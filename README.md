@@ -1,0 +1,319 @@
+# Taskerino - AI-Powered Notes & Tasks
+
+A beautifully minimal note-taking and task management tool powered by Claude AI. Designed for people who want to capture thoughts quickly without the friction of manual organization.
+
+## ✨ Core Philosophy
+
+**Zero Friction. Maximum Intelligence.**
+
+- No manual filing or categorization
+- No confirmation dialogs or multi-step workflows
+- Just capture your thoughts and let AI organize everything
+- Beautiful, intentional UX that stays out of your way
+
+## 🎯 Perfect For
+
+Anyone who:
+- Takes frequent notes throughout the day (meetings, calls, random thoughts)
+- Wants AI to automatically organize and extract tasks
+- Needs quick access to past conversations and context
+- Values beautiful, minimal interfaces over feature-heavy CRMs
+
+## 🚀 Key Features
+
+### 📝 Universal Capture
+The main interface is a **frosted glass capture box** on a beautiful gradient background. That's it.
+
+- Type or paste anything (meeting notes, call transcripts, ideas)
+- Press **⌘ + Enter** to process
+- AI automatically:
+  - Detects topics (people, companies, projects)
+  - Creates or merges notes intelligently
+  - Extracts actionable tasks
+  - Generates summaries
+- See real-time processing steps
+- Get clear results with next actions
+
+### ✅ Task Management
+A dedicated tasks zone with powerful features:
+
+- **Interactive task cards** with inline editing
+- **Priority toggle** - Click to cycle Low → Medium → High → Urgent
+- **Quick reschedule** - Today, Tomorrow, or Next Week options
+- **Interactive subtasks** with visual progress bars
+- **Status indicators** with color-coded borders
+- **AI confidence badges** showing how tasks were created
+- **Source note preview** to see context
+- Kanban board, list, and table views
+- Filter by status, priority, topic, or tags
+
+### 📚 Library (Notes & Knowledge)
+Your organized knowledge base with rich context:
+
+- **Enhanced note cards** with smart features:
+  - Entity chips showing linked companies and contacts
+  - Smart highlights for dates and action keywords
+  - Beautiful key insights callouts
+  - Related tasks section
+  - Updates timeline for note history
+- **Topic-based organization** (companies, people, projects)
+- **Card grid** with note previews, tags, and timestamps
+- Sort by recent, alphabetical, or note count
+- Delete notes or entire topics
+
+### 🤖 Ned - Your AI Assistant
+Meet Ned, your conversational AI that knows everything about your work:
+
+- **Natural conversation** - Chat like you're talking to a colleague
+- **Contextual search** - Searches across all notes and tasks
+- **Interactive cards** - View and manage tasks/notes directly in chat
+- **Smart status updates** - See exactly what Ned is doing
+- **Pulsing avatar** with smooth animations
+- **Persistent conversations** - Context maintained across zones
+- **Permission system** - Control what Ned can do
+- **Ask about anything** - Click "Ask Ned" on any card for instant help
+
+### ⚙️ Smart Settings
+Configure everything AI does:
+
+- API key management (Claude Sonnet 4.5)
+- System instructions (customize AI behavior)
+- Auto-merge similar notes (on/off)
+- Auto-extract tasks (on/off)
+- Topic creation sensitivity (conservative/balanced/aggressive)
+- Data export/import/clear
+
+## 🎨 Design Highlights
+
+### Five-Zone Navigation
+Navigate between zones using the floating navigation island:
+
+1. **Capture** - Universal input for quick note capture
+2. **Tasks** - Manage todos with interactive cards
+3. **Library** - Browse notes and knowledge base
+4. **Assistant** - Chat with Ned, your AI assistant
+5. **Profile** - Settings and AI configuration
+
+### Glass Morphism UI
+- Frosted glass effects with backdrop blur
+- Gradient mesh backgrounds with subtle animations
+- Clean, modern aesthetics
+- Smooth transitions throughout
+
+### Keyboard-First
+- **⌘ + Enter**: Submit capture/query
+- **↑/↓ arrows**: Navigate zones quickly
+- Minimal mouse interaction needed
+
+## 📦 Getting Started
+
+### Prerequisites
+- Node.js 16+
+- Claude API key from [console.anthropic.com](https://console.anthropic.com/)
+
+### Installation
+
+```bash
+cd ~/Documents/taskerino
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`
+
+### First-Time Setup
+
+1. App opens to the **Capture Zone**
+2. Scroll down to **Library Zone** → click Settings icon
+3. Enter your Claude API key and save
+4. Configure AI behavior (optional)
+5. Close settings and scroll back up to **Capture Zone**
+6. Start capturing!
+
+## 💡 Example Workflows
+
+### Quick Note After a Meeting
+```
+Had a great call with Sarah at Acme Corp. They want to upgrade
+to Enterprise tier by Q2. Main concern is pricing vs competitors.
+Need to send them a quote by Friday and schedule a technical
+deep-dive with their CTO next week.
+```
+
+**What happens:**
+- AI detects topic: "Acme Corp" (company)
+- Creates note with summary: "Enterprise upgrade discussion with pricing concerns"
+- Extracts tasks:
+  - "Send Enterprise pricing quote to Acme Corp" (high priority)
+  - "Schedule technical deep-dive with Acme CTO" (medium priority)
+- Shows you the results with options to view note or add another
+
+### Asking the AI Assistant
+Scroll up to Assistant and ask:
+- "What did Acme Corp say about pricing?"
+- "Which topics haven't I updated in 2 weeks?"
+- "What are my high-priority tasks?"
+
+AI searches across all notes and gives answers with sources.
+
+## 🏗️ Technical Architecture
+
+### Data Model
+```
+Topic (auto-detected)
+├── name: "Acme Corp"
+├── type: company | project | person | other
+├── noteCount
+└── lastUpdated
+
+Note
+├── topicId → Topic
+├── content (markdown)
+├── summary (AI-generated)
+├── timestamp
+├── tags (auto-extracted)
+├── metadata (sentiment, keyPoints)
+└── parentNoteId (for threading)
+
+Task
+├── title
+├── priority (low/medium/high/urgent)
+├── topicId → Topic (optional)
+├── noteId → Note (optional)
+├── done
+└── dueDate (optional)
+```
+
+### AI Intelligence
+
+**Topic Detection & Matching:**
+- Fuzzy matching algorithm (exact → contains → word overlap)
+- Confidence scoring with Jaccard similarity
+- Auto-merge when confidence > 70%
+
+**Note Merging:**
+- Finds similar notes from last 7 days
+- Uses keyword overlap algorithm (30% threshold)
+- Merges automatically or creates new based on similarity
+
+**Task Extraction:**
+- Natural language parsing for actionable items
+- Priority inference from context
+- Links tasks to relevant topics/notes
+
+### Tech Stack
+- **React 18** + TypeScript + Vite
+- **Tailwind CSS v3** (glass morphism, animations)
+- **Claude AI** (claude-3-5-sonnet-20241022)
+- **localStorage** for persistence (client-side only)
+- **Lucide React** for icons
+
+### Project Structure
+```
+src/
+├── components/
+│   ├── ZoneLayout.tsx          # Main 3-zone container
+│   ├── CaptureZone.tsx         # Frosted capture box
+│   ├── LibraryZone.tsx         # Notes grid & topics
+│   ├── AssistantZone.tsx       # AI chat interface
+│   └── SettingsModal.tsx       # Configuration
+├── context/
+│   └── AppContext.tsx          # Global state (topics, notes, tasks)
+├── services/
+│   └── claudeService.ts        # AI processing & querying
+├── utils/
+│   └── helpers.ts              # Topic matching, note similarity
+├── types.ts                    # TypeScript definitions
+├── index.css                   # Animations & glass effects
+└── App.tsx                     # Entry point
+```
+
+## 🔐 Privacy & Data
+
+- **100% local** - all data stored in browser localStorage
+- **API calls only to Anthropic Claude** - no other external services
+- **No tracking, no analytics, no servers**
+- Export your data anytime (JSON format)
+- Future: Optional self-hosted backend for sync
+
+## 🎯 What Makes This Different?
+
+### vs. Notion
+- **No folders/databases to set up** - AI does it automatically
+- **Way faster** - optimized for quick capture
+- **No learning curve** - just type and submit
+
+### vs. Roam/Obsidian
+- **AI-first** - topics, tags, and links auto-generated
+- **Minimal UX** - no complex graph views or markup
+- **Task extraction** - actionable items pulled out automatically
+
+### vs. Traditional CRMs
+- **Not a CRM** - lightweight note & task tracking
+- **No manual data entry** - paste transcripts, get organized notes
+- **Personal tool** - designed for individuals, not teams (yet)
+
+## 🚧 Roadmap
+
+**Completed ✅**
+- Topic auto-detection with fuzzy matching
+- Intelligent note merging
+- Task extraction
+- AI query interface
+- Glass morphism UI
+- Vertical zone navigation
+
+**Next Up 🔜**
+- Rich text editor (markdown support in capture)
+- Task management view with filtering
+- Note detail modal with full content
+- Keyboard shortcuts (⌘+K command palette)
+- Dark mode
+
+**Future 🔮**
+- Backend sync (PostgreSQL + auth)
+- Mobile app (React Native)
+- Email integration (auto-import conversations)
+- Voice capture (transcribe & process)
+- Team collaboration
+- Chrome extension for quick capture
+
+## 🐛 Troubleshooting
+
+**Build errors:**
+```bash
+rm -rf node_modules dist
+npm install
+npm run build
+```
+
+**API key issues:**
+- Get fresh key from [console.anthropic.com](https://console.anthropic.com/)
+- Open Settings and re-enter
+- Refresh page
+
+**Notes not processing:**
+- Check browser console for errors
+- Verify API key is saved
+- Ensure you have credits in Anthropic account
+
+**Performance:**
+- Clear old data: Settings → Clear All Data
+- Browser localStorage has limits (~5-10MB)
+- Export & clear periodically for best performance
+
+## 📝 License
+
+MIT - use and modify freely!
+
+## 🙏 Acknowledgments
+
+Built with:
+- [Anthropic Claude](https://www.anthropic.com/) - The AI brain
+- [Vite](https://vitejs.dev/) - Lightning-fast dev environment
+- [Tailwind CSS](https://tailwindcss.com/) - Beautiful styling
+- [Lucide Icons](https://lucide.dev/) - Clean iconography
+
+---
+
+**Made for people who think fast and don't want tools to slow them down.**
