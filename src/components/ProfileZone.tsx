@@ -1,60 +1,128 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { invoke } from '@tauri-apps/api/core';
+import { useSettings } from '../context/SettingsContext';
+import { useUI } from '../context/UIContext';
+import { useEntities } from '../context/EntitiesContext';
+import { useNotes } from '../context/NotesContext';
+import { useTasks } from '../context/TasksContext';
+import { useApp } from '../context/AppContext'; // Keep for LOAD_STATE and RESET_ONBOARDING
 import { claudeService } from '../services/claudeService';
-import { Key, Brain, Download, Upload, Trash2, Settings, Clock, Globe, Calendar, ChevronDown, RefreshCw, Sparkles, Bot } from 'lucide-react';
+import { sessionsAgentService } from '../services/sessionsAgentService';
+import { openAIService } from '../services/openAIService';
+import { audioCompressionService, type AudioQualityPreset } from '../services/audioCompressionService';
+import { Key, Brain, Download, Upload, Trash2, Settings, Clock, Globe, Calendar, ChevronDown, RefreshCw, Bot, Mic, Video } from 'lucide-react';
 import type { AppState } from '../types';
 import { LearningDashboard } from './LearningDashboard';
 import { NedSettings } from './ned/NedSettings';
+import { Input } from './Input';
+import { Button } from './Button';
+import { StandardSelect } from './StandardSelect';
 
-type SettingsTab = 'general' | 'ai' | 'ned' | 'time' | 'data';
+type SettingsTab = 'general' | 'ai' | 'ned' | 'sessions' | 'time' | 'data';
 
-export function ProfileZone() {
-  const { state, dispatch } = useApp();
+export default function ProfileZone() {
+  const { dispatch: appDispatch } = useApp(); // Only for LOAD_STATE and RESET_ONBOARDING
+  const { state: settingsState, dispatch: settingsDispatch } = useSettings();
+  const { state: uiState, dispatch: uiDispatch } = useUI();
+  const { state: entitiesState } = useEntities();
+  const { state: notesState } = useNotes();
+  const { state: tasksState } = useTasks();
+
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [apiKey, setApiKey] = useState('');
-  const [localAISettings, setLocalAISettings] = useState(state.aiSettings);
-  const [localPreferences, setLocalPreferences] = useState(state.ui.preferences);
-  const [userName, setUserName] = useState(state.userProfile.name);
+  const [openAIApiKey, setOpenAIApiKey] = useState('');
+  const [localAISettings, setLocalAISettings] = useState(settingsState.aiSettings);
+  const [localPreferences, setLocalPreferences] = useState(uiState.preferences);
+  const [userName, setUserName] = useState(settingsState.userProfile.name);
   const [showLearningDashboard, setShowLearningDashboard] = useState(false);
+  const [audioQualityPreset, setAudioQualityPreset] = useState<AudioQualityPreset>('optimized');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const savedKey = localStorage.getItem('claude-api-key');
-    if (savedKey) setApiKey(savedKey);
-    setLocalAISettings(state.aiSettings);
-    setLocalPreferences(state.ui.preferences);
-    setUserName(state.userProfile.name);
-  }, [state.aiSettings, state.ui.preferences, state.userProfile.name]);
+    const loadKeys = async () => {
+      const savedKey = await invoke<string | null>('get_claude_api_key');
+      if (savedKey) setApiKey(savedKey);
 
-  const handleSaveApiKey = () => {
+      const savedOpenAIKey = await invoke<string | null>('get_openai_api_key');
+      if (savedOpenAIKey) setOpenAIApiKey(savedOpenAIKey);
+    };
+    loadKeys();
+
+    const savedAudioQuality = audioCompressionService.getQualityPreset();
+    setAudioQualityPreset(savedAudioQuality);
+
+    setLocalAISettings(settingsState.aiSettings);
+    setLocalPreferences(uiState.preferences);
+    setUserName(settingsState.userProfile.name);
+  }, [settingsState.aiSettings, uiState.preferences, settingsState.userProfile.name]);
+
+  const handleSaveApiKey = async () => {
     if (apiKey.trim()) {
-      localStorage.setItem('claude-api-key', apiKey.trim());
+      // Validate API key format
+      if (!apiKey.trim().startsWith('sk-ant-')) {
+        alert('Invalid API key format. Anthropic API keys should start with "sk-ant-"');
+        return;
+      }
+
+      await invoke('set_claude_api_key', { apiKey: apiKey.trim() });
       claudeService.setApiKey(apiKey.trim());
+      sessionsAgentService.setApiKey(apiKey.trim());
       alert('API key saved successfully!');
     }
   };
 
+  const handleClearApiKey = async () => {
+    if (confirm('Are you sure you want to clear your API key?')) {
+      await invoke('set_claude_api_key', { apiKey: '' });
+      setApiKey('');
+      alert('API key cleared. Please enter a new one.');
+    }
+  };
+
+  const handleSaveOpenAIApiKey = async () => {
+    if (openAIApiKey.trim()) {
+      // Validate API key format
+      if (!openAIApiKey.trim().startsWith('sk-')) {
+        alert('Invalid API key format. OpenAI API keys should start with "sk-"');
+        return;
+      }
+
+      await invoke('set_openai_api_key', { apiKey: openAIApiKey.trim() });
+      openAIService.setApiKey(openAIApiKey.trim());
+      alert('OpenAI API key saved successfully!');
+    }
+  };
+
+  const handleClearOpenAIApiKey = async () => {
+    if (confirm('Are you sure you want to clear your OpenAI API key?')) {
+      await invoke('set_openai_api_key', { apiKey: '' });
+      setOpenAIApiKey('');
+      alert('OpenAI API key cleared.');
+    }
+  };
+
   const handleSaveAISettings = () => {
-    dispatch({ type: 'UPDATE_AI_SETTINGS', payload: localAISettings });
+    settingsDispatch({ type: 'UPDATE_AI_SETTINGS', payload: localAISettings });
     alert('AI settings saved!');
   };
 
   const handleSavePreferences = () => {
-    dispatch({ type: 'UPDATE_PREFERENCES', payload: localPreferences });
+    uiDispatch({ type: 'UPDATE_PREFERENCES', payload: localPreferences });
     alert('Preferences saved!');
   };
 
   const handleSaveUserProfile = () => {
-    dispatch({ type: 'UPDATE_USER_PROFILE', payload: { name: userName.trim() } });
+    settingsDispatch({ type: 'UPDATE_USER_PROFILE', payload: { name: userName.trim() } });
     alert('Profile saved!');
   };
 
   const handleExportData = () => {
     const data = {
-      topics: state.topics,
-      notes: state.notes,
-      tasks: state.tasks,
-      aiSettings: state.aiSettings,
-      preferences: state.ui.preferences,
+      topics: entitiesState.topics,
+      notes: notesState.notes,
+      tasks: tasksState.tasks,
+      aiSettings: settingsState.aiSettings,
+      preferences: uiState.preferences,
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -74,10 +142,10 @@ export function ProfileZone() {
       try {
         const data = JSON.parse(event.target?.result as string);
         if (confirm('This will replace all your current data. Continue?')) {
-          dispatch({ type: 'LOAD_STATE', payload: data });
+          appDispatch({ type: 'LOAD_STATE', payload: data });
           alert('Data imported successfully!');
         }
-      } catch (error) {
+      } catch {
         alert('Failed to import data. Invalid file format.');
       }
     };
@@ -88,7 +156,7 @@ export function ProfileZone() {
     if (confirm('This will permanently delete all your topics, notes, and tasks. Are you sure?')) {
       if (confirm('This action cannot be undone. Really delete everything?')) {
         localStorage.removeItem('taskerino-v2-state');
-        dispatch({ type: 'LOAD_STATE', payload: { topics: [], notes: [], tasks: [] } });
+        appDispatch({ type: 'LOAD_STATE', payload: { topics: [], notes: [], tasks: [] } });
         alert('All data cleared.');
       }
     }
@@ -97,22 +165,30 @@ export function ProfileZone() {
 
   const handleResetOnboarding = () => {
     if (confirm('This will reset the onboarding flow. You\'ll see the welcome screen next time you refresh. Continue?')) {
-      dispatch({ type: 'RESET_ONBOARDING' });
+      uiDispatch({ type: 'RESET_ONBOARDING' });
       alert('Onboarding reset! Refresh the page to see the welcome flow again.');
     }
+  };
+
+  const handleSaveAudioQuality = () => {
+    audioCompressionService.setQualityPreset(audioQualityPreset);
+    alert('Audio quality settings saved!');
   };
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: 'general', label: 'General', icon: <Settings className="w-4 h-4" /> },
     { id: 'ai', label: 'AI Behavior', icon: <Brain className="w-4 h-4" /> },
     { id: 'ned', label: 'Ned Assistant', icon: <Bot className="w-4 h-4" /> },
+    { id: 'sessions', label: 'Sessions', icon: <Video className="w-4 h-4" /> },
     { id: 'time', label: 'Time & Date', icon: <Clock className="w-4 h-4" /> },
     { id: 'data', label: 'Data', icon: <Download className="w-4 h-4" /> },
   ];
 
   return (
-    <div className="h-full w-full bg-gradient-to-br from-cyan-50 via-blue-50/30 to-teal-50 overflow-hidden">
-      <div className="h-full overflow-y-auto p-8 pt-24">
+    <div className="h-full w-full relative flex flex-col bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20 overflow-hidden">
+      {/* Secondary animated gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none" />
+      <div className="relative z-10 h-full overflow-y-auto p-8 pt-24">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="mb-8">
@@ -121,16 +197,16 @@ export function ProfileZone() {
           </div>
 
           {/* Tabs */}
-          <div className="backdrop-blur-2xl bg-white/40 rounded-[1.5rem] shadow-xl border-2 border-white/30 overflow-hidden">
+          <div className="backdrop-blur-2xl bg-white/30 rounded-[24px] shadow-xl border-2 border-white/50 overflow-hidden">
             <div className="border-b border-gray-200 px-2 pt-2">
               <div className="flex gap-1">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-t-xl font-medium transition-all ${
+                    className={`flex items-center gap-2 px-4 py-3 rounded-t-[20px] font-medium transition-all ${
                       activeTab === tab.id
-                        ? 'bg-white text-cyan-700 shadow-sm'
+                        ? 'bg-white/80 backdrop-blur-sm text-cyan-700 shadow-sm'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
                     }`}
                   >
@@ -142,7 +218,7 @@ export function ProfileZone() {
             </div>
 
             {/* Tab Content */}
-            <div className="bg-white p-8 space-y-6">
+            <div className="bg-white/20 backdrop-blur-xl p-8 space-y-8">
               {/* General Tab */}
               {activeTab === 'general' && (
                 <>
@@ -153,39 +229,88 @@ export function ProfileZone() {
                       onChange={(e) => setUserName(e.target.value)}
                       placeholder="Enter your name"
                     />
-                    <SaveButton onClick={handleSaveUserProfile} label="Save Profile" />
+                    <Button onClick={handleSaveUserProfile}>Save Profile</Button>
                   </Section>
 
-                  <Section title="Claude API Key">
-                    <Input
-                      label="API Key"
-                      type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="sk-ant-..."
-                    />
-                    <p className="text-sm text-gray-600">
-                      Get your API key from{' '}
-                      <a
-                        href="https://console.anthropic.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-cyan-600 hover:underline font-medium"
-                      >
-                        console.anthropic.com
-                      </a>
-                    </p>
-                    <SaveButton onClick={handleSaveApiKey} label="Save API Key" />
-                  </Section>
+                  <Divider />
+
+                  {/* API Configuration Group */}
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 mb-1">API Configuration</h3>
+                      <p className="text-sm text-gray-600">Configure API keys for AI-powered features</p>
+                    </div>
+
+                    <Section title="Claude API Key">
+                      <Input
+                        label="API Key"
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="sk-ant-..."
+                      />
+                      <p className="text-sm text-gray-600">
+                        Get your API key from{' '}
+                        <a
+                          href="https://console.anthropic.com/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-cyan-600 hover:underline font-medium"
+                        >
+                          console.anthropic.com
+                        </a>
+                      </p>
+                      <div className="flex gap-2">
+                        <Button onClick={handleSaveApiKey}>Save API Key</Button>
+                        <Button onClick={handleClearApiKey} variant="danger">
+                          Clear
+                        </Button>
+                      </div>
+                    </Section>
+
+                    <Section title="OpenAI API Key">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Mic className="w-4 h-4 text-orange-600" />
+                        <span className="text-sm font-semibold text-orange-700">For Audio Recording</span>
+                      </div>
+                      <Input
+                        label="API Key"
+                        type="password"
+                        value={openAIApiKey}
+                        onChange={(e) => setOpenAIApiKey(e.target.value)}
+                        placeholder="sk-..."
+                      />
+                      <p className="text-sm text-gray-600">
+                        Required for audio transcription and description. Get your key from{' '}
+                        <a
+                          href="https://platform.openai.com/api-keys"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-orange-600 hover:underline font-medium"
+                        >
+                          platform.openai.com
+                        </a>
+                      </p>
+                      <div className="flex gap-2">
+                        <Button onClick={handleSaveOpenAIApiKey}>Save OpenAI Key</Button>
+                        <Button onClick={handleClearOpenAIApiKey} variant="danger">
+                          Clear
+                        </Button>
+                      </div>
+                    </Section>
+                  </div>
+
+                  <Divider />
 
                   <Section title="Onboarding">
-                    <button
+                    <Button
                       onClick={handleResetOnboarding}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 text-cyan-700 rounded-xl font-semibold hover:from-cyan-500/20 hover:to-blue-500/20 transition-all border-2 border-cyan-200"
+                      variant="secondary"
+                      fullWidth
+                      icon={<RefreshCw className="w-5 h-5" />}
                     >
-                      <RefreshCw className="w-5 h-5" />
                       Reset Onboarding
-                    </button>
+                    </Button>
                     <p className="text-sm text-gray-600">
                       Reset the welcome flow and see the onboarding experience again
                     </p>
@@ -215,6 +340,8 @@ export function ProfileZone() {
                     />
                   </Section>
 
+                  <Divider />
+
                   <Section title="AI Agents">
                     <div className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200">
                       <div className="flex items-center gap-3 mb-3">
@@ -231,6 +358,8 @@ export function ProfileZone() {
                       </p>
                     </div>
                   </Section>
+
+                  <Divider />
 
                   <details className="group">
                     <summary className="cursor-pointer text-sm font-semibold text-gray-600 hover:text-gray-900 mb-4 flex items-center gap-2">
@@ -253,22 +382,140 @@ export function ProfileZone() {
                     </Section>
                   </details>
 
-                  <SaveButton onClick={handleSaveAISettings} label="Save AI Settings" />
+                  <Button onClick={handleSaveAISettings}>Save AI Settings</Button>
                 </>
               )}
 
               {/* Ned Assistant Tab */}
               {activeTab === 'ned' && <NedSettings />}
 
+              {/* Sessions Tab */}
+              {activeTab === 'sessions' && (
+                <>
+                  <Section title="Audio Quality">
+                    <p className="text-sm text-gray-600 mb-4">
+                      Configure how audio is compressed before sending to OpenAI. Local storage always uses full quality.
+                    </p>
+
+                    <div className="space-y-4">
+                      {/* Optimized Preset */}
+                      <label
+                        className={`flex items-start gap-4 p-5 rounded-[20px] cursor-pointer transition-all border-2 ${
+                          audioQualityPreset === 'optimized'
+                            ? 'bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-400'
+                            : 'bg-white/20 backdrop-blur-sm border-white/40 hover:bg-white/30'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="audioQuality"
+                          value="optimized"
+                          checked={audioQualityPreset === 'optimized'}
+                          onChange={(e) => setAudioQualityPreset(e.target.value as AudioQualityPreset)}
+                          className="mt-1 w-4 h-4 text-cyan-600 focus:ring-cyan-500"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-gray-900">Optimized</h4>
+                            <span className="text-xs px-2 py-1 bg-cyan-500 text-white rounded-full font-semibold">
+                              Recommended
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2">
+                            16kHz for transcription, 24kHz for description. Best balance of quality and speed.
+                          </p>
+                          <div className="text-xs text-gray-600">
+                            <div>• Transcription: ~250KB/min (~95% reduction)</div>
+                            <div>• Description: ~750KB/min (~85% reduction)</div>
+                            <div>• Faster uploads & API processing</div>
+                          </div>
+                        </div>
+                      </label>
+
+                      {/* Balanced Preset */}
+                      <label
+                        className={`flex items-start gap-4 p-5 rounded-[20px] cursor-pointer transition-all border-2 ${
+                          audioQualityPreset === 'balanced'
+                            ? 'bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-400'
+                            : 'bg-white/20 backdrop-blur-sm border-white/40 hover:bg-white/30'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="audioQuality"
+                          value="balanced"
+                          checked={audioQualityPreset === 'balanced'}
+                          onChange={(e) => setAudioQualityPreset(e.target.value as AudioQualityPreset)}
+                          className="mt-1 w-4 h-4 text-cyan-600 focus:ring-cyan-500"
+                        />
+                        <div className="flex-1">
+                          <h4 className="font-bold text-gray-900 mb-1">Balanced</h4>
+                          <p className="text-sm text-gray-700 mb-2">
+                            22kHz for both modes. Good quality, moderate file sizes.
+                          </p>
+                          <div className="text-xs text-gray-600">
+                            <div>• ~1MB/min for both modes (~75% reduction)</div>
+                            <div>• Good for most use cases</div>
+                          </div>
+                        </div>
+                      </label>
+
+                      {/* High Quality Preset */}
+                      <label
+                        className={`flex items-start gap-4 p-5 rounded-[20px] cursor-pointer transition-all border-2 ${
+                          audioQualityPreset === 'high'
+                            ? 'bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-400'
+                            : 'bg-white/20 backdrop-blur-sm border-white/40 hover:bg-white/30'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="audioQuality"
+                          value="high"
+                          checked={audioQualityPreset === 'high'}
+                          onChange={(e) => setAudioQualityPreset(e.target.value as AudioQualityPreset)}
+                          className="mt-1 w-4 h-4 text-cyan-600 focus:ring-cyan-500"
+                        />
+                        <div className="flex-1">
+                          <h4 className="font-bold text-gray-900 mb-1">High Quality</h4>
+                          <p className="text-sm text-gray-700 mb-2">
+                            44.1kHz with high bitrate. Largest files, slowest uploads.
+                          </p>
+                          <div className="text-xs text-red-600">
+                            <div>• ~2MB/min for transcription</div>
+                            <div>• ~3MB/min for description</div>
+                            <div>• Not recommended - unnecessary for speech</div>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </Section>
+
+                  <Divider />
+
+                  <div className="p-4 bg-blue-50/50 backdrop-blur-sm rounded-[20px] border border-blue-200">
+                    <h4 className="font-semibold text-blue-900 mb-2">About Audio Compression</h4>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• OpenAI Whisper was trained on 16kHz audio</li>
+                      <li>• Higher sample rates don't improve transcription accuracy</li>
+                      <li>• Compression happens after local storage (full quality preserved)</li>
+                      <li>• Settings apply to new recordings only</li>
+                    </ul>
+                  </div>
+
+                  <Button onClick={handleSaveAudioQuality}>Save Audio Settings</Button>
+                </>
+              )}
+
               {/* Time & Date Tab */}
               {activeTab === 'time' && (
                 <>
                   <Section title="Time Format">
-                    <Select
+                    <StandardSelect
                       label="Time Display"
                       value={localPreferences.dateFormat}
-                      onChange={(e) =>
-                        setLocalPreferences((prev) => ({ ...prev, dateFormat: e.target.value as '12h' | '24h' }))
+                      onChange={(value) =>
+                        setLocalPreferences((prev) => ({ ...prev, dateFormat: value as '12h' | '24h' }))
                       }
                       options={[
                         { value: '12h', label: '12-hour (2:30 PM)' },
@@ -276,6 +523,8 @@ export function ProfileZone() {
                       ]}
                     />
                   </Section>
+
+                  <Divider />
 
                   <Section title="Timezone">
                     <Input
@@ -289,14 +538,16 @@ export function ProfileZone() {
                     </p>
                   </Section>
 
+                  <Divider />
+
                   <Section title="Calendar">
-                    <Select
+                    <StandardSelect
                       label="Week Starts On"
                       value={localPreferences.weekStartsOn}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setLocalPreferences((prev) => ({
                           ...prev,
-                          weekStartsOn: e.target.value as 'sunday' | 'monday',
+                          weekStartsOn: value as 'sunday' | 'monday',
                         }))
                       }
                       options={[
@@ -306,62 +557,79 @@ export function ProfileZone() {
                     />
                   </Section>
 
-                  <SaveButton onClick={handleSavePreferences} label="Save Preferences" />
+                  <Divider />
+
+                  <Button onClick={handleSavePreferences}>Save Preferences</Button>
                 </>
               )}
 
               {/* Data Tab */}
               {activeTab === 'data' && (
                 <>
-                  <Section title="Backup & Restore">
-                    <button
-                      onClick={handleExportData}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all"
-                    >
-                      <Download className="w-5 h-5" />
-                      Export All Data
-                    </button>
+                  <Section title="Storage Info">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="p-4 bg-white/20 backdrop-blur-sm rounded-[20px] border border-white/40">
+                        <div className="text-2xl font-bold text-gray-900">{entitiesState.topics.length}</div>
+                        <div className="text-sm text-gray-600">Topics</div>
+                      </div>
+                      <div className="p-4 bg-white/20 backdrop-blur-sm rounded-[20px] border border-white/40">
+                        <div className="text-2xl font-bold text-gray-900">{notesState.notes.length}</div>
+                        <div className="text-sm text-gray-600">Notes</div>
+                      </div>
+                      <div className="p-4 bg-white/20 backdrop-blur-sm rounded-[20px] border border-white/40">
+                        <div className="text-2xl font-bold text-gray-900">{tasksState.tasks.length}</div>
+                        <div className="text-sm text-gray-600">Tasks</div>
+                      </div>
+                    </div>
+                  </Section>
 
-                    <label className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all cursor-pointer">
-                      <Upload className="w-5 h-5" />
+                  <Divider />
+
+                  <Section title="Backup & Restore">
+                    <Button
+                      onClick={handleExportData}
+                      variant="secondary"
+                      fullWidth
+                      icon={<Download className="w-5 h-5" />}
+                    >
+                      Export All Data
+                    </Button>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportData}
+                      className="hidden"
+                    />
+                    <Button
+                      variant="secondary"
+                      fullWidth
+                      icon={<Upload className="w-5 h-5" />}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
                       Import Data
-                      <input type="file" accept=".json" onChange={handleImportData} className="hidden" />
-                    </label>
+                    </Button>
 
                     <p className="text-sm text-gray-600">
                       Export your data to back it up, or import from a previous backup
                     </p>
                   </Section>
 
+                  <Divider />
 
                   <Section title="Danger Zone">
-                    <button
+                    <Button
                       onClick={handleClearAllData}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-xl font-semibold hover:bg-red-100 transition-all"
+                      variant="danger"
+                      fullWidth
+                      icon={<Trash2 className="w-5 h-5" />}
                     >
-                      <Trash2 className="w-5 h-5" />
                       Clear All Data
-                    </button>
+                    </Button>
                     <p className="text-sm text-red-600">
                       This will permanently delete all your topics, notes, and tasks. This action cannot be undone.
                     </p>
-                  </Section>
-
-                  <Section title="Storage Info">
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div className="p-4 bg-gray-50 rounded-xl">
-                        <div className="text-2xl font-bold text-gray-900">{state.topics.length}</div>
-                        <div className="text-sm text-gray-600">Topics</div>
-                      </div>
-                      <div className="p-4 bg-gray-50 rounded-xl">
-                        <div className="text-2xl font-bold text-gray-900">{state.notes.length}</div>
-                        <div className="text-sm text-gray-600">Notes</div>
-                      </div>
-                      <div className="p-4 bg-gray-50 rounded-xl">
-                        <div className="text-2xl font-bold text-gray-900">{state.tasks.length}</div>
-                        <div className="text-sm text-gray-600">Tasks</div>
-                      </div>
-                    </div>
                   </Section>
                 </>
               )}
@@ -386,31 +654,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Input({
-  label,
-  type = 'text',
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  type?: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-semibold text-gray-700 mb-2">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
-      />
-    </div>
-  );
+function Divider() {
+  return <div className="border-t border-white/40" />;
 }
 
 function Textarea({
@@ -434,37 +679,8 @@ function Textarea({
         onChange={onChange}
         rows={rows}
         placeholder={placeholder}
-        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 resize-none transition-all"
+        className="w-full px-4 py-3 bg-white/30 backdrop-blur-sm border border-white/60 rounded-[20px] focus:ring-2 focus:ring-cyan-500 focus:border-cyan-300 resize-none transition-all"
       />
-    </div>
-  );
-}
-
-function Select({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-semibold text-gray-700 mb-2">{label}</label>
-      <select
-        value={value}
-        onChange={onChange}
-        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }
@@ -481,7 +697,7 @@ function Toggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between p-4 bg-gray-50 rounded-xl">
+    <div className="flex items-start justify-between p-4 bg-white/20 backdrop-blur-sm rounded-[20px]">
       <div className="flex-1">
         <div className="font-semibold text-gray-900">{label}</div>
         <div className="text-sm text-gray-600 mt-1">{description}</div>
@@ -499,16 +715,5 @@ function Toggle({
         />
       </button>
     </div>
-  );
-}
-
-function SaveButton({ onClick, label }: { onClick: () => void; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
-    >
-      {label}
-    </button>
   );
 }

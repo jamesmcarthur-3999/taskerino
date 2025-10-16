@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useTasks } from '../context/TasksContext';
+import { useNotes } from '../context/NotesContext';
+import { useUI } from '../context/UIContext';
 import { Calendar, Clock, CheckSquare, Circle, Plus, X, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Task, SubTask } from '../types';
 import { formatRelativeTime, isTaskOverdue, isTaskDueToday, generateId } from '../utils/helpers';
@@ -10,8 +12,10 @@ interface TaskDetailInlineProps {
 }
 
 export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
-  const { state, dispatch } = useApp();
-  const task = state.tasks.find(t => t.id === taskId);
+  const { state: tasksState, dispatch: tasksDispatch } = useTasks();
+  const { state: notesState } = useNotes();
+  const { dispatch: uiDispatch } = useUI();
+  const task = tasksState.tasks.find(t => t.id === taskId);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -55,7 +59,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
       setSaveStatus('unsaved');
       const timer = setTimeout(() => {
         setSaveStatus('saving');
-        dispatch({
+        tasksDispatch({
           type: 'UPDATE_TASK',
           payload: {
             ...task,
@@ -75,7 +79,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [title, description, priority, status, dueDate, dueTime, tags, subtasks, task, dispatch]);
+  }, [title, description, priority, status, dueDate, dueTime, tags, subtasks, task, tasksDispatch]);
 
   const handleAddTag = () => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
@@ -113,7 +117,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
 
   const handleDelete = () => {
     if (confirm('Delete this task?')) {
-      dispatch({ type: 'DELETE_TASK', payload: taskId });
+      tasksDispatch({ type: 'DELETE_TASK', payload: taskId });
     }
   };
 
@@ -423,9 +427,9 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
               {task.aiContext.sourceNoteId && (
                 <button
                   onClick={() => {
-                    const note = state.notes.find(n => n.id === task.aiContext?.sourceNoteId);
+                    const note = notesState.notes.find(n => n.id === task.aiContext?.sourceNoteId);
                     if (note) {
-                      dispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'note', itemId: note.id, label: note.summary } });
+                      uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'note', itemId: note.id, label: note.summary } });
                     }
                   }}
                   className="text-xs text-purple-600 hover:text-purple-800 underline"

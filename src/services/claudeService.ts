@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { invoke } from '@tauri-apps/api/core';
 import type {
   AIProcessResult,
   AIQueryResponse,
@@ -8,6 +8,12 @@ import type {
   AppState,
   Attachment,
 } from '../types';
+import type {
+  ClaudeChatResponse,
+  ClaudeMessage,
+  ClaudeContentBlock,
+  ClaudeImageSource,
+} from '../types/tauri-ai-commands';
 import {
   findMatchingTopic,
   calculateMatchConfidence,
@@ -17,31 +23,37 @@ import { LearningService } from './learningService';
 import { fileStorage } from './fileStorageService';
 
 export class ClaudeService {
-  private client: Anthropic | null = null;
+  private hasApiKey: boolean = false;
 
   constructor(apiKey?: string) {
     if (apiKey) {
-      this.client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+      this.setApiKey(apiKey);
     } else {
-      // Auto-load API key from localStorage if available
+      // Auto-load API key from storage if available
       this.loadApiKeyFromStorage();
     }
   }
 
-  private loadApiKeyFromStorage() {
+  private async loadApiKeyFromStorage() {
     try {
-      const savedKey = localStorage.getItem('claude-api-key');
+      const savedKey = await invoke<string | null>('get_claude_api_key');
       if (savedKey) {
-        this.client = new Anthropic({ apiKey: savedKey, dangerouslyAllowBrowser: true });
-        console.log('✅ Loaded API key from localStorage');
+        this.hasApiKey = true;
+        console.log('✅ Loaded API key from storage');
       }
     } catch (error) {
       console.error('Failed to load API key from storage:', error);
     }
   }
 
-  setApiKey(apiKey: string) {
-    this.client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  async setApiKey(apiKey: string) {
+    try {
+      await invoke('set_claude_api_key', { apiKey });
+      this.hasApiKey = true;
+    } catch (error) {
+      console.error('Failed to set API key:', error);
+      throw error;
+    }
   }
 
   /**
@@ -58,7 +70,7 @@ export class ClaudeService {
     attachments?: Attachment[],
     extractTasks: boolean = true
   ): Promise<AIProcessResult> {
-    if (!this.client) {
+    if (!this.hasApiKey) {
       throw new Error('API key not set. Please configure your Claude API key in Settings.');
     }
 
@@ -128,348 +140,261 @@ Images may contain:
 `
       : '';
 
-    const prompt = `${settings.systemInstructions}
+    const prompt = `<system_instructions>
+${settings.systemInstructions}
+</system_instructions>
 ${learningsSection}
 
-**CRITICAL RULES:**
-1. TOPIC HIERARCHY: Always associate content in this order:
-   - PRIMARY: Customer/Company (most important)
-   - SECONDARY: People mentioned in the conversation
-   - TERTIARY: Features, products, or technologies discussed
+<existing_data>
+Topics: ${topicList}
 
-2. NOTE CONSOLIDATION:
-   - For call transcripts or long inputs: Create ONE comprehensive note for the primary customer
-   - For quick notes: Create one focused note
-   - NEVER create multiple notes from a single input unless it discusses completely separate customers
-
-3. UPDATE vs CREATE:
-   - If recent notes exist for the same customer/topic, consider updating rather than creating new
-   - Look for notes from the same day or recent conversation threads
-
-**Existing Topics:** ${topicList}
-
-**Recent Notes (for context):**
+Recent Notes:
 ${recentNotes || 'No recent notes'}
 
-**Existing Tasks (do NOT create duplicates):**
+Existing Tasks (check for duplicates):
 ${recentTasks}
+</existing_data>
 
-**⚠️ IMPORTANT - Duplicate Detection & Reporting:**
-Before creating any task, check if it already exists in the list above.
-- If a task is very similar to an existing one (same title, same general topic), DO NOT add it to the tasks array
-- Instead, add it to the skippedTasks array with the reason and existing task title
-- This helps the user understand why certain tasks weren't created
-- Only extract NEW tasks that aren't already in the system
-
-**User Input:**
-"""
+<user_input>
 ${text}
-"""${attachmentInfo}
+</user_input>
+${attachmentInfo}
 
-**⚠️ CRITICAL - TASK EXTRACTION REQUIREMENTS ⚠️**
+<core_rules>
+1. Topic Hierarchy: PRIMARY (Customer/Company) > SECONDARY (People) > TERTIARY (Features/Tech)
+2. Note Consolidation: ONE comprehensive note per customer/topic from each input
+3. Update vs Create: Check if recent note exists for same topic before creating new
+4. Duplicate Detection: Check existing tasks; if duplicate, add to skippedTasks array with reason
+5. Task Extraction: Create SEPARATE task for EACH distinct action item mentioned
+</core_rules>
 
-**STEP 1: Extract ALL tasks from input**
-Read the entire input carefully and identify EVERY action item, follow-up, or to-do mentioned.
-- If multiple tasks are listed (e.g., "follow up on X, Y, and Z"), create a SEPARATE task for EACH
-- Don't combine multiple distinct actions into one task
-- Look for phrases like "need to", "follow up", "send", "update", "schedule", "review", etc.
+<task_requirements>
+For EVERY task, provide ALL fields:
+- title: Clear, actionable
+- description: REQUIRED, 1-2 sentences (never empty/null)
+- sourceExcerpt: REQUIRED, exact quote from input (never empty/null)
+- dueDate + dueTime: If temporal context exists, BOTH required (18:00 for EOD, 09:00 for morning)
+- dueDateReasoning: Why this date/time chosen
+- tags: 2-4 relevant tags
+- priority: high/medium/low
+- suggestedSubtasks: If multi-step task
+</task_requirements>
 
-**STEP 2: For EVERY task, populate ALL required fields:**
-1. title - Clear, actionable task title
-2. description - REQUIRED, NEVER empty or null. 1-2 sentences of context.
-3. sourceExcerpt - REQUIRED, NEVER empty. Exact quote from user input.
-4. dueDate - If temporal context exists (EOD, tomorrow, Friday, etc.), calculate the date
-5. dueTime - If dueDate is set, time is REQUIRED (use 18:00 for EOD, 09:00 for morning)
-6. dueDateReasoning - Explain why this date/time was chosen
-7. tags - 2-4 relevant tags
-8. priority - high/medium/low based on urgency
-9. suggestedSubtasks - If multi-step, break into subtasks
+<note_structure>
+Use markdown with:
+- ## for headers (Context, Discussion, Decisions, Next Steps)
+- **bold** for key terms/names
+- Bullet lists (-) and numbered lists (1. 2. 3.)
+- Clear sections for scanability
+</note_structure>
 
-**Example:** "I need to follow up with NVIDIA on contract costs, M365 updates, and email an update EOD tomorrow"
-→ Should create 3 SEPARATE tasks, each with description, sourceExcerpt, date, time, etc.
-
-**Analysis Instructions:**
-
-1. **Identify Primary Topic**: What is the MAIN customer/company this input is about? Match to existing topics if possible.
-
-2. **Identify Secondary Topics**: Who are the people mentioned? What features/technologies discussed?
-
-3. **Input Type**: Is this a call transcript (long, conversational), a meeting note, or a quick capture?
-
-4. **Tags**:
-   - Extract meaningful tags from the content (e.g., "pricing", "demo", "integration")
-   - Preserve any hashtags found in the original text (e.g., #training, #customer-success)
-   - Tags should be lowercase, without # symbols in the output
-   - Aim for 3-8 relevant tags
-
-5. **Note Strategy**:
-   - If call transcript: Create ONE comprehensive note summarizing the entire conversation
-   - If quick note: Create one focused note
-   - Check if you should UPDATE an existing recent note instead of creating new
-
-Return ONLY valid JSON (no markdown):
+<output_schema>
 {
   "inputType": "call_transcript" | "meeting_note" | "quick_note",
-  "primaryTopic": {
-    "name": "Acme Corp",
-    "type": "company",
-    "confidence": 0.95,
-    "matchedExisting": "Acme Corp" // if matched to existing, use EXACT existing name
-  },
-  "secondaryTopics": [
-    {
-      "name": "Sarah Johnson",
-      "type": "person",
-      "relationTo": "Acme Corp"
-    }
-  ],
-  "noteStrategy": {
-    "action": "create" | "update",
-    "shouldConsolidate": true,
-    "updateNoteId": "note-123"
-  },
+  "primaryTopic": {"name": "", "type": "company", "confidence": 0.95, "matchedExisting": ""},
+  "secondaryTopics": [{"name": "", "type": "person", "relationTo": ""}],
+  "noteStrategy": {"action": "create"|"update", "shouldConsolidate": true, "updateNoteId": ""},
   "note": {
-    "content": "## Context\n\nBrief overview of the call/meeting in 1-2 sentences.\n\n## Discussion Points\n\n- **Key topic 1**: Details about this topic\n- **Key topic 2**: Details about this topic\n- **Decisions made**: Any decisions or agreements\n\n## Next Steps\n\n- Action item 1\n- Action item 2\n\n## Additional Notes\n\nAny other relevant context or observations.",
-    "summary": "Brief one-line summary",
-    "topicAssociation": "Acme Corp",
-    "tags": ["pricing", "demo", "integration"],
-    "source": "call" | "email" | "thought" | "other",
-    "sentiment": "positive" | "neutral" | "negative",
-    "keyPoints": [
-      "Discussed enterprise pricing model",
-      "Sarah has concerns about ROI",
-      "Need to follow up with updated numbers"
-    ],
-    "relatedTopics": ["Sarah Johnson", "Enterprise Sales"]
+    "content": "## Context\n\n...\n\n## Discussion Points\n\n...\n\n## Next Steps\n\n...",
+    "summary": "One-line summary (max 100 chars)",
+    "topicAssociation": "",
+    "tags": ["tag1", "tag2"],
+    "source": "call"|"email"|"thought"|"other",
+    "sentiment": "positive"|"neutral"|"negative",
+    "keyPoints": ["Point 1", "Point 2"],
+    "relatedTopics": ["Topic 1"]
   },
   "tasks": [
     {
-      "title": "Send Enterprise pricing to Sarah at Acme Corp",
+      "title": "",
       "priority": "high",
       "dueDate": "2025-10-05",
       "dueTime": "18:00",
-      "dueDateReasoning": "User said 'end of week' which is Friday at EOD (6PM)",
-      "description": "Include updated Q3 numbers and ROI analysis for enterprise tier. Sarah requested this during call about pricing concerns.",
-      "tags": ["pricing", "enterprise"],
-      "suggestedSubtasks": [
-        "Prepare pricing spreadsheet",
-        "Get approval from sales manager",
-        "Send via email with follow-up"
-      ],
-      "sourceExcerpt": "Send Enterprise pricing to Sarah",
-      "relatedTo": "Acme Corp"
+      "dueDateReasoning": "",
+      "description": "",
+      "tags": [],
+      "suggestedSubtasks": [],
+      "sourceExcerpt": "",
+      "relatedTo": ""
     }
   ],
-  "skippedTasks": [
-    {
-      "title": "Follow up with Acme Corp",
-      "reason": "duplicate",
-      "existingTaskTitle": "Follow up with Acme Corp on pricing",
-      "sourceExcerpt": "need to follow up with Acme"
-    }
-  ],
-  "tags": ["pricing", "enterprise", "sales"],
+  "skippedTasks": [{"title": "", "reason": "duplicate", "existingTaskTitle": "", "sourceExcerpt": ""}],
+  "tags": [],
   "sentiment": "positive"
 }
+</output_schema>
 
-**NOTE CREATION RULES:**
-For the note object, ALWAYS provide:
-1. **Content** - Well-structured markdown with proper hierarchy:
-   - Use ## for section headers (Context, Discussion Points, Next Steps, etc.)
-   - Use **bold** for emphasis on key terms and names
-   - Use bullet points (- ) for lists
-   - Use numbered lists (1. 2. 3.) for sequential steps
-   - Structure content logically with clear sections
-   - For call transcripts: Include Context, Discussion Points, Decisions, Next Steps
-   - For quick notes: Use appropriate structure based on content
-   - Make it scannable and easy to read with visual hierarchy
-2. **Summary** - Brief one-line summary (max 100 characters)
-3. **Tags** - 3-8 relevant tags extracted from content (lowercase, no # symbols)
-4. **Source** - Determine input type:
-   - "call" - If it's a call transcript, meeting notes, or conversation
-   - "email" - If it's from email or written correspondence
-   - "thought" - If it's a personal note, idea, or quick capture
-   - "other" - If unclear
-5. **Sentiment** - Overall tone: positive, neutral, or negative
-6. **Key Points** - 3-5 bullet points of the most important information
-7. **Related Topics** - Names of secondary topics/people mentioned (if any)
-
-**TASK CREATION RULES:**
-For each task, ALWAYS provide:
-1. **Due Date Inference** - Extract temporal context:
-   - "today", "ASAP", "urgent" → today's date
-   - "tomorrow" → tomorrow's date
-   - "this week", "by Friday", "end of week" → upcoming Friday
-   - "next week" → Monday of next week
-   - "end of month" → last day of current month
-   - "in X days/weeks" → calculate exact date
-   - If no temporal context, set dueDate to null
-
-2. **Due Date Reasoning** - Explain your inference (e.g., "end of week", "urgent", "in 2 weeks")
-
-3. **Description** - Extract relevant context from the note (1-2 sentences)
-
-4. **Tags** - 2-4 relevant tags based on task type and content
-
-5. **Suggested Subtasks** - If task is multi-step, break into 2-5 subtasks
-
-6. **Source Linking** - ALWAYS include:
-   - sourceExcerpt: The exact text from input that triggered this task
-
-**TEMPORAL CONTEXT:**
+<temporal_context>
 ${(() => {
   const now = new Date();
   const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
   const monthDay = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const currentTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  return `Current Date & Time: ${dayOfWeek}, ${monthDay} at ${currentTime} ${timeZone}
-Current Date (ISO): ${now.toISOString().split('T')[0]}
-Current Time (24h): ${currentTime}
-Day of Week: ${dayOfWeek}
-Business Hours: 9:00 AM - 6:00 PM (09:00 - 18:00)
-End of Day (EOD): 6:00 PM (18:00)`;
+  return `${dayOfWeek}, ${monthDay} at ${currentTime}
+ISO Date: ${now.toISOString().split('T')[0]}
+Business Hours: 09:00-18:00 | EOD: 18:00`;
 })()}
 
-**DATE INFERENCE EXAMPLES:**
+Date Inference:
 - "EOD today" → ${new Date().toISOString().split('T')[0]} at 18:00
-- "EOD tomorrow" → ${new Date(Date.now() + 86400000).toISOString().split('T')[0]} at 18:00
-- "by end of week" → Next Friday at 18:00
-- "next Monday" → Next Monday at 09:00
-- "in 2 weeks" → ${new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]}
-- "ASAP" or "urgent" → ${new Date().toISOString().split('T')[0]} (today)
-- No temporal context → Leave dueDate as null
+- "tomorrow" → ${new Date(Date.now() + 86400000).toISOString().split('T')[0]} at 09:00
+- "by Friday"/"end of week" → Next Friday at 18:00
+- "next week" → Next Monday at 09:00
+- "ASAP"/"urgent" → today
+- No context → null
+</temporal_context>
 
-**TASK EXTRACTION EXAMPLES:**
+<example>
+Input: "Follow up with Sarah about pricing, send proposal EOD Friday"
+Output tasks:
+[
+  {
+    "title": "Follow up with Sarah about pricing",
+    "description": "Follow up with Sarah regarding pricing discussion.",
+    "sourceExcerpt": "Follow up with Sarah about pricing",
+    "dueDate": null,
+    "dueTime": null,
+    "dueDateReasoning": "No specific deadline",
+    "priority": "medium",
+    "tags": ["follow-up", "pricing"]
+  },
+  {
+    "title": "Send proposal",
+    "description": "Send proposal by end of day Friday.",
+    "sourceExcerpt": "send proposal EOD Friday",
+    "dueDate": "[Friday]",
+    "dueTime": "18:00",
+    "dueDateReasoning": "EOD Friday specified",
+    "priority": "high",
+    "tags": ["proposal"]
+  }
+]
+</example>
 
-Example 1:
-Input: "Need to send proposal to Acme Corp by Friday"
-Output:
-{
-  "title": "Send proposal to Acme Corp",
-  "priority": "high",
-  "dueDate": "[next Friday date]",
-  "dueTime": "18:00",
-  "dueDateReasoning": "User specified 'by Friday', defaulting to EOD",
-  "description": "Send proposal to Acme Corp as requested. Time-sensitive deadline for Friday.",
-  "sourceExcerpt": "Need to send proposal to Acme Corp by Friday",
-  "tags": ["proposal", "acme-corp"]
-}
-
-Example 2:
-Input: "Follow up with Sarah about the pricing discussion. Need to provide update via email my EOD tomorrow."
-Output:
-{
-  "title": "Follow up with Sarah about pricing discussion",
-  "priority": "high",
-  "dueDate": "${new Date(Date.now() + 86400000).toISOString().split('T')[0]}",
-  "dueTime": "18:00",
-  "dueDateReasoning": "User said 'EOD tomorrow' which is 6PM tomorrow",
-  "description": "Follow up with Sarah regarding pricing discussion and provide update via email by EOD tomorrow.",
-  "sourceExcerpt": "Follow up with Sarah about the pricing discussion. Need to provide update via email my EOD tomorrow.",
-  "tags": ["follow-up", "email", "pricing"]
-}
-
-Example 3:
-Input: "Review contract terms and schedule meeting"
-Output:
-{
-  "title": "Review contract terms and schedule meeting",
-  "priority": "medium",
-  "dueDate": null,
-  "dueTime": null,
-  "dueDateReasoning": "No temporal context provided",
-  "description": "Review contract terms and schedule related meeting.",
-  "sourceExcerpt": "Review contract terms and schedule meeting",
-  "tags": ["contract", "meeting"]
-}
-
-**⚠️ VALIDATION CHECKLIST - REVIEW BEFORE RETURNING JSON ⚠️**
-For EVERY task in your response, verify:
-✓ description is NOT null, NOT empty, has actual content (1-2 sentences minimum)
-✓ sourceExcerpt is NOT null, NOT empty, contains exact quote from user input
-✓ If dueDate exists → dueTime MUST exist (18:00 for EOD, 09:00 for morning, etc.)
-✓ dueDateReasoning explains why this date was chosen
-✓ tags has 2-4 relevant tags
-✓ priority is set based on urgency
-✓ title is clear and actionable
-
-**COMMON MISTAKES TO AVOID:**
-❌ Leaving description empty or null → WRONG
-❌ Leaving sourceExcerpt empty → WRONG
-❌ Setting dueDate without dueTime → WRONG
-❌ Generic descriptions like "Task to do" → WRONG
-✅ Specific descriptions with context → CORRECT
-✅ Exact quotes in sourceExcerpt → CORRECT
-✅ Both date AND time when deadline exists → CORRECT
-`;
+Return valid JSON only (no markdown).`;
 
     try {
       // Build content array for vision support
-      const contentBlocks: Anthropic.MessageParam['content'] = [
+      const contentBlocks: ClaudeContentBlock[] = [
         { type: 'text', text: prompt }
       ];
 
       // Add image attachments to content blocks
       if (attachments && attachments.length > 0) {
+        console.log('🖼️ Processing', attachments.length, 'attachments for Claude API');
         for (const attachment of attachments) {
+          console.log('📎 Processing attachment:', {
+            id: attachment.id,
+            type: attachment.type,
+            name: attachment.name,
+            hasThumbnail: !!attachment.thumbnail,
+            hasPath: !!attachment.path,
+          });
+
           if (attachment.type === 'image' || attachment.type === 'screenshot') {
             try {
               let base64Data: string;
 
               // Get base64 from thumbnail or read from file
               if (attachment.thumbnail && attachment.thumbnail.startsWith('data:image')) {
+                console.log('✅ Using thumbnail data for', attachment.name);
                 // Extract base64 from data URL
                 base64Data = attachment.thumbnail.split(',')[1];
               } else if (attachment.path) {
+                console.log('📄 Reading from file path:', attachment.path);
                 // Read file and convert to base64
                 const fileData = await fileStorage.readAttachment(attachment.path);
                 base64Data = fileStorage.uint8ArrayToBase64(fileData);
+                console.log('✅ Read', fileData.length, 'bytes from file');
               } else {
+                console.warn('⚠️ Skipping attachment - no thumbnail or path:', attachment.name);
                 continue; // Skip if no data available
               }
 
               // Determine media type
               const mediaType = attachment.mimeType.startsWith('image/')
-                ? attachment.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+                ? attachment.mimeType
                 : 'image/png';
+
+              console.log('✅ Adding image to Claude API request:', {
+                name: attachment.name,
+                mediaType,
+                base64Length: base64Data.length,
+              });
+
+              const imageSource: ClaudeImageSource = {
+                type: 'base64',
+                mediaType: mediaType,
+                data: base64Data,
+              };
 
               contentBlocks.push({
                 type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: mediaType,
-                  data: base64Data,
-                },
+                source: imageSource,
               });
             } catch (error) {
-              console.error('Failed to load image attachment:', error);
+              console.error('❌ Failed to load image attachment:', error);
               // Continue processing without this image
             }
           }
         }
+        console.log('✅ Total content blocks to send to Claude:', contentBlocks.length, '(1 text +', contentBlocks.length - 1, 'images)');
       }
 
-      const message = await this.client.messages.create({
+      // Build messages array
+      const messages: ClaudeMessage[] = [
+        { role: 'user', content: contentBlocks }
+      ];
+
+      const response = await invoke<ClaudeChatResponse>('claude_chat_completion_vision', {
         model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5
-        max_tokens: 4096,
-        messages: [{ role: 'user', content: contentBlocks }],
+        maxTokens: 4096,
+        messages,
+        system: undefined,
+        temperature: undefined,
       });
 
-      const content = message.content[0];
+      const content = response.content[0];
       if (content.type !== 'text') {
         throw new Error('Unexpected response format from Claude');
       }
 
       const responseText = content.text.trim();
       let jsonText = responseText;
-      const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+
+      // Try multiple extraction strategies for JSON from Claude's response
+      // Strategy 1: Extract from markdown code blocks (```json or ```)
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       if (jsonMatch) {
-        jsonText = jsonMatch[1];
+        jsonText = jsonMatch[1].trim();
+      }
+      // Strategy 2: If no code blocks, try to find JSON object/array directly
+      else if (!responseText.startsWith('{') && !responseText.startsWith('[')) {
+        const objectMatch = responseText.match(/(\{[\s\S]*\})/);
+        const arrayMatch = responseText.match(/(\[[\s\S]*\])/);
+        if (objectMatch) {
+          jsonText = objectMatch[1];
+        } else if (arrayMatch) {
+          jsonText = arrayMatch[1];
+        }
       }
 
-      const aiResponse = JSON.parse(jsonText);
+      let aiResponse;
+      try {
+        aiResponse = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error('Failed to parse Claude response as JSON');
+        console.error('Parse error:', parseError);
+        console.error('Attempted to parse:', jsonText.substring(0, 500));
+        console.error('Full response (first 1000 chars):', responseText.substring(0, 1000));
+
+        throw new Error(
+          `Failed to parse AI response as JSON. Claude may have returned text instead of structured data. ` +
+          `Parse error: ${parseError instanceof Error ? parseError.message : 'Unknown error'}. ` +
+          `Response preview: ${responseText.substring(0, 100)}...`
+        );
+      }
 
       // DEBUG: Log full AI response for analysis
       console.group('🤖 AI Response Analysis');
@@ -717,7 +642,7 @@ For EVERY task in your response, verify:
     tasks: Task[],
     settings: AppState['aiSettings']
   ): Promise<AIQueryResponse> {
-    if (!this.client) {
+    if (!this.hasApiKey) {
       throw new Error('API key not set. Please configure your Claude API key in Settings.');
     }
 
@@ -762,25 +687,53 @@ Return ONLY valid JSON (no markdown):
 }`;
 
     try {
-      const message = await this.client.messages.create({
-        model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5
-        max_tokens: 2048,
-        messages: [{ role: 'user', content: prompt }],
+      const messages: ClaudeMessage[] = [
+        { role: 'user', content: prompt }
+      ];
+
+      const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
+        request: {
+          model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5
+          maxTokens: 2048,
+          messages,
+          system: undefined,
+          temperature: undefined,
+        }
       });
 
-      const content = message.content[0];
+      const content = response.content[0];
       if (content.type !== 'text') {
         throw new Error('Unexpected response format from Claude');
       }
 
       const responseText = content.text.trim();
       let jsonText = responseText;
-      const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+
+      // Try multiple extraction strategies for JSON
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       if (jsonMatch) {
-        jsonText = jsonMatch[1];
+        jsonText = jsonMatch[1].trim();
+      } else if (!responseText.startsWith('{') && !responseText.startsWith('[')) {
+        const objectMatch = responseText.match(/(\{[\s\S]*\})/);
+        const arrayMatch = responseText.match(/(\[[\s\S]*\])/);
+        if (objectMatch) {
+          jsonText = objectMatch[1];
+        } else if (arrayMatch) {
+          jsonText = arrayMatch[1];
+        }
       }
 
-      const result = JSON.parse(jsonText);
+      let result;
+      try {
+        result = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error('Failed to parse query response as JSON');
+        console.error('Parse error:', parseError);
+        console.error('Response preview:', responseText.substring(0, 500));
+        throw new Error(
+          `Failed to parse query response. ${parseError instanceof Error ? parseError.message : 'Unknown error'}`
+        );
+      }
 
       return {
         answer: result.answer || 'I could not find an answer to that question.',
@@ -806,7 +759,7 @@ Return ONLY valid JSON (no markdown):
     reasoning: string;
     suggestedSettings?: Partial<AppState['learningSettings']>;
   }> {
-    if (!this.client) {
+    if (!this.hasApiKey) {
       throw new Error('API key not set. Please configure your Claude API key in Settings.');
     }
 
@@ -846,25 +799,52 @@ Only include "suggestedSettings" if shouldOptimize is true. Make conservative ad
 `;
 
     try {
-      const message = await this.client.messages.create({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
+      const messages: ClaudeMessage[] = [
+        { role: 'user', content: prompt }
+      ];
+
+      const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
+        request: {
+          model: 'claude-sonnet-4-5-20250929',
+          maxTokens: 1024,
+          messages,
+          system: undefined,
+          temperature: undefined,
+        }
       });
 
-      const content = message.content[0];
+      const content = response.content[0];
       if (content.type !== 'text') {
         throw new Error('Unexpected response format from Claude');
       }
 
       const responseText = content.text.trim();
       let jsonText = responseText;
-      const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+
+      // Try multiple extraction strategies for JSON
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       if (jsonMatch) {
-        jsonText = jsonMatch[1];
+        jsonText = jsonMatch[1].trim();
+      } else if (!responseText.startsWith('{') && !responseText.startsWith('[')) {
+        const objectMatch = responseText.match(/(\{[\s\S]*\})/);
+        const arrayMatch = responseText.match(/(\[[\s\S]*\])/);
+        if (objectMatch) {
+          jsonText = objectMatch[1];
+        } else if (arrayMatch) {
+          jsonText = arrayMatch[1];
+        }
       }
 
-      const result = JSON.parse(jsonText);
+      let result;
+      try {
+        result = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error('Failed to parse optimization response as JSON');
+        console.error('Parse error:', parseError);
+        console.error('Response preview:', responseText.substring(0, 500));
+        throw parseError;
+      }
+
       return result;
     } catch (error) {
       console.error('Error optimizing parameters with Claude:', error);

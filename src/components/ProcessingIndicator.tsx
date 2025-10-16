@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useUI } from '../context/UIContext';
 import { Loader2, CheckCircle2, XCircle, ChevronDown, Eye, Trash2 } from 'lucide-react';
 
 export function ProcessingIndicator() {
-  const { state, dispatch } = useApp();
+  const { state: uiState, dispatch: uiDispatch } = useUI();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const { backgroundProcessing } = state.ui;
+  const { backgroundProcessing } = uiState;
   const processingJobs = backgroundProcessing.queue.filter(j => j.status === 'processing' || j.status === 'queued');
   const completedJobs = backgroundProcessing.completed;
   const totalCount = processingJobs.length + completedJobs.length;
@@ -29,7 +29,7 @@ export function ProcessingIndicator() {
   if (totalCount === 0) return null;
 
   const handleDismissCompleted = (jobId: string) => {
-    dispatch({ type: 'REMOVE_PROCESSING_JOB', payload: jobId });
+    uiDispatch({ type: 'REMOVE_PROCESSING_JOB', payload: jobId });
   };
 
   const handleViewResults = (jobId: string) => {

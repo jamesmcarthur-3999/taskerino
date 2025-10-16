@@ -1,0 +1,3236 @@
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSessions } from '../context/SessionsContext';
+import { useUI } from '../context/UIContext';
+import { useTasks } from '../context/TasksContext';
+import { Play, Pause, Square, Clock, Calendar, Tag, Activity, CheckCircle2, AlertCircle, Target, Lightbulb, Search, FileText, CheckSquare, TrendingUp, Camera, BookOpen, Trash2, Sparkles, Save, Filter, SlidersHorizontal, CheckCheck, Video, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
+import type { Session, SessionScreenshot, SessionAudioSegment, SessionContextItem } from '../types';
+import { screenshotCaptureService } from '../services/screenshotCaptureService';
+import { adaptiveScreenshotScheduler } from '../services/adaptiveScreenshotScheduler';
+import { audioRecordingService } from '../services/audioRecordingService';
+import { videoRecordingService } from '../services/videoRecordingService';
+import { videoStorageService } from '../services/videoStorageService';
+import { sessionsAgentService } from '../services/sessionsAgentService';
+import { attachmentStorage } from '../services/attachmentStorage';
+import { SessionTimeline } from './SessionTimeline';
+import { SessionDetailView } from './SessionDetailView';
+import { checkScreenRecordingPermission, showMacOSPermissionInstructions } from '../utils/permissions';
+import { listen } from '@tauri-apps/api/event';
+import { getTemplates, saveTemplate, type SessionTemplate } from '../utils/sessionTemplates';
+import { loadLastSessionSettings, saveLastSessionSettings, getSettingsSummary, type LastSessionSettings } from '../utils/lastSessionSettings';
+import { ToggleButton } from './sessions/ToggleButton';
+import { IntervalControl } from './sessions/IntervalControl';
+import { AdaptiveSchedulerDebug } from './sessions/AdaptiveSchedulerDebug';
+import { Camera as CameraIcon, Mic } from 'lucide-react';
+import { DropdownTrigger } from './DropdownTrigger';
+import { InlineTagManager } from './InlineTagManager';
+import { tagUtils } from '../utils/tagUtils';
+import { FeatureTooltip } from './FeatureTooltip';
+import { CollapsibleSidebar } from './CollapsibleSidebar';
+import { useSessionEnding } from '../hooks/useSessionEnding';
+import { useSessionStarting } from '../hooks/useSessionStarting';
+import { SessionsStatsBar } from './sessions/SessionsStatsBar';
+import { SessionsSortMenu } from './sessions/SessionsSortMenu';
+import { SessionsSearchBar } from './sessions/SessionsSearchBar';
+import { BulkOperationsBar } from './sessions/BulkOperationsBar';
+import { ActiveFiltersDisplay } from './sessions/ActiveFiltersDisplay';
+
+/**
+ * Helper function to group sessions by date ranges
+ */
+function groupSessionsByDate(sessions: Session[]) {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+  const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  return {
+    today: sessions.filter(s => new Date(s.startTime) >= todayStart),
+    yesterday: sessions.filter(s => {
+      const date = new Date(s.startTime);
+      return date >= yesterdayStart && date < todayStart;
+    }),
+    thisWeek: sessions.filter(s => {
+      const date = new Date(s.startTime);
+      return date >= weekStart && date < yesterdayStart;
+    }),
+    earlier: sessions.filter(s => new Date(s.startTime) < weekStart),
+  };
+}
+
+/**
+ * Helper function to calculate total stats across all sessions
+ */
+function calculateTotalStats(sessions: Session[]) {
+  return {
+    totalSessions: sessions.length,
+    totalMinutes: sessions.reduce((sum, s) => sum + (s.totalDuration || 0), 0),
+    totalTasks: sessions.reduce((sum, s) => sum + (s.extractedTaskIds?.length || 0), 0),
+    totalScreenshots: sessions.reduce((sum, s) => sum + (s.screenshots?.length || 0), 0),
+  };
+}
+
+export default function SessionsZone() {
+  const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment, updateScreenshotAnalysis, addScreenshotComment, toggleScreenshotFlag, setActiveSession, addExtractedTask, addExtractedNote, addContextItem } = useSessions();
+  const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
+  const { state: tasksState, dispatch: tasksDispatch } = useTasks();
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [lastMetadataUpdate, setLastMetadataUpdate] = useState<string | null>(null);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [lastSynthesisUpdate, setLastSynthesisUpdate] = useState<string | null>(null);
+  const [synthesisError, setSynthesisError] = useState<string | null>(null);
+
+  const [selectedFilter, setSelectedFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'duration-desc' | 'duration-asc' | 'screenshots' | 'tasks'>('date-desc');
+
+  // Session ending state management
+  const { isEnding, completedSessionId, shouldAutoNavigate, handleEndSession, clearAutoNavigation, isSessionNewlyCompleted } = useSessionEnding();
+
+  // Session starting state management
+  const { isStarting, countdown, startedSessionId, shouldAutoScroll, handleStartSession: startSessionWithCountdown, clearAutoScroll, isSessionNewlyStarted } = useSessionStarting();
+
+  // Sessions Introduction Tooltip State
+  const [showSessionsIntro, setShowSessionsIntro] = useState(false);
+
+  // Filter dropdown state
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // Sort dropdown state
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+
+  // Interval dropdown state
+  const [showIntervalDropdown, setShowIntervalDropdown] = useState(false);
+
+  // Bulk selection state
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+
+  // Sidebar state - control sidebar expansion from parent
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
+    // Initialize based on screen size
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1280;
+    }
+    return true;
+  });
+
+  // Track whether sidebar collapse was manual or automatic
+  // This determines whether to auto-expand when screen becomes large
+  const [collapseReason, setCollapseReason] = useState<'manual' | 'auto' | null>(() => {
+    // Initialize based on screen size - if starting collapsed, mark as auto
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1280 ? 'auto' : null;
+    }
+    return null;
+  });
+
+  // Responsive sidebar behavior - auto-collapse on small screens, auto-expand on large screens
+  useEffect(() => {
+    const handleResize = () => {
+      const isLargeScreen = window.innerWidth >= 1280;
+
+      if (isLargeScreen) {
+        // Screen became large - auto-expand ONLY if it was auto-collapsed
+        if (!isSidebarExpanded && collapseReason === 'auto') {
+          setIsSidebarExpanded(true);
+          setCollapseReason(null); // Reset reason after auto-expanding
+        }
+      } else {
+        // Screen became small - auto-collapse
+        if (isSidebarExpanded) {
+          setIsSidebarExpanded(false);
+          setCollapseReason('auto'); // Mark as auto-collapsed
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isSidebarExpanded, collapseReason]);
+
+  // Wrapper for setIsSidebarExpanded that tracks manual toggles
+  const handleSidebarToggle = (expanded: boolean) => {
+    setIsSidebarExpanded(expanded);
+    // If user manually changes state, mark it as manual
+    // This prevents auto-expand when screen becomes large
+    setCollapseReason(expanded ? null : 'manual');
+  };
+
+  // Programmatic sidebar control (for auto-expand/collapse, not user-initiated)
+  const handleSidebarProgrammatic = (expanded: boolean, reason: 'auto' | null = 'auto') => {
+    setIsSidebarExpanded(expanded);
+    setCollapseReason(reason);
+  };
+
+  // Ref to track active session ID for audio chunk listener (avoids stale closures)
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+
+  // Ref to track previous active session ID for detecting completion transitions
+  const prevActiveSessionIdRef = useRef<string | null>(null);
+
+  // Ref to track video recording initialization attempts (prevents duplicate starts)
+  const videoRecordingInitializedRef = useRef<string | null>(null);
+
+  // Ref to store latest state (avoids stale closures in callbacks)
+  const stateRef = useRef({ sessions });
+
+  // Ref to store audio segment handler (prevents duplicate event listeners)
+  const handleAudioSegmentProcessedRef = useRef<((segment: SessionAudioSegment) => void) | null>(null);
+
+  // Ref to track if audio listener is already active (prevents duplicate registration in StrictMode)
+  const audioListenerActiveRef = useRef<boolean>(false);
+
+  // Ref for session list scroll container (enables auto-scroll to live session)
+  const sessionListScrollRef = useRef<HTMLDivElement>(null);
+
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+
+  // Get the selected session from state by ID (always fresh, never stale)
+  const selectedSessionForDetail = selectedSessionId
+    ? sessions.find(s => s.id === selectedSessionId)
+    : null;
+
+  // Debug logging for right panel rendering decision
+  console.log('🖼️ [Right Panel] Render decision:', {
+    selectedSessionId,
+    selectedSessionForDetail: selectedSessionForDetail?.id,
+    selectedSessionForDetailStatus: selectedSessionForDetail?.status,
+    activeSessionId,
+    activeSession: activeSession?.id,
+    activeSessionStatus: activeSession?.status,
+    willShow: selectedSessionForDetail ? 'selectedSessionForDetail' : activeSession ? 'activeSession' : 'empty'
+  });
+
+  // Update refs on every render (cheap operation, avoids stale closures)
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+    stateRef.current = { sessions };
+  }, [activeSessionId, sessions]);
+
+  // Show sessions intro tooltip when user first opens Sessions zone with no sessions
+  useEffect(() => {
+    if (!uiState.onboarding.featureIntroductions.sessions && sessions.length === 0) {
+      const timer = setTimeout(() => setShowSessionsIntro(true), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [uiState.onboarding.featureIntroductions.sessions, sessions.length]);
+
+  // Clean up corrupted sessions on mount (one-time cleanup)
+  useEffect(() => {
+    const corruptedSessions = sessions.filter(s => {
+      if (!s.id || !s.name || !s.startTime) return true;
+      const startDate = new Date(s.startTime);
+      return isNaN(startDate.getTime());
+    });
+
+    if (corruptedSessions.length > 0) {
+      console.warn('🧹 Found corrupted sessions, cleaning up:', corruptedSessions.length);
+      corruptedSessions.forEach(s => {
+        console.warn('🗑️ Deleting corrupted session:', s.id, s);
+        deleteSession(s.id );
+      });
+    }
+  }, []); // Only run once on mount
+   
+
+  // Get all past sessions, filtering out corrupted ones
+  const allPastSessions = sessions
+    .filter(s => {
+      // Only include completed sessions
+      if (s.status !== 'completed') return false;
+
+      // Filter out corrupted sessions with invalid data
+      if (!s.id || !s.name || !s.startTime) {
+        console.warn('⚠️ Filtering out corrupted session:', s.id, 'missing required fields');
+        return false;
+      }
+
+      // Check if startTime is a valid date
+      const startDate = new Date(s.startTime);
+      if (isNaN(startDate.getTime())) {
+        console.warn('⚠️ Filtering out session with invalid date:', s.id, s.startTime);
+        return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) =>
+      new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+    );
+
+  // Extract unique tags for filter options
+  const uniqueTags = useMemo(() => {
+    const tags = new Set<string>();
+    allPastSessions.forEach(s => {
+      if (s.tags) {
+        s.tags.forEach(tag => tags.add(tag));
+      }
+    });
+    return Array.from(tags).sort();
+  }, [allPastSessions]);
+
+  // Extract unique categories
+  const uniqueCategories = useMemo(() => {
+    const categories = new Set<string>();
+    allPastSessions.forEach(s => {
+      if (s.category) categories.add(s.category);
+    });
+    return Array.from(categories).sort();
+  }, [allPastSessions]);
+
+  // Extract unique sub-categories
+  const uniqueSubCategories = useMemo(() => {
+    const subCategories = new Set<string>();
+    allPastSessions.forEach(s => {
+      if (s.subCategory) subCategories.add(s.subCategory);
+    });
+    return Array.from(subCategories).sort();
+  }, [allPastSessions]);
+
+  // Apply filters, search, and sorting
+  const filteredSessions = useMemo(() => {
+    let filtered = allPastSessions;
+
+    // Apply category filters
+    if (selectedCategories.length > 0) {
+      filtered = filtered.filter(s =>
+        s.category && selectedCategories.includes(s.category)
+      );
+    }
+
+    // Apply sub-category filters
+    if (selectedSubCategories.length > 0) {
+      filtered = filtered.filter(s =>
+        s.subCategory && selectedSubCategories.includes(s.subCategory)
+      );
+    }
+
+    // Apply tag filters from dropdown
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter(s =>
+        s.tags && s.tags.some(tag => selectedTags.includes(tag))
+      );
+    }
+
+    // Apply old tag filter (for backwards compatibility with tag pills)
+    if (selectedFilter !== 'all') {
+      filtered = filtered.filter(s => s.tags?.includes(selectedFilter));
+    }
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(s => {
+        // Search in basic fields
+        const basicMatch = (
+          s.name.toLowerCase().includes(query) ||
+          s.description.toLowerCase().includes(query) ||
+          (s.summary?.narrative || '').toLowerCase().includes(query)
+        );
+
+        // Search in screenshot analyses (summary, activity, and key elements)
+        const screenshotMatch = s.screenshots?.some(screenshot =>
+          screenshot.aiAnalysis?.summary?.toLowerCase().includes(query) ||
+          screenshot.aiAnalysis?.detectedActivity?.toLowerCase().includes(query) ||
+          screenshot.aiAnalysis?.keyElements?.some(element =>
+            element.toLowerCase().includes(query)
+          )
+        );
+
+        // Search in audio transcriptions
+        const audioMatch = s.audioSegments?.some(segment =>
+          segment.transcription?.toLowerCase().includes(query)
+        );
+
+        return basicMatch || screenshotMatch || audioMatch;
+      });
+    }
+
+    // Apply sorting
+    const sorted = [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case 'date-desc':
+          return new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
+        case 'date-asc':
+          return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+        case 'duration-desc':
+          return (b.totalDuration || 0) - (a.totalDuration || 0);
+        case 'duration-asc':
+          return (a.totalDuration || 0) - (b.totalDuration || 0);
+        case 'screenshots':
+          return (b.screenshots?.length || 0) - (a.screenshots?.length || 0);
+        case 'tasks':
+          return (b.extractedTaskIds?.length || 0) - (a.extractedTaskIds?.length || 0);
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [allPastSessions, selectedCategories, selectedSubCategories, selectedTags, selectedFilter, searchQuery, sortBy]);
+
+  // Memoize grouped sessions to avoid re-calculating on every render
+  const groupedSessions = useMemo(() => groupSessionsByDate(filteredSessions), [filteredSessions]);
+
+  // Memoize stats to avoid re-calculating on every render
+  const stats = useMemo(() => calculateTotalStats(sessions), [sessions]);
+
+  // Auto-select first visible session when navigating to sessions space
+  // Respects current sort order - selects whatever session appears first in the list
+  useEffect(() => {
+    // Don't interfere with session start auto-scroll navigation
+    if (shouldAutoScroll) {
+      return;
+    }
+
+    if (filteredSessions.length > 0) {
+      // Check if current selection is valid:
+      // - Either it's in the filtered list (completed sessions)
+      // - OR it's the active session
+      const isActiveSession = selectedSessionId && activeSession && selectedSessionId === activeSession.id;
+      const isInFilteredList = selectedSessionId && filteredSessions.some(s => s.id === selectedSessionId);
+      const isValid = isActiveSession || isInFilteredList;
+
+      if (!isValid) {
+        setSelectedSessionId(filteredSessions[0].id);
+      }
+    } else if (selectedSessionId && (!activeSession || selectedSessionId !== activeSession.id)) {
+      // Only clear selection if it's not the active session
+      setSelectedSessionId(null);
+    }
+  }, [filteredSessions, selectedSessionId, sortBy, activeSession, shouldAutoScroll]);
+
+  /**
+   * Auto-navigate to newly completed session detail view
+   * Creates a delightful "session saved, here's what you did" experience
+   *
+   * PACING: Intentionally delayed to let users see the sparkle animation and NEW badge
+   */
+  useEffect(() => {
+    if (shouldAutoNavigate && completedSessionId) {
+      console.log('🎯 [Auto-Navigation] Navigating to completed session:', completedSessionId);
+
+      // Increased delay: Let user see the sparkle animation and NEW badge first (2000ms)
+      // This gives users time to:
+      // - See the session appear in the list (0-500ms)
+      // - Notice the sparkle animation and NEW badge (500-2000ms)
+      // - Then smoothly transition to the detail view (2000ms)
+      const timeoutId = setTimeout(() => {
+        setSelectedSessionId(completedSessionId);
+        // Expand sidebar if collapsed on mobile (programmatic, not user action)
+        if (!isSidebarExpanded && window.innerWidth >= 1024) {
+          handleSidebarProgrammatic(true, null);
+        }
+        clearAutoNavigation();
+      }, 2000);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [shouldAutoNavigate, completedSessionId, clearAutoNavigation, isSidebarExpanded]);
+
+  /**
+   * Auto-scroll to active session view when a new session starts
+   * Creates a delightful "countdown finished, now you're recording" experience
+   *
+   * PACING: Immediate - user just saw the countdown, now show them the active session
+   */
+  useEffect(() => {
+    console.log('🔍 [Auto-Scroll Effect] Effect fired:', {
+      shouldAutoScroll,
+      startedSessionId,
+      activeSessionId,
+      selectedSessionId
+    });
+
+    if (shouldAutoScroll && startedSessionId) {
+      console.log('🎯 [Auto-Scroll] Navigating to live session:', startedSessionId);
+
+      // Scroll left panel to top to show live session card
+      sessionListScrollRef.current?.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+
+      // Select the active session to show ActiveSessionView on right panel
+      console.log('🎯 [Auto-Scroll] Selecting active session (was:', selectedSessionId, ')');
+      setSelectedSessionId(startedSessionId);
+
+      // Collapse sidebar on smaller screens to give more room for active session (programmatic)
+      if (isSidebarExpanded && window.innerWidth < 1280) {
+        handleSidebarProgrammatic(false, 'auto');
+      }
+
+      clearAutoScroll();
+    }
+  }, [shouldAutoScroll, startedSessionId, clearAutoScroll, isSidebarExpanded]);
+
+  /**
+   * Handle screenshot capture callback
+   * Note: Only depends on addScreenshot and updateScreenshotAnalysis to avoid recreating on every session update
+   * Uses stateRef to access latest state without causing callback recreation
+   */
+  const handleScreenshotCaptured = useCallback(async (screenshot: SessionScreenshot) => {
+    console.log('📸 Screenshot captured, starting AI analysis...');
+
+    // Get current active session ID from ref (avoids stale closure)
+    const currentActiveSessionId = activeSessionIdRef.current;
+    if (!currentActiveSessionId) return;
+
+    // Add screenshot to session
+    addScreenshot(currentActiveSessionId, screenshot);
+
+    // Get the session from stateRef to check autoAnalysis setting
+    const sessionForAnalysis = stateRef.current.sessions.find(s => s.id === currentActiveSessionId);
+    if (!sessionForAnalysis) return;
+
+    // Trigger AI analysis if enabled
+    if (sessionForAnalysis.autoAnalysis) {
+      try {
+        // Update status to 'analyzing'
+        updateScreenshotAnalysis(screenshot.id, undefined, 'analyzing');
+
+        // Load the screenshot attachment from storage
+        console.log('📷 Loading screenshot attachment:', screenshot.attachmentId);
+        const attachment = await attachmentStorage.getAttachment(screenshot.attachmentId);
+
+        if (!attachment || !attachment.base64) {
+          throw new Error('Screenshot attachment not found or has no image data');
+        }
+
+        const screenshotData = attachment.base64;
+        const mimeType = attachment.mimeType || 'image/jpeg';
+        console.log('✅ Screenshot loaded:', {
+          size: screenshotData.length,
+          mimeType
+        });
+
+        // Analyze with AI (use sessionForAnalysis which has latest state)
+        const analysis = await sessionsAgentService.analyzeScreenshot(
+          screenshot,
+          sessionForAnalysis,
+          screenshotData,
+          mimeType
+        );
+
+        // Update with analysis results
+        updateScreenshotAnalysis(screenshot.id, analysis, 'complete');
+
+        console.log('✅ Screenshot analysis complete');
+
+        // Feed AI curiosity score back to adaptive scheduler (if active)
+        if (analysis && analysis.curiosity !== undefined && adaptiveScreenshotScheduler.isActive()) {
+          adaptiveScreenshotScheduler.updateCuriosityScore(analysis.curiosity);
+          console.log(`🧠 [ADAPTIVE] Curiosity score updated: ${analysis.curiosity.toFixed(1)}`);
+        }
+      } catch (error) {
+        console.error('❌ Screenshot analysis failed:', error);
+        updateScreenshotAnalysis(
+          screenshot.id,
+          undefined,
+          'error',
+          error instanceof Error ? error.message : 'Analysis failed'
+        );
+      }
+    }
+  }, [updateScreenshotAnalysis]);
+
+  /**
+   * Handle audio segment processed callback
+   * Note: Only depends on addAudioSegment to avoid recreating on every session update
+   */
+  const handleAudioSegmentProcessed = useCallback(async (segment: SessionAudioSegment) => {
+    console.log('🎤 Audio segment processed:', segment.id);
+
+    // Get current active session ID from ref (avoids stale closure)
+    const currentActiveSessionId = activeSessionIdRef.current;
+    if (!currentActiveSessionId) return;
+
+    // Add audio segment to session
+    addAudioSegment(currentActiveSessionId, segment);
+
+    console.log('✅ Audio segment added to session');
+  }, [addAudioSegment]);
+
+  // Update ref whenever callback changes
+  useEffect(() => {
+    handleAudioSegmentProcessedRef.current = handleAudioSegmentProcessed;
+  }, [handleAudioSegmentProcessed]);
+
+  /**
+   * Manage screenshot capture and audio recording lifecycle
+   */
+  useEffect(() => {
+    console.log('🔵 [SESSIONS ZONE] useEffect triggered');
+    console.log('🔵 [SESSIONS ZONE] activeSession:', activeSession?.id, 'status:', activeSession?.status);
+
+    if (!activeSession) {
+      // No active session - stop capture and audio
+      console.log('⛔ [SESSIONS ZONE] No active session, stopping capture and audio');
+      screenshotCaptureService.stopCapture();
+      audioRecordingService.stopRecording();
+      return;
+    }
+
+    if (activeSession.status === 'active') {
+      // Active session - start or resume capture
+      const isCapturingThisSession = screenshotCaptureService.getActiveSessionId() === activeSession.id;
+      const isCurrentlyCapturing = screenshotCaptureService.isCapturing();
+      const isAudioRecording = audioRecordingService.isCurrentlyRecording();
+
+      console.log('🔵 [SESSIONS ZONE] Active session detected');
+      console.log('🔵 [SESSIONS ZONE] isCapturingThisSession:', isCapturingThisSession);
+      console.log('🔵 [SESSIONS ZONE] isCurrentlyCapturing:', isCurrentlyCapturing);
+      console.log('🔵 [SESSIONS ZONE] isAudioRecording:', isAudioRecording);
+
+      // Handle screenshot capture based on enableScreenshots setting
+      if (activeSession.enableScreenshots) {
+        // Only start capture if not already capturing this session, or if we need to restart for settings changes
+        // Check if we're already capturing this specific session
+        if (!isCurrentlyCapturing || !isCapturingThisSession) {
+          console.log('🚀 [SESSIONS ZONE] Starting screenshot capture for session:', activeSession.id);
+
+          // Check permissions before starting (macOS only, non-blocking)
+          checkScreenRecordingPermission().then(hasPermission => {
+            if (!hasPermission) {
+              console.warn('⚠️ Screen recording permission may not be granted');
+              showMacOSPermissionInstructions();
+            } else {
+              console.log('✅ [SESSIONS ZONE] Screen recording permission granted');
+            }
+          });
+
+          screenshotCaptureService.startCapture(activeSession, handleScreenshotCaptured);
+        } else {
+          console.log('✅ [SESSIONS ZONE] Already capturing for this session');
+        }
+      } else {
+        // Screenshots are disabled - stop capture if running
+        if (isCurrentlyCapturing && isCapturingThisSession) {
+          console.log('⏹️ [SESSIONS ZONE] Stopping screenshot capture (disabled by user)');
+          screenshotCaptureService.stopCapture();
+        } else {
+          console.log('⏭️ [SESSIONS ZONE] Screenshot capture disabled for this session (audio-only mode)');
+        }
+      }
+
+      // Handle audio recording based on audioRecording setting
+      if (activeSession.audioRecording) {
+        // Audio is enabled
+        if (!isAudioRecording) {
+          console.log('🚀 [SESSIONS ZONE] Starting audio recording');
+          audioRecordingService.startRecording(activeSession, handleAudioSegmentProcessed)
+            .catch(error => {
+              console.error('❌ [SESSIONS ZONE] Failed to start audio recording:', error);
+              // Don't throw - audio failure shouldn't stop the session
+            });
+        } else {
+          console.log('✅ [SESSIONS ZONE] Already recording audio');
+        }
+      } else {
+        // Audio is disabled - stop recording if running
+        if (isAudioRecording) {
+          console.log('⏹️ [SESSIONS ZONE] Stopping audio recording (disabled by user)');
+          audioRecordingService.stopRecording();
+        }
+      }
+
+      // Handle video recording based on videoRecording setting
+      console.log('🎬 [SESSIONS ZONE] Video recording check - videoRecording flag:', activeSession.videoRecording, 'session:', activeSession.id);
+      if (activeSession.videoRecording) {
+        // Video is enabled - check backend recording status
+        const activeVideoSessionId = videoRecordingService.getActiveSessionId();
+        const isAlreadyRecordingThisSession = activeVideoSessionId === activeSession.id;
+        const hasAttemptedInitialization = videoRecordingInitializedRef.current === activeSession.id;
+
+        console.log('🎬 [SESSIONS ZONE] Video is ENABLED - activeVideoSessionId:', activeVideoSessionId, 'currentSession:', activeSession.id, 'hasAttempted:', hasAttemptedInitialization);
+
+        if (!isAlreadyRecordingThisSession && !hasAttemptedInitialization) {
+          // Mark as attempted to prevent duplicate initialization
+          videoRecordingInitializedRef.current = activeSession.id;
+
+          // Check backend recording status and forcefully stop any existing recording
+          console.log('🎬 [SESSIONS ZONE] Checking backend recording status...');
+          videoRecordingService.isCurrentlyRecording()
+            .then(isRecording => {
+              console.log('🎬 [SESSIONS ZONE] Backend recording status:', isRecording);
+
+              if (isRecording) {
+                console.warn('⚠️ [SESSIONS ZONE] Backend has active recording - forcefully stopping before starting new one');
+                return videoRecordingService.stopRecording()
+                  .catch(err => {
+                    console.error('❌ [SESSIONS ZONE] Failed to stop existing recording:', err);
+                    // Continue anyway - try to start
+                    
+                  });
+              }
+              
+            })
+            .then(() => {
+              // Now start the new recording
+              console.log('🎬 [SESSIONS ZONE] Starting video recording for session:', activeSession.id);
+              return videoRecordingService.startRecording(activeSession);
+            })
+            .then(() => {
+              console.log('✅ [SESSIONS ZONE] Video recording started successfully for session:', activeSession.id);
+            })
+            .catch(error => {
+              console.error('❌ [SESSIONS ZONE] Failed to start video recording:', error);
+              // Reset the flag so user can retry manually if needed
+              videoRecordingInitializedRef.current = null;
+              // Don't throw - video failure shouldn't stop the session
+            });
+        } else if (isAlreadyRecordingThisSession) {
+          console.log('✅ [SESSIONS ZONE] Already recording video for this session:', activeSession.id);
+        } else {
+          console.log('ℹ️ [SESSIONS ZONE] Video initialization already attempted for session:', activeSession.id);
+        }
+      } else {
+        // Video is disabled - stop recording if running
+        console.log('⚠️ [SESSIONS ZONE] Video is DISABLED for session:', activeSession.id);
+        const activeVideoSessionId = videoRecordingService.getActiveSessionId();
+        if (activeVideoSessionId === activeSession.id) {
+          console.log('⏹️ [SESSIONS ZONE] Stopping video recording (disabled by user)');
+          videoRecordingService.stopRecording()
+            .catch(error => {
+              console.error('❌ [SESSIONS ZONE] Failed to stop video recording:', error);
+            });
+          // Reset initialization flag when video is disabled
+          videoRecordingInitializedRef.current = null;
+        } else {
+          console.log('ℹ️ [SESSIONS ZONE] No video to stop for this session');
+        }
+      }
+    } else if (activeSession.status === 'paused') {
+      // Paused session - pause capture and audio
+      console.log('⏸️ [SESSIONS ZONE] Session paused, pausing capture and audio');
+      screenshotCaptureService.pauseCapture();
+      audioRecordingService.pauseRecording();
+    } else if (activeSession.status === 'completed') {
+      // Completed session - stop capture and audio, but allow grace period for pending audio
+      console.log('⏹️ [SESSIONS ZONE] Session completed, stopping capture');
+      screenshotCaptureService.stopCapture();
+
+      // Stop audio recording (Rust backend stops sending new chunks)
+      console.log('⏹️ [SESSIONS ZONE] Stopping audio recording (waiting for pending chunks...)');
+      audioRecordingService.stopRecording();
+
+      // NOTE: Video stopping is handled by the dedicated useEffect below (VIDEO COMPLETION)
+      // to avoid race conditions and duplicate stops. The separate useEffect ensures video
+      // is stopped exactly once when the session completes.
+
+      // Wait for pending audio chunks to be processed before cleanup
+      // Audio events may still arrive for ~5 seconds after stopping
+      const cleanupTimer = setTimeout(() => {
+        console.log('🧹 [SESSIONS ZONE] Grace period ended, clearing session context');
+        sessionsAgentService.clearSessionContext(activeSession.id);
+      }, 5000);
+
+      return () => clearTimeout(cleanupTimer);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      console.log('🔵 [SESSIONS ZONE] useEffect cleanup');
+      if (activeSession?.status === 'completed') {
+        screenshotCaptureService.stopCapture();
+        audioRecordingService.stopRecording();
+        // NOTE: Video stopping is handled by dedicated useEffect (VIDEO COMPLETION)
+      }
+    };
+  }, [activeSession?.id, activeSession?.status, activeSession?.audioRecording, activeSession?.videoRecording, activeSession?.enableScreenshots, activeSession?.screenshotInterval, handleScreenshotCaptured, handleAudioSegmentProcessed]);
+
+  /**
+   * Detect session completion transition and stop video recording
+   *
+   * This is the SINGLE SOURCE OF TRUTH for video stopping to avoid race conditions.
+   * It catches the moment when a session completes and stops the video exactly once.
+   */
+  useEffect(() => {
+    const prevSessionId = prevActiveSessionIdRef.current;
+    const currentSessionId = activeSessionId;
+
+    console.log('🎬 [VIDEO COMPLETION] Checking for session completion transition');
+    console.log('🎬 [VIDEO COMPLETION] prevSessionId:', prevSessionId, 'currentSessionId:', currentSessionId);
+
+    // Detect session completion: had active session, now undefined
+    if (prevSessionId && !currentSessionId) {
+      const completedSession = sessions.find(s => s.id === prevSessionId && s.status === 'completed');
+
+      console.log('🎬 [VIDEO COMPLETION] Detected activeSessionId cleared, looking for completed session:', prevSessionId);
+      console.log('🎬 [VIDEO COMPLETION] Found completed session:', completedSession?.id, 'status:', completedSession?.status);
+
+      if (completedSession) {
+        console.log('⏹️ [VIDEO COMPLETION] Session completed, stopping video recording...');
+
+        // Check if video was recording for this session
+        const activeVideoSessionId = videoRecordingService.getActiveSessionId();
+        console.log('🎬 [VIDEO COMPLETION] activeVideoSessionId:', activeVideoSessionId, 'completedSessionId:', completedSession.id);
+
+        if (activeVideoSessionId === completedSession.id) {
+          console.log('⏹️ [VIDEO COMPLETION] Stopping video recording for completed session:', completedSession.id);
+
+          // Stop recording - this is the ONLY place video stopping happens
+          videoRecordingService.stopRecording()
+            .then(async (sessionVideo) => {
+              if (sessionVideo) {
+                console.log('✅ [VIDEO COMPLETION] Video recording stopped, sessionVideo:', sessionVideo);
+
+                // Get fresh session from state (not from closure) to avoid staleness
+                const freshSession = sessions.find(s => s.id === completedSession.id);
+                if (!freshSession) {
+                  console.error('❌ [VIDEO COMPLETION] Session not found in state after video stop:', completedSession.id);
+                  return;
+                }
+
+                // Update session with video data
+                console.log('✅ [VIDEO COMPLETION] Updating session with video data for session:', freshSession.id);
+                updateSession({
+                  ...freshSession, // Use fresh session to avoid overwriting concurrent updates
+                  video: sessionVideo
+                });
+                console.log('✅ [VIDEO COMPLETION] Session updated with video');
+
+                // Wait for save to complete (critical action triggers immediate save)
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                console.log('✅ [VIDEO COMPLETION] Save triggered');
+              } else {
+                console.warn('⚠️ [VIDEO COMPLETION] stopRecording returned null sessionVideo');
+              }
+
+              // Reset initialization flag after stopping
+              videoRecordingInitializedRef.current = null;
+            })
+            .catch(error => {
+              console.error('❌ [VIDEO COMPLETION] Failed to stop video recording:', error);
+              // Reset flag even on error to allow retry in next session
+              videoRecordingInitializedRef.current = null;
+            });
+        } else {
+          console.log('ℹ️ [VIDEO COMPLETION] No video to stop - activeVideoSessionId:', activeVideoSessionId, 'completedSession:', completedSession.id);
+          // Reset flag since this session is ending
+          videoRecordingInitializedRef.current = null;
+        }
+      }
+    }
+
+    // Update prev ref for next render
+    prevActiveSessionIdRef.current = currentSessionId ?? null;
+  }, [activeSessionId, sessions, updateSession]);
+
+  /**
+   * Listen for menu bar session control events
+   */
+  useEffect(() => {
+    let unlistenPause: (() => void) | undefined;
+    let unlistenResume: (() => void) | undefined;
+    let unlistenStop: (() => void) | undefined;
+    let unlistenQuickCapture: (() => void) | undefined;
+
+    const setupListeners = async () => {
+      // Pause session from menu bar
+      unlistenPause = await listen('menubar-pause-session', () => {
+        console.log('📊 [MENU BAR] Pause session requested');
+        if (activeSession) {
+          pauseSession(activeSession.id );
+        }
+      });
+
+      // Resume session from menu bar
+      unlistenResume = await listen('menubar-resume-session', () => {
+        console.log('📊 [MENU BAR] Resume session requested');
+        if (activeSession) {
+          resumeSession(activeSession.id );
+        }
+      });
+
+      // Stop session from menu bar
+      unlistenStop = await listen('menubar-stop-session', () => {
+        console.log('📊 [MENU BAR] Stop session requested');
+        if (activeSession) {
+          handleEndSession(activeSession.id);
+        }
+      });
+
+      // Quick capture screenshot (CMD+Shift+Space)
+      unlistenQuickCapture = await listen<string>('quick-capture-screenshot', (event) => {
+        console.log('📸 [QUICK CAPTURE] Screenshot captured');
+        if (!activeSession) {
+          console.warn('⚠️ [QUICK CAPTURE] No active session - ignoring screenshot');
+          return;
+        }
+
+        // Process screenshot immediately
+        (async () => {
+          try {
+            const base64Data = event.payload;
+            const timestamp = new Date().toISOString();
+            const screenshotId = `screenshot-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+            const attachmentId = `attachment-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+            // Create screenshot record (will be processed by existing handleScreenshotCaptured logic)
+            const screenshot: SessionScreenshot = {
+              id: screenshotId,
+              sessionId: activeSession.id,
+              timestamp,
+              attachmentId,
+              analysisStatus: 'pending',
+              flagged: false,
+            };
+
+            // Save screenshot to attachmentStorage
+            const attachment = {
+              id: attachmentId,
+              type: 'screenshot' as const,
+              name: `Quick Capture ${new Date().toLocaleTimeString()}.png`,
+              mimeType: 'image/png',
+              size: base64Data.length,
+              createdAt: timestamp,
+              base64: base64Data,
+            };
+
+            await attachmentStorage.saveAttachment(attachment);
+
+            // Trigger the regular screenshot handler
+            handleScreenshotCaptured(screenshot);
+
+            console.log('✅ [QUICK CAPTURE] Screenshot added to session');
+          } catch (error) {
+            console.error('❌ [QUICK CAPTURE] Failed to add screenshot:', error);
+          }
+        })();
+      });
+    };
+
+    setupListeners();
+
+    // Cleanup listeners on unmount
+    return () => {
+      if (unlistenPause) unlistenPause();
+      if (unlistenResume) unlistenResume();
+      if (unlistenStop) unlistenStop();
+      if (unlistenQuickCapture) unlistenQuickCapture();
+    };
+  }, [activeSession, pauseSession, resumeSession, endSession, handleScreenshotCaptured]);
+
+  /**
+   * Listen for audio-chunk events from Rust audio recorder
+   * Using refs to prevent duplicate listeners and stale closures
+   *
+   * CRITICAL FIX: This effect handles the async nature of listen() properly to prevent
+   * duplicate listeners in React Strict Mode. The cleanup function ensures that any
+   * in-progress setup is canceled and existing listeners are properly removed.
+   */
+  useEffect(() => {
+    let unlistenAudioChunk: (() => void) | undefined;
+    let isCancelled = false;
+
+    const setupAudioListener = async () => {
+      // Check if listener is already active (prevents duplicate registration)
+      if (audioListenerActiveRef.current) {
+        console.log('🎤 [AUDIO LISTENER] Already active, skipping duplicate setup');
+        return;
+      }
+
+      console.log('🎤 [AUDIO LISTENER] Setting up audio-chunk listener');
+
+      // Mark listener as active
+      audioListenerActiveRef.current = true;
+
+      const unlistenFn = await listen<{sessionId: string; audioBase64: string; duration: number}>('audio-chunk', async (event) => {
+        console.log('🎤 [AUDIO CHUNK] Received audio chunk from Rust');
+
+        const { sessionId, audioBase64, duration } = event.payload;
+
+        // Debug logging
+        console.log('🎤 [AUDIO CHUNK] Payload sessionId:', sessionId);
+        console.log('🎤 [AUDIO CHUNK] activeSessionIdRef.current:', activeSessionIdRef.current);
+
+        // Only process if this is for the active session (read from ref to avoid stale closure)
+        if (!activeSessionIdRef.current || activeSessionIdRef.current !== sessionId) {
+          console.warn('⚠️  [AUDIO CHUNK] Received audio for inactive session, ignoring', {
+            hasActiveSession: !!activeSessionIdRef.current,
+            activeSessionId: activeSessionIdRef.current,
+            receivedSessionId: sessionId,
+            match: activeSessionIdRef.current === sessionId
+          });
+          return;
+        }
+
+        // Get current handler from ref (prevents stale closure)
+        const handler = handleAudioSegmentProcessedRef.current;
+        if (!handler) {
+          console.warn('⚠️  [AUDIO CHUNK] No handler available, ignoring');
+          return;
+        }
+
+        // Process the audio chunk through OpenAI and create the segment
+        // The audioRecordingService will create the SessionAudioSegment and call our callback
+        try {
+          await audioRecordingService.processAudioChunk(
+            audioBase64,
+            duration,
+            sessionId,
+            handler
+          );
+        } catch (error) {
+          console.error('❌ [AUDIO CHUNK] Failed to process audio chunk:', error);
+        }
+      });
+
+      // Check if cleanup was called while we were setting up
+      if (isCancelled) {
+        console.log('🎤 [AUDIO LISTENER] Setup was cancelled, cleaning up immediately');
+        unlistenFn();
+        return;
+      }
+
+      // Store the unlisten function for cleanup
+      unlistenAudioChunk = unlistenFn;
+      console.log('🎤 [AUDIO LISTENER] Audio-chunk listener registered successfully');
+    };
+
+    setupAudioListener();
+
+    // Cleanup listener on unmount or re-render
+    return () => {
+      console.log('🎤 [AUDIO LISTENER] Cleanup called');
+      isCancelled = true;
+      if (unlistenAudioChunk) {
+        console.log('🎤 [AUDIO LISTENER] Removing audio-chunk listener');
+        unlistenAudioChunk();
+        unlistenAudioChunk = undefined;
+      }
+      // Reset the active flag to allow re-registration
+      audioListenerActiveRef.current = false;
+    };
+  }, []); // Empty dependencies - listener is set up once and uses refs for current values
+
+  /**
+   * Auto-generate session metadata with intelligent throttling
+   * - Triggers every 5 screenshots OR 10 minutes (whichever comes first)
+   * - Prevents race conditions by using state from Redux store
+   */
+  useEffect(() => {
+    if (!activeSession || activeSession.status !== 'active') {
+      return;
+    }
+
+    const screenshots = activeSession.screenshots || [];
+    const analyzedScreenshots = screenshots.filter(s => s.analysisStatus === 'complete');
+    const audioSegments = activeSession.audioSegments || [];
+
+    // Don't generate if no data (need either screenshots OR audio)
+    if (analyzedScreenshots.length === 0 && audioSegments.length === 0) {
+      return;
+    }
+
+    // Throttling logic: Update metadata every 5 screenshots/audio OR 10 minutes
+    const DATA_THRESHOLD = 5;
+    const TIME_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
+    const totalDataPoints = analyzedScreenshots.length + audioSegments.length;
+    const shouldUpdateByCount = totalDataPoints % DATA_THRESHOLD === 0;
+    const timeSinceLastUpdate = lastMetadataUpdate
+      ? Date.now() - new Date(lastMetadataUpdate).getTime()
+      : TIME_THRESHOLD_MS + 1; // Force update on first data point
+    const shouldUpdateByTime = timeSinceLastUpdate >= TIME_THRESHOLD_MS;
+
+    if (!shouldUpdateByCount && !shouldUpdateByTime) {
+      return;
+    }
+
+    // Check if we've already updated for this count to prevent duplicate calls
+    const expectedUpdateKey = `${activeSession.id}-${totalDataPoints}`;
+    if (lastMetadataUpdate && lastMetadataUpdate.startsWith(expectedUpdateKey)) {
+      return;
+    }
+
+    // Generate metadata
+    const generateMetadata = async () => {
+      try {
+        console.log('📝 Generating evolving session metadata...', {
+          screenshotCount: analyzedScreenshots.length,
+          audioCount: audioSegments.length,
+          totalDataPoints,
+          timeSinceLastUpdate: Math.round(timeSinceLastUpdate / 1000 / 60) + 'm',
+          trigger: shouldUpdateByCount ? 'data-count' : 'time-threshold'
+        });
+
+        const metadata = await sessionsAgentService.generateSessionMetadata(
+          activeSession,
+          screenshots,
+          activeSession.audioSegments || []
+        );
+
+        // Get fresh session data to avoid overwriting concurrent updates
+        const freshSession = sessions.find(s => s.id === activeSession.id);
+        if (!freshSession) {
+          console.warn('⚠️ Session no longer exists, skipping metadata update');
+          return;
+        }
+
+        updateSession({
+          ...freshSession,  // Use fresh data, not stale closure
+          name: metadata.title,
+          description: metadata.description,
+        });
+
+        // Store update key with timestamp to prevent duplicates
+        setLastMetadataUpdate(`${expectedUpdateKey}-${new Date().toISOString()}`);
+        setMetadataError(null); // Clear any previous errors
+
+        console.log('✅ Session metadata updated', {
+          title: metadata.title,
+          description: metadata.description?.substring(0, 50) + '...'
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('❌ Failed to update session metadata:', error);
+        setMetadataError(errorMessage);
+      }
+    };
+
+    generateMetadata();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeSession?.id,
+    activeSession?.status,
+    activeSession?.screenshots?.length,
+    activeSession?.audioSegments?.length,
+    // DO NOT add filter() here - it creates new array every render causing infinite loop
+  ]);
+
+  /**
+   * Session synthesis - runs every 1 minute for active sessions
+   * Also runs once when a session is completed
+   */
+  useEffect(() => {
+    // Find the session to synthesize: active session OR most recently completed
+    const sessionToSynthesize = activeSession ||
+      sessions
+        .filter(s => s.status === 'completed')
+        .sort((a, b) => new Date(b.endTime!).getTime() - new Date(a.endTime!).getTime())[0];
+
+    if (!sessionToSynthesize) {
+      return;
+    }
+
+    // FIX: Don't auto-synthesize if session already has enrichment summary
+    // OR if it already has a valid basic summary (with correct structure)
+    if (sessionToSynthesize.enrichmentStatus?.status === 'completed') {
+      return;
+    }
+
+    // Check if session has a valid summary with the correct structure
+    // (If it has the old structure with wrong field names, regenerate it)
+    const hasValidSummary = sessionToSynthesize.summary &&
+                           'narrative' in sessionToSynthesize.summary;
+    if (hasValidSummary) {
+      return;
+    }
+
+    const screenshots = sessionToSynthesize.screenshots || [];
+    const analyzedScreenshots = screenshots.filter(s => s.analysisStatus === 'complete');
+    const audioSegments = sessionToSynthesize.audioSegments || [];
+
+    // Need at least 2 analyzed screenshots OR audio segments to synthesize
+    // This allows audio-only sessions to generate summaries
+    const hasEnoughData = analyzedScreenshots.length >= 2 || audioSegments.length > 0;
+
+    if (!hasEnoughData) {
+      return;
+    }
+
+    // For active sessions: Run every 1 minute
+    // For paused/completed sessions: Run once
+    const SYNTHESIS_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
+
+    const shouldRunSynthesis = (() => {
+      // Always run for paused/completed sessions (if not already done)
+      if (sessionToSynthesize.status !== 'active') {
+        const alreadySynthesized = lastSynthesisUpdate?.startsWith(`${sessionToSynthesize.id}-${sessionToSynthesize.status}`);
+        return !alreadySynthesized;
+      }
+
+      // For active sessions: Check time threshold
+      const timeSinceLastSynthesis = lastSynthesisUpdate
+        ? Date.now() - new Date(lastSynthesisUpdate).getTime()
+        : SYNTHESIS_INTERVAL_MS + 1; // Force synthesis on first run
+
+      return timeSinceLastSynthesis >= SYNTHESIS_INTERVAL_MS;
+    })();
+
+    if (!shouldRunSynthesis) {
+      return;
+    }
+
+    // Generate synthesis
+    const generateSynthesis = async () => {
+      try {
+        console.log('🔄 Synthesizing session summary...', {
+          sessionId: sessionToSynthesize.id,
+          screenshotCount: analyzedScreenshots.length,
+          audioCount: audioSegments.length,
+          status: sessionToSynthesize.status
+        });
+
+        // Use backend service (no API key needed)
+        const summary = await sessionsAgentService.generateSessionSummary(
+          sessionToSynthesize,
+          analyzedScreenshots,
+          audioSegments
+        );
+
+        // Get fresh session data from state to avoid overwriting concurrent updates
+        const freshSession = sessions.find(s => s.id === sessionToSynthesize.id);
+        if (!freshSession) {
+          console.warn('⚠️ Session no longer exists, skipping summary update');
+          return;
+        }
+
+        updateSession({
+          ...freshSession,  // Use fresh data, not stale closure
+          summary,
+        });
+
+        // Store update key with status to prevent duplicates
+        const updateKey = sessionToSynthesize.status === 'active'
+          ? new Date().toISOString()
+          : `${sessionToSynthesize.id}-${sessionToSynthesize.status}`;
+        setLastSynthesisUpdate(updateKey);
+        setSynthesisError(null);
+
+        console.log('✅ Session summary synthesized', {
+          achievements: summary.achievements?.length || 0,
+          blockers: summary.blockers?.length || 0,
+          tasks: summary.recommendedTasks?.length || 0,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('❌ Failed to synthesize session summary:', error);
+        setSynthesisError(errorMessage);
+      }
+    };
+
+    generateSynthesis();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeSession?.id,
+    activeSession?.status,
+    activeSession?.screenshots?.length,
+    activeSession?.audioSegments?.length,
+  ]);
+
+  /**
+   * Automatic transition to summary view when session completes
+   * Detects when active session transitions to completed and selects it for viewing
+   */
+  useEffect(() => {
+    // When there's no active session but there was one before, it completed
+    if (!activeSession && prevActiveSessionIdRef.current) {
+      const completedSessionId = prevActiveSessionIdRef.current;
+      const completedSession = sessions.find(s => s.id === completedSessionId);
+
+      if (completedSession && completedSession.status === 'completed') {
+        console.log('🎬 Session completed, transitioning to summary view:', completedSessionId);
+        setSelectedSessionId(completedSession.id);
+      }
+    }
+
+    // Update the ref for next render
+    prevActiveSessionIdRef.current = activeSession?.id || null;
+  }, [activeSession, sessions]);
+
+  const handleStartSession = (sessionData: Partial<Session>) => {
+    startSession({
+      name: sessionData.name || 'Untitled Session',
+      description: sessionData.description || '',
+      status: 'active',
+      screenshotInterval: sessionData.screenshotInterval || 2,
+      enableScreenshots: sessionData.enableScreenshots ?? true,
+      autoAnalysis: sessionData.autoAnalysis ?? true,
+      tags: sessionData.tags || [],
+      activityType: sessionData.activityType,
+      audioRecording: sessionData.audioRecording ?? false,
+      audioMode: sessionData.audioMode || 'off',
+      audioReviewCompleted: false,
+      videoRecording: sessionData.videoRecording ?? false,
+    });
+  };
+
+  // Session settings state (for top controls)
+  const [lastSettings, setLastSettings] = useState(() => loadLastSessionSettings());
+
+  // Quick start handler for top control - with delightful countdown
+  const handleQuickStart = async () => {
+    saveLastSessionSettings(lastSettings);
+
+    await startSessionWithCountdown({
+      name: 'Quick Session',
+      description: 'Started quickly without description',
+      status: 'active',
+      tags: [],
+      screenshotInterval: lastSettings.screenshotInterval,
+      enableScreenshots: lastSettings.enableScreenshots,
+      autoAnalysis: lastSettings.autoAnalysis,
+      audioRecording: lastSettings.audioRecording,
+      audioMode: lastSettings.audioRecording ? 'transcription' : 'off',
+      audioReviewCompleted: false,
+      videoRecording: lastSettings.videoRecording,
+    });
+  };
+
+  // Update settings handlers
+  const updateScreenshots = (enabled: boolean) => {
+    // Update last settings for next session
+    const newSettings = { ...lastSettings, enableScreenshots: enabled };
+    setLastSettings(newSettings);
+    saveLastSessionSettings(newSettings);
+
+    // If session is active, update the running session too
+    if (activeSession) {
+      updateSession({ ...activeSession, enableScreenshots: enabled });
+    }
+  };
+
+  const updateAudio = (enabled: boolean) => {
+    // Update last settings for next session
+    const newSettings = { ...lastSettings, audioRecording: enabled };
+    setLastSettings(newSettings);
+    saveLastSessionSettings(newSettings);
+
+    // If session is active, update the running session too
+    if (activeSession) {
+      updateSession({ ...activeSession, audioRecording: enabled });
+    }
+  };
+
+  const updateVideo = async (enabled: boolean) => {
+    // Update last settings for next session
+    const newSettings = { ...lastSettings, videoRecording: enabled };
+    setLastSettings(newSettings);
+    saveLastSessionSettings(newSettings);
+
+    // If session is active, update the running session too
+    if (activeSession) {
+      updateSession({ ...activeSession, videoRecording: enabled });
+    }
+  };
+
+  const updateInterval = (interval: number) => {
+    // Update last settings for next session
+    const newSettings = { ...lastSettings, screenshotInterval: interval };
+    setLastSettings(newSettings);
+    saveLastSessionSettings(newSettings);
+
+    // If session is active, update the running session too
+    if (activeSession) {
+      updateSession({ ...activeSession, screenshotInterval: interval });
+    }
+  };
+
+  // Get current settings (from active session if running, otherwise from last settings)
+  const currentSettings = activeSession ? {
+    enableScreenshots: activeSession.enableScreenshots,
+    audioRecording: activeSession.audioRecording,
+    videoRecording: activeSession.videoRecording,
+    screenshotInterval: activeSession.screenshotInterval
+  } : lastSettings;
+
+  return (
+    <div className="h-full w-full relative flex flex-col bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20 overflow-hidden">
+      {/* Animated gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none" />
+
+      {/* Sessions Introduction Tooltip */}
+      <div className="absolute top-32 left-1/2 -translate-x-1/2 z-[200]">
+        <FeatureTooltip
+          show={showSessionsIntro}
+          onDismiss={() => {
+            setShowSessionsIntro(false);
+            uiDispatch({ type: 'MARK_FEATURE_INTRODUCED', payload: 'sessions' });
+          }}
+          position="bottom"
+          title="🎥 Welcome to Sessions - Deep Work Tracking"
+          message={
+            <div>
+              <p>Sessions help you understand your work patterns:</p>
+              <ul className="list-disc ml-4 mt-2 space-y-1">
+                <li>📸 <strong>Screenshots:</strong> Capture your screen at intervals</li>
+                <li>🎤 <strong>Audio:</strong> Record and transcribe your thoughts</li>
+                <li>📹 <strong>Video:</strong> Full screen recording with AI chapters</li>
+                <li>🤖 <strong>AI Analysis:</strong> Insights, blockers, achievements</li>
+              </ul>
+              <p className="mt-3"><strong>Perfect for:</strong></p>
+              <ul className="list-disc ml-4 mt-1 space-y-1">
+                <li>Documenting complex work</li>
+                <li>Time tracking with context</li>
+                <li>Async updates to your team</li>
+              </ul>
+            </div>
+          }
+          primaryAction={{
+            label: "Explore on my own",
+            onClick: () => {},
+          }}
+        />
+      </div>
+
+      {/* Main content with padding */}
+      <div className="relative z-10 flex-1 flex flex-col pt-24 px-6 pb-6 min-h-0">
+        {/* Top Controls Bar */}
+        <div className="mb-4 flex items-center justify-between relative z-50">
+          <div className="flex items-center gap-3 bg-white/40 backdrop-blur-xl border-2 border-white/50 rounded-[24px] p-1.5 shadow-lg">
+            {activeSession ? (
+              <>
+                {/* Active Session Controls */}
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <div className={`w-3 h-3 rounded-full ${activeSession.status === 'paused' ? 'bg-yellow-400 shadow-lg shadow-yellow-400/50' : 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50'}`} />
+                  <span className="text-sm font-bold text-gray-900">{activeSession.name}</span>
+                </div>
+
+                <div className="h-8 w-px bg-white/30"></div>
+
+                {/* Pause/Resume Button */}
+                {activeSession.status === 'paused' ? (
+                  <button
+                    onClick={() => resumeSession(activeSession.id)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent"
+                  >
+                    <Play size={16} />
+                    <span>Resume</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => pauseSession(activeSession.id)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent"
+                  >
+                    <Pause size={16} />
+                    <span>Pause</span>
+                  </button>
+                )}
+
+                {/* Stop Button - with delightful UX */}
+                <button
+                  onClick={() => handleEndSession(activeSession.id)}
+                  disabled={isEnding}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
+                >
+                  {isEnding ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Square size={16} />
+                      <span>Stop</span>
+                    </>
+                  )}
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Start Session Button */}
+                <button
+                  onClick={handleQuickStart}
+                  disabled={isStarting}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-white shadow-md font-semibold text-sm transition-all border-2 border-transparent disabled:cursor-not-allowed ${
+                    isStarting
+                      ? 'bg-gradient-to-r from-cyan-500 to-blue-500 animate-pulse shadow-lg shadow-cyan-500/50'
+                      : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:shadow-lg hover:scale-[1.02] active:scale-95'
+                  }`}
+                >
+                  {isStarting ? (
+                    countdown !== null && countdown > 0 ? (
+                      <>
+                        <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center border border-white/40">
+                          <span className="text-sm font-bold">{countdown}</span>
+                        </div>
+                        <span>Starting in {countdown}...</span>
+                      </>
+                    ) : countdown === 0 ? (
+                      <>
+                        <CheckCircle2 size={16} className="animate-pulse" />
+                        <span>Recording!</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Starting...</span>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <Play size={16} />
+                      <span>Start Session</span>
+                    </>
+                  )}
+                </button>
+              </>
+            )}
+
+            <div className="h-8 w-px bg-white/30"></div>
+
+            {/* Settings Controls - Always visible */}
+            <ToggleButton
+              icon={CameraIcon}
+              label="Screenshots"
+              active={currentSettings.enableScreenshots}
+              onChange={updateScreenshots}
+              size="sm"
+            />
+
+            <ToggleButton
+              icon={Mic}
+              label="Audio"
+              active={currentSettings.audioRecording}
+              onChange={updateAudio}
+              size="sm"
+            />
+
+            <ToggleButton
+              icon={Video}
+              label="Video"
+              active={currentSettings.videoRecording || false}
+              onChange={updateVideo}
+              size="sm"
+            />
+
+            {/* Interval Selector - Show when screenshots enabled */}
+            {currentSettings.enableScreenshots && (
+              <div className="relative">
+                <DropdownTrigger
+                  icon={Clock}
+                  label={
+                    currentSettings.screenshotInterval === -1 ? '🧠 Adaptive' :
+                    currentSettings.screenshotInterval === 10/60 ? 'Every 10s' :
+                    currentSettings.screenshotInterval === 0.5 ? 'Every 30s' :
+                    currentSettings.screenshotInterval === 1 ? 'Every 1m' :
+                    currentSettings.screenshotInterval === 2 ? 'Every 2m' :
+                    currentSettings.screenshotInterval === 3 ? 'Every 3m' :
+                    currentSettings.screenshotInterval === 5 ? 'Every 5m' : ''
+                  }
+                  active={showIntervalDropdown}
+                  onClick={() => setShowIntervalDropdown(!showIntervalDropdown)}
+                />
+
+                {/* Interval Dropdown Panel */}
+                {showIntervalDropdown && (
+                  <div className="absolute top-full left-0 mt-2 w-56 bg-white backdrop-blur-xl rounded-[20px] border-2 border-cyan-400/80 shadow-2xl z-[9999]">
+                    <div className="p-3 space-y-1">
+                      <button
+                        onClick={() => { updateInterval(-1); setShowIntervalDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                          currentSettings.screenshotInterval === -1
+                            ? 'bg-gradient-to-r from-purple-100 to-cyan-100 text-purple-900 border-2 border-purple-300'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        🧠 Adaptive (AI-driven)
+                      </button>
+                      <div className="border-t border-gray-200 my-2"></div>
+                      <button
+                        onClick={() => { updateInterval(10/60); setShowIntervalDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          currentSettings.screenshotInterval === 10/60
+                            ? 'bg-cyan-100 text-cyan-900'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        Every 10 seconds
+                      </button>
+                      <button
+                        onClick={() => { updateInterval(0.5); setShowIntervalDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          currentSettings.screenshotInterval === 0.5
+                            ? 'bg-cyan-100 text-cyan-900'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        Every 30 seconds
+                      </button>
+                      <button
+                        onClick={() => { updateInterval(1); setShowIntervalDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          currentSettings.screenshotInterval === 1
+                            ? 'bg-cyan-100 text-cyan-900'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        Every 1 minute
+                      </button>
+                      <button
+                        onClick={() => { updateInterval(2); setShowIntervalDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          currentSettings.screenshotInterval === 2
+                            ? 'bg-cyan-100 text-cyan-900'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        Every 2 minutes
+                      </button>
+                      <button
+                        onClick={() => { updateInterval(3); setShowIntervalDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          currentSettings.screenshotInterval === 3
+                            ? 'bg-cyan-100 text-cyan-900'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        Every 3 minutes
+                      </button>
+                      <button
+                        onClick={() => { updateInterval(5); setShowIntervalDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          currentSettings.screenshotInterval === 5
+                            ? 'bg-cyan-100 text-cyan-900'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        Every 5 minutes
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Filter, Sort, Select Controls - Always visible */}
+            {allPastSessions.length > 0 && (
+              <>
+                <div className="h-8 w-px bg-white/30"></div>
+
+                {/* Filters Button */}
+                <div className="relative">
+                  <DropdownTrigger
+                    icon={SlidersHorizontal}
+                    label="Filter"
+                    active={showFilterDropdown}
+                    onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                    badge={
+                      (selectedCategories.length > 0 || selectedSubCategories.length > 0 || selectedTags.length > 0)
+                        ? selectedCategories.length + selectedSubCategories.length + selectedTags.length
+                        : undefined
+                    }
+                  />
+
+                  {/* Filter Dropdown Panel */}
+                  {showFilterDropdown && (
+                    <div className="absolute top-full left-0 mt-2 w-80 bg-white backdrop-blur-xl rounded-[20px] border-2 border-cyan-400/80 shadow-2xl z-[9999] max-h-96 overflow-y-auto">
+                          <div className="p-5 space-y-5">
+                            {/* Header */}
+                            <div className="flex items-center justify-between pb-3 border-b-2 border-gray-200">
+                              <h3 className="text-base font-bold text-gray-900">Filter Sessions</h3>
+                              {(selectedCategories.length > 0 || selectedSubCategories.length > 0 || selectedTags.length > 0) && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedCategories([]);
+                                    setSelectedSubCategories([]);
+                                    setSelectedTags([]);
+                                  }}
+                                  className="text-xs text-cyan-600 hover:text-cyan-800 font-bold underline transition-colors"
+                                >
+                                  Clear all
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Categories Section */}
+                            {uniqueCategories.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Categories</h4>
+                                <div className="space-y-2">
+                                  {uniqueCategories.map(category => (
+                                    <label key={category} className="flex items-center gap-3 cursor-pointer group py-1 px-2 -mx-2 rounded-lg hover:bg-cyan-50 transition-colors">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedCategories.includes(category)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedCategories([...selectedCategories, category]);
+                                          } else {
+                                            setSelectedCategories(selectedCategories.filter(c => c !== category));
+                                          }
+                                        }}
+                                        className="w-4 h-4 rounded border-2 border-gray-300 text-cyan-600 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 cursor-pointer transition-all"
+                                      />
+                                      <span className="text-sm font-medium text-gray-800 group-hover:text-cyan-700 transition-colors">
+                                        {category}
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Sub-Categories Section */}
+                            {uniqueSubCategories.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Sub-Categories</h4>
+                                <div className="space-y-2">
+                                  {uniqueSubCategories.map(subCategory => (
+                                    <label key={subCategory} className="flex items-center gap-3 cursor-pointer group py-1 px-2 -mx-2 rounded-lg hover:bg-cyan-50 transition-colors">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedSubCategories.includes(subCategory)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedSubCategories([...selectedSubCategories, subCategory]);
+                                          } else {
+                                            setSelectedSubCategories(selectedSubCategories.filter(sc => sc !== subCategory));
+                                          }
+                                        }}
+                                        className="w-4 h-4 rounded border-2 border-gray-300 text-cyan-600 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 cursor-pointer transition-all"
+                                      />
+                                      <span className="text-sm font-medium text-gray-800 group-hover:text-cyan-700 transition-colors">
+                                        {subCategory}
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Tags Section */}
+                            {uniqueTags.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Tags</h4>
+                                <div className="space-y-2">
+                                  {uniqueTags.map(tag => (
+                                    <label key={tag} className="flex items-center gap-3 cursor-pointer group py-1 px-2 -mx-2 rounded-lg hover:bg-purple-50 transition-colors">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedTags.includes(tag)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedTags([...selectedTags, tag]);
+                                          } else {
+                                            setSelectedTags(selectedTags.filter(t => t !== tag));
+                                          }
+                                        }}
+                                        className="w-4 h-4 rounded border-2 border-gray-300 text-purple-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 cursor-pointer transition-all"
+                                      />
+                                      <span className="text-sm font-medium text-gray-800 group-hover:text-purple-700 transition-colors">
+                                        {tag}
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Sort Dropdown */}
+                    <SessionsSortMenu
+                      sortBy={sortBy}
+                      onSortChange={setSortBy}
+                    />
+
+                {/* Select Button */}
+                <button
+                  onClick={() => {
+                    setBulkSelectMode(!bulkSelectMode);
+                    if (bulkSelectMode) {
+                      setSelectedSessionIds(new Set());
+                    }
+                  }}
+                  className={`px-4 py-2 backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${
+                    bulkSelectMode
+                      ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md border-transparent'
+                      : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-cyan-300'
+                  } focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none`}
+                  title="Select multiple sessions"
+                >
+                  <CheckCheck size={16} />
+                  <span>{bulkSelectMode ? 'Cancel' : 'Select'}</span>
+                  {selectedSessionIds.size > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 bg-white/30 text-white text-[10px] font-bold rounded-full">
+                      {selectedSessionIds.size}
+                    </span>
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Stats Pill - Right Side */}
+          <SessionsStatsBar sessions={sessions} />
+        </div>
+
+        {/* Two-Panel Layout */}
+        <div className="flex-1 flex gap-4 min-h-0 relative">
+          {/* LEFT PANEL - Past Sessions List (wrapped in CollapsibleSidebar) */}
+          <CollapsibleSidebar
+            width="420px"
+            peekWidth="20px"
+            collapseBreakpoint={1280}
+            side="left"
+            isExpanded={isSidebarExpanded}
+            onExpandedChange={handleSidebarToggle}
+          >
+            <div className="h-full bg-white/30 backdrop-blur-xl rounded-[24px] border-2 border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col overflow-hidden">
+            {/* Scrollable Content */}
+            <div ref={sessionListScrollRef} className="flex-1 overflow-y-auto px-6 py-6">
+              {/* Metadata Error Notification */}
+              {metadataError && (
+                <div className="mb-4 p-4 bg-red-100/80 backdrop-blur-sm border-2 border-red-300 rounded-[20px] flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-red-900 mb-1">AI Narrator Update Failed</h4>
+                    <p className="text-sm text-red-800">
+                      Couldn't update session title/description: {metadataError}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setMetadataError(null)}
+                    className="flex-shrink-0 text-red-600 hover:text-red-800 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Active Filters Display */}
+              <ActiveFiltersDisplay
+                selectedCategories={selectedCategories}
+                selectedSubCategories={selectedSubCategories}
+                selectedTags={selectedTags}
+                onRemoveCategory={(category) => setSelectedCategories(selectedCategories.filter(c => c !== category))}
+                onRemoveSubCategory={(subCategory) => setSelectedSubCategories(selectedSubCategories.filter(sc => sc !== subCategory))}
+                onRemoveTag={(tag) => setSelectedTags(selectedTags.filter(t => t !== tag))}
+                onClearAll={() => {
+                  setSelectedCategories([]);
+                  setSelectedSubCategories([]);
+                  setSelectedTags([]);
+                }}
+              />
+
+              {/* Bulk Operations Bar */}
+              {bulkSelectMode && selectedSessionIds.size > 0 && (
+                <BulkOperationsBar
+                  selectedCount={selectedSessionIds.size}
+                  totalFilteredCount={filteredSessions.length}
+                  onSelectAll={() => {
+                    const newSet = new Set<string>();
+                    filteredSessions.forEach(s => newSet.add(s.id));
+                    setSelectedSessionIds(newSet);
+                  }}
+                  onDelete={() => {
+                    if (window.confirm(`Delete ${selectedSessionIds.size} session${selectedSessionIds.size !== 1 ? 's' : ''}? This action cannot be undone.`)) {
+                      selectedSessionIds.forEach(id => {
+                        deleteSession(id);
+                      });
+                      addNotification({
+                        type: 'success',
+                        title: 'Sessions Deleted',
+                        message: `${selectedSessionIds.size} session${selectedSessionIds.size !== 1 ? 's' : ''} deleted successfully`,
+                      });
+                      setSelectedSessionIds(new Set());
+                      setBulkSelectMode(false);
+                    }
+                  }}
+                  onCategorize={() => {
+                    alert('Bulk categorize feature coming soon!');
+                  }}
+                  onTag={() => {
+                    alert('Bulk tag feature coming soon!');
+                  }}
+                  onExport={() => {
+                    alert('Bulk export feature coming soon!');
+                  }}
+                />
+              )}
+
+              {/* Past Sessions - Grouped Timeline */}
+              {allPastSessions.length > 0 ? (
+                <div>
+                {/* Search Bar */}
+                <div className="mb-4 space-y-3">
+                  {/* Search Bar */}
+                  <SessionsSearchBar
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                  />
+
+              {/* Active Search Indicator */}
+              {(searchQuery.trim() || selectedFilter !== 'all') && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Active Filters:</span>
+                  {searchQuery.trim() && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-100 border border-cyan-300 rounded-full text-xs font-semibold text-cyan-700">
+                      <Search size={12} />
+                      <span>"{searchQuery}"</span>
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="ml-1 hover:text-cyan-900 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  {selectedFilter !== 'all' && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 border border-purple-300 rounded-full text-xs font-semibold text-purple-700">
+                      <Tag size={12} />
+                      <span>{selectedFilter}</span>
+                      <button
+                        onClick={() => setSelectedFilter('all')}
+                        className="ml-1 hover:text-purple-900 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedFilter('all');
+                    }}
+                    className="text-xs text-gray-500 hover:text-gray-700 font-semibold underline"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Session Groups */}
+            {filteredSessions.length === 0 && !activeSession ? (
+              <div className="bg-white/40 backdrop-blur-xl rounded-[24px] border-2 border-white/50 p-12 text-center">
+                <Search className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No sessions found</h3>
+                <p className="text-gray-600">Try adjusting your filters or search query</p>
+              </div>
+            ) : (
+            <div className="space-y-8">
+              {/* Live Session - Always at Top */}
+              {activeSession && (
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3 flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${activeSession.status === 'paused' ? 'bg-yellow-400' : 'bg-green-500 animate-pulse'}`} />
+                    Live Session
+                  </h3>
+                  <div
+                    onClick={() => setSelectedSessionId(activeSession.id)}
+                    className="group relative backdrop-blur-xl rounded-[24px] border-2 p-4 transition-all overflow-hidden bg-white/40 border-white/60 hover:bg-white/50 hover:border-white/80 cursor-pointer"
+                  >
+                    {/* Minimal Card Content */}
+                    <div>
+                      {/* Session Name with Live Badge */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="font-semibold text-gray-900 leading-tight flex-1">
+                          {activeSession.name}
+                        </h4>
+                        <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full uppercase tracking-wide animate-pulse">
+                          LIVE
+                        </span>
+                      </div>
+
+                      {/* Description - 2 lines max */}
+                      {activeSession.description && (
+                        <p className="text-sm text-gray-600 mb-3 line-clamp-2 leading-relaxed">
+                          {activeSession.description}
+                        </p>
+                      )}
+
+                      {/* Condensed Stats - Single Row */}
+                      <div className="flex items-center gap-3 text-xs text-gray-600">
+                        <span className="flex items-center gap-1">
+                          <Clock size={12} />
+                          {activeSession.status === 'paused' ? 'Paused' : 'Recording'}
+                        </span>
+                        {(activeSession.screenshots?.length || 0) > 0 && (
+                          <>
+                            <span className="text-gray-300">•</span>
+                            <span>{activeSession.screenshots.length} screenshots</span>
+                          </>
+                        )}
+                        {activeSession.audioSegments && activeSession.audioSegments.length > 0 && (
+                          <>
+                            <span className="text-gray-300">•</span>
+                            <span>{activeSession.audioSegments.length} audio</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Today */}
+              {groupedSessions.today.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
+                    Today
+                  </h3>
+                  <div className="space-y-3">
+                    {groupedSessions.today.map(session => (
+                      <SessionCard
+                        key={session.id}
+                        session={session}
+                        onClick={() => setSelectedSessionId(session.id)}
+                        bulkSelectMode={bulkSelectMode}
+                        isSelected={selectedSessionIds.has(session.id)}
+                        onSelect={(id) => {
+                          const newSet = new Set(selectedSessionIds);
+                          if (newSet.has(id)) {
+                            newSet.delete(id);
+                          } else {
+                            newSet.add(id);
+                          }
+                          setSelectedSessionIds(newSet);
+                        }}
+                        isNewlyCompleted={isSessionNewlyCompleted(session.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Yesterday */}
+              {groupedSessions.yesterday.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
+                    Yesterday
+                  </h3>
+                  <div className="space-y-3">
+                    {groupedSessions.yesterday.map(session => (
+                      <SessionCard
+                        key={session.id}
+                        session={session}
+                        onClick={() => setSelectedSessionId(session.id)}
+                        bulkSelectMode={bulkSelectMode}
+                        isSelected={selectedSessionIds.has(session.id)}
+                        onSelect={(id) => {
+                          const newSet = new Set(selectedSessionIds);
+                          if (newSet.has(id)) {
+                            newSet.delete(id);
+                          } else {
+                            newSet.add(id);
+                          }
+                          setSelectedSessionIds(newSet);
+                        }}
+                        isNewlyCompleted={isSessionNewlyCompleted(session.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* This Week */}
+              {groupedSessions.thisWeek.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
+                    This Week
+                  </h3>
+                  <div className="space-y-3">
+                    {groupedSessions.thisWeek.map(session => (
+                      <SessionCard
+                        key={session.id}
+                        session={session}
+                        onClick={() => setSelectedSessionId(session.id)}
+                        bulkSelectMode={bulkSelectMode}
+                        isSelected={selectedSessionIds.has(session.id)}
+                        onSelect={(id) => {
+                          const newSet = new Set(selectedSessionIds);
+                          if (newSet.has(id)) {
+                            newSet.delete(id);
+                          } else {
+                            newSet.add(id);
+                          }
+                          setSelectedSessionIds(newSet);
+                        }}
+                        isNewlyCompleted={isSessionNewlyCompleted(session.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Earlier */}
+              {groupedSessions.earlier.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
+                    Earlier
+                  </h3>
+                  <div className="space-y-3">
+                    {groupedSessions.earlier.map(session => (
+                      <SessionCard
+                        key={session.id}
+                        session={session}
+                        onClick={() => setSelectedSessionId(session.id)}
+                        bulkSelectMode={bulkSelectMode}
+                        isSelected={selectedSessionIds.has(session.id)}
+                        onSelect={(id) => {
+                          const newSet = new Set(selectedSessionIds);
+                          if (newSet.has(id)) {
+                            newSet.delete(id);
+                          } else {
+                            newSet.add(id);
+                          }
+                          setSelectedSessionIds(newSet);
+                        }}
+                        isNewlyCompleted={isSessionNewlyCompleted(session.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            )}
+          </div>
+          ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                <div className="bg-white/40 backdrop-blur-xl rounded-[24px] p-8 border-2 border-white/50">
+                  <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <h3 className="text-base font-semibold text-gray-900 mb-1">No Past Sessions</h3>
+                  <p className="text-xs text-gray-600">
+                    Start tracking a session to see your work history
+                  </p>
+                </div>
+              </div>
+          )}
+        </div>
+        {/* End of Scrollable Content */}
+            </div>
+          </CollapsibleSidebar>
+        {/* End of LEFT PANEL */}
+
+        {/* RIGHT PANEL - Selected Session or Active Session */}
+        <div className="flex-1 bg-white/30 backdrop-blur-xl rounded-[24px] border-2 border-white/60 shadow-xl flex flex-col overflow-hidden">
+          {selectedSessionForDetail ? (
+            // Show selected session detail (can be active or past session)
+            selectedSessionForDetail.status === 'active' || selectedSessionForDetail.status === 'paused' ? (
+              // Selected session is the active one - show ActiveSessionView
+              <ActiveSessionView session={selectedSessionForDetail} />
+            ) : (
+              // Selected session is a completed past session - show SessionDetailView
+              <SessionDetailView
+                session={selectedSessionForDetail}
+                onClose={() => setSelectedSessionId(null)}
+                onDelete={(sessionId) => {
+                  deleteSession(sessionId );
+                  setSelectedSessionId(null);
+                }}
+                onAddComment={(screenshotId, comment) => {
+                  addScreenshotComment(screenshotId, comment);
+                }}
+                onToggleFlag={(screenshotId) => {
+                  toggleScreenshotFlag(screenshotId);
+                }}
+                isSidebarExpanded={isSidebarExpanded}
+                onToggleSidebar={() => handleSidebarToggle(!isSidebarExpanded)}
+              />
+            )
+          ) : activeSession ? (
+            // No session selected, but there's an active session - show it
+            <ActiveSessionView session={activeSession} />
+          ) : (
+            // Empty state
+            <div className="flex items-center justify-center h-full text-center px-12">
+              <div>
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No Session Selected</h3>
+                <p className="text-gray-600">
+                  {sessions.length === 0
+                    ? 'Start a session to begin tracking your work'
+                    : 'Select a session from the list to view its details'}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* End of RIGHT PANEL */}
+        </div>
+        {/* End of Two-Panel Layout */}
+      </div>
+
+      {/* Subtle toast notification during countdown */}
+      {isStarting && countdown !== null && countdown > 0 && (
+        <div className="fixed bottom-6 right-6 bg-white/95 backdrop-blur-xl rounded-2xl p-4 shadow-2xl border-2 border-cyan-400/60 animate-in slide-in-from-bottom-4 z-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg shadow-lg animate-pulse">
+              {countdown}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-gray-900">Starting session...</span>
+              <span className="text-xs text-gray-600">Get ready to capture</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// Active Session View Component
+function ActiveSessionView({ session }: { session: Session }) {
+  const [liveElapsed, setLiveElapsed] = useState(0);
+  const [countdown, setCountdown] = useState(0);
+
+  const isPaused = session.status === 'paused';
+
+  // Live timer
+  useEffect(() => {
+    if (isPaused) return;
+
+    const updateElapsed = () => {
+      if (session.startTime) {
+        const elapsed = Math.floor((Date.now() - new Date(session.startTime).getTime()) / 1000);
+        setLiveElapsed(elapsed);
+      }
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [session.startTime, isPaused]);
+
+  // Format elapsed time
+  const formatElapsed = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Countdown timer for next screenshot
+  useEffect(() => {
+    if (isPaused || !session.enableScreenshots) {
+      setCountdown(0);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const now = Date.now();
+      let nextShot: number;
+
+      // Check if using adaptive mode
+      if (session.screenshotInterval === -1 && adaptiveScreenshotScheduler.isActive()) {
+        // Adaptive mode - use scheduler's actual next capture time
+        const schedulerState = adaptiveScreenshotScheduler.getState();
+        if (schedulerState.nextCaptureTime) {
+          nextShot = schedulerState.nextCaptureTime;
+        } else {
+          // Scheduler hasn't set next capture time yet
+          setCountdown(0);
+          return;
+        }
+      } else {
+        // Fixed interval mode - calculate based on last screenshot + interval
+        if (!session.lastScreenshotTime) {
+          setCountdown(0);
+          return;
+        }
+        const lastShot = new Date(session.lastScreenshotTime).getTime();
+        const intervalMs = session.screenshotInterval === -1 ? 2 * 60 * 1000 : session.screenshotInterval * 60 * 1000;
+        nextShot = lastShot + intervalMs;
+      }
+
+      const remaining = Math.max(0, Math.ceil((nextShot - now) / 1000));
+      setCountdown(remaining);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [session.lastScreenshotTime, session.screenshotInterval, isPaused, session.enableScreenshots]);
+
+  const handleAddContext = (contextItem: SessionContextItem) => {
+    addContextItem(session.id, contextItem);
+  };
+
+  return (
+    <div className="h-full w-full flex flex-col overflow-hidden">
+      {/* Header with live stats */}
+      <div className="p-6 border-b-2 border-white/40">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-1">{session.name}</h2>
+            <p className="text-sm text-gray-600">{session.description}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Live Duration Timer */}
+            <div className="px-4 py-2 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 backdrop-blur-sm rounded-[20px] border-2 border-blue-400/60 flex items-center gap-2 shadow-md">
+              <Clock size={18} className="text-blue-600" />
+              <span className="text-lg font-bold text-gray-900 font-mono tracking-wider">
+                {formatElapsed(liveElapsed)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Next Capture Countdown */}
+          {session.enableScreenshots && !isPaused && countdown > 0 && (() => {
+            const isAdaptiveMode = session.screenshotInterval === -1;
+            const schedulerState = isAdaptiveMode ? adaptiveScreenshotScheduler.getState() : null;
+            const activityLevel = schedulerState?.lastActivityScore || 0;
+            const urgency = schedulerState?.lastUrgency || 0;
+
+            // Color intensity based on urgency (higher urgency = more intense color)
+            const urgencyClass = isAdaptiveMode
+              ? urgency > 0.7 ? 'from-orange-500/40 to-red-500/40 border-orange-500/80'
+                : urgency > 0.4 ? 'from-cyan-500/30 to-blue-500/30 border-cyan-500/70'
+                : 'from-teal-500/20 to-emerald-500/20 border-teal-400/60'
+              : 'from-cyan-500/30 to-teal-500/30 border-cyan-400/70';
+
+            const iconClass = isAdaptiveMode
+              ? urgency > 0.7 ? 'text-orange-700'
+                : urgency > 0.4 ? 'text-cyan-700'
+                : 'text-teal-600'
+              : 'text-cyan-700';
+
+            const textClass = isAdaptiveMode
+              ? urgency > 0.7 ? 'text-orange-900'
+                : urgency > 0.4 ? 'text-cyan-900'
+                : 'text-teal-900'
+              : 'text-cyan-900';
+
+            return (
+              <div className={`px-4 py-2 bg-gradient-to-r ${urgencyClass} backdrop-blur-sm rounded-[20px] border-2 flex items-center gap-2 shadow-md ${isAdaptiveMode ? 'animate-pulse' : ''}`}>
+                <Camera size={16} className={iconClass} />
+                <span className={`text-sm font-bold ${textClass}`}>
+                  {isAdaptiveMode && <span className="mr-1">🧠</span>}
+                  Next in <span className="font-mono">{countdown}s</span>
+                  {isAdaptiveMode && schedulerState && (
+                    <span className="ml-2 text-xs opacity-75">
+                      ({Math.round(activityLevel * 100)}% active)
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })()}
+
+          {/* Screenshots Count */}
+          {session.enableScreenshots && (
+            <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 flex items-center gap-2">
+              <Camera size={16} className="text-cyan-600" />
+              <span className="text-sm font-bold text-gray-900">{session.screenshots?.length || 0} shots</span>
+            </div>
+          )}
+
+          {/* Audio */}
+          {session.audioRecording && (
+            <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 flex items-center gap-2">
+              <Mic size={16} className="text-red-600" />
+              <span className="text-sm font-bold text-gray-900">{session.audioSegments?.length || 0}</span>
+              {!isPaused && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+            </div>
+          )}
+
+          {/* Tasks */}
+          <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 flex items-center gap-2">
+            <CheckSquare size={16} className="text-purple-600" />
+            <span className="text-sm font-bold text-gray-900">{session.extractedTaskIds?.length || 0}</span>
+          </div>
+
+          {/* AI Learning Indicator */}
+          {session.screenshots?.some(s => s.analysisStatus === 'analyzing') && (
+            <div className="px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-400/40 rounded-full flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+              <span className="text-xs font-bold text-purple-700">AI Learning</span>
+            </div>
+          )}
+        </div>
+
+        {/* Adaptive Scheduler Debug Panel */}
+        {session.screenshotInterval === -1 && session.enableScreenshots && !isPaused && (
+          <AdaptiveSchedulerDebug isActive={true} />
+        )}
+
+        {/* AI Summary */}
+        {session.summary?.liveSnapshot && (
+          <div className="mt-4 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 backdrop-blur-sm rounded-[20px] border border-cyan-300/30 p-4">
+            <div className="flex items-start gap-2 mb-3">
+              <Sparkles className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-cyan-700 uppercase tracking-wide mb-1">
+                  Right Now
+                </p>
+                <p className="text-sm text-gray-800 leading-relaxed">
+                  {session.summary.liveSnapshot.currentFocus}
+                </p>
+              </div>
+            </div>
+
+            {/* Progress Bullets */}
+            {session.summary.liveSnapshot.progressToday && session.summary.liveSnapshot.progressToday.length > 0 && (
+              <div className="ml-6 space-y-1 mb-3">
+                {session.summary.liveSnapshot.progressToday.slice(0, 3).map((item, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs text-gray-700">{item}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Momentum Indicator */}
+            {session.summary.liveSnapshot.momentum && (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">Momentum:</span>
+                <div className="flex items-center gap-1.5">
+                  <div className={`h-1.5 w-12 rounded-full transition-all ${
+                    session.summary.liveSnapshot.momentum === 'high'
+                      ? 'bg-gradient-to-r from-green-400 to-green-500'
+                      : session.summary.liveSnapshot.momentum === 'medium'
+                      ? 'bg-gradient-to-r from-yellow-400 to-yellow-500'
+                      : 'bg-gradient-to-r from-gray-300 to-gray-400'
+                  }`} />
+                  <span className={`text-[10px] font-semibold ${
+                    session.summary.liveSnapshot.momentum === 'high'
+                      ? 'text-green-600'
+                      : session.summary.liveSnapshot.momentum === 'medium'
+                      ? 'text-yellow-600'
+                      : 'text-gray-600'
+                  }`}>
+                    {session.summary.liveSnapshot.momentum.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Timeline - Scrollable */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <SessionTimeline
+          session={session}
+          onAddComment={(screenshotId, comment) => {
+            addScreenshotComment(screenshotId, comment);
+          }}
+          onToggleFlag={(screenshotId) => {
+            toggleScreenshotFlag(screenshotId);
+          }}
+          onAddContext={handleAddContext}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActiveSessionCard({ session, onTagClick }: { session: Session; onTagClick?: (tag: string) => void }) {
+  const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment } = useSessions();
+  const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
+  const [showDetails, setShowDetails] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [liveElapsed, setLiveElapsed] = useState(0); // Live timer in seconds
+
+  const duration = session.startTime
+    ? Math.floor((new Date().getTime() - new Date(session.startTime).getTime()) / 60000)
+    : 0;
+
+  const isPaused = session.status === 'paused';
+
+  // Live timer - updates every second
+  useEffect(() => {
+    if (isPaused) {
+      return;
+    }
+
+    const updateElapsed = () => {
+      if (session.startTime) {
+        const elapsed = Math.floor((Date.now() - new Date(session.startTime).getTime()) / 1000);
+        setLiveElapsed(elapsed);
+      }
+    };
+
+    updateElapsed(); // Initial update
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [session.startTime, isPaused]);
+
+  // Format elapsed time as HH:MM:SS
+  const formatElapsed = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Countdown timer for next screenshot
+  useEffect(() => {
+    if (isPaused || !session.enableScreenshots) {
+      setCountdown(0);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const now = Date.now();
+      let nextShot: number;
+
+      // Check if using adaptive mode
+      if (session.screenshotInterval === -1 && adaptiveScreenshotScheduler.isActive()) {
+        // Adaptive mode - use scheduler's actual next capture time
+        const schedulerState = adaptiveScreenshotScheduler.getState();
+        if (schedulerState.nextCaptureTime) {
+          nextShot = schedulerState.nextCaptureTime;
+        } else {
+          // Scheduler hasn't set next capture time yet
+          setCountdown(0);
+          return;
+        }
+      } else {
+        // Fixed interval mode - calculate based on last screenshot + interval
+        if (!session.lastScreenshotTime) {
+          setCountdown(0);
+          return;
+        }
+        const lastShot = new Date(session.lastScreenshotTime).getTime();
+        const intervalMs = session.screenshotInterval === -1 ? 2 * 60 * 1000 : session.screenshotInterval * 60 * 1000;
+        nextShot = lastShot + intervalMs;
+      }
+
+      const remaining = Math.max(0, Math.ceil((nextShot - now) / 1000));
+      setCountdown(remaining);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [session.lastScreenshotTime, session.screenshotInterval, isPaused, session.enableScreenshots]);
+
+  // Handle settings changes with persistence
+  const handleScreenshotsToggle = (enabled: boolean) => {
+    updateSession({ ...session, enableScreenshots: enabled });
+    saveLastSessionSettings({ enableScreenshots: enabled });
+  };
+
+  const handleAudioToggle = (enabled: boolean) => {
+    updateSession({ ...session, audioRecording: enabled });
+    saveLastSessionSettings({ audioRecording: enabled });
+  };
+
+  const handleVideoToggle = (enabled: boolean) => {
+    updateSession({ ...session, videoRecording: enabled });
+    saveLastSessionSettings({ videoRecording: enabled });
+  };
+
+  const handleIntervalChange = (newInterval: number) => {
+    updateSession({ ...session, screenshotInterval: newInterval });
+    screenshotCaptureService.updateInterval(
+      newInterval,
+      session.lastScreenshotTime || new Date().toISOString(),
+      session.status
+    );
+    saveLastSessionSettings({ screenshotInterval: newInterval });
+  };
+
+  const handleAddContext = (contextItem: SessionContextItem) => {
+    addContextItem(session.id, contextItem);
+  };
+
+  return (
+    <div className="backdrop-blur-xl bg-white/30 rounded-[32px] border-2 border-white/50 p-8 shadow-2xl">
+      {/* Compact Header */}
+      <div className="flex items-start justify-between mb-6 gap-4">
+        <div className="flex-1 flex items-start gap-4 min-w-0">
+          <div className={`w-4 h-4 rounded-full shrink-0 mt-1 ${isPaused ? 'bg-yellow-400 shadow-lg shadow-yellow-400/50' : 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50'}`} />
+          <div className="flex-1 min-w-0">
+            <h3 className="text-2xl font-bold text-gray-900 break-words">{session.name}</h3>
+            <p className="text-sm text-gray-600 line-clamp-2 break-words">{session.description}</p>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isPaused ? (
+            <button
+              onClick={() => resumeSession(session.id)}
+              className="p-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-[20px] transition-all hover:scale-105 active:scale-95 shadow-lg"
+              title="Resume"
+            >
+              <Play size={20} />
+            </button>
+          ) : (
+            <button
+              onClick={() => pauseSession(session.id)}
+              className="p-3 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white rounded-[20px] transition-all hover:scale-105 active:scale-95 shadow-lg"
+              title="Pause"
+            >
+              <Pause size={20} />
+            </button>
+          )}
+          <button
+            onClick={() => handleEndSession(session.id)}
+            className="p-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-[20px] transition-all hover:scale-105 active:scale-95 shadow-lg"
+            title="End Session"
+          >
+            <Square size={20} />
+          </button>
+        </div>
+      </div>
+
+      {/* Compact Stats Row */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        {/* Live Duration Timer (HH:MM:SS) */}
+        <div className="px-4 py-2 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 backdrop-blur-sm rounded-[20px] border-2 border-blue-400/60 flex items-center gap-2 shadow-md">
+          <Clock size={16} className="text-blue-600" />
+          <span className="text-sm font-bold text-gray-900 font-mono tracking-wider">
+            {formatElapsed(liveElapsed)}
+          </span>
+        </div>
+
+        {/* Next Capture Countdown - Prominent */}
+        {session.enableScreenshots && !isPaused && countdown > 0 && (() => {
+          const isAdaptiveMode = session.screenshotInterval === -1;
+          const schedulerState = isAdaptiveMode ? adaptiveScreenshotScheduler.getState() : null;
+          const activityLevel = schedulerState?.lastActivityScore || 0;
+          const urgency = schedulerState?.lastUrgency || 0;
+
+          // Color intensity based on urgency (higher urgency = warmer colors)
+          const urgencyClass = isAdaptiveMode
+            ? urgency > 0.7 ? 'bg-gradient-to-r from-orange-500/40 to-red-500/40 border-orange-500/80'
+              : urgency > 0.4 ? 'bg-gradient-to-r from-purple-500/30 to-cyan-500/30 border-purple-400/70'
+              : 'bg-gradient-to-r from-teal-500/20 to-emerald-500/20 border-teal-400/60'
+            : 'bg-gradient-to-r from-cyan-500/30 to-teal-500/30 border-cyan-400/70';
+
+          const iconClass = isAdaptiveMode
+            ? urgency > 0.7 ? 'text-orange-700'
+              : urgency > 0.4 ? 'text-purple-700'
+              : 'text-teal-600'
+            : 'text-cyan-700';
+
+          const textClass = isAdaptiveMode
+            ? urgency > 0.7 ? 'text-orange-900'
+              : urgency > 0.4 ? 'text-purple-900'
+              : 'text-teal-900'
+            : 'text-cyan-900';
+
+          return (
+            <div className={`px-4 py-2 backdrop-blur-sm rounded-[20px] border-2 flex items-center gap-2 shadow-md animate-pulse ${urgencyClass}`}>
+              <CameraIcon size={16} className={iconClass} />
+              <span className={`text-sm font-bold ${textClass}`}>
+                {isAdaptiveMode && <span className="mr-1">🧠</span>}
+                Next in <span className="font-mono">{countdown}s</span>
+                {isAdaptiveMode && schedulerState && (
+                  <span className="ml-2 text-xs opacity-75">
+                    ({Math.round(activityLevel * 100)}%)
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })()}
+
+        {/* Screenshots Count */}
+        {session.enableScreenshots && (
+          <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 flex items-center gap-2">
+            <CameraIcon size={16} className="text-cyan-600" />
+            <span className="text-sm font-bold text-gray-900">{session.screenshots?.length || 0} shots</span>
+          </div>
+        )}
+
+        {/* Audio */}
+        {session.audioRecording && (
+          <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 flex items-center gap-2">
+            <Mic size={16} className="text-red-600" />
+            <span className="text-sm font-bold text-gray-900">{session.audioSegments?.length || 0}</span>
+            {!isPaused && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+          </div>
+        )}
+
+        {/* Tasks */}
+        <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 flex items-center gap-2">
+          <CheckSquare size={16} className="text-purple-600" />
+          <span className="text-sm font-bold text-gray-900">{session.extractedTaskIds?.length || 0}</span>
+        </div>
+
+        {/* AI Learning Indicator */}
+        {session.screenshots?.some(s => s.analysisStatus === 'analyzing') && (
+          <div className="px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-400/40 rounded-full flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+            <span className="text-xs font-bold text-purple-700">AI Learning</span>
+          </div>
+        )}
+      </div>
+
+      {/* Inline Settings - Always Visible */}
+      <div className="mb-6 flex items-center gap-3 flex-wrap">
+        <ToggleButton
+          icon={CameraIcon}
+          label="Screenshots"
+          active={session.enableScreenshots}
+          onChange={handleScreenshotsToggle}
+          disabled={isPaused}
+          size="sm"
+        />
+        <ToggleButton
+          icon={Mic}
+          label="Audio"
+          active={session.audioRecording}
+          onChange={handleAudioToggle}
+          disabled={isPaused}
+          size="sm"
+        />
+        <ToggleButton
+          icon={Video}
+          label="Video"
+          active={session.videoRecording || false}
+          onChange={handleVideoToggle}
+          disabled={isPaused}
+          size="sm"
+        />
+
+        {/* Interval Dropdown */}
+        {session.enableScreenshots && (
+          <div className="flex items-center gap-2">
+            <Clock size={14} className="text-gray-600 shrink-0" />
+            <select
+              value={session.screenshotInterval}
+              onChange={(e) => handleIntervalChange(Number(e.target.value))}
+              disabled={isPaused}
+              className={`
+                px-3 py-2 rounded-[20px] text-sm font-semibold
+                bg-white/60 backdrop-blur-sm border-2 border-white/60
+                focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none
+                transition-all appearance-none cursor-pointer
+                ${isPaused ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/80'}
+              `}
+            >
+              <option value={-1}>Adaptive (AI)</option>
+              <option value={10/60}>Every 10s</option>
+              <option value={0.5}>Every 30s</option>
+              <option value={1}>Every 1m</option>
+              <option value={2}>Every 2m</option>
+              <option value={3}>Every 3m</option>
+              <option value={5}>Every 5m</option>
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* AI Summary - Session-Aware */}
+      {session.summary && (
+        <>
+          {/* Live Session Snapshot */}
+          {session.status === 'active' && session.summary.liveSnapshot && (
+            <div className="mb-4 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 backdrop-blur-sm rounded-[20px] border border-cyan-300/30 p-4">
+              {/* Current Focus */}
+              <div className="flex items-start gap-2 mb-3">
+                <Sparkles className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-cyan-700 uppercase tracking-wide mb-1">
+                    Right Now
+                  </p>
+                  <p className="text-sm text-gray-800 leading-relaxed">
+                    {session.summary.liveSnapshot.currentFocus}
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress Bullets */}
+              {session.summary.liveSnapshot.progressToday && session.summary.liveSnapshot.progressToday.length > 0 && (
+                <div className="ml-6 space-y-1 mb-3">
+                  {session.summary.liveSnapshot.progressToday.slice(0, 3).map((item, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-xs text-gray-700">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Momentum Indicator */}
+              {session.summary.liveSnapshot.momentum && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">Momentum:</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className={`h-1.5 w-12 rounded-full transition-all ${
+                      session.summary.liveSnapshot.momentum === 'high'
+                        ? 'bg-gradient-to-r from-green-400 to-green-500'
+                        : session.summary.liveSnapshot.momentum === 'medium'
+                        ? 'bg-gradient-to-r from-yellow-400 to-yellow-500'
+                        : 'bg-gradient-to-r from-gray-300 to-gray-400'
+                    }`} />
+                    <span className={`text-[10px] font-semibold ${
+                      session.summary.liveSnapshot.momentum === 'high'
+                        ? 'text-green-600'
+                        : session.summary.liveSnapshot.momentum === 'medium'
+                        ? 'text-yellow-600'
+                        : 'text-gray-600'
+                    }`}>
+                      {session.summary.liveSnapshot.momentum.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Completed Session - Simple Narrative */}
+          {session.status === 'completed' && (
+            <div className="mb-4 p-3 bg-white/30 backdrop-blur-sm rounded-[24px] border-2 border-white/50">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                <span className="font-semibold text-cyan-600">AI:</span> {session.summary.narrative}
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Tags */}
+      <div className="mb-6">
+        <InlineTagManager
+          tags={session.tags || []}
+          onTagsChange={(newTags) => {
+            updateSession({ ...session, tags: newTags });
+          }}
+          allTags={tagUtils.getTopTags(sessions, (s) => s.tags || [], 20)}
+          onTagClick={onTagClick ? (tag) => onTagClick(tag) : undefined}
+          editable={true}
+        />
+      </div>
+
+      {/* View Timeline Button - Subtle Glassy Pill */}
+      <div className="flex justify-center">
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="px-6 py-2.5 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 text-gray-700 hover:bg-white/60 hover:border-cyan-300 font-semibold text-sm transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+        >
+          <BookOpen size={16} />
+          {showDetails ? 'Hide Timeline' : 'View Timeline'}
+        </button>
+      </div>
+
+      {/* Timeline */}
+      {showDetails && (
+        <div className="mt-6 pt-6 border-t-2 border-white/40">
+          <SessionTimeline
+            session={session}
+            onAddComment={(screenshotId, comment) => {
+              addScreenshotComment(screenshotId, comment);
+            }}
+            onToggleFlag={(screenshotId) => {
+              toggleScreenshotFlag(screenshotId);
+            }}
+            onAddContext={handleAddContext}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptySessionCard({ onStart }: { onStart: (data: Partial<Session>) => void }) {
+  const [isStarting, setIsStarting] = useState(false);
+  const [showContext, setShowContext] = useState(false);
+  const [description, setDescription] = useState('');
+  
+  const [lastSettings, setLastSettings] = useState(() => {
+    const settings = loadLastSessionSettings();
+    console.log('🔧 [EMPTY SESSION] Initial settings loaded:', settings);
+    return settings;
+  });
+
+  // Direct update functions for each setting
+  const handleScreenshotsToggle = React.useCallback((enabled: boolean) => {
+    console.log('📸 [EMPTY SESSION] Screenshots toggle:', enabled);
+    setLastSettings(prev => {
+      const updated = { ...prev, enableScreenshots: enabled };
+      saveLastSessionSettings(updated);
+      console.log('📸 [EMPTY SESSION] Updated settings:', updated);
+      return updated;
+    });
+  }, []);
+
+  const handleAudioToggle = React.useCallback((enabled: boolean) => {
+    console.log('🎙️ [EMPTY SESSION] Audio toggle:', enabled);
+    setLastSettings(prev => {
+      const updated = { ...prev, audioRecording: enabled };
+      saveLastSessionSettings(updated);
+      console.log('🎙️ [EMPTY SESSION] Updated settings:', updated);
+      return updated;
+    });
+  }, []);
+
+  const handleVideoToggle = React.useCallback((enabled: boolean) => {
+    try {
+      console.log('🎥 [EMPTY SESSION] Video toggle called with:', enabled);
+      setLastSettings(prev => {
+        console.log('🎥 [EMPTY SESSION] Previous state in setter:', prev);
+        const updated = { ...prev, videoRecording: enabled };
+        console.log('🎥 [EMPTY SESSION] Updated settings (new state):', updated);
+        saveLastSessionSettings(updated);
+        return updated;
+      });
+    } catch (error) {
+      console.error('❌ [EMPTY SESSION] Error in handleVideoToggle:', error);
+    }
+  }, []); // Empty deps - we use functional setState so no closure issues
+
+  const handleIntervalChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newInterval = Number(e.target.value);
+    console.log('⏱️ [EMPTY SESSION] Interval change:', newInterval);
+    setLastSettings(prev => {
+      const updated = { ...prev, screenshotInterval: newInterval };
+      saveLastSessionSettings(updated);
+      console.log('⏱️ [EMPTY SESSION] Updated settings:', updated);
+      return updated;
+    });
+  };
+
+  const handleQuickStart = () => {
+    setIsStarting(true);
+
+    // Save settings for next time
+    saveLastSessionSettings({
+      screenshotInterval: lastSettings.screenshotInterval,
+      enableScreenshots: lastSettings.enableScreenshots,
+      audioRecording: lastSettings.audioRecording,
+      videoRecording: lastSettings.videoRecording,
+      autoAnalysis: lastSettings.autoAnalysis,
+    });
+
+    setTimeout(() => {
+      onStart({
+        name: description.trim() || 'Quick Session',
+        description: description.trim() || 'Started quickly without description',
+        tags: [],
+        screenshotInterval: lastSettings.screenshotInterval,
+        enableScreenshots: lastSettings.enableScreenshots,
+        autoAnalysis: lastSettings.autoAnalysis,
+        audioRecording: lastSettings.audioRecording,
+        videoRecording: lastSettings.videoRecording,
+      });
+    }, 100);
+  };
+
+  if (isStarting) {
+    return (
+      <div className="backdrop-blur-xl bg-white/30 rounded-[32px] border-2 border-white/40 p-10 shadow-2xl">
+        <div className="flex items-center justify-center gap-4">
+          <div className="relative">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 animate-pulse" />
+            <div className="absolute inset-0 w-8 h-8 rounded-full border-2 border-white border-t-transparent animate-spin" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">Starting Session...</h3>
+            <p className="text-sm text-gray-600">Setting up capture and analysis</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="backdrop-blur-xl bg-white/30 rounded-[32px] border-2 border-white/40 p-8 shadow-2xl">
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Ready to start tracking?</h2>
+        <p className="text-sm text-gray-600">
+          Last settings: {getSettingsSummary(lastSettings)}
+        </p>
+      </div>
+
+      {/* Start Button + Controls Row */}
+      <div className="flex items-center gap-3 flex-wrap mb-6">
+        <button
+          onClick={handleQuickStart}
+          className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-[20px] font-semibold transition-all hover:scale-105 active:scale-95 shadow-lg flex items-center gap-2"
+        >
+          <Play size={20} />
+          Start Session
+        </button>
+
+        <ToggleButton
+          icon={CameraIcon}
+          label="Screenshots"
+          active={lastSettings.enableScreenshots}
+          onChange={handleScreenshotsToggle}
+          size="sm"
+        />
+
+        <ToggleButton
+          icon={Mic}
+          label="Audio"
+          active={lastSettings.audioRecording}
+          onChange={handleAudioToggle}
+          size="sm"
+        />
+
+        <ToggleButton
+          icon={Video}
+          label="Video"
+          active={lastSettings.videoRecording || false}
+          onChange={handleVideoToggle}
+          size="sm"
+        />
+
+        {lastSettings.enableScreenshots && (
+          <div className="flex items-center gap-2">
+            <Clock size={14} className="text-gray-600 shrink-0" />
+            <select
+              value={lastSettings.screenshotInterval}
+              onChange={handleIntervalChange}
+              className="px-3 py-2 rounded-[20px] text-sm font-semibold bg-white/60 backdrop-blur-sm border-2 border-white/60 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none transition-all appearance-none cursor-pointer hover:bg-white/80"
+            >
+              <option value={-1}>🧠 Adaptive (AI)</option>
+              <option value={10/60}>Every 10s</option>
+              <option value={0.5}>Every 30s</option>
+              <option value={1}>Every 1m</option>
+              <option value={2}>Every 2m</option>
+              <option value={3}>Every 3m</option>
+              <option value={5}>Every 5m</option>
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Optional Context Input */}
+      {showContext ? (
+        <div className="animate-in slide-in-from-top-2 fade-in duration-200">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What are you working on? (optional)"
+            className="w-full px-4 py-3 bg-white/40 backdrop-blur-sm border-2 border-white/60 rounded-[20px] focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none transition-all resize-none placeholder:text-gray-500 text-sm"
+            rows={2}
+            autoFocus
+          />
+          <button
+            onClick={() => setShowContext(false)}
+            className="text-xs text-gray-500 hover:text-gray-700 mt-2"
+          >
+            Hide context
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowContext(true)}
+          className="text-sm text-gray-600 hover:text-cyan-600 font-semibold transition-colors"
+        >
+          + Add context for this session
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SessionCard({
+  session,
+  onClick,
+  bulkSelectMode = false,
+  isSelected = false,
+  onSelect,
+  onTagClick,
+  isNewlyCompleted = false,
+}: {
+  session: Session;
+  onClick: () => void;
+  bulkSelectMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: (sessionId: string) => void;
+  onTagClick?: (tag: string) => void;
+  isNewlyCompleted?: boolean;
+}) {
+  const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment } = useSessions();
+  const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
+  const startDate = new Date(session.startTime);
+  const endDate = session.endTime ? new Date(session.endTime) : null;
+
+  // Handler to extract all recommended tasks from summary
+  const handleExtractAllTasks = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening detail view
+
+    if (!session.summary?.recommendedTasks || session.summary.recommendedTasks.length === 0) {
+      addNotification({
+        type: 'info',
+        title: 'No Tasks Available',
+        message: 'This session has no recommended tasks to extract.',
+      });
+      return;
+    }
+
+    // Create tasks from all recommendations
+    session.summary.recommendedTasks.forEach(taskRec => {
+      const newTask = {
+        id: `task-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        title: taskRec.title,
+        done: false,
+        priority: taskRec.priority,
+        status: 'todo' as const,
+        createdBy: 'ai' as const,
+        createdAt: new Date().toISOString(),
+        sourceSessionId: session.id,
+        sourceExcerpt: taskRec.title,
+        description: taskRec.context || `Extracted from session: ${session.name}`,
+        contextForAgent: taskRec.context
+          ? `This task was identified during the session "${session.name}". Context: ${taskRec.context}`
+          : `This task was identified during the session "${session.name}".`,
+        tags: [],
+      };
+
+      tasksDispatch({ type: 'ADD_TASK', payload: newTask });
+      addExtractedTask(session.id, newTask.id);
+    });
+
+    addNotification({
+      type: 'success',
+      title: 'Tasks Extracted',
+      message: `${session.summary.recommendedTasks.length} tasks added from session "${session.name}"`,
+    });
+  };
+
+  // Handler to delete session
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening detail view
+
+    if (window.confirm(`Delete session "${session.name}"? This action cannot be undone.`)) {
+      deleteSession(session.id,
+      );
+
+      addNotification({
+        type: 'success',
+        title: 'Session Deleted',
+        message: `"${session.name}" has been deleted.`,
+      });
+    }
+  };
+
+  const handleCardClick = () => {
+    if (bulkSelectMode && onSelect) {
+      onSelect(session.id);
+    } else {
+      onClick();
+    }
+  };
+
+  return (
+    <div
+      onClick={handleCardClick}
+      className={`group relative backdrop-blur-xl rounded-[24px] border-2 p-4 hover:shadow-md transition-all cursor-pointer overflow-hidden ${
+        isNewlyCompleted
+          ? 'bg-gradient-to-br from-green-100/80 via-cyan-100/80 to-blue-100/80 border-green-400 shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-500'
+          : bulkSelectMode && isSelected
+          ? 'bg-cyan-100/50 border-cyan-400 shadow-lg'
+          : 'bg-white/40 border-white/60 hover:bg-white/60 hover:border-cyan-300/60'
+      }`}
+    >
+      {/* NEW badge for newly completed sessions */}
+      {isNewlyCompleted && (
+        <div className="absolute top-3 right-3 px-2.5 py-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1">
+          <Sparkles size={12} />
+          <span>NEW</span>
+        </div>
+      )}
+      {/* Checkbox - Shows in bulk select mode */}
+      {bulkSelectMode && (
+        <div
+          className="absolute top-3 left-3 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onSelect?.(session.id)}
+            className="w-5 h-5 rounded border-2 border-gray-300 text-cyan-600 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 cursor-pointer transition-all"
+          />
+        </div>
+      )}
+
+      {/* Delete Button - Appears on hover (hidden in bulk select mode) */}
+      {!bulkSelectMode && (
+        <button
+          onClick={handleDelete}
+          className="absolute top-3 right-3 p-1.5 bg-white/80 hover:bg-red-50 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"
+          title="Delete session"
+        >
+          <Trash2 size={14} className="text-gray-400 hover:text-red-600" />
+        </button>
+      )}
+
+      {/* Minimal Card Content */}
+      <div className={bulkSelectMode ? "pl-8 pr-4" : "pr-8"}>
+        {/* Session Name */}
+        <h4 className="font-semibold text-gray-900 mb-2 leading-tight">
+          {session.name}
+        </h4>
+
+        {/* Description - 2 lines max */}
+        {session.description && (
+          <p className="text-sm text-gray-600 mb-3 line-clamp-2 leading-relaxed">
+            {session.description}
+          </p>
+        )}
+
+        {/* Category & Sub-Category */}
+        {(session.category || session.subCategory) && (
+          <div className="flex items-center gap-2 mb-3">
+            {session.category && (
+              <span className="px-2.5 py-1 bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 rounded-full text-xs font-semibold border border-cyan-200">
+                {session.category}
+              </span>
+            )}
+            {session.subCategory && (
+              <span className="px-2.5 py-1 bg-white/60 text-gray-700 rounded-full text-xs font-medium border border-gray-200">
+                {session.subCategory}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Condensed Stats - Single Row */}
+        <div className="flex items-center gap-3 text-xs text-gray-600">
+          <span>{startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+          <span className="text-gray-300">•</span>
+          <span>
+            {session.totalDuration
+              ? session.totalDuration < 60
+                ? `${session.totalDuration}m`
+                : `${Math.floor(session.totalDuration / 60)}h ${session.totalDuration % 60}m`
+              : '0m'}
+          </span>
+          {(session.screenshots?.length || 0) > 0 && (
+            <>
+              <span className="text-gray-300">•</span>
+              <span>{session.screenshots.length} screenshots</span>
+            </>
+          )}
+          {session.audioSegments && session.audioSegments.length > 0 && (
+            <>
+              <span className="text-gray-300">•</span>
+              <span>{Math.floor(session.audioSegments.reduce((sum, seg) => sum + seg.duration, 0) / 60)}m audio</span>
+            </>
+          )}
+        </div>
+
+        {/* Optional: Small tags if present */}
+        {session.tags && session.tags.length > 0 && (
+          <div className="mt-2">
+            <InlineTagManager
+              tags={session.tags}
+              onTagsChange={(newTags) => {
+                updateSession({ ...session, tags: newTags });
+              }}
+              allTags={tagUtils.getTopTags(sessions, (s) => s.tags || [], 20)}
+              onTagClick={onTagClick ? (tag) => onTagClick(tag) : undefined}
+              maxDisplayed={5}
+              editable={true}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+

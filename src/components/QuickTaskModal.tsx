@@ -1,10 +1,17 @@
 import { useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useUI } from '../context/UIContext';
+import { useEntities } from '../context/EntitiesContext';
+import { useTasks } from '../context/TasksContext';
 import { X, Calendar, Flag, Tag, Folder } from 'lucide-react';
 import type { Task } from '../types';
+import { useTheme } from '../context/ThemeContext';
+import { getModalClasses } from '../design-system/theme';
 
 export function QuickTaskModal() {
-  const { state, dispatch } = useApp();
+  const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
+  const { state: entitiesState } = useEntities();
+  const { addTask } = useTasks();
+  const { colorScheme, glassStrength } = useTheme();
   const [input, setInput] = useState('');
   const [parsedTask, setParsedTask] = useState<Partial<Task>>({
     title: '',
@@ -12,10 +19,10 @@ export function QuickTaskModal() {
     tags: [],
   });
 
-  if (!state.ui.quickCaptureOpen) return null;
+  if (!uiState.quickCaptureOpen) return null;
 
   const handleClose = () => {
-    dispatch({ type: 'TOGGLE_QUICK_CAPTURE' });
+    uiDispatch({ type: 'TOGGLE_QUICK_CAPTURE' });
     setInput('');
     setParsedTask({ title: '', priority: 'medium', tags: [] });
   };
@@ -77,25 +84,19 @@ export function QuickTaskModal() {
   const handleCreate = () => {
     if (!parsedTask.title?.trim()) return;
 
-    dispatch({
-      type: 'CREATE_MANUAL_TASK',
-      payload: {
-        title: parsedTask.title,
-        priority: parsedTask.priority || 'medium',
-        dueDate: parsedTask.dueDate,
-        tags: parsedTask.tags,
-        topicId: parsedTask.topicId,
-        description: parsedTask.description,
-      }
+    addTask({
+      title: parsedTask.title,
+      priority: parsedTask.priority || 'medium',
+      dueDate: parsedTask.dueDate,
+      tags: parsedTask.tags,
+      topicId: parsedTask.topicId,
+      description: parsedTask.description,
     });
 
-    dispatch({
-      type: 'ADD_NOTIFICATION',
-      payload: {
-        type: 'success',
-        title: 'Task Created',
-        message: `"${parsedTask.title}" has been added to your tasks`,
-      }
+    addNotification({
+      type: 'success',
+      title: 'Task Created',
+      message: `"${parsedTask.title}" has been added to your tasks`,
     });
 
     handleClose();
@@ -110,13 +111,15 @@ export function QuickTaskModal() {
     }
   };
 
+  const modalClasses = getModalClasses(colorScheme, glassStrength);
+
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      className={modalClasses.overlay}
       onClick={handleClose}
     >
       <div
-        className="bg-white/60 backdrop-blur-2xl border-2 border-white/50 rounded-2xl shadow-2xl max-w-2xl w-full"
+        className={`${modalClasses.content} max-w-2xl w-full`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -147,7 +150,7 @@ export function QuickTaskModal() {
               onChange={(e) => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="e.g., buy milk tomorrow @high #groceries"
-              className="w-full px-4 py-3 bg-white/70 backdrop-blur-xl border border-white/60 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-400 transition-all text-lg shadow-sm"
+              className="w-full px-4 py-3 bg-white/30 backdrop-blur-xl border border-white/60 rounded-[20px] focus:ring-2 focus:ring-cyan-500 focus:border-cyan-400 transition-all text-lg shadow-sm"
               autoFocus
             />
             <p className="text-xs text-gray-500 mt-2">
@@ -156,7 +159,7 @@ export function QuickTaskModal() {
           </div>
 
           {/* Parsed Fields (editable) */}
-          <div className="bg-gradient-to-br from-cyan-50/80 to-blue-50/80 backdrop-blur-sm rounded-xl p-4 space-y-4 border border-white/60 shadow-sm">
+          <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 space-y-4 border border-white/60 shadow-sm">
             <h3 className="font-semibold text-gray-900 flex items-center gap-2">
               <span>📋 Parsed Task</span>
             </h3>
@@ -219,7 +222,7 @@ export function QuickTaskModal() {
                 className="w-full px-3 py-2 bg-white/70 backdrop-blur-xl border border-white/60 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-400 transition-all shadow-sm"
               >
                 <option value="">No Topic</option>
-                {state.topics.map(topic => (
+                {entitiesState.topics.map(topic => (
                   <option key={topic.id} value={topic.id}>
                     {topic.name}
                   </option>

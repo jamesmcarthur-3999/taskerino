@@ -13,21 +13,44 @@ dist
 dist-ssr
 *.local
 
+# Test files with API keys
+test-*.ts
+
 # Environment files (may contain API keys)
 .env
 .env.local
 .env.*.local
+.env.production
 
 # Tauri build artifacts
 src-tauri/target
+src-tauri/WixTools
+
+# macOS specific
+.DS_Store
+*.dmg
+*.app
+
+# Code signing
+*.p12
+*.mobileprovision
+*.provisionprofile
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Temporary files
+*.tmp
+*.temp
+.cache
+
+# Backup files
+*.backup
+*.bak

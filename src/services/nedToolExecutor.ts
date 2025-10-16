@@ -5,11 +5,14 @@
  * Connects Ned's tool calls to actual app state and actions.
  */
 
-import type { AppState } from '../types';
+import type { AppState, Session } from '../types';
 import type { ToolCall, ToolResult } from './nedTools';
 import { contextAgent } from './contextAgent';
+import { sessionsQueryAgent } from './sessionsQueryAgent';
 import { nedMemory } from './nedMemory';
-import { generateId } from '../utils/helpers';
+import { sessionsAgentService } from './sessionsAgentService';
+import { attachmentStorage } from './attachmentStorage';
+import { generateId, stripHtmlTags } from '../utils/helpers';
 
 type DispatchFunction = (action: any) => void;
 
@@ -44,6 +47,23 @@ export class NedToolExecutor {
 
         case 'get_item_details':
           return this.getItemDetails(tool);
+
+        // ==================== SESSION TOOLS ====================
+
+        case 'query_sessions':
+          return await this.querySessions(tool);
+
+        case 'get_session_details':
+          return this.getSessionDetails(tool);
+
+        case 'get_session_summary':
+          return await this.getSessionSummary(tool);
+
+        case 'get_active_session':
+          return this.getActiveSession(tool);
+
+        case 'get_screenshot_image':
+          return await this.getScreenshotImage(tool);
 
         // ==================== WRITE TOOLS ====================
 
@@ -385,6 +405,10 @@ export class NedToolExecutor {
         task: newTask,
         message: `Created task: "${title}"`,
       },
+      // Change tracking data for UI
+      operation: 'create',
+      item_type: 'task',
+      item: newTask,
     };
   }
 
@@ -403,6 +427,31 @@ export class NedToolExecutor {
       };
     }
 
+    // Track changes
+    const changes = [];
+    const fieldLabels: Record<string, string> = {
+      title: 'Title',
+      description: 'Description',
+      priority: 'Priority',
+      status: 'Status',
+      dueDate: 'Due Date',
+      dueTime: 'Due Time',
+      done: 'Completed',
+      tags: 'Tags',
+    };
+
+    for (const [field, newValue] of Object.entries(updates)) {
+      const oldValue = (task as any)[field];
+      if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+        changes.push({
+          field,
+          label: fieldLabels[field] || field,
+          oldValue,
+          newValue,
+        });
+      }
+    }
+
     const updatedTask = { ...task, ...updates };
     this.dispatch({ type: 'UPDATE_TASK', payload: updatedTask });
 
@@ -412,7 +461,13 @@ export class NedToolExecutor {
         success: true,
         task: updatedTask,
         message: `Updated task: "${task.title}"`,
+        changes,
       },
+      // Change tracking data for UI
+      operation: 'update',
+      item_type: 'task',
+      item: updatedTask,
+      changes,
     };
   }
 
@@ -476,10 +531,13 @@ export class NedToolExecutor {
   private createNote(tool: ToolCall): ToolResult {
     const { content, topic_id, tags } = tool.input;
 
+    // Strip any HTML tags from AI-generated content to ensure clean markdown/plain text
+    const cleanContent = stripHtmlTags(content);
+
     const newNote = {
       id: generateId(),
-      content,
-      summary: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+      content: cleanContent,
+      summary: cleanContent.substring(0, 100) + (cleanContent.length > 100 ? '...' : ''),
       topicId: topic_id,
       timestamp: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
@@ -496,6 +554,10 @@ export class NedToolExecutor {
         note: newNote,
         message: 'Created note',
       },
+      // Change tracking data for UI
+      operation: 'create',
+      item_type: 'note',
+      item: newNote,
     };
   }
 
@@ -514,10 +576,24 @@ export class NedToolExecutor {
       };
     }
 
+    // Strip any HTML tags from AI-generated content to ensure clean markdown/plain text
+    const cleanContent = stripHtmlTags(content);
+
+    // Track changes
+    const changes = [];
+    if (note.content !== cleanContent) {
+      changes.push({
+        field: 'content',
+        label: 'Content',
+        oldValue: note.content,
+        newValue: cleanContent,
+      });
+    }
+
     const updatedNote = {
       ...note,
-      content,
-      summary: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+      content: cleanContent,
+      summary: cleanContent.substring(0, 100) + (cleanContent.length > 100 ? '...' : ''),
       lastUpdated: new Date().toISOString(),
     };
 
@@ -529,7 +605,13 @@ export class NedToolExecutor {
         success: true,
         note: updatedNote,
         message: 'Updated note',
+        changes,
       },
+      // Change tracking data for UI
+      operation: 'update',
+      item_type: 'note',
+      item: updatedNote,
+      changes,
     };
   }
 
@@ -576,5 +658,380 @@ export class NedToolExecutor {
         message: `Recorded ${memory_type}: "${content}"`,
       },
     };
+  }
+
+  // ==================== SESSION TOOL IMPLEMENTATIONS ====================
+
+  /**
+   * Query sessions using AI agent for semantic search
+   */
+  private async querySessions(tool: ToolCall): Promise<ToolResult> {
+    const { query, agent_thread_id } = tool.input;
+
+    try {
+      // Use Sessions Query Agent for intelligent search
+      const result = await sessionsQueryAgent.search(
+        query,
+        this.appState.sessions,
+        agent_thread_id
+      );
+
+      // Format session data for Ned
+      const sessionData = result.sessions.map(s => {
+        const audioSegments = s.audioSegments || [];
+
+        // Combine transcriptions (first 200 chars)
+        const transcriptionPreview = audioSegments
+          .map(seg => seg.transcription)
+          .join(' ')
+          .substring(0, 200);
+
+        // Get key phrases
+        const audioKeyPhrases = audioSegments
+          .flatMap(seg => seg.keyPhrases || [])
+          .slice(0, 5);
+
+        return {
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          status: s.status,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          duration: s.totalDuration || this.calculateSessionDuration(s),
+          screenshotCount: s.screenshots.length,
+          audioSegmentCount: audioSegments.length,
+          extractedTaskCount: s.extractedTaskIds.length,
+          extractedNoteCount: s.extractedNoteIds.length,
+          tags: s.tags,
+          activityType: s.activityType,
+          // Include summary of screenshot activities for context
+          recentActivities: s.screenshots
+            .filter(ss => ss.aiAnalysis?.detectedActivity)
+            .slice(-3)
+            .map(ss => ss.aiAnalysis!.detectedActivity),
+          // Include audio transcription preview
+          audioTranscriptionPreview: transcriptionPreview || undefined,
+          audioKeyPhrases: audioKeyPhrases.length > 0 ? audioKeyPhrases : undefined,
+          audioTasksDetected: audioSegments.filter(seg => seg.containsTask).length,
+          audioBlockersDetected: audioSegments.filter(seg => seg.containsBlocker).length,
+        };
+      });
+
+      return {
+        tool_use_id: tool.id,
+        content: {
+          summary: result.summary,
+          sessions: sessionData,
+          total_found: result.sessions.length,
+          suggestions: result.suggestions,
+          thread_id: result.thread_id,
+        },
+        // UI also gets full session objects for rendering
+        full_sessions: result.sessions,
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Failed to search sessions: ${error instanceof Error ? error.message : String(error)}`,
+        is_error: true,
+      };
+    }
+  }
+
+  /**
+   * Get complete details for a specific session
+   */
+  private getSessionDetails(tool: ToolCall): ToolResult {
+    const { session_id } = tool.input;
+
+    const session = this.appState.sessions.find(s => s.id === session_id);
+
+    if (!session) {
+      return {
+        tool_use_id: tool.id,
+        content: `Session not found: ${session_id}`,
+        is_error: true,
+      };
+    }
+
+    // Get extracted tasks
+    const extractedTasks = session.extractedTaskIds
+      .map(taskId => this.appState.tasks.find(t => t.id === taskId))
+      .filter(Boolean);
+
+    // Get extracted notes
+    const extractedNotes = session.extractedNoteIds
+      .map(noteId => this.appState.notes.find(n => n.id === noteId))
+      .filter(Boolean);
+
+    // Format screenshots with analysis
+    const screenshots = session.screenshots.map(ss => ({
+      id: ss.id,
+      timestamp: ss.timestamp,
+      analysisStatus: ss.analysisStatus,
+      aiAnalysis: ss.aiAnalysis,
+      userComment: ss.userComment,
+      flagged: ss.flagged,
+    }));
+
+    // Format audio segments with transcriptions
+    const audioSegments = (session.audioSegments || []).map(seg => ({
+      id: seg.id,
+      timestamp: seg.timestamp,
+      duration: seg.duration,
+      transcription: seg.transcription,
+      description: seg.description,
+      mode: seg.mode,
+      keyPhrases: seg.keyPhrases,
+      sentiment: seg.sentiment,
+      containsTask: seg.containsTask,
+      containsBlocker: seg.containsBlocker,
+    }));
+
+    return {
+      tool_use_id: tool.id,
+      content: {
+        session: {
+          id: session.id,
+          name: session.name,
+          description: session.description,
+          status: session.status,
+          startTime: session.startTime,
+          endTime: session.endTime,
+          duration: session.totalDuration || this.calculateSessionDuration(session),
+          screenshotInterval: session.screenshotInterval,
+          autoAnalysis: session.autoAnalysis,
+          audioMode: session.audioMode,
+          tags: session.tags,
+          activityType: session.activityType,
+        },
+        screenshots,
+        audioSegments,
+        extractedTasks: extractedTasks.map(t => ({
+          id: t!.id,
+          title: t!.title,
+          priority: t!.priority,
+          status: t!.status,
+        })),
+        extractedNotes: extractedNotes.map(n => ({
+          id: n!.id,
+          summary: n!.summary,
+          timestamp: n!.timestamp,
+        })),
+        stats: {
+          screenshotCount: screenshots.length,
+          audioSegmentCount: audioSegments.length,
+          taskCount: extractedTasks.length,
+          noteCount: extractedNotes.length,
+          duration: session.totalDuration || this.calculateSessionDuration(session),
+        },
+      },
+    };
+  }
+
+  /**
+   * Generate AI-powered session summary
+   */
+  private async getSessionSummary(tool: ToolCall): Promise<ToolResult> {
+    const { session_id } = tool.input;
+
+    const session = this.appState.sessions.find(s => s.id === session_id);
+
+    if (!session) {
+      return {
+        tool_use_id: tool.id,
+        content: `Session not found: ${session_id}`,
+        is_error: true,
+      };
+    }
+
+    try {
+      // Gather context from existing sessions and notes for categorization
+      const existingCategories = Array.from(new Set(this.appState.sessions.map(s => s.category).filter(Boolean))) as string[];
+      const existingSubCategories = Array.from(new Set(this.appState.sessions.map(s => s.subCategory).filter(Boolean))) as string[];
+      const existingTags = Array.from(
+        new Set([
+          ...this.appState.sessions.flatMap(s => s.tags || []),
+          ...this.appState.notes.flatMap(n => n.tags || [])
+        ])
+      );
+
+      // Generate summary using SessionsAgentService
+      const summary = await sessionsAgentService.generateSessionSummary(
+        session,
+        session.screenshots,
+        session.audioSegments || [],
+        {
+          existingCategories,
+          existingSubCategories,
+          existingTags
+        }
+      );
+
+      return {
+        tool_use_id: tool.id,
+        content: {
+          narrative: summary.narrative || '',
+          achievements: summary.achievements || [],
+          blockers: summary.blockers || [],
+          recommendedTasks: summary.recommendedTasks || [],
+          keyInsights: summary.keyInsights || [],
+          focusAreas: summary.focusAreas || [],
+          category: summary.category,
+          subCategory: summary.subCategory,
+          tags: summary.tags,
+          sessionName: session.name,
+          duration: this.calculateSessionDuration(session),
+        },
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Failed to generate summary: ${error instanceof Error ? error.message : String(error)}`,
+        is_error: true,
+      };
+    }
+  }
+
+  /**
+   * Get currently active session
+   */
+  private getActiveSession(tool: ToolCall): ToolResult {
+    const activeSession = this.appState.sessions.find(
+      s => s.id === this.appState.activeSessionId
+    );
+
+    if (!activeSession) {
+      return {
+        tool_use_id: tool.id,
+        content: {
+          hasActiveSession: false,
+          message: 'No active session',
+        },
+      };
+    }
+
+    return {
+      tool_use_id: tool.id,
+      content: {
+        hasActiveSession: true,
+        session: {
+          id: activeSession.id,
+          name: activeSession.name,
+          description: activeSession.description,
+          status: activeSession.status,
+          startTime: activeSession.startTime,
+          duration: this.calculateSessionDuration(activeSession),
+          screenshotCount: activeSession.screenshots.length,
+          audioSegmentCount: (activeSession.audioSegments || []).length,
+          audioMode: activeSession.audioMode,
+          tags: activeSession.tags,
+          activityType: activeSession.activityType,
+        },
+      },
+    };
+  }
+
+  /**
+   * Get screenshot image for visual analysis
+   * EXPENSIVE - loads full screenshot image data
+   */
+  private async getScreenshotImage(tool: ToolCall): Promise<ToolResult> {
+    const { screenshot_id, reason } = tool.input;
+
+    // Log usage for tracking
+    console.log(`📸 Ned viewing screenshot: ${screenshot_id} | Reason: ${reason}`);
+
+    // Find the screenshot across all sessions
+    let screenshot = null;
+    let session = null;
+
+    for (const s of this.appState.sessions) {
+      const found = s.screenshots.find(ss => ss.id === screenshot_id);
+      if (found) {
+        screenshot = found;
+        session = s;
+        break;
+      }
+    }
+
+    if (!screenshot || !session) {
+      return {
+        tool_use_id: tool.id,
+        content: `Screenshot not found: ${screenshot_id}`,
+        is_error: true,
+      };
+    }
+
+    try {
+      // Load the attachment containing the screenshot
+      const attachment = await attachmentStorage.getAttachment(screenshot.attachmentId);
+
+      if (!attachment || !attachment.base64) {
+        return {
+          tool_use_id: tool.id,
+          content: `Screenshot image data not found for: ${screenshot_id}`,
+          is_error: true,
+        };
+      }
+
+      // Return the screenshot with full visual data
+      return {
+        tool_use_id: tool.id,
+        content: {
+          screenshot: {
+            id: screenshot.id,
+            timestamp: screenshot.timestamp,
+            sessionId: session.id,
+            sessionName: session.name,
+            analysisStatus: screenshot.analysisStatus,
+            aiAnalysis: screenshot.aiAnalysis,
+            userComment: screenshot.userComment,
+            flagged: screenshot.flagged,
+          },
+          image: {
+            source: {
+              type: 'base64',
+              media_type: attachment.mimeType || 'image/jpeg',
+              data: attachment.base64,
+            },
+          },
+          context: {
+            reason_for_viewing: reason,
+            session_context: `Part of session "${session.name}" started at ${new Date(session.startTime).toLocaleString()}`,
+            screenshot_number: session.screenshots.findIndex(ss => ss.id === screenshot_id) + 1,
+            total_screenshots: session.screenshots.length,
+          },
+        },
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Failed to load screenshot image: ${error instanceof Error ? error.message : String(error)}`,
+        is_error: true,
+      };
+    }
+  }
+
+  /**
+   * Helper: Calculate session duration (excluding pause time)
+   */
+  private calculateSessionDuration(session: Session): number {
+    if (!session.startTime) return 0;
+
+    const startMs = new Date(session.startTime).getTime();
+    const endMs = session.endTime ? new Date(session.endTime).getTime() : new Date().getTime();
+    let totalPausedMs = session.totalPausedTime || 0;
+
+    // If currently paused, add current pause duration
+    if (session.status === 'paused' && session.pausedAt) {
+      const currentPauseDuration = new Date().getTime() - new Date(session.pausedAt).getTime();
+      totalPausedMs += currentPauseDuration;
+    }
+
+    // Calculate active duration: (end - start - total paused time) in minutes
+    const activeMs = endMs - startMs - totalPausedMs;
+    return Math.floor(activeMs / (1000 * 60));
   }
 }

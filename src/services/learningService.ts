@@ -425,7 +425,7 @@ export class LearningService {
       this.learnings = imported;
       this.updateStats();
       return this.learnings;
-    } catch (error) {
+    } catch {
       throw new Error('Invalid profile format');
     }
   }

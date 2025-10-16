@@ -1,0 +1,221 @@
+  const handleSaveApiKey = async () => {
+    if (apiKey.trim()) {
+      // Validate API key format
+      if (!apiKey.trim().startsWith('sk-ant-')) {
+        dispatch({
+          type: 'ADD_NOTIFICATION',
+          payload: {
+            type: 'error',
+            title: 'Invalid API Key',
+            message: 'Anthropic API keys should start with "sk-ant-"',
+          }
+        });
+        return;
+      }
+
+      await invoke('set_claude_api_key', { apiKey: apiKey.trim() });
+      claudeService.setApiKey(apiKey.trim());
+      sessionsAgentService.setApiKey(apiKey.trim());
+      dispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'success',
+          title: 'API Key Saved',
+          message: 'Your Claude API key has been saved successfully.',
+        }
+      });
+    }
+  };
+
+  const handleClearApiKey = async () => {
+    // TODO: Replace with modal confirmation dialog for better UX
+    if (confirm('Are you sure you want to clear your API key?')) {
+      await invoke('set_claude_api_key', { apiKey: '' });
+      setApiKey('');
+      dispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'info',
+          title: 'API Key Cleared',
+          message: 'Please enter a new API key to use AI features.',
+        }
+      });
+    }
+  };
+
+  const handleSaveOpenAIApiKey = async () => {
+    if (openAIApiKey.trim()) {
+      // Validate API key format
+      if (!openAIApiKey.trim().startsWith('sk-')) {
+        dispatch({
+          type: 'ADD_NOTIFICATION',
+          payload: {
+            type: 'error',
+            title: 'Invalid API Key',
+            message: 'OpenAI API keys should start with "sk-"',
+          }
+        });
+        return;
+      }
+
+      await invoke('set_openai_api_key', { apiKey: openAIApiKey.trim() });
+      openAIService.setApiKey(openAIApiKey.trim());
+      dispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'success',
+          title: 'OpenAI API Key Saved',
+          message: 'Your OpenAI API key has been saved successfully.',
+        }
+      });
+    }
+  };
+
+  const handleClearOpenAIApiKey = async () => {
+    // TODO: Replace with modal confirmation dialog for better UX
+    if (confirm('Are you sure you want to clear your OpenAI API key?')) {
+      await invoke('set_openai_api_key', { apiKey: '' });
+      setOpenAIApiKey('');
+      dispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'info',
+          title: 'OpenAI API Key Cleared',
+          message: 'Your OpenAI API key has been removed.',
+        }
+      });
+    }
+  };
+
+  const handleSaveAISettings = () => {
+    dispatch({ type: 'UPDATE_AI_SETTINGS', payload: localAISettings });
+    dispatch({
+      type: 'ADD_NOTIFICATION',
+      payload: {
+        type: 'success',
+        title: 'Settings Saved',
+        message: 'Your AI settings have been updated.',
+      }
+    });
+  };
+
+  const handleSavePreferences = () => {
+    dispatch({ type: 'UPDATE_PREFERENCES', payload: localPreferences });
+    dispatch({
+      type: 'ADD_NOTIFICATION',
+      payload: {
+        type: 'success',
+        title: 'Preferences Saved',
+        message: 'Your preferences have been updated.',
+      }
+    });
+  };
+
+  const handleSaveUserProfile = () => {
+    dispatch({ type: 'UPDATE_USER_PROFILE', payload: { name: userName.trim() } });
+    dispatch({
+      type: 'ADD_NOTIFICATION',
+      payload: {
+        type: 'success',
+        title: 'Profile Saved',
+        message: 'Your profile has been updated.',
+      }
+    });
+  };
+
+  const handleExportData = () => {
+    const data = {
+      topics: state.topics,
+      notes: state.notes,
+      tasks: state.tasks,
+      aiSettings: state.aiSettings,
+      preferences: state.ui.preferences,
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `taskerino-backup-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        // TODO: Replace with modal confirmation dialog for better UX
+        if (confirm('This will replace all your current data. Continue?')) {
+          dispatch({ type: 'LOAD_STATE', payload: data });
+          dispatch({
+            type: 'ADD_NOTIFICATION',
+            payload: {
+              type: 'success',
+              title: 'Data Imported',
+              message: 'Your data has been successfully imported.',
+            }
+          });
+        }
+      } catch {
+        dispatch({
+          type: 'ADD_NOTIFICATION',
+          payload: {
+            type: 'error',
+            title: 'Import Failed',
+            message: 'Failed to import data. The file format is invalid.',
+          }
+        });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleClearAllData = () => {
+    // TODO: Replace with modal confirmation dialog for better UX
+    if (confirm('This will permanently delete all your topics, notes, and tasks. Are you sure?')) {
+      if (confirm('This action cannot be undone. Really delete everything?')) {
+        localStorage.removeItem('taskerino-v2-state');
+        dispatch({ type: 'LOAD_STATE', payload: { topics: [], notes: [], tasks: [] } });
+        dispatch({
+          type: 'ADD_NOTIFICATION',
+          payload: {
+            type: 'info',
+            title: 'Data Cleared',
+            message: 'All your data has been permanently deleted.',
+          }
+        });
+      }
+    }
+  };
+
+
+  const handleResetOnboarding = () => {
+    // TODO: Replace with modal confirmation dialog for better UX
+    if (confirm('This will reset the onboarding flow. You\'ll see the welcome screen next time you refresh. Continue?')) {
+      dispatch({ type: 'RESET_ONBOARDING' });
+      dispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'success',
+          title: 'Onboarding Reset',
+          message: 'Refresh the page to see the welcome flow again.',
+        }
+      });
+    }
+  };
+
+  const handleSaveAudioQuality = () => {
+    audioCompressionService.setQualityPreset(audioQualityPreset);
+    dispatch({
+      type: 'ADD_NOTIFICATION',
+      payload: {
+        type: 'success',
+        title: 'Audio Settings Saved',
+        message: 'Your audio quality settings have been updated.',
+      }
+    });
+  };

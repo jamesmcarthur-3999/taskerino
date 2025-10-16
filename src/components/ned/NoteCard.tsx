@@ -91,7 +91,7 @@ const highlightContent = (content: string) => {
   return parts.length > 0 ? parts : [{ text: content, type: 'text' as const }];
 };
 
-export const NoteCard: React.FC<NoteCardProps> = ({
+export const NoteCard = React.memo<NoteCardProps>(({
   note,
   onView,
   onEdit,
@@ -491,4 +491,4 @@ export const NoteCard: React.FC<NoteCardProps> = ({
       )}
     </motion.div>
   );
-};
+});

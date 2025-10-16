@@ -1,0 +1,50 @@
+┌─────────────────────────────────────────────────────────────────┐
+│              TASKERINO SECURITY QUICK REFERENCE                 │
+│                    2025-10-15 Update                            │
+└─────────────────────────────────────────────────────────────────┘
+
+🔒 SECURITY FIXES IMPLEMENTED:
+
+1. CONTENT SECURITY POLICY (CSP)
+   Location: src-tauri/tauri.conf.json
+   What: Restricts resource loading to trusted sources
+   Impact: Prevents XSS through external scripts/resources
+
+2. XSS PROTECTION (DOMPurify)
+   Location: src/utils/helpers.ts → formatNoteContent()
+   What: Sanitizes all HTML before rendering
+   Components Protected:
+     - NoteDetailSidebar.tsx (line 546)
+     - ResultsReview.tsx (line 460)
+   Impact: Blocks malicious code in AI-generated content
+
+3. FILE SYSTEM RESTRICTIONS
+   Location: src-tauri/capabilities/default.json
+   What: Limited file deletion to specific paths:
+     - $APPDATA/attachments/**
+     - $APPDATA/sessions/**
+     - $APPDATA/*.tmp
+   Impact: Prevents unauthorized file deletion
+
+4. ASSET PROTOCOL RESTRICTION
+   Location: src-tauri/tauri.conf.json
+   What: Limited asset:// to $APPDATA/** only
+   Impact: Prevents reading arbitrary files
+
+─────────────────────────────────────────────────────────────────
+
+⚠️  IMPORTANT FOR DEVELOPERS:
+
+• DO NOT remove DOMPurify sanitization from formatNoteContent()
+• DO NOT expand file system permissions without security review
+• DO NOT modify CSP without testing thoroughly
+• DO NOT use dangerouslySetInnerHTML without sanitization
+• ALWAYS run AI content through formatNoteContent() before rendering
+
+─────────────────────────────────────────────────────────────────
+
+📦 DEPENDENCIES:
+   dompurify@3.3.0
+   @types/dompurify
+
+─────────────────────────────────────────────────────────────────

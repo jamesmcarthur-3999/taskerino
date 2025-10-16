@@ -17,7 +17,7 @@ import {
   AlertCircle,
   Info,
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useSettings } from '../../context/SettingsContext';
 import { WRITE_TOOLS } from '../../services/nedTools';
 
 const TOOL_DESCRIPTIONS: Record<string, string> = {
@@ -32,34 +32,34 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 };
 
 export const NedSettings: React.FC = () => {
-  const { state, dispatch } = useApp();
+  const { state: settingsState, dispatch: settingsDispatch } = useSettings();
   const [showTokens, setShowTokens] = useState(false);
 
-  const { nedSettings } = state;
+  const { nedSettings } = settingsState;
 
-  const handleChattinessChange = (chattiness: 'concise' | 'balanced' | 'detailed') => {
-    dispatch({
+  const handleChattinessChange = (chattiness: 'concise' | 'balanced' | 'verbose') => {
+    settingsDispatch({
       type: 'UPDATE_NED_SETTINGS',
       payload: { chattiness },
     });
   };
 
   const handleShowThinkingToggle = () => {
-    dispatch({
+    settingsDispatch({
       type: 'UPDATE_NED_SETTINGS',
       payload: { showThinking: !nedSettings.showThinking },
     });
   };
 
   const handleRevokePermission = (toolName: string) => {
-    dispatch({
+    settingsDispatch({
       type: 'REVOKE_NED_PERMISSION',
-      payload: toolName,
+      payload: { toolName },
     });
   };
 
   const handleClearSessionPermissions = () => {
-    dispatch({ type: 'CLEAR_SESSION_PERMISSIONS' });
+    settingsDispatch({ type: 'CLEAR_SESSION_PERMISSIONS' });
   };
 
   const allPermissions = [...nedSettings.permissions, ...nedSettings.sessionPermissions];
@@ -101,7 +101,7 @@ export const NedSettings: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-3 gap-2">
-          {(['concise', 'balanced', 'detailed'] as const).map((level) => (
+          {(['concise', 'balanced', 'verbose'] as const).map((level) => (
             <button
               key={level}
               onClick={() => handleChattinessChange(level)}
@@ -273,7 +273,7 @@ export const NedSettings: React.FC = () => {
             className="mt-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800"
           >
             <p className="text-sm text-purple-700 dark:text-purple-300">
-              Estimated cost: <span className="font-semibold">${estimatedCost.toFixed(2)}</span>
+              Estimated cost: <span className="font-semibold">${estimatedCost.toFixed(1)}</span>
             </p>
             <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
               Based on Claude Sonnet pricing (~${costPerMToken}/M tokens)

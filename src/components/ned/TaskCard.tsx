@@ -65,7 +65,7 @@ const STATUS_BORDER_COLORS = {
 
 const PRIORITIES: Task['priority'][] = ['low', 'medium', 'high', 'urgent'];
 
-export const TaskCard: React.FC<TaskCardProps> = ({
+export const TaskCard = React.memo<TaskCardProps>(({
   task,
   onComplete,
   onEdit,
@@ -450,4 +450,4 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       </div>
     </motion.div>
   );
-};
+});

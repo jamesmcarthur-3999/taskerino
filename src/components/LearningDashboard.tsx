@@ -2,14 +2,14 @@ import { useState } from 'react';
 import type { Learning, AppState } from '../types';
 import { LearningService } from '../services/learningService';
 import { claudeService } from '../services/claudeService';
-import { useApp } from '../context/AppContext';
+import { useSettings } from '../context/SettingsContext';
 
 interface LearningDashboardProps {
   onClose: () => void;
 }
 
 export function LearningDashboard({ onClose }: LearningDashboardProps) {
-  const { state, dispatch } = useApp();
+  const { state: settingsState, dispatch: settingsDispatch } = useSettings();
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'rules' | 'patterns' | 'observations'>('all');
   const [expandedLearningId, setExpandedLearningId] = useState<string | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -18,19 +18,19 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
     applied: boolean;
   } | null>(null);
 
-  const learningService = new LearningService(state.learnings, state.learningSettings);
+  const learningService = new LearningService(settingsState.learnings, settingsState.learningSettings);
   const metrics = learningService.analyzeLearningEffectiveness();
 
   // Categorize learnings
-  const rules = state.learnings.learnings.filter(l =>
-    l.strength >= state.learningSettings.thresholds.rule && l.status === 'active'
+  const rules = settingsState.learnings.learnings.filter(l =>
+    l.strength >= settingsState.learningSettings.thresholds.rule && l.status === 'active'
   );
-  const patterns = state.learnings.learnings.filter(l =>
-    l.strength >= state.learningSettings.thresholds.active &&
-    l.strength < state.learningSettings.thresholds.rule &&
+  const patterns = settingsState.learnings.learnings.filter(l =>
+    l.strength >= settingsState.learningSettings.thresholds.active &&
+    l.strength < settingsState.learningSettings.thresholds.rule &&
     l.status === 'active'
   );
-  const observations = state.learnings.learnings.filter(l =>
+  const observations = settingsState.learnings.learnings.filter(l =>
     l.status === 'experimental' || l.status === 'deprecated'
   );
 
@@ -38,10 +38,10 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
     selectedCategory === 'rules' ? rules :
     selectedCategory === 'patterns' ? patterns :
     selectedCategory === 'observations' ? observations :
-    state.learnings.learnings;
+    settingsState.learnings.learnings;
 
   const handleFlagToggle = (learningId: string) => {
-    const learning = state.learnings.learnings.find(l => l.id === learningId);
+    const learning = settingsState.learnings.learnings.find(l => l.id === learningId);
     if (!learning) return;
 
     if (learning.isFlag) {
@@ -50,8 +50,8 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
       learningService.flagLearning(learningId);
     }
 
-    dispatch({
-      type: 'LOAD_STATE',
+    settingsDispatch({
+      type: 'LOAD_SETTINGS',
       payload: { learnings: learningService.getLearnings() }
     });
   };
@@ -66,7 +66,7 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
 
       if (result.shouldOptimize && result.suggestedSettings) {
         // Apply AI's suggested settings
-        dispatch({
+        settingsDispatch({
           type: 'UPDATE_LEARNING_SETTINGS',
           payload: result.suggestedSettings
         });
@@ -115,8 +115,8 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
       try {
         const text = await file.text();
         const imported = learningService.importProfile(text);
-        dispatch({
-          type: 'LOAD_STATE',
+        settingsDispatch({
+          type: 'LOAD_SETTINGS',
           payload: { learnings: imported }
         });
         alert('Profile imported successfully!');
@@ -157,7 +157,7 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
             </div>
             <div>
               <div className="text-xs text-gray-400 mb-1">Accuracy Rate</div>
-              <div className="text-2xl font-bold text-green-400">{(metrics.accuracy * 100).toFixed(0)}%</div>
+              <div className="text-2xl font-bold text-green-400">{(metrics.accuracy * 100).toFixed(1)}%</div>
             </div>
             <div>
               <div className="text-xs text-gray-400 mb-1">Active Rules</div>
@@ -179,7 +179,7 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
                 selectedCategory === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              All ({state.learnings.learnings.length})
+              All ({settingsState.learnings.learnings.length})
             </button>
             <button
               onClick={() => setSelectedCategory('rules')}
@@ -286,7 +286,7 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
                 <LearningCard
                   key={learning.id}
                   learning={learning}
-                  settings={state.learningSettings}
+                  settings={settingsState.learningSettings}
                   isExpanded={expandedLearningId === learning.id}
                   onToggleExpand={() => setExpandedLearningId(
                     expandedLearningId === learning.id ? null : learning.id
@@ -353,7 +353,7 @@ function LearningCard({ learning, settings, isExpanded, onToggleExpand, onToggle
                 </span>
               )}
               <span className="text-xs text-gray-500">
-                Strength: {learning.strength.toFixed(0)}%
+                Strength: {learning.strength.toFixed(1)}%
               </span>
             </div>
             <div className="text-white font-medium mb-1">{learning.pattern}</div>

@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useUI } from '../context/UIContext';
+import { useTasks } from '../context/TasksContext';
+import { useNotes } from '../context/NotesContext';
+import { useEntities } from '../context/EntitiesContext';
 import { Command } from 'cmdk';
 import {
   Search,
@@ -15,9 +18,11 @@ import {
   Clock,
   Pin,
   Zap,
+  Camera,
+  Activity,
 } from 'lucide-react';
 import { formatRelativeTime } from '../utils/helpers';
-import type { Note } from '../types';
+import type { Note, Session } from '../types';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -26,7 +31,10 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPaletteProps) {
-  const { state, dispatch } = useApp();
+  const { state: uiState, dispatch: uiDispatch } = useUI();
+  const { state: tasksState, dispatch: tasksDispatch } = useTasks();
+  const { state: notesState } = useNotes();
+  const { state: entitiesState } = useEntities();
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -35,25 +43,33 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
     }
   }, [isOpen]);
 
-  const handleNavigate = (tab: 'assistant' | 'capture' | 'library' | 'tasks') => {
-    dispatch({ type: 'SET_ACTIVE_TAB', payload: tab });
+  const handleNavigate = (tab: 'assistant' | 'capture' | 'notes' | 'tasks') => {
+    uiDispatch({ type: 'SET_ACTIVE_TAB', payload: tab });
     onClose();
   };
 
   const handleOpenNote = (note: Note) => {
-    dispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'note', itemId: note.id, label: note.summary } });
-    dispatch({ type: 'SET_ACTIVE_TAB', payload: 'library' });
+    uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'note', itemId: note.id, label: note.summary } });
+    uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'notes' });
+    onClose();
+  };
+
+  const handleOpenSession = () => {
+    // Navigate to sessions zone
+    uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'sessions' });
+    // Note: The SessionsZone component will need to handle opening the detail view
+    // For now, we'll just navigate to the sessions page
     onClose();
   };
 
   const handleToggleTask = (taskId: string) => {
-    dispatch({ type: 'TOGGLE_TASK', payload: taskId });
+    tasksDispatch({ type: 'TOGGLE_TASK', payload: taskId });
     onClose();
   };
 
   const handlePinNote = (noteId: string) => {
-    if (state.ui.pinnedNotes.includes(noteId)) {
-      dispatch({
+    if (uiState.pinnedNotes.includes(noteId)) {
+      uiDispatch({
         type: 'ADD_NOTIFICATION',
         payload: {
           type: 'info',
@@ -61,8 +77,8 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
           message: 'This note is already in your reference panel',
         }
       });
-    } else if (state.ui.pinnedNotes.length >= 5) {
-      dispatch({
+    } else if (uiState.pinnedNotes.length >= 5) {
+      uiDispatch({
         type: 'ADD_NOTIFICATION',
         payload: {
           type: 'warning',
@@ -71,8 +87,8 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
         }
       });
     } else {
-      dispatch({ type: 'PIN_NOTE', payload: noteId });
-      dispatch({
+      uiDispatch({ type: 'PIN_NOTE', payload: noteId });
+      uiDispatch({
         type: 'ADD_NOTIFICATION',
         payload: {
           type: 'success',
@@ -85,35 +101,67 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
   };
 
   const handleNewNote = () => {
-    dispatch({ type: 'SET_ACTIVE_TAB', payload: 'library' });
+    uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'notes' });
     onClose();
   };
 
   const handleQuickTask = () => {
-    dispatch({ type: 'TOGGLE_QUICK_CAPTURE' });
+    uiDispatch({ type: 'TOGGLE_QUICK_CAPTURE' });
     onClose();
   };
 
   // Filter notes and tasks based on search
   const filteredNotes = search
-    ? state.notes.filter(
+    ? notesState.notes.filter(
         (note) =>
           note.content.toLowerCase().includes(search.toLowerCase()) ||
           note.summary.toLowerCase().includes(search.toLowerCase()) ||
           note.tags.some((tag) => tag.toLowerCase().includes(search.toLowerCase()))
       )
-    : state.notes.slice(0, 5);
+    : notesState.notes.slice(0, 5);
 
   const filteredTasks = search
-    ? state.tasks.filter((task) =>
+    ? tasksState.tasks.filter((task) =>
         task.title.toLowerCase().includes(search.toLowerCase())
       )
-    : state.tasks.filter((t) => !t.done).slice(0, 5);
+    : tasksState.tasks.filter((t) => !t.done).slice(0, 5);
 
   const filteredTopics = search
-    ? state.topics.filter((topic) =>
+    ? entitiesState.topics.filter((topic) =>
         topic.name.toLowerCase().includes(search.toLowerCase())
       )
+    : [];
+
+  // Filter sessions based on search (same deep search as SessionsZone)
+  const filteredSessions: Session[] = search
+    ? ([] as Session[]) // TODO: Add sessions data from useSessions() hook
+        .filter((session: Session) => session.status === 'completed') // Only show completed sessions
+        .filter((s: Session) => {
+          const query = search.toLowerCase();
+          // Search in basic fields
+          const basicMatch =
+            s.name.toLowerCase().includes(query) ||
+            s.description.toLowerCase().includes(query) ||
+            (s.summary?.narrative || '').toLowerCase().includes(query);
+
+          // Search in screenshot analyses
+          const screenshotMatch = s.screenshots?.some(
+            (screenshot: any) =>
+              screenshot.aiAnalysis?.summary?.toLowerCase().includes(query) ||
+              screenshot.aiAnalysis?.detectedActivity?.toLowerCase().includes(query) ||
+              screenshot.aiAnalysis?.keyElements?.some((element: string) =>
+                element.toLowerCase().includes(query)
+              )
+          );
+
+          // Search in audio transcriptions
+          const audioMatch = s.audioSegments?.some((segment: any) =>
+            segment.transcription?.toLowerCase().includes(query)
+          );
+
+          return basicMatch || screenshotMatch || audioMatch;
+        })
+        .slice(0, 5)
     : [];
 
   if (!isOpen) return null;
@@ -125,7 +173,7 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
     >
       <div className="fixed top-[15vh] left-1/2 -translate-x-1/2 w-full max-w-2xl px-4">
         <Command
-          className="bg-white/70 backdrop-blur-2xl rounded-2xl shadow-2xl border-2 border-white/50 overflow-hidden"
+          className="bg-white/30 backdrop-blur-2xl rounded-[32px] shadow-2xl border-2 border-white/50 overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center border-b-2 border-white/50 px-4 bg-white/30 backdrop-blur-sm">
@@ -133,7 +181,7 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
             <Command.Input
               value={search}
               onValueChange={setSearch}
-              placeholder="Search notes, tasks, or run command..."
+              placeholder="Search notes, tasks, sessions, or run command..."
               className="w-full py-4 bg-transparent border-none outline-none text-gray-900 placeholder-gray-400 text-base"
               autoFocus
             />
@@ -181,14 +229,14 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
                 </Command.Item>
 
                 <Command.Item
-                  onSelect={() => handleNavigate('library')}
+                  onSelect={() => handleNavigate('notes')}
                   className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer hover:bg-gradient-to-r hover:from-cyan-50 hover:to-blue-50 data-[selected]:bg-gradient-to-r data-[selected]:from-cyan-50 data-[selected]:to-blue-50 transition-all"
                 >
                   <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg">
                     <FileText className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">Notes Library</div>
+                    <div className="font-medium text-gray-900">Notes</div>
                     <div className="text-xs text-gray-500">Browse all notes</div>
                   </div>
                   <ArrowDown className="w-4 h-4 text-gray-400" />
@@ -256,7 +304,7 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
                   <Command.Item
                     key={topic.id}
                     onSelect={() => {
-                      dispatch({ type: 'SET_ACTIVE_TAB', payload: 'library' });
+                      uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'notes' });
                       onClose();
                     }}
                     className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer hover:bg-gradient-to-r hover:from-cyan-50 hover:to-blue-50 data-[selected]:bg-gradient-to-r data-[selected]:from-cyan-50 data-[selected]:to-blue-50 transition-all"
@@ -277,7 +325,7 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
             {filteredNotes.length > 0 && (
               <Command.Group heading="Notes" className="mb-2">
                 {filteredNotes.slice(0, 8).map((note) => {
-                  const isPinned = state.ui.pinnedNotes.includes(note.id);
+                  const isPinned = uiState.pinnedNotes.includes(note.id);
                   return (
                     <div key={note.id} className="relative group">
                       <Command.Item
@@ -364,6 +412,46 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
                     </div>
                   </Command.Item>
                 ))}
+              </Command.Group>
+            )}
+
+            {/* Sessions */}
+            {filteredSessions.length > 0 && (
+              <Command.Group heading="Sessions" className="mb-2">
+                {filteredSessions.map((session) => {
+                  const duration = session.totalDuration || 0;
+                  const hours = Math.floor(duration / 60);
+                  const mins = duration % 60;
+                  const durationText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+                  return (
+                    <Command.Item
+                      key={session.id}
+                      onSelect={() => handleOpenSession()}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer hover:bg-gradient-to-r hover:from-cyan-50 hover:to-blue-50 data-[selected]:bg-gradient-to-r data-[selected]:from-cyan-50 data-[selected]:to-blue-50 transition-all"
+                    >
+                      <Camera className="w-4 h-4 text-cyan-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900 truncate">
+                          {session.name}
+                        </div>
+                        <div className="text-xs text-gray-500 flex items-center gap-2">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(session.startTime).toLocaleDateString()}
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Activity className="w-3 h-3" />
+                            {durationText}
+                          </span>
+                          <span>•</span>
+                          <span>{session.screenshots?.length || 0} shots</span>
+                        </div>
+                      </div>
+                    </Command.Item>
+                  );
+                })}
               </Command.Group>
             )}
           </Command.List>

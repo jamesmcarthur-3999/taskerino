@@ -1,4 +1,5 @@
 import type { Topic, Note, Task } from '../types';
+import DOMPurify from 'dompurify';
 
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -232,9 +233,31 @@ export function formatRelativeTime(timestamp: string): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
+/**
+ * Strip HTML tags from text content
+ * Use this to sanitize AI-generated note content that may contain unwanted HTML
+ */
+export function stripHtmlTags(text: string): string {
+  if (!text) return '';
+
+  // Remove all HTML tags
+  let cleaned = text.replace(/<[^>]*>/g, '');
+
+  // Decode common HTML entities
+  cleaned = cleaned
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+
+  return cleaned.trim();
+}
+
 export function truncateText(text: string, maxLength: number): string {
   // Strip HTML tags and markdown for clean preview
-  let cleaned = text
+  const cleaned = text
     .replace(/<[^>]*>/g, '') // Remove HTML tags
     .replace(/#{1,6}\s+/g, '') // Remove markdown headers
     .replace(/\*\*/g, '') // Remove bold markers
@@ -279,7 +302,7 @@ export function getTimeBasedGreeting(): 'morning' | 'afternoon' | 'evening' {
 // Generate a succinct title from summary (first 5-6 words or up to 50 chars)
 export function generateNoteTitle(summary: string): string {
   // Remove common prefixes
-  let text = summary
+  const text = summary
     .replace(/^(Note about|Summary of|Call with|Meeting with|Discussion about)\s+/i, '')
     .trim();
 
@@ -385,15 +408,51 @@ export function isTaskDueSoon(task: Task, daysThreshold = 7): boolean {
   return due > now && due - now < threshold;
 }
 
+/**
+ * Decode HTML entities in a string
+ */
+function decodeHtmlEntities(text: string): string {
+  if (!text) return '';
+
+  // Decode common HTML entities
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#x2F;/g, '/')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec));
+}
+
 // Format note content - handles both plain text and HTML
 export function formatNoteContent(content: string): string {
-  // If content already looks like HTML (has tags or entities), return as-is
-  if (content.includes('<p>') || content.includes('<div>') || content.includes('<br') || content.includes('&amp;') || content.includes('&lt;') || content.includes('&gt;')) {
-    return content;
+  if (!content) return '';
+
+  // First, decode any HTML entities that might be in the content
+  // This handles the case where AI returns entity-encoded HTML
+  const decoded = decodeHtmlEntities(content);
+
+  // Now check if the decoded content is already HTML (has actual HTML tags)
+  const hasHtmlTags = decoded.includes('<p>') || decoded.includes('<div>') ||
+                      decoded.includes('<br') || decoded.includes('<h1') ||
+                      decoded.includes('<h2') || decoded.includes('<h3') ||
+                      decoded.includes('<ul') || decoded.includes('<ol') ||
+                      decoded.includes('<strong') || decoded.includes('<em');
+
+  // If it already has HTML tags after decoding, return it sanitized
+  if (hasHtmlTags) {
+    return DOMPurify.sanitize(decoded, {
+      ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'p', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a', 'code', 'pre', 'br'],
+      ALLOWED_ATTR: ['href', 'class'],
+      ALLOW_DATA_ATTR: false,
+    });
   }
 
   // Convert plain text with markdown-style formatting to HTML
-  let formatted = content;
+  let formatted = decoded;
 
   // Escape any existing HTML tags first
   formatted = formatted
@@ -482,7 +541,12 @@ export function formatNoteContent(content: string): string {
   // Single line breaks within paragraphs
   formatted = formatted.replace(/\n(?!<)/g, '<br>');
 
-  return formatted;
+  // Sanitize the final HTML output to prevent XSS attacks
+  return DOMPurify.sanitize(formatted, {
+    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'p', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a', 'code', 'pre', 'br'],
+    ALLOWED_ATTR: ['href', 'class'],
+    ALLOW_DATA_ATTR: false,
+  });
 }
 
 /**

@@ -11,28 +11,47 @@
  * - Returns structured data with IDs
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { invoke } from '@tauri-apps/api/core';
+import type { ClaudeChatResponse, ClaudeMessage } from '../types/tauri-ai-commands';
 import type { Note, Task, Company, Contact, Topic } from '../types';
 import type { ContextAgentResult } from './nedTools';
 
 interface AgentThread {
   id: string;
-  messages: Anthropic.MessageParam[];
+  messages: ClaudeMessage[];
   createdAt: string;
 }
 
 export class ContextAgentService {
-  private client: Anthropic | null = null;
+  private hasApiKey: boolean = false;
   private threads: Map<string, AgentThread> = new Map();
 
   constructor(apiKey?: string) {
     if (apiKey) {
-      this.client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+      this.setApiKey(apiKey);
+    } else {
+      // Auto-load API key from storage
+      this.loadApiKeyFromStorage();
     }
   }
 
   setApiKey(apiKey: string) {
-    this.client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    invoke('set_claude_api_key', { apiKey });
+    this.hasApiKey = true;
+  }
+
+  private async loadApiKeyFromStorage() {
+    try {
+      const savedKey = await invoke<string | null>('get_claude_api_key');
+      if (savedKey && savedKey.trim()) {
+        this.hasApiKey = true;
+        console.log('✅ ContextAgent: Loaded API key from storage');
+      } else {
+        console.warn('⚠️ ContextAgent: No API key found in storage');
+      }
+    } catch (error) {
+      console.error('❌ ContextAgent: Failed to load API key from storage:', error);
+    }
   }
 
   /**
@@ -60,7 +79,7 @@ export class ContextAgentService {
     topics: Topic[],
     threadId?: string
   ): Promise<ContextAgentResult> {
-    if (!this.client) {
+    if (!this.hasApiKey) {
       throw new Error('Context Agent: API key not set');
     }
 
@@ -83,12 +102,14 @@ export class ContextAgentService {
     });
 
     try {
-      // Call Claude Haiku
-      const response = await this.client.messages.create({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: thread.messages,
+      // Call Claude Haiku via Tauri
+      const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
+        request: {
+          model: 'claude-3-5-haiku-20241022',
+          maxTokens: 4096,
+          system: systemPrompt,
+          messages: thread.messages,
+        },
       });
 
       const content = response.content[0];
@@ -117,14 +138,17 @@ export class ContextAgentService {
    * Build system prompt for Context Agent
    */
   private buildSystemPrompt(): string {
-    return `You are a Context Agent for Taskerino. Your job is to search and filter notes and tasks based on user queries.
+    return `<role>
+You are a Context Agent for Taskerino. Search and filter notes and tasks based on user queries.
+</role>
 
-You have access to:
-- Notes: Can contain text, tags, dates, linked to companies/contacts/topics
-- Tasks: Have titles, priorities, due dates, statuses, tags
-- Companies, Contacts, Topics: Organizational entities
+<data_sources>
+- Notes: text, tags, dates, linked to companies/contacts/topics
+- Tasks: titles, priorities, due dates, statuses, tags
+- Companies, Contacts, Topics: organizational entities
+</data_sources>
 
-Your responses must be in this JSON format:
+<output_format>
 \`\`\`json
 {
   "note_ids": ["note_123", "note_456"],
@@ -133,52 +157,40 @@ Your responses must be in this JSON format:
   "suggestions": ["Want to see notes from Q3 as well?"]
 }
 \`\`\`
+</output_format>
 
-Search Strategy:
-1. **Keyword matching**: Search in content, titles, tags
-2. **Date filtering**: Use metadata for date ranges
-3. **Entity linking**: Filter by companies, contacts, topics
-4. **Metadata use**: Priority, status, source, sentiment
-5. **Relationship awareness**: Tasks link to notes via context field
+<search_strategy>
+1. Match keywords in content, titles, tags
+2. Filter by dates using metadata
+3. Filter by companies, contacts, topics
+4. Use metadata: priority, status, source, sentiment
+5. Leverage relationships (tasks link to notes)
+</search_strategy>
 
-**CRITICAL: Quality Over Quantity**
+<quality_principle>
+Return the MOST RELEVANT results, not the most results.
 
-Your goal is to return the MOST RELEVANT results, not the most results:
+Rank by: exact match > recency > priority > metadata richness
+- Focused queries: 3-10 items
+- Broad queries: 10-15 items
+- Maximum: 20 items unless explicitly requested
 
-✅ GOOD:
-- User asks "tasks about NVIDIA" → Return 3-5 most relevant/recent NVIDIA tasks
-- User asks "notes from last week" → Return most important notes from last week
-- Focus on relevance, recency, and importance (high priority tasks, detailed notes)
+Better 5 perfect matches than 50 mediocre ones.
+</quality_principle>
 
-❌ BAD:
-- Returning 50+ loosely related items
-- Including tangentially related content
-- Overwhelming the user with quantity
+<ambiguity_handling>
+If query is unclear, ask clarifying questions:
+- Multiple entities? "Which John? John Doe (Acme) or John Smith (TechCo)?"
+- Vague timeframe? "This week or next week?"
+- Unclear scope? "All notes or just high priority?"
+</ambiguity_handling>
 
-**Ranking Priority:**
-1. Exact keyword matches in title/content
-2. Recent items (this week > last week > older)
-3. High priority tasks, important notes
-4. Items with rich metadata (descriptions, tags, relationships)
-5. Items linked to active topics/companies
-
-**Result Limits:**
-- For focused queries: Return 3-10 most relevant items
-- For broad queries: Return 10-15 most representative items
-- Never return more than 20 items unless explicitly asked
-
-If query is ambiguous, ask clarifying questions:
-- "Which John? John Doe (Acme Corp) or John Smith (TechCo)?"
-- "This week or next week?"
-- "All notes or just high priority?"
-
-Be smart about dates:
+<date_intelligence>
 - "this week" = current week
 - "next week" = upcoming week
 - "Q4" = Oct-Dec
 - "this year" = current year
-
-Remember: Better to return 5 perfect matches than 50 mediocre ones.`;
+</date_intelligence>`;
   }
 
   /**
@@ -209,23 +221,21 @@ ${contacts.map(c => `- ${c.name} (ID: ${c.id}, ${c.noteCount} notes)`).join('\n'
 ${topics.map(t => `- ${t.name} (ID: ${t.id}, ${t.noteCount} notes)`).join('\n') || '(none)'}
 
 **Notes (${notes.length}):**
-${notes.slice(0, 50).map(n => {
+${notes.map(n => {
   const entities = [
     ...(n.companyIds || []).map(id => companies.find(c => c.id === id)?.name).filter(Boolean),
     ...(n.contactIds || []).map(id => contacts.find(c => c.id === id)?.name).filter(Boolean),
     ...(n.topicIds || []).map(id => topics.find(t => t.id === id)?.name).filter(Boolean),
   ];
-  return `- [${n.id}] ${n.summary} (${n.timestamp.split('T')[0]}, tags: ${n.tags.join(', ') || 'none'}, entities: ${entities.join(', ') || 'none'})`;
+  return `- [${n.id}] ${n.summary.substring(0, 150)} (${n.timestamp.split('T')[0]}, tags: ${n.tags.join(', ') || 'none'}, entities: ${entities.join(', ') || 'none'})`;
 }).join('\n')}
-${notes.length > 50 ? `\n... and ${notes.length - 50} more notes` : ''}
 
 **Tasks (${tasks.length}):**
-${tasks.slice(0, 30).map(t =>
-  `- [${t.id}] ${t.title} (${t.priority}, ${t.status}, due: ${t.dueDate || 'none'}, tags: ${t.tags?.join(', ') || 'none'})`
+${tasks.map(t =>
+  `- [${t.id}] ${t.title.substring(0, 100)} (${t.priority}, ${t.status}, due: ${t.dueDate || 'none'}, tags: ${t.tags?.join(', ') || 'none'})`
 ).join('\n')}
-${tasks.length > 30 ? `\n... and ${tasks.length - 30} more tasks` : ''}
 
-Use IDs in your response. Search through ALL data, not just what's shown above.`;
+Use IDs in your response. You can see ALL ${notes.length} notes and ALL ${tasks.length} tasks above.`;
   }
 
   /**

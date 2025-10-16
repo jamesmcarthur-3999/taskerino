@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useTasks } from '../context/TasksContext';
+import { useUI } from '../context/UIContext';
+import { useEntities } from '../context/EntitiesContext';
 import {
   GripVertical,
   CheckSquare,
@@ -21,6 +23,8 @@ import {
 import type { Task } from '../types';
 import { formatRelativeTime, isTaskOverdue, isTaskDueToday, isTaskDueSoon, generateId } from '../utils/helpers';
 import { TaskDetailInline } from './TaskDetailInline';
+import { InlineTagManager } from './InlineTagManager';
+import { tagUtils } from '../utils/tagUtils';
 
 interface TaskTableViewProps {
   tasks: Task[];
@@ -49,7 +53,9 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
 ];
 
 export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: TaskTableViewProps) {
-  const { state, dispatch } = useApp();
+  const { dispatch: tasksDispatch } = useTasks();
+  const { dispatch: uiDispatch } = useUI();
+  const { state: entitiesState } = useEntities();
   const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_COLUMNS);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
@@ -113,7 +119,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
           break;
 
         case 'topic':
-          const topic = state.topics.find(t => t.id === task.topicId);
+          const topic = entitiesState.topics.find(t => t.id === task.topicId);
           groupKey = task.topicId || 'no-topic';
           groupLabel = topic ? `📌 ${topic.name}` : 'No Topic';
           groupOrder = topic ? 0 : 999;
@@ -180,7 +186,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
     return Object.entries(groups)
       .sort(([, a], [, b]) => a.order - b.order)
       .map(([key, value]) => ({ key, ...value }));
-  }, [tasks, groupBy, state.topics, sortBy, sortDirection]);
+  }, [tasks, groupBy, entitiesState.topics, sortBy, sortDirection]);
 
   const toggleGroup = (groupKey: string) => {
     const newCollapsed = new Set(collapsedGroups);
@@ -192,14 +198,10 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
     setCollapsedGroups(newCollapsed);
   };
 
-  const handleTaskToggle = (taskId: string) => {
-    dispatch({ type: 'TOGGLE_TASK', payload: taskId });
-  };
-
   const handleDeleteTask = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm('Delete this task?')) {
-      dispatch({ type: 'DELETE_TASK', payload: taskId });
+      tasksDispatch({ type: 'DELETE_TASK', payload: taskId });
     }
   };
 
@@ -213,7 +215,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
       createdAt: new Date().toISOString(),
       completedAt: undefined,
     };
-    dispatch({ type: 'ADD_TASK', payload: newTask });
+    tasksDispatch({ type: 'ADD_TASK', payload: newTask });
   };
 
   const handleColumnDragStart = (columnId: ColumnId) => {
@@ -251,7 +253,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
     }
 
     // Update task based on group it was dropped into
-    let updates: Partial<Task> = {};
+    const updates: Partial<Task> = {};
 
     if (groupBy === 'status' && targetTask.status !== draggedTask.status) {
       updates.status = targetTask.status;
@@ -261,7 +263,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
     }
 
     if (Object.keys(updates).length > 0) {
-      dispatch({
+      tasksDispatch({
         type: 'UPDATE_TASK',
         payload: { ...draggedTask, ...updates }
       });
@@ -308,7 +310,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
       newTask.priority = groupKey as Task['priority'];
     }
 
-    dispatch({ type: 'ADD_TASK', payload: newTask });
+    tasksDispatch({ type: 'ADD_TASK', payload: newTask });
     setNewTaskGroupKey(null);
     setNewTaskTitle('');
   };
@@ -368,7 +370,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
     const isEditing = editingCell?.taskId === task.id && editingCell?.field === columnId;
 
     const updateTask = (updates: Partial<Task>) => {
-      dispatch({
+      tasksDispatch({
         type: 'UPDATE_TASK',
         payload: { ...task, ...updates }
       });
@@ -390,7 +392,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
               });
             }}
             onClick={(e) => e.stopPropagation()}
-            className={`w-full text-xs font-medium rounded pl-1 pr-6 py-0.5 border-0 cursor-pointer transition-all hover:bg-white/60 ${
+            className={`w-full text-xs font-medium rounded pl-1 pr-6 py-0.5 border-0 cursor-pointer transition-all hover:bg-white/30 ${
               task.status === 'done' ? 'text-green-700 bg-green-50' :
               task.status === 'in-progress' ? 'text-cyan-700 bg-cyan-50' :
               task.status === 'blocked' ? 'text-red-700 bg-red-50' :
@@ -424,7 +426,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
               }}
               onClick={(e) => e.stopPropagation()}
               autoFocus
-              className="w-full bg-white/60 border-0 focus:outline-none text-sm font-medium px-1 py-0.5 rounded"
+              className="w-full bg-white/30 border-0 focus:outline-none text-sm font-medium px-1 py-0.5 rounded"
             />
           );
         }
@@ -486,7 +488,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
               }}
               onClick={(e) => e.stopPropagation()}
               autoFocus
-              className="w-full text-xs bg-white/60 border-0 rounded px-1 py-0.5"
+              className="w-full text-xs bg-white/30 border-0 rounded px-1 py-0.5"
             />
           );
         }
@@ -525,62 +527,15 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
         );
 
       case 'tags':
-        if (isEditing) {
-          return (
-            <input
-              type="text"
-              defaultValue={task.tags?.join(', ') || ''}
-              onBlur={(e) => {
-                const tags = e.target.value.split(',').map(t => t.trim()).filter(Boolean);
-                updateTask({ tags });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const tags = e.currentTarget.value.split(',').map(t => t.trim()).filter(Boolean);
-                  updateTask({ tags });
-                } else if (e.key === 'Escape') {
-                  setEditingCell(null);
-                }
-                e.stopPropagation();
-              }}
-              onClick={(e) => e.stopPropagation()}
-              placeholder="tag1, tag2"
-              autoFocus
-              className="w-full text-xs bg-white/60 border-0 rounded px-1 py-0.5"
-            />
-          );
-        }
-
-        if (!task.tags || task.tags.length === 0) {
-          return (
-            <span
-              className="text-xs text-gray-400 hover:text-gray-600"
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                setEditingCell({ taskId: task.id, field: 'tags' });
-              }}
-            >
-              Add tags
-            </span>
-          );
-        }
-
         return (
-          <div
-            className="flex gap-1 flex-wrap"
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              setEditingCell({ taskId: task.id, field: 'tags' });
-            }}
-          >
-            {task.tags.slice(0, 2).map(tag => (
-              <span key={tag} className="inline-flex items-center px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded text-[10px] font-medium">
-                #{tag}
-              </span>
-            ))}
-            {task.tags.length > 2 && (
-              <span className="text-[10px] text-gray-400">+{task.tags.length - 2}</span>
-            )}
+          <div onClick={(e) => e.stopPropagation()}>
+            <InlineTagManager
+              tags={task.tags || []}
+              onTagsChange={(newTags) => updateTask({ tags: newTags })}
+              maxDisplayed={2}
+              editable={false}
+              className="text-[10px]"
+            />
           </div>
         );
 
@@ -593,10 +548,10 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
               updateTask({ topicId: e.target.value || undefined });
             }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full text-xs text-gray-600 bg-transparent border-0 cursor-pointer rounded pl-1 pr-6 py-0.5 hover:bg-white/60"
+            className="w-full text-xs text-gray-600 bg-transparent border-0 cursor-pointer rounded pl-1 pr-6 py-0.5 hover:bg-white/30"
           >
             <option value="">No topic</option>
-            {state.topics.map(topic => (
+            {entitiesState.topics.map(topic => (
               <option key={topic.id} value={topic.id}>{topic.name}</option>
             ))}
           </select>
@@ -610,7 +565,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
   return (
     <div className="flex-1 flex gap-4 overflow-hidden table-view-container">
       {/* LEFT PANEL - Table */}
-      <div className="flex-1 flex flex-col bg-white/70 backdrop-blur-2xl rounded-2xl border border-white/60 shadow-xl overflow-hidden">
+      <div className="flex-1 flex flex-col bg-white/30 backdrop-blur-2xl rounded-[24px] border border-white/60 shadow-xl overflow-hidden">
         {/* Column Headers */}
         <div className="flex items-center gap-2 px-4 py-3 border-b-2 border-white/50 bg-white/30 backdrop-blur-sm">
           {columns.map((column) => (
@@ -662,7 +617,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
                     <ChevronDown className="w-4 h-4 text-gray-500" />
                   )}
                   <span className="font-semibold text-sm text-gray-900">{label}</span>
-                  <span className="text-xs font-medium text-gray-500 bg-white/60 px-2 py-0.5 rounded-full">{groupTasks.length}</span>
+                  <span className="text-xs font-medium text-gray-500 bg-white/30 px-2 py-0.5 rounded-full">{groupTasks.length}</span>
                 </div>
               </button>
 
@@ -678,7 +633,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
                       onDrop={() => handleTaskDrop(task, key)}
                       onClick={() => onTaskClick(task.id)}
                       className={`group flex items-center gap-2 px-4 py-2 cursor-pointer border-b border-white/20 last:border-b-0 transition-all hover:bg-white/30 ${
-                        selectedTaskId === task.id ? 'bg-cyan-50/50 border-l-4 border-l-cyan-500' : ''
+                        selectedTaskId === task.id ? 'bg-cyan-100/20 border-l-4 border-l-cyan-500' : ''
                       }`}
                     >
                       {columns.map((column) => (
@@ -696,16 +651,16 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            dispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'task', itemId: task.id, label: task.title } });
+                            uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'task', itemId: task.id, label: task.title } });
                           }}
-                          className="p-1 hover:bg-white/60 rounded transition-all"
+                          className="p-1 hover:bg-white/30 rounded transition-all"
                           title="Open in modal"
                         >
                           <ExternalLink className="w-3.5 h-3.5 text-gray-600" />
                         </button>
                         <button
                           onClick={(e) => handleDuplicateTask(task, e)}
-                          className="p-1 hover:bg-white/60 rounded transition-all"
+                          className="p-1 hover:bg-white/30 rounded transition-all"
                           title="Duplicate"
                         >
                           <Copy className="w-3.5 h-3.5 text-gray-600" />
@@ -795,7 +750,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
 
       {/* RIGHT PANEL - Task Detail */}
       <div
-        className={`flex-shrink-0 bg-white/70 backdrop-blur-2xl rounded-2xl border border-white/60 shadow-xl flex flex-col overflow-hidden ${
+        className={`flex-shrink-0 bg-white/30 backdrop-blur-2xl rounded-[24px] border border-white/60 shadow-xl flex flex-col overflow-hidden ${
           selectedTaskId ? 'opacity-100' : 'w-0 opacity-0 border-0'
         } ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
         style={{ width: selectedTaskId ? `${panelWidth}px` : 0 }}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Taskerino needs screen recording permission to automatically capture screenshots during work sessions for AI-powered productivity tracking.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Taskerino needs microphone access to record audio notes and transcribe meeting conversations for AI-powered task extraction.</string>
+</dict>
+</plist>

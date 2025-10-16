@@ -1,50 +1,68 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Note, Task } from '../types';
-import { useApp } from '../context/AppContext';
-import { Calendar, Tag as TagIcon, FileText, Trash2, Clock, Phone, Mail, MessageSquare, User, CheckSquare, Link2, Plus, X, Sparkles } from 'lucide-react';
-import { formatRelativeTime, generateNoteTitle, formatNoteContent } from '../utils/helpers';
+import { useNotes } from '../context/NotesContext';
+import { useEntities } from '../context/EntitiesContext';
+import { useTasks } from '../context/TasksContext';
+import { useUI } from '../context/UIContext';
+import { Calendar, Tag as TagIcon, FileText, Trash2, Clock, CheckSquare, Link2, X, Sparkles, Plus, Columns, Focus } from 'lucide-react';
+import { formatRelativeTime } from '../utils/helpers';
 import { getTasksByNoteId } from '../utils/navigation';
 import { RichTextEditor } from './RichTextEditor';
+import { InlineTagManager } from './InlineTagManager';
+import { ICON_SIZES } from '../design-system/theme';
 
 interface NoteDetailInlineProps {
   noteId: string;
+  onToggleSidebar?: (expanded: boolean) => void;
+  isSidebarExpanded?: boolean;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
 
-export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
-  const { state, dispatch } = useApp();
+export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }: NoteDetailInlineProps) {
+  const { state: notesState, updateNote, deleteNote } = useNotes();
+  const { state: entitiesState } = useEntities();
+  const { state: tasksState } = useTasks();
+  const { dispatch: uiDispatch } = useUI();
   const [editedContent, setEditedContent] = useState('');
   const [editedSummary, setEditedSummary] = useState('');
   const [isEditingSummary, setIsEditingSummary] = useState(false);
-  const [isEditingTags, setIsEditingTags] = useState(false);
-  const [isEditingRelationships, setIsEditingRelationships] = useState(false);
-  const [newTag, setNewTag] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
   const summaryInputRef = useRef<HTMLInputElement>(null);
-  const newTagInputRef = useRef<HTMLInputElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
 
   // Find the note from state
-  const note = state.notes.find(n => n.id === noteId);
+  const note = notesState.notes.find(n => n.id === noteId);
 
   // Get all related entities (companies, contacts, topics)
-  const relatedCompanies = note ? state.companies.filter(c => note.companyIds?.includes(c.id)) : [];
-  const relatedContacts = note ? state.contacts.filter(c => note.contactIds?.includes(c.id)) : [];
-  const relatedTopics = note ? state.topics.filter(t => note.topicIds?.includes(t.id)) : [];
+  const relatedCompanies = note ? entitiesState.companies.filter(c => note.companyIds?.includes(c.id)) : [];
+  const relatedContacts = note ? entitiesState.contacts.filter(c => note.contactIds?.includes(c.id)) : [];
+  const relatedTopics = note ? entitiesState.topics.filter(t => note.topicIds?.includes(t.id)) : [];
 
   // Legacy support
   if (note?.topicId) {
-    const legacyCompany = state.companies.find(c => c.id === note.topicId);
-    const legacyContact = state.contacts.find(c => c.id === note.topicId);
-    const legacyTopic = state.topics.find(t => t.id === note.topicId);
+    const legacyCompany = entitiesState.companies.find(c => c.id === note.topicId);
+    const legacyContact = entitiesState.contacts.find(c => c.id === note.topicId);
+    const legacyTopic = entitiesState.topics.find(t => t.id === note.topicId);
     if (legacyCompany && !relatedCompanies.some(c => c.id === legacyCompany.id)) relatedCompanies.push(legacyCompany);
     if (legacyContact && !relatedContacts.some(c => c.id === legacyContact.id)) relatedContacts.push(legacyContact);
     if (legacyTopic && !relatedTopics.some(t => t.id === legacyTopic.id)) relatedTopics.push(legacyTopic);
   }
 
   // Get linked tasks
-  const linkedTasks = noteId ? getTasksByNoteId(noteId, state.tasks) : [];
+  const linkedTasks = noteId ? getTasksByNoteId(noteId, tasksState.tasks) : [];
+
+  // Get all unique tags from all notes for autocomplete
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    notesState.notes.forEach(n => {
+      n.tags?.forEach(tag => tagSet.add(tag));
+    });
+    return Array.from(tagSet);
+  }, [notesState.notes]);
 
   // Initialize edited values when note changes
   useEffect(() => {
@@ -84,7 +102,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
         content: editedContent,
         summary: editedSummary,
       };
-      dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+      updateNote(updatedNote);
       setSaveStatus('saved');
 
       // Reset to idle after showing "saved" for 2 seconds
@@ -92,7 +110,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [editedContent, editedSummary, noteId, dispatch]);
+  }, [editedContent, editedSummary, noteId, updateNote]);
 
   // Focus input when entering edit mode
   useEffect(() => {
@@ -102,41 +120,37 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
     }
   }, [isEditingSummary]);
 
+  // Track scroll progress for smooth animations
   useEffect(() => {
-    if (isEditingTags && newTagInputRef.current) {
-      newTagInputRef.current.focus();
-    }
-  }, [isEditingTags]);
+    const contentElement = contentRef.current;
+    if (!contentElement) return;
+
+    const handleScroll = () => {
+      const scrollTop = contentElement.scrollTop;
+      // Calculate progress from 0 to 1 over 200px of scrolling
+      const progress = Math.min(scrollTop / 200, 1);
+      setScrollProgress(progress);
+      setIsScrolled(scrollTop > 100);
+    };
+
+    contentElement.addEventListener('scroll', handleScroll);
+    return () => contentElement.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleDelete = () => {
     if (!note) return;
     if (confirm('Delete this note? This cannot be undone.')) {
-      dispatch({ type: 'DELETE_NOTE', payload: note.id });
+      deleteNote(note.id);
     }
   };
 
-  const handleAddTag = () => {
-    if (!note || !newTag.trim()) return;
-    const trimmedTag = newTag.trim().toLowerCase();
-    if (note.tags?.includes(trimmedTag)) {
-      setNewTag('');
-      return;
-    }
-    const updatedNote: Note = {
-      ...note,
-      tags: [...(note.tags || []), trimmedTag],
-    };
-    dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
-    setNewTag('');
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
+  const handleTagsChange = (newTags: string[]) => {
     if (!note) return;
     const updatedNote: Note = {
       ...note,
-      tags: note.tags?.filter(t => t !== tagToRemove) || [],
+      tags: newTags,
     };
-    dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+    updateNote(updatedNote);
   };
 
   const handleAddCompany = (companyId: string) => {
@@ -147,7 +161,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
       ...note,
       companyIds: [...currentIds, companyId],
     };
-    dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+    updateNote(updatedNote);
   };
 
   const handleRemoveCompany = (companyId: string) => {
@@ -156,7 +170,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
       ...note,
       companyIds: (note.companyIds || []).filter(id => id !== companyId),
     };
-    dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+    updateNote(updatedNote);
   };
 
   const handleAddContact = (contactId: string) => {
@@ -167,7 +181,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
       ...note,
       contactIds: [...currentIds, contactId],
     };
-    dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+    updateNote(updatedNote);
   };
 
   const handleRemoveContact = (contactId: string) => {
@@ -176,7 +190,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
       ...note,
       contactIds: (note.contactIds || []).filter(id => id !== contactId),
     };
-    dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+    updateNote(updatedNote);
   };
 
   const handleAddTopic = (topicId: string) => {
@@ -187,7 +201,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
       ...note,
       topicIds: [...currentIds, topicId],
     };
-    dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+    updateNote(updatedNote);
   };
 
   const handleRemoveTopic = (topicId: string) => {
@@ -196,7 +210,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
       ...note,
       topicIds: (note.topicIds || []).filter(id => id !== topicId),
     };
-    dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+    updateNote(updatedNote);
   };
 
   const getPriorityFlag = (priority: Task['priority']) => {
@@ -252,67 +266,12 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
   };
 
   return (
-    <div className="h-full overflow-y-auto relative">
-      {/* Main Content Area */}
-      <div className="px-8 py-6 max-w-5xl mx-auto space-y-4">
-        {/* Metadata Pills - Inline at Top */}
-        <div className="flex items-center gap-2 flex-wrap text-xs">
-          {/* Entity Relationships */}
-          {relatedCompanies.map(company => (
-            <span key={company.id} className="inline-flex items-center gap-1 font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1 whitespace-nowrap">
-              <span>🏢</span>
-              <span>{company.name}</span>
-            </span>
-          ))}
-          {relatedContacts.map(contact => (
-            <span key={contact.id} className="inline-flex items-center gap-1 font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1 whitespace-nowrap">
-              <span>👤</span>
-              <span>{contact.name}</span>
-            </span>
-          ))}
-          {relatedTopics.map(topic => (
-            <span key={topic.id} className="inline-flex items-center gap-1 font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1 whitespace-nowrap">
-              <span>📌</span>
-              <span>{topic.name}</span>
-            </span>
-          ))}
-
-          {/* Show placeholder if no entities */}
-          {relatedCompanies.length === 0 && relatedContacts.length === 0 && relatedTopics.length === 0 && (
-            <span className="font-medium text-gray-400 whitespace-nowrap">
-              No relationships
-            </span>
-          )}
-
-          {/* Divider */}
-          <div className="w-px h-3 bg-gray-200 flex-shrink-0" />
-
-          {/* Source badge */}
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 capitalize font-medium whitespace-nowrap">
-            {note.source}
-          </span>
-
-          {/* Sentiment */}
-          {note.metadata?.sentiment && (
-            <span className="flex-shrink-0">
-              {note.metadata.sentiment === 'positive' ? '😊' :
-               note.metadata.sentiment === 'negative' ? '😞' : '😐'}
-            </span>
-          )}
-
-          {/* Timestamp */}
-          <div className="flex items-center gap-1 text-[10px] text-gray-400 flex-shrink-0">
-            <Clock className="w-3 h-3" />
-            <span className="whitespace-nowrap">{formatRelativeTime(note.timestamp)}</span>
-          </div>
-
-          {/* Save status */}
-          <div className="flex-shrink-0">
-            {renderSaveStatus()}
-          </div>
-        </div>
-        {/* Title - Large and prominent */}
-        <div>
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      {/* Compact Header - Glass Morphism */}
+      <div className="flex-shrink-0 bg-white/50 backdrop-blur-2xl border-b-2 border-white/60 shadow-lg px-8 py-6">
+        <div className="max-w-5xl mx-auto flex items-start justify-between gap-8">
+          <div className="flex-1 min-w-0 space-y-3">
+          {/* Title - Click to edit */}
           {isEditingSummary ? (
             <input
               ref={summaryInputRef}
@@ -327,270 +286,125 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
                   setIsEditingSummary(false);
                 }
               }}
-              className="text-4xl font-bold text-gray-900 w-full border-b-2 border-cyan-500 focus:outline-none pb-3 bg-transparent"
+              className={`font-bold text-gray-900 w-full border-b-2 border-cyan-500 focus:outline-none bg-transparent transition-all duration-300 ${
+                isScrolled ? 'text-xl' : 'text-3xl'
+              }`}
             />
           ) : (
             <h1
               onClick={() => setIsEditingSummary(true)}
-              className="text-4xl font-bold text-gray-900 cursor-text hover:text-gray-700 transition-colors pb-3 border-b-2 border-transparent hover:border-gray-200"
+              className={`font-bold text-gray-900 cursor-text hover:text-cyan-700 transition-all duration-300 ${
+                isScrolled ? 'text-xl' : 'text-3xl'
+              }`}
               title="Click to edit title"
             >
               {editedSummary}
             </h1>
           )}
-        </div>
 
-        {/* Meta Row - Relationships, Tags, Tasks */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Relationships Button */}
-          <button
-            onClick={() => setIsEditingRelationships(!isEditingRelationships)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-              isEditingRelationships
-                ? 'bg-gray-100 text-gray-700 border-gray-300'
-                : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-200'
-            }`}
+          {/* Metadata Section - Collapsible on scroll */}
+          <div
+            className="overflow-hidden transition-all duration-150"
+            style={{
+              maxHeight: `${Math.max(0, (1 - scrollProgress) * 200)}px`,
+              opacity: Math.max(0, 1 - scrollProgress * 1.2),
+            }}
           >
-            <Link2 className="w-3.5 h-3.5" />
-            Edit Relationships
-          </button>
+            {/* Entity Relationships - Inline & Editable */}
+            <InlineRelationshipManager
+              relatedCompanies={relatedCompanies}
+              relatedContacts={relatedContacts}
+              relatedTopics={relatedTopics}
+              onAddCompany={handleAddCompany}
+              onRemoveCompany={handleRemoveCompany}
+              onAddContact={handleAddContact}
+              onRemoveContact={handleRemoveContact}
+              onAddTopic={handleAddTopic}
+              onRemoveTopic={handleRemoveTopic}
+            />
 
-          {/* Tags Display/Edit */}
-          {!isEditingTags && note.tags && note.tags.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              {note.tags.slice(0, 3).map((tag, idx) => (
-                <span
-                  key={idx}
-                  className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium border border-gray-200"
-                >
-                  #{tag}
-                </span>
-              ))}
-              {note.tags.length > 3 && (
-                <span className="text-xs text-gray-400">+{note.tags.length - 3}</span>
-              )}
-            </div>
-          )}
-
-          <button
-            onClick={() => setIsEditingTags(!isEditingTags)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-              isEditingTags
-                ? 'bg-gray-100 text-gray-700 border-gray-300'
-                : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-200'
-            }`}
-          >
-            <TagIcon className="w-3.5 h-3.5" />
-            Edit Tags
-          </button>
-
-          {linkedTasks.length > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium border border-gray-200">
-              <CheckSquare className="w-3.5 h-3.5" />
-              {linkedTasks.length} {linkedTasks.length === 1 ? 'task' : 'tasks'}
-            </div>
-          )}
-        </div>
-
-        {/* Compact Relationship Editor */}
-        {isEditingRelationships && (
-          <div className="bg-gray-50/80 backdrop-blur-sm border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <Link2 className="w-4 h-4" />
-                Relationships
-              </h3>
-              <button
-                onClick={() => setIsEditingRelationships(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {/* Companies */}
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1.5 block flex items-center gap-1">
-                  <span>🏢</span>
-                  Companies
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {relatedCompanies.map(company => (
-                    <span
-                      key={company.id}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium border border-gray-200"
-                    >
-                      🏢 {company.name}
-                      <button
-                        onClick={() => handleRemoveCompany(company.id)}
-                        className="hover:text-gray-900 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleAddCompany(e.target.value);
-                      e.target.value = '';
-                    }
-                  }}
-                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 bg-white"
-                >
-                  <option value="">+ Add company...</option>
-                  {state.companies.filter(c => !relatedCompanies.some(rc => rc.id === c.id)).map(company => (
-                    <option key={company.id} value={company.id}>{company.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Contacts */}
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1.5 block flex items-center gap-1">
-                  <span>👤</span>
-                  Contacts
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {relatedContacts.map(contact => (
-                    <span
-                      key={contact.id}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium border border-gray-200"
-                    >
-                      👤 {contact.name}
-                      <button
-                        onClick={() => handleRemoveContact(contact.id)}
-                        className="hover:text-gray-900 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleAddContact(e.target.value);
-                      e.target.value = '';
-                    }
-                  }}
-                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 bg-white"
-                >
-                  <option value="">+ Add contact...</option>
-                  {state.contacts.filter(c => !relatedContacts.some(rc => rc.id === c.id)).map(contact => (
-                    <option key={contact.id} value={contact.id}>{contact.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Topics */}
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1.5 block flex items-center gap-1">
-                  <span>📌</span>
-                  Topics
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {relatedTopics.map(topic => (
-                    <span
-                      key={topic.id}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium border border-gray-200"
-                    >
-                      📌 {topic.name}
-                      <button
-                        onClick={() => handleRemoveTopic(topic.id)}
-                        className="hover:text-gray-900 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleAddTopic(e.target.value);
-                      e.target.value = '';
-                    }
-                  }}
-                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 bg-white"
-                >
-                  <option value="">+ Add topic...</option>
-                  {state.topics.filter(t => !relatedTopics.some(rt => rt.id === t.id)).map(topic => (
-                    <option key={topic.id} value={topic.id}>{topic.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Compact Tag Editor */}
-        {isEditingTags && (
-          <div className="bg-gray-50/80 backdrop-blur-sm border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <TagIcon className="w-4 h-4" />
-                Tags
-              </h3>
-              <button
-                onClick={() => setIsEditingTags(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {note.tags && note.tags.length > 0 ? (
-                note.tags.map((tag, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium border border-gray-200"
-                  >
-                    #{tag}
-                    <button
-                      onClick={() => handleRemoveTag(tag)}
-                      className="hover:text-gray-900 transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))
-              ) : (
-                <p className="text-xs text-gray-400 italic">No tags</p>
-              )}
-            </div>
-
-            <div className="flex gap-2">
-              <input
-                ref={newTagInputRef}
-                type="text"
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddTag();
-                  }
-                }}
-                placeholder="Add a tag..."
-                className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 bg-white"
+            {/* Tags - Inline & Editable */}
+            <div className="mt-3">
+              <InlineTagManager
+                tags={note.tags || []}
+                onTagsChange={handleTagsChange}
+                allTags={allTags}
+                editable={true}
+                className="min-h-[32px]"
               />
-              <button
-                onClick={handleAddTag}
-                className="px-4 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg text-sm font-medium hover:shadow-lg transition-all"
-              >
-                Add
-              </button>
+            </div>
+
+            {/* Quick Stats Row */}
+            <div className="flex items-center gap-4 text-xs text-gray-600 mt-3">
+              <div className="flex items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded-full bg-white/60 text-gray-600 capitalize font-medium">
+                  {note.source}
+                </span>
+              </div>
+              {note.metadata?.sentiment && (
+                <div className="flex items-center gap-1">
+                  <span>
+                    {note.metadata.sentiment === 'positive' ? '😊 Positive' :
+                     note.metadata.sentiment === 'negative' ? '😞 Negative' : '😐 Neutral'}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                <Clock size={14} />
+                <span>{formatRelativeTime(note.timestamp)}</span>
+              </div>
+              {linkedTasks.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <CheckSquare size={14} />
+                  <span>{linkedTasks.length} {linkedTasks.length === 1 ? 'task' : 'tasks'}</span>
+                </div>
+              )}
+              <div className="ml-auto">
+                {renderSaveStatus()}
+              </div>
             </div>
           </div>
-        )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {onToggleSidebar && (
+              <button
+                onClick={() => onToggleSidebar(!isSidebarExpanded)}
+                className={`
+                  w-11 h-11 rounded-full transition-all hover:scale-105 active:scale-95 shadow-md flex items-center justify-center
+                  ${isSidebarExpanded
+                    ? 'bg-white/60 hover:bg-white/80 border-2 border-white/60 text-gray-700'
+                    : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 border-2 border-cyan-400 text-white shadow-cyan-200/50'
+                  }
+                `}
+                title={isSidebarExpanded ? "List View" : "Focus Mode (currently active)"}
+              >
+                {isSidebarExpanded ? (
+                  <Columns size={ICON_SIZES.md} />
+                ) : (
+                  <Focus size={ICON_SIZES.md} />
+                )}
+              </button>
+            )}
+            <button
+              onClick={handleDelete}
+              className="w-11 h-11 bg-red-100 hover:bg-red-200 rounded-full transition-all hover:scale-105 active:scale-95 border-2 border-red-200 shadow-md flex items-center justify-center"
+              title="Delete note"
+            >
+              <Trash2 size={20} className="text-red-700" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Scrollable Content Area */}
+      <div ref={contentRef} className="flex-1 min-h-0 overflow-y-auto">
+        <div className="px-8 py-6 max-w-5xl mx-auto space-y-4">
 
         {/* Key Takeaways - Compact Card */}
         {note.metadata?.keyPoints && note.metadata.keyPoints.length > 0 && (
-          <div className="bg-cyan-50/60 backdrop-blur-sm rounded-xl p-4 border border-cyan-200/50">
+          <div className="bg-cyan-100/20 backdrop-blur-sm rounded-[24px] p-4 border border-cyan-200/50">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="w-4 h-4 text-cyan-600" />
               <h3 className="text-sm font-bold text-cyan-900 uppercase tracking-wide">Key Takeaways</h3>
@@ -610,7 +424,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
         <div>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Content</h2>
           <RichTextEditor
-            content={formatNoteContent(editedContent)}
+            content={editedContent}
             onChange={setEditedContent}
             placeholder="Write your note here... Use the toolbar for rich formatting!"
             autoFocus={false}
@@ -634,7 +448,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
               {linkedTasks.map((task) => (
                 <div
                   key={task.id}
-                  onClick={() => dispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'task', itemId: task.id, label: task.title } })}
+                  onClick={() => uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'task', itemId: task.id, label: task.title } })}
                   className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-cyan-300 cursor-pointer transition-all"
                 >
                   <div className="flex items-start gap-2">
@@ -665,7 +479,7 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
             {note.metadata.relatedTopics.map((relatedTopic, idx) => (
               <span
                 key={idx}
-                className="px-2.5 py-1 bg-white/60 backdrop-blur-sm text-gray-700 rounded-lg text-xs font-medium border border-white/60"
+                className="px-2.5 py-1 bg-white/30 backdrop-blur-sm text-gray-700 rounded-[16px] text-xs font-medium border border-white/60"
               >
                 {relatedTopic}
               </span>
@@ -688,20 +502,191 @@ export function NoteDetailInline({ noteId }: NoteDetailInlineProps) {
           </details>
         )}
 
-        {/* Delete Button */}
-        <div className="pt-6 border-t-2 border-gray-200/50 mt-8">
-          <button
-            onClick={handleDelete}
-            className="px-4 py-2 bg-red-50/80 backdrop-blur-sm text-red-600 rounded-lg font-medium hover:bg-red-100 transition-all hover:scale-105 active:scale-95 text-sm flex items-center gap-2 border border-red-200/50"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete Note
-          </button>
-        </div>
-
         {/* Bottom padding for comfortable scrolling */}
         <div className="h-24" />
+        </div>
       </div>
+    </div>
+  );
+}
+
+// Inline Relationship Manager Component - Click to edit relationships inline
+interface InlineRelationshipManagerProps {
+  relatedCompanies: Array<{ id: string; name: string }>;
+  relatedContacts: Array<{ id: string; name: string }>;
+  relatedTopics: Array<{ id: string; name: string }>;
+  onAddCompany: (companyId: string) => void;
+  onRemoveCompany: (companyId: string) => void;
+  onAddContact: (contactId: string) => void;
+  onRemoveContact: (contactId: string) => void;
+  onAddTopic: (topicId: string) => void;
+  onRemoveTopic: (topicId: string) => void;
+}
+
+function InlineRelationshipManager({
+  relatedCompanies,
+  relatedContacts,
+  relatedTopics,
+  onAddCompany,
+  onRemoveCompany,
+  onAddContact,
+  onRemoveContact,
+  onAddTopic,
+  onRemoveTopic,
+}: InlineRelationshipManagerProps) {
+  const { state: entitiesState } = useEntities();
+  const [isEditing, setIsEditing] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedContactId, setSelectedContactId] = useState('');
+  const [selectedTopicId, setSelectedTopicId] = useState('');
+
+  const handleAddCompany = (companyId: string) => {
+    if (!companyId) return;
+    onAddCompany(companyId);
+    setSelectedCompanyId('');
+  };
+
+  const handleAddContact = (contactId: string) => {
+    if (!contactId) return;
+    onAddContact(contactId);
+    setSelectedContactId('');
+  };
+
+  const handleAddTopic = (topicId: string) => {
+    if (!topicId) return;
+    onAddTopic(topicId);
+    setSelectedTopicId('');
+  };
+
+  const hasRelationships = relatedCompanies.length > 0 || relatedContacts.length > 0 || relatedTopics.length > 0;
+
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Companies Dropdown */}
+        <select
+          value={selectedCompanyId}
+          onChange={(e) => {
+            setSelectedCompanyId(e.target.value);
+            handleAddCompany(e.target.value);
+          }}
+          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-blue-400 rounded-full text-xs font-semibold text-gray-800 outline-none"
+        >
+          <option value="">+ Company...</option>
+          {entitiesState.companies.filter(c => !relatedCompanies.some(rc => rc.id === c.id)).map(company => (
+            <option key={company.id} value={company.id}>🏢 {company.name}</option>
+          ))}
+        </select>
+
+        {/* Contacts Dropdown */}
+        <select
+          value={selectedContactId}
+          onChange={(e) => {
+            setSelectedContactId(e.target.value);
+            handleAddContact(e.target.value);
+          }}
+          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-emerald-400 rounded-full text-xs font-semibold text-gray-800 outline-none"
+        >
+          <option value="">+ Contact...</option>
+          {entitiesState.contacts.filter(c => !relatedContacts.some(rc => rc.id === c.id)).map(contact => (
+            <option key={contact.id} value={contact.id}>👤 {contact.name}</option>
+          ))}
+        </select>
+
+        {/* Topics Dropdown */}
+        <select
+          value={selectedTopicId}
+          onChange={(e) => {
+            setSelectedTopicId(e.target.value);
+            handleAddTopic(e.target.value);
+          }}
+          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-amber-400 rounded-full text-xs font-semibold text-gray-800 outline-none"
+        >
+          <option value="">+ Topic...</option>
+          {entitiesState.topics.filter(t => !relatedTopics.some(rt => rt.id === t.id)).map(topic => (
+            <option key={topic.id} value={topic.id}>📌 {topic.name}</option>
+          ))}
+        </select>
+
+        <button
+          onClick={() => setIsEditing(false)}
+          className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full text-xs font-semibold transition-all"
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
+      {/* Company Pills */}
+      {relatedCompanies.map(company => (
+        <button
+          key={company.id}
+          onClick={() => setIsEditing(true)}
+          className="group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-100/80 to-cyan-100/80 hover:from-blue-200/90 hover:to-cyan-200/90 border border-blue-300/60 rounded-full text-xs font-semibold text-blue-800 transition-all"
+        >
+          <span>🏢</span>
+          <span>{company.name}</span>
+          <X
+            className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemoveCompany(company.id);
+            }}
+          />
+        </button>
+      ))}
+
+      {/* Contact Pills */}
+      {relatedContacts.map(contact => (
+        <button
+          key={contact.id}
+          onClick={() => setIsEditing(true)}
+          className="group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-100/80 to-green-100/80 hover:from-emerald-200/90 hover:to-green-200/90 border border-emerald-300/60 rounded-full text-xs font-semibold text-emerald-800 transition-all"
+        >
+          <span>👤</span>
+          <span>{contact.name}</span>
+          <X
+            className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemoveContact(contact.id);
+            }}
+          />
+        </button>
+      ))}
+
+      {/* Topic Pills */}
+      {relatedTopics.map(topic => (
+        <button
+          key={topic.id}
+          onClick={() => setIsEditing(true)}
+          className="group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-100/80 to-yellow-100/80 hover:from-amber-200/90 hover:to-yellow-200/90 border border-amber-300/60 rounded-full text-xs font-semibold text-amber-800 transition-all"
+        >
+          <span>📌</span>
+          <span>{topic.name}</span>
+          <X
+            className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemoveTopic(topic.id);
+            }}
+          />
+        </button>
+      ))}
+
+      {/* Add Button - Only show if no relationships */}
+      {!hasRelationships && (
+        <button
+          onClick={() => setIsEditing(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/40 hover:bg-white/60 border border-dashed border-gray-400 hover:border-cyan-400 rounded-full text-xs text-gray-500 hover:text-cyan-700 font-medium transition-all"
+        >
+          <Plus size={12} />
+          <span>Add Relationships</span>
+        </button>
+      )}
     </div>
   );
 }

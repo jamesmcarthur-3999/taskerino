@@ -1,12 +1,16 @@
 import { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { claudeService } from '../services/claudeService';
 import { Key, Sparkles } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { getModalClasses } from '../design-system/theme';
 
 interface FirstTimeSetupProps {
   onComplete: () => void;
 }
 
 export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
+  const { colorScheme, glassStrength } = useTheme();
   const [apiKey, setApiKey] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,21 +35,23 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
       // Test the API key with a simple request
       claudeService.setApiKey(apiKey.trim());
 
-      // Save to localStorage
-      localStorage.setItem('claude-api-key', apiKey.trim());
+      // Save to Tauri secure storage
+      await invoke('set_claude_api_key', { apiKey: apiKey.trim() });
 
       onComplete();
-    } catch (err) {
+    } catch {
       setError('Failed to validate API key. Please check and try again.');
       setIsSubmitting(false);
     }
   };
 
+  const modalClasses = getModalClasses(colorScheme, glassStrength);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-violet-500/20 via-fuchsia-500/20 to-cyan-500/20 backdrop-blur-sm">
+    <div className={modalClasses.overlay}>
       <div className="w-full max-w-2xl px-6">
         {/* Welcome Card */}
-        <div className="backdrop-blur-xl bg-white/90 rounded-3xl shadow-2xl border border-white/20 p-8 space-y-6">
+        <div className={`${modalClasses.content} p-8 space-y-6`}>
           {/* Header */}
           <div className="text-center space-y-3">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-2xl mb-4">

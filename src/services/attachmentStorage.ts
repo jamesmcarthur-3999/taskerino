@@ -1,0 +1,448 @@
+/**
+ * Attachment Storage Service
+ *
+ * Handles storing large attachment data (images, screenshots) on the file system.
+ * Uses Tauri's file system API for reliable, large file storage.
+ *
+ * Storage structure:
+ * - App data directory/attachments/{id}.dat (base64 data)
+ * - App data directory/attachments/{id}.meta.json (metadata)
+ *
+ * PERFORMANCE: Added in-memory LRU cache (100MB limit) for fast repeat access
+ */
+
+import { BaseDirectory, exists, readTextFile, writeTextFile, mkdir, remove, readDir } from '@tauri-apps/plugin-fs';
+import type { Attachment } from '../types';
+
+interface CacheEntry {
+  attachment: Attachment;
+  size: number;
+  lastAccessed: number;
+}
+
+interface CacheStats {
+  hits: number;
+  misses: number;
+  currentSize: number;
+  maxSize: number;
+  entryCount: number;
+}
+
+class AttachmentStorageService {
+  private readonly ATTACHMENTS_DIR = 'attachments';
+
+  // LRU Cache configuration
+  private readonly CACHE_MAX_SIZE = 100 * 1024 * 1024; // 100MB
+  private readonly MAX_CACHE_AGE = 10 * 60 * 1000; // 10 minutes
+  private cache: Map<string, CacheEntry> = new Map();
+  private cacheSize = 0;
+  private cacheHits = 0;
+  private cacheMisses = 0;
+  private cleanupInterval: ReturnType<typeof setInterval>;
+
+  /**
+   * Initialize cache with periodic cleanup
+   */
+  constructor() {
+    // Clean up stale cache entries every 5 minutes
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupStaleEntries();
+    }, 5 * 60 * 1000);
+
+    console.log('💾 AttachmentStorageService initialized with LRU cache (100MB limit)');
+  }
+
+  /**
+   * Ensure attachments directory exists
+   */
+  private async ensureDir(): Promise<void> {
+    try {
+      const dirExists = await exists(this.ATTACHMENTS_DIR, { baseDir: BaseDirectory.AppData });
+      if (!dirExists) {
+        await mkdir(this.ATTACHMENTS_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
+        console.log('📁 Created attachments directory');
+      }
+    } catch (error) {
+      console.error('❌ Failed to create attachments directory:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Estimate memory size of an attachment (in bytes)
+   */
+  private estimateSize(attachment: Attachment): number {
+    let size = 0;
+
+    // Base64 data is the largest contributor
+    if (attachment.base64) {
+      size += attachment.base64.length * 2; // UTF-16 in JavaScript
+    }
+
+    // Thumbnail data
+    if (attachment.thumbnail) {
+      size += attachment.thumbnail.length * 2;
+    }
+
+    // Metadata (approximate)
+    size += JSON.stringify({
+      id: attachment.id,
+      type: attachment.type,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+    }).length * 2;
+
+    return size;
+  }
+
+  /**
+   * Evict least recently used cache entries until size is under limit
+   */
+  private evictLRU(): void {
+    if (this.cacheSize <= this.CACHE_MAX_SIZE) {
+      return;
+    }
+
+    // Sort entries by lastAccessed (oldest first)
+    const entries = Array.from(this.cache.entries())
+      .sort((a, b) => a[1].lastAccessed - b[1].lastAccessed);
+
+    // Evict oldest entries until we're under the limit
+    for (const [id, entry] of entries) {
+      if (this.cacheSize <= this.CACHE_MAX_SIZE * 0.8) {
+        // Keep cache at 80% after eviction to reduce thrashing
+        break;
+      }
+
+      this.cache.delete(id);
+      this.cacheSize -= entry.size;
+      console.log(`🗑️  Evicted attachment ${id} from cache (${Math.round(entry.size / 1024)}KB)`);
+    }
+  }
+
+  /**
+   * Add attachment to cache
+   */
+  private addToCache(attachment: Attachment): void {
+    const size = this.estimateSize(attachment);
+
+    // Don't cache if single item is larger than max size
+    if (size > this.CACHE_MAX_SIZE) {
+      console.warn(`⚠️  Attachment ${attachment.id} too large to cache (${Math.round(size / 1024 / 1024)}MB)`);
+      return;
+    }
+
+    // Remove existing entry if present
+    this.removeFromCache(attachment.id);
+
+    // Add to cache
+    this.cache.set(attachment.id, {
+      attachment,
+      size,
+      lastAccessed: Date.now(),
+    });
+
+    this.cacheSize += size;
+
+    // Evict if necessary
+    this.evictLRU();
+
+    console.log(`💾 Cached attachment ${attachment.id} (${Math.round(size / 1024)}KB, cache: ${Math.round(this.cacheSize / 1024 / 1024)}MB)`);
+  }
+
+  /**
+   * Get attachment from cache
+   */
+  private getFromCache(id: string): Attachment | null {
+    const entry = this.cache.get(id);
+
+    if (entry) {
+      // Update last accessed time
+      entry.lastAccessed = Date.now();
+      this.cacheHits++;
+      console.log(`✅ Cache HIT for attachment ${id}`);
+      return entry.attachment;
+    }
+
+    this.cacheMisses++;
+    console.log(`❌ Cache MISS for attachment ${id}`);
+    return null;
+  }
+
+  /**
+   * Remove attachment from cache
+   */
+  private removeFromCache(id: string): void {
+    const entry = this.cache.get(id);
+    if (entry) {
+      this.cache.delete(id);
+      this.cacheSize -= entry.size;
+    }
+  }
+
+  /**
+   * Clear entire cache
+   */
+  clearCache(): void {
+    this.cache.clear();
+    this.cacheSize = 0;
+    this.cacheHits = 0;
+    this.cacheMisses = 0;
+    console.log('🗑️  Cache cleared');
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats(): CacheStats {
+    return {
+      hits: this.cacheHits,
+      misses: this.cacheMisses,
+      currentSize: this.cacheSize,
+      maxSize: this.CACHE_MAX_SIZE,
+      entryCount: this.cache.size,
+    };
+  }
+
+  /**
+   * Save attachment to file system
+   * Stores base64 data and metadata separately
+   * PERFORMANCE: Also adds to cache for fast subsequent access
+   */
+  async saveAttachment(attachment: Attachment): Promise<void> {
+    await this.ensureDir();
+
+    try {
+      // Save metadata (without base64 data)
+      const metadata = {
+        id: attachment.id,
+        type: attachment.type,
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+        createdAt: attachment.createdAt,
+        thumbnail: attachment.thumbnail, // Keep thumbnail for quick display
+        path: attachment.path, // File path (for videos and other file-based attachments)
+        duration: attachment.duration, // Video duration
+        dimensions: attachment.dimensions, // Video/image dimensions
+      };
+
+      const metaPath = `${this.ATTACHMENTS_DIR}/${attachment.id}.meta.json`;
+      await writeTextFile(metaPath, JSON.stringify(metadata), { baseDir: BaseDirectory.AppData });
+
+      // Save base64 data separately (if present)
+      if (attachment.base64) {
+        const dataPath = `${this.ATTACHMENTS_DIR}/${attachment.id}.dat`;
+        await writeTextFile(dataPath, attachment.base64, { baseDir: BaseDirectory.AppData });
+      }
+
+      console.log(`💾 Saved attachment ${attachment.id} to file system (${Math.round(attachment.size / 1024)}KB)`);
+
+      // Add to cache for fast access
+      this.addToCache(attachment);
+    } catch (error) {
+      console.error('❌ Failed to save attachment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get attachment from file system
+   * PERFORMANCE: Checks cache first to avoid file I/O
+   */
+  async getAttachment(id: string): Promise<Attachment | null> {
+    // Check cache first
+    const cached = this.getFromCache(id);
+    if (cached) {
+      return cached;
+    }
+
+    // Cache miss - read from file system
+    try {
+      // Read metadata
+      const metaPath = `${this.ATTACHMENTS_DIR}/${id}.meta.json`;
+      const metaExists = await exists(metaPath, { baseDir: BaseDirectory.AppData });
+
+      if (!metaExists) {
+        return null;
+      }
+
+      const metaContent = await readTextFile(metaPath, { baseDir: BaseDirectory.AppData });
+      const metadata = JSON.parse(metaContent);
+
+      // Read base64 data if exists
+      const dataPath = `${this.ATTACHMENTS_DIR}/${id}.dat`;
+      const dataExists = await exists(dataPath, { baseDir: BaseDirectory.AppData });
+
+      let base64: string | undefined;
+      if (dataExists) {
+        base64 = await readTextFile(dataPath, { baseDir: BaseDirectory.AppData });
+      }
+
+      const attachment = {
+        ...metadata,
+        base64,
+      };
+
+      // Add to cache for next time
+      this.addToCache(attachment);
+
+      return attachment;
+    } catch (error) {
+      console.error('❌ Failed to get attachment:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Delete attachment from file system
+   * Handles missing files gracefully - won't fail if file is already gone
+   */
+  async deleteAttachment(id: string): Promise<void> {
+    try {
+      // Remove from cache first
+      this.removeFromCache(id);
+
+      // Load attachment metadata to get file path
+      const attachment = await this.getAttachment(id);
+
+      // Delete the actual file if it exists
+      if (attachment?.path) {
+        const actualFilePath = attachment.path;
+        try {
+          if (await exists(actualFilePath, { baseDir: BaseDirectory.AppData })) {
+            await remove(actualFilePath, { baseDir: BaseDirectory.AppData });
+            console.log(`🗑️ Deleted actual file: ${actualFilePath}`);
+          }
+        } catch (error) {
+          console.error(`Failed to delete actual file ${actualFilePath}:`, error);
+          // Continue with metadata cleanup even if file deletion fails
+        }
+      }
+
+      // Delete metadata file
+      const metaPath = `${this.ATTACHMENTS_DIR}/${id}.meta.json`;
+      if (await exists(metaPath, { baseDir: BaseDirectory.AppData })) {
+        await remove(metaPath, { baseDir: BaseDirectory.AppData });
+      }
+
+      // Delete data file
+      const dataPath = `${this.ATTACHMENTS_DIR}/${id}.dat`;
+      if (await exists(dataPath, { baseDir: BaseDirectory.AppData })) {
+        await remove(dataPath, { baseDir: BaseDirectory.AppData });
+      }
+
+      console.log(`✅ Attachment deleted: ${id}`);
+    } catch (error) {
+      console.error(`Failed to delete attachment ${id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete multiple attachments in batch
+   * Handles missing files gracefully - logs errors but doesn't fail the entire operation
+   */
+  async deleteAttachments(ids: string[]): Promise<void> {
+    console.log(`🗑️  Deleting ${ids.length} attachments...`);
+
+    const results = await Promise.allSettled(
+      ids.map(id => this.deleteAttachment(id))
+    );
+
+    // Log any failures but don't throw
+    const failures = results.filter(r => r.status === 'rejected');
+    if (failures.length > 0) {
+      console.warn(`⚠️  Failed to delete ${failures.length} of ${ids.length} attachments`);
+      failures.forEach((failure, index) => {
+        if (failure.status === 'rejected') {
+          console.warn(`  - ${ids[index]}: ${failure.reason}`);
+        }
+      });
+    }
+
+    const successes = results.filter(r => r.status === 'fulfilled').length;
+    console.log(`✅ Successfully deleted ${successes} of ${ids.length} attachments`);
+  }
+
+  /**
+   * Get all attachments from file system
+   */
+  async getAllAttachments(): Promise<Attachment[]> {
+    try {
+      await this.ensureDir();
+
+      // Read all files in the attachments directory
+      const entries = await readDir(this.ATTACHMENTS_DIR, { baseDir: BaseDirectory.AppData });
+
+      // Filter for .meta.json files and extract attachment IDs
+      const metaFiles = entries.filter(entry => entry.name && entry.name.endsWith('.meta.json'));
+
+      // Load all attachments
+      const attachments: Attachment[] = [];
+      for (const metaFile of metaFiles) {
+        // Extract ID from filename (remove .meta.json extension)
+        const id = metaFile.name!.replace('.meta.json', '');
+        const attachment = await this.getAttachment(id);
+        if (attachment) {
+          attachments.push(attachment);
+        }
+      }
+
+      return attachments;
+    } catch (error) {
+      // If directory doesn't exist yet, return empty array
+      return [];
+    }
+  }
+
+  /**
+   * Check if running in Tauri environment
+   * (Always returns true since we always use Tauri APIs)
+   */
+  isTauriEnvironment(): boolean {
+    return true;
+  }
+
+  /**
+   * Remove entries that haven't been accessed recently
+   * Called periodically by cleanup interval
+   */
+  private cleanupStaleEntries(): void {
+    const now = Date.now();
+    const staleIds: string[] = [];
+
+    for (const [id, entry] of this.cache.entries()) {
+      if (now - entry.lastAccessed > this.MAX_CACHE_AGE) {
+        staleIds.push(id);
+      }
+    }
+
+    for (const id of staleIds) {
+      const entry = this.cache.get(id);
+      if (entry) {
+        this.cache.delete(id);
+        this.cacheSize -= entry.size;
+        console.log(`⏰ Removed stale entry ${id} (${Math.round(entry.size / 1024)}KB)`);
+      }
+    }
+
+    if (staleIds.length > 0) {
+      console.log(`🧹 Cleaned up ${staleIds.length} stale cache entries`);
+    }
+  }
+
+  /**
+   * Destroy service and cleanup interval
+   */
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+    this.clearCache();
+    console.log('💾 AttachmentStorageService destroyed');
+  }
+}
+
+// Export singleton instance
+export const attachmentStorage = new AttachmentStorageService();

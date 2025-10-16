@@ -148,14 +148,16 @@ export function ResultsReview({ results, onSave, onCancel }: ResultsReviewProps)
   const totalItems = editableNotes.length + activeTasks.length;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-gradient-to-br from-cyan-50 via-blue-50/30 to-teal-50">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20">
+      {/* Animated gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none" />
       {/* Backdrop */}
-      <div className="absolute inset-0 backdrop-blur-sm bg-white/40" onClick={onCancel} />
+      <div className="absolute inset-0 backdrop-blur-sm bg-white/30" onClick={onCancel} />
 
       {/* Modal Container */}
-      <div className="relative h-full flex flex-col max-w-7xl mx-auto p-6">
+      <div className="relative h-full flex flex-col max-w-7xl mx-auto p-6 pt-24">
         {/* Header */}
-        <div className="relative backdrop-blur-2xl bg-white/60 rounded-t-3xl border-2 border-white/50 shadow-2xl p-6 flex items-center justify-between z-10">
+        <div className="relative backdrop-blur-2xl bg-white/40 rounded-t-[40px] border-2 border-white/50 shadow-2xl p-6 flex items-center justify-between z-10">
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent flex items-center gap-3">
               <Sparkles className="w-8 h-8 text-cyan-600" />
@@ -167,7 +169,7 @@ export function ResultsReview({ results, onSave, onCancel }: ResultsReviewProps)
           </div>
           <button
             onClick={onCancel}
-            className="p-2 text-gray-600 hover:bg-white/60 backdrop-blur-md rounded-xl transition-all duration-300 hover:scale-110 active:scale-95"
+            className="p-2 text-gray-600 hover:bg-white/30 backdrop-blur-md rounded-[20px] transition-all duration-300 hover:scale-110 active:scale-95"
             title="Close"
           >
             <X className="w-6 h-6" />
@@ -175,7 +177,7 @@ export function ResultsReview({ results, onSave, onCancel }: ResultsReviewProps)
         </div>
 
         {/* Content - Two Column Layout */}
-        <div className="relative flex-1 overflow-hidden backdrop-blur-2xl bg-white/60 border-x-2 border-white/50 shadow-2xl flex">
+        <div className="relative flex-1 overflow-hidden backdrop-blur-2xl bg-white/40 border-x-2 border-white/50 shadow-2xl flex">
 
           {/* Left Column: Topics + Note */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -184,7 +186,7 @@ export function ResultsReview({ results, onSave, onCancel }: ResultsReviewProps)
             <section>
               <button
                 onClick={() => setTopicsExpanded(!topicsExpanded)}
-                className="w-full flex items-center justify-between p-4 backdrop-blur-xl bg-white/50 border-2 border-white/60 rounded-2xl hover:bg-white/60 transition-all duration-300 hover:scale-[1.01] active:scale-[0.99]"
+                className="w-full flex items-center justify-between p-4 backdrop-blur-xl bg-white/30 border-2 border-white/60 rounded-[24px] hover:bg-white/40 transition-all duration-300 hover:scale-[1.01] active:scale-[0.99]"
               >
                 <div className="flex items-center gap-3">
                   {topicsExpanded ? <ChevronDown className="w-5 h-5 text-cyan-600" /> : <ChevronRight className="w-5 h-5 text-cyan-600" />}
@@ -211,7 +213,7 @@ export function ResultsReview({ results, onSave, onCancel }: ResultsReviewProps)
                     return (
                       <div
                         key={index}
-                        className="backdrop-blur-xl bg-white/50 border-2 border-white/60 rounded-xl p-4 flex items-center gap-3 group"
+                        className="backdrop-blur-xl bg-white/30 border-2 border-white/60 rounded-[24px] p-4 flex items-center gap-3 group"
                       >
                         <div className="p-2 bg-cyan-100 rounded-lg text-cyan-600">
                           {getTopicIcon(et.topic.type)}
@@ -258,7 +260,7 @@ export function ResultsReview({ results, onSave, onCancel }: ResultsReviewProps)
 
           {/* Right Column: Tasks Sidebar */}
           <div className="w-96 border-l-2 border-white/50 bg-white/20 backdrop-blur-sm overflow-y-auto p-6">
-            <div className="sticky top-0 bg-white/60 backdrop-blur-xl -mx-6 -mt-6 px-6 pt-6 pb-4 mb-4 border-b-2 border-white/50 z-10">
+            <div className="sticky top-0 bg-white/40 backdrop-blur-xl -mx-6 -mt-6 px-6 pt-6 pb-4 mb-4 border-b-2 border-white/50 z-10">
               <div className="flex items-center gap-3 mb-2">
                 <CheckCircle2 className="w-6 h-6 text-green-600" />
                 <h2 className="text-xl font-bold text-gray-900">Tasks</h2>
@@ -269,7 +271,7 @@ export function ResultsReview({ results, onSave, onCancel }: ResultsReviewProps)
             </div>
 
             {activeTasks.length === 0 ? (
-              <div className="backdrop-blur-xl bg-white/50 border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center">
+              <div className="backdrop-blur-xl bg-white/30 border-2 border-dashed border-gray-300 rounded-[24px] p-6 text-center">
                 <CheckCircle2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-600 font-medium">No tasks extracted</p>
                 <p className="text-xs text-gray-500 mt-1">Tasks appear when AI detects action items in your notes</p>
@@ -304,7 +306,7 @@ export function ResultsReview({ results, onSave, onCancel }: ResultsReviewProps)
 
             {/* Removed Tasks */}
             {removedTasks.length > 0 && (
-              <details className="mt-4 backdrop-blur-xl bg-red-50/60 rounded-2xl border-2 border-red-200 overflow-hidden">
+              <details className="mt-4 backdrop-blur-xl bg-red-100/20 rounded-[24px] border-2 border-red-200 overflow-hidden">
                 <summary className="cursor-pointer p-3 font-semibold text-red-900 hover:bg-red-100/50 transition-all flex items-center gap-2 text-sm">
                   <Trash2 className="w-4 h-4" />
                   {removedTasks.length} Removed
@@ -329,23 +331,23 @@ export function ResultsReview({ results, onSave, onCancel }: ResultsReviewProps)
         </div>
 
         {/* Footer */}
-        <div className="relative backdrop-blur-2xl bg-white/60 rounded-b-3xl border-2 border-white/50 border-t-0 shadow-2xl p-6 flex items-center justify-between z-10">
+        <div className="relative backdrop-blur-2xl bg-white/40 rounded-b-[40px] border-2 border-white/50 border-t-0 shadow-2xl p-6 flex items-center justify-between z-10">
           <p className="text-sm text-gray-600">
-            Review and edit, then save to your library
+            Review and edit, then save to notes
           </p>
           <div className="flex items-center gap-3">
             <button
               onClick={onCancel}
-              className="px-6 py-3 text-gray-700 hover:bg-white/60 backdrop-blur-md rounded-xl transition-all font-semibold hover:scale-105 active:scale-95 duration-300"
+              className="px-6 py-3 text-gray-700 hover:bg-white/30 backdrop-blur-md rounded-[20px] transition-all font-semibold hover:scale-105 active:scale-95 duration-300"
             >
               Discard
             </button>
             <button
               onClick={handleSaveAll}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shadow-cyan-200/50"
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-[20px] font-semibold hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shadow-cyan-200/50"
             >
               <Save className="w-5 h-5" />
-              Save to Library ({totalItems})
+              Save Notes ({totalItems})
             </button>
           </div>
         </div>
@@ -437,14 +439,14 @@ function NoteSection({
           </div>
           <button
             onClick={onEdit}
-            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 transition-all hover:scale-105 active:scale-95 duration-300"
+            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-[20px] font-medium hover:bg-violet-700 transition-all hover:scale-105 active:scale-95 duration-300"
           >
             <Edit2 className="w-4 h-4" />
             Edit
           </button>
         </div>
 
-        <div className="backdrop-blur-xl bg-white/50 border-2 border-white/60 rounded-2xl p-6 space-y-4">
+        <div className="backdrop-blur-xl bg-white/30 border-2 border-white/60 rounded-[24px] p-6 space-y-4">
           {/* Summary */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">Summary</label>
@@ -565,7 +567,7 @@ function NoteSection({
           </button>
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-medium hover:shadow-lg transition-all hover:scale-105 active:scale-95 duration-300"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-[20px] font-medium hover:shadow-lg transition-all hover:scale-105 active:scale-95 duration-300"
           >
             <Save className="w-4 h-4" />
             Save Changes
@@ -573,7 +575,7 @@ function NoteSection({
         </div>
       </div>
 
-      <div className="backdrop-blur-xl bg-violet-50/40 border-2 border-violet-300 rounded-2xl p-6 space-y-6">
+      <div className="backdrop-blur-xl bg-violet-100/20 border-2 border-violet-300 rounded-[24px] p-6 space-y-6">
         {/* Summary */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">Summary</label>
@@ -581,7 +583,7 @@ function NoteSection({
             type="text"
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
-            className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border-2 border-violet-200 rounded-xl focus:border-violet-400 focus:outline-none font-medium transition-all"
+            className="w-full px-4 py-3 bg-white/30 backdrop-blur-sm border-2 border-violet-200 rounded-[20px] focus:border-violet-400 focus:outline-none font-medium transition-all"
             placeholder="Brief summary of the note"
           />
         </div>
@@ -618,7 +620,7 @@ function NoteSection({
         {/* Content Editor */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">Content</label>
-          <div className="bg-white/80 backdrop-blur-sm border-2 border-violet-200 rounded-xl overflow-hidden">
+          <div className="bg-white/30 backdrop-blur-sm border-2 border-violet-200 rounded-[20px] overflow-hidden">
             <RichTextEditor
               content={formatNoteContent(content)}
               onChange={setContent}
@@ -637,7 +639,7 @@ function NoteSection({
           </label>
           <div className="space-y-2">
             {keyPoints.map((point, i) => (
-              <div key={i} className="flex items-start gap-2 p-3 bg-white/60 rounded-lg group">
+              <div key={i} className="flex items-start gap-2 p-3 bg-white/20 rounded-[16px] group">
                 <span className="text-cyan-600 font-bold mt-0.5">•</span>
                 <span className="flex-1 text-sm text-gray-700">{point}</span>
                 <button
@@ -655,11 +657,11 @@ function NoteSection({
                 onChange={(e) => setNewKeyPoint(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addKeyPoint()}
                 placeholder="Add a key point..."
-                className="flex-1 px-3 py-2 bg-white/60 border border-violet-200 rounded-lg focus:border-violet-400 focus:outline-none text-sm"
+                className="flex-1 px-3 py-2 bg-white/30 border border-violet-200 rounded-[16px] focus:border-violet-400 focus:outline-none text-sm"
               />
               <button
                 onClick={addKeyPoint}
-                className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+                className="px-4 py-2 bg-violet-600 text-white rounded-[16px] hover:bg-violet-700 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
               >
                 <Plus className="w-4 h-4" />
                 Add
@@ -695,11 +697,11 @@ function NoteSection({
                 onChange={(e) => setNewTag(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addTag()}
                 placeholder="Add a tag..."
-                className="flex-1 px-3 py-2 bg-white/60 border border-violet-200 rounded-lg focus:border-violet-400 focus:outline-none text-sm"
+                className="flex-1 px-3 py-2 bg-white/30 border border-violet-200 rounded-[16px] focus:border-violet-400 focus:outline-none text-sm"
               />
               <button
                 onClick={addTag}
-                className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+                className="px-4 py-2 bg-cyan-600 text-white rounded-[16px] hover:bg-cyan-700 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
               >
                 <Plus className="w-4 h-4" />
                 Add
@@ -735,7 +737,7 @@ function NoteSection({
                 onChange={(e) => setNewRelatedTopic(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addRelatedTopic()}
                 placeholder="Add a related topic..."
-                className="flex-1 px-3 py-2 bg-white/60 border border-violet-200 rounded-lg focus:border-violet-400 focus:outline-none text-sm"
+                className="flex-1 px-3 py-2 bg-white/30 border border-violet-200 rounded-[16px] focus:border-violet-400 focus:outline-none text-sm"
               />
               <button
                 onClick={addRelatedTopic}
@@ -783,7 +785,7 @@ function TaskViewCard({
   };
 
   return (
-    <div className="backdrop-blur-xl bg-white/50 border-2 border-white/60 rounded-xl p-4 hover:border-green-300 transition-all duration-300 group hover:scale-[1.02] active:scale-[0.98]">
+    <div className="backdrop-blur-xl bg-white/30 border-2 border-white/60 rounded-[24px] p-4 hover:border-green-300 transition-all duration-300 group hover:scale-[1.02] active:scale-[0.98]">
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
           <div className={`w-1 h-12 rounded-full ${getPriorityColor(task.priority)} flex-shrink-0`} />
@@ -871,12 +873,12 @@ function TaskEditCard({
   };
 
   return (
-    <div className="backdrop-blur-xl bg-violet-50/60 border-2 border-violet-300 rounded-xl p-4 space-y-3">
+    <div className="backdrop-blur-xl bg-violet-100/20 border-2 border-violet-300 rounded-[24px] p-4 space-y-3">
       <input
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="w-full px-3 py-2 bg-white/80 backdrop-blur-sm border-2 border-violet-200 rounded-lg focus:border-violet-400 focus:outline-none font-semibold text-sm transition-all"
+        className="w-full px-3 py-2 bg-white/30 backdrop-blur-sm border-2 border-violet-200 rounded-[16px] focus:border-violet-400 focus:outline-none font-semibold text-sm transition-all"
         placeholder="Task title"
         autoFocus
       />
@@ -887,7 +889,7 @@ function TaskEditCard({
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as Task['priority'])}
-            className="w-full px-2 py-1.5 bg-white/80 border-2 border-violet-200 rounded-lg focus:border-violet-400 focus:outline-none text-xs transition-all"
+            className="w-full px-2 py-1.5 bg-white/30 border-2 border-violet-200 rounded-[16px] focus:border-violet-400 focus:outline-none text-xs transition-all"
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -901,7 +903,7 @@ function TaskEditCard({
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="w-full px-2 py-1.5 bg-white/80 border-2 border-violet-200 rounded-lg focus:border-violet-400 focus:outline-none text-xs transition-all"
+            className="w-full px-2 py-1.5 bg-white/30 border-2 border-violet-200 rounded-[16px] focus:border-violet-400 focus:outline-none text-xs transition-all"
           />
         </div>
       </div>
@@ -912,7 +914,7 @@ function TaskEditCard({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="w-full px-3 py-2 bg-white/80 border-2 border-violet-200 rounded-lg focus:border-violet-400 focus:outline-none text-xs resize-none transition-all"
+          className="w-full px-3 py-2 bg-white/30 border-2 border-violet-200 rounded-[16px] focus:border-violet-400 focus:outline-none text-xs resize-none transition-all"
           placeholder="Add details..."
         />
       </div>

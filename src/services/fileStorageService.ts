@@ -2,7 +2,7 @@ import { BaseDirectory, mkdir, readFile, writeFile, exists, remove } from '@taur
 import type { Attachment, AttachmentType } from '../types';
 
 export class FileStorageService {
-  private baseDir = 'taskerino/attachments';
+  private baseDir = 'attachments';
   private initialized = false;
 
   async initialize() {
@@ -26,9 +26,9 @@ export class FileStorageService {
 
   private async ensureDir(path: string) {
     try {
-      const pathExists = await exists(path, { baseDir: BaseDirectory.Home });
+      const pathExists = await exists(path, { baseDir: BaseDirectory.AppData });
       if (!pathExists) {
-        await mkdir(path, { baseDir: BaseDirectory.Home, recursive: true });
+        await mkdir(path, { baseDir: BaseDirectory.AppData, recursive: true });
       }
     } catch (error) {
       console.error(`Failed to create directory ${path}:`, error);
@@ -45,7 +45,7 @@ export class FileStorageService {
     const path = `${this.baseDir}/${subDir}/${fileName}`;
 
     try {
-      await writeFile(path, fileData, { baseDir: BaseDirectory.Home });
+      await writeFile(path, fileData, { baseDir: BaseDirectory.AppData });
       console.log(`✅ Saved attachment to ${path}`);
       return path;
     } catch (error) {
@@ -56,7 +56,7 @@ export class FileStorageService {
 
   async readAttachment(path: string): Promise<Uint8Array> {
     try {
-      return await readFile(path, { baseDir: BaseDirectory.Home });
+      return await readFile(path, { baseDir: BaseDirectory.AppData });
     } catch (error) {
       console.error('Failed to read attachment:', error);
       throw error;
@@ -65,9 +65,9 @@ export class FileStorageService {
 
   async deleteAttachment(path: string): Promise<void> {
     try {
-      const fileExists = await exists(path, { baseDir: BaseDirectory.Home });
+      const fileExists = await exists(path, { baseDir: BaseDirectory.AppData });
       if (fileExists) {
-        await remove(path, { baseDir: BaseDirectory.Home });
+        await remove(path, { baseDir: BaseDirectory.AppData });
         console.log(`✅ Deleted attachment at ${path}`);
       }
     } catch (error) {
@@ -78,7 +78,7 @@ export class FileStorageService {
 
   async attachmentExists(path: string): Promise<boolean> {
     try {
-      return await exists(path, { baseDir: BaseDirectory.Home });
+      return await exists(path, { baseDir: BaseDirectory.AppData });
     } catch (error) {
       return false;
     }

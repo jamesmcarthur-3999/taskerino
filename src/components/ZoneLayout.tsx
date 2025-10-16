@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useApp } from '../context/AppContext';
-import { CaptureZone } from './CaptureZone';
-import { TasksZone } from './TasksZone';
-import { LibraryZone } from './LibraryZone';
-import { AssistantZone } from './AssistantZone';
-import { ProfileZone } from './ProfileZone';
+import { useUI } from '../context/UIContext';
+import CaptureZone from './CaptureZone';
+import TasksZone from './TasksZone';
+import LibraryZone from './LibraryZone';
+import AssistantZone from './AssistantZone';
+import ProfileZone from './ProfileZone';
 import { SettingsModal } from './SettingsModal';
 import { CommandPalette } from './CommandPalette';
 import { TaskDetailSidebar } from './TaskDetailSidebar';
@@ -12,37 +12,37 @@ import { NoteDetailSidebar } from './NoteDetailSidebar';
 import { ChevronUp, ChevronDown, User } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-type Zone = 'assistant' | 'capture' | 'tasks' | 'library' | 'profile';
+type Zone = 'assistant' | 'capture' | 'tasks' | 'notes' | 'sessions' | 'profile';
 
 export function ZoneLayout() {
-  const { state, dispatch } = useApp();
+  const { state: uiState, dispatch: uiDispatch } = useUI();
   const [currentZone, setCurrentZone] = useState<Zone>('capture');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   const navigateToZone = useCallback((zone: Zone) => {
     setCurrentZone(zone);
-    dispatch({ type: 'SET_ZONE', payload: zone });
-  }, [dispatch]);
+    uiDispatch({ type: 'SET_ZONE', payload: zone });
+  }, [uiDispatch]);
 
   // Listen for zone changes from app state (e.g., "View Notes" button)
   useEffect(() => {
-    if (state.currentZone && state.currentZone !== currentZone) {
-      setCurrentZone(state.currentZone);
+    if (uiState.currentZone && uiState.currentZone !== currentZone) {
+      setCurrentZone(uiState.currentZone);
     }
-  }, [state.currentZone, currentZone]);
+  }, [uiState.currentZone, currentZone]);
 
   const handleNavClick = (direction: 'up' | 'down') => {
     if (direction === 'up') {
-      if (currentZone === 'profile') navigateToZone('library');
-      else if (currentZone === 'library') navigateToZone('tasks');
+      if (currentZone === 'profile') navigateToZone('notes');
+      else if (currentZone === 'notes') navigateToZone('tasks');
       else if (currentZone === 'tasks') navigateToZone('capture');
       else if (currentZone === 'capture') navigateToZone('assistant');
     } else {
       if (currentZone === 'assistant') navigateToZone('capture');
       else if (currentZone === 'capture') navigateToZone('tasks');
-      else if (currentZone === 'tasks') navigateToZone('library');
-      else if (currentZone === 'library') navigateToZone('profile');
+      else if (currentZone === 'tasks') navigateToZone('notes');
+      else if (currentZone === 'notes') navigateToZone('profile');
     }
   };
 
@@ -68,16 +68,16 @@ export function ZoneLayout() {
 
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        if (currentZone === 'profile') navigateToZone('library');
-        else if (currentZone === 'library') navigateToZone('tasks');
+        if (currentZone === 'profile') navigateToZone('notes');
+        else if (currentZone === 'notes') navigateToZone('tasks');
         else if (currentZone === 'tasks') navigateToZone('capture');
         else if (currentZone === 'capture') navigateToZone('assistant');
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         if (currentZone === 'assistant') navigateToZone('capture');
         else if (currentZone === 'capture') navigateToZone('tasks');
-        else if (currentZone === 'tasks') navigateToZone('library');
-        else if (currentZone === 'library') navigateToZone('profile');
+        else if (currentZone === 'tasks') navigateToZone('notes');
+        else if (currentZone === 'notes') navigateToZone('profile');
       }
     };
 
@@ -146,7 +146,7 @@ export function ZoneLayout() {
 
         <div
           className={`absolute inset-0 transition-all duration-500 ease-in-out ${
-            currentZone === 'library'
+            currentZone === 'notes'
               ? 'opacity-100 translate-y-0 pointer-events-auto'
               : 'opacity-0 translate-y-4 pointer-events-none'
           }`}
@@ -210,11 +210,11 @@ export function ZoneLayout() {
           aria-label="Go to Tasks"
         />
         <button
-          onClick={() => navigateToZone('library')}
+          onClick={() => navigateToZone('notes')}
           className={`w-2 h-2 rounded-full transition-all duration-200 hover:scale-125 ${
-            currentZone === 'library' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 scale-150' : 'bg-gray-300'
+            currentZone === 'notes' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 scale-150' : 'bg-gray-300'
           }`}
-          aria-label="Go to Library"
+          aria-label="Go to Notes"
         />
         <button
           onClick={() => navigateToZone('profile')}
@@ -251,12 +251,12 @@ export function ZoneLayout() {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      {/* Sidebar - renders based on state.sidebar */}
-      {state.sidebar.type === 'task' && state.sidebar.itemId && (
-        <TaskDetailSidebar taskId={state.sidebar.itemId} />
+      {/* Sidebar - renders based on uiState.sidebar */}
+      {uiState.sidebar.type === 'task' && uiState.sidebar.itemId && (
+        <TaskDetailSidebar taskId={uiState.sidebar.itemId} />
       )}
-      {state.sidebar.type === 'note' && state.sidebar.itemId && (
-        <NoteDetailSidebar noteId={state.sidebar.itemId} />
+      {uiState.sidebar.type === 'note' && uiState.sidebar.itemId && (
+        <NoteDetailSidebar noteId={uiState.sidebar.itemId} />
       )}
 
       {/* Settings Modal */}

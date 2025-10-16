@@ -102,14 +102,18 @@ export function RichTextEditor({
 
   // Update editor content when prop changes (for controlled component)
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content);
+    if (editor && editor.view && content !== editor.getHTML()) {
+      try {
+        editor.commands.setContent(content);
+      } catch (error) {
+        console.warn('Failed to set editor content:', error);
+      }
     }
   }, [content, editor]);
 
   // Handle Cmd+Enter to submit
   useEffect(() => {
-    if (!editor || !onSubmit) return;
+    if (!editor || !editor.view || !onSubmit) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -122,12 +126,16 @@ export function RichTextEditor({
 
     // Wait for editor to be fully initialized
     const checkAndAttach = () => {
-      const editorElement = editor.view?.dom;
-      if (editorElement) {
-        editorElement.addEventListener('keydown', handleKeyDown, true); // Use capture phase
-        return () => {
-          editorElement.removeEventListener('keydown', handleKeyDown, true);
-        };
+      try {
+        const editorElement = editor.view?.dom;
+        if (editorElement) {
+          editorElement.addEventListener('keydown', handleKeyDown, true); // Use capture phase
+          return () => {
+            editorElement.removeEventListener('keydown', handleKeyDown, true);
+          };
+        }
+      } catch (error) {
+        console.warn('Failed to attach keyboard handler:', error);
       }
       return undefined;
     };
@@ -172,21 +180,27 @@ export function RichTextEditor({
           {!minimal && (
             <>
               <button
+                type="button"
                 onClick={() => editor.chain().focus().toggleBold().run()}
                 className={`p-2 rounded hover:bg-gray-200 transition-colors ${
                   editor.isActive('bold') ? 'bg-gray-200 text-violet-600' : 'text-gray-600'
                 }`}
                 title="Bold (Cmd+B)"
+                aria-label="Toggle bold formatting"
+                aria-pressed={editor.isActive('bold')}
               >
                 <Bold className="w-4 h-4" />
               </button>
 
               <button
+                type="button"
                 onClick={() => editor.chain().focus().toggleItalic().run()}
                 className={`p-2 rounded hover:bg-gray-200 transition-colors ${
                   editor.isActive('italic') ? 'bg-gray-200 text-violet-600' : 'text-gray-600'
                 }`}
                 title="Italic (Cmd+I)"
+                aria-label="Toggle italic formatting"
+                aria-pressed={editor.isActive('italic')}
               >
                 <Italic className="w-4 h-4" />
               </button>

@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useUI } from '../context/UIContext';
 
 export function useKeyboardShortcuts() {
-  const { dispatch } = useApp();
+  const { dispatch } = useUI();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -27,7 +27,7 @@ export function useKeyboardShortcuts() {
 
           case '3':
             e.preventDefault();
-            dispatch({ type: 'SET_ACTIVE_TAB', payload: 'library' });
+            dispatch({ type: 'SET_ACTIVE_TAB', payload: 'notes' });
             break;
 
           case '4':
@@ -38,6 +38,11 @@ export function useKeyboardShortcuts() {
           case ',':
             e.preventDefault();
             dispatch({ type: 'SET_ACTIVE_TAB', payload: 'profile' });
+            break;
+
+          case 'j':
+            e.preventDefault();
+            dispatch({ type: 'TOGGLE_NED_OVERLAY' });
             break;
 
           case 'k':

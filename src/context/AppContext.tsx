@@ -1,9 +1,31 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useState, useRef } from 'react';
 import type { ReactNode } from 'react';
-import type { Topic, Company, Contact, Note, Task, AppState, TabType, Notification, ProcessingJob, SearchHistoryItem, ManualNoteData, ManualTopicData, ManualTaskData, NedMessage, NedMessageContent } from '../types';
+import type { Topic, Company, Contact, Note, Task, AppState, TabType, Notification, ProcessingJob, SearchHistoryItem, ManualNoteData, ManualTopicData, ManualTaskData, NedMessage, NedMessageContent, Session, SessionScreenshot, SessionAudioSegment, SessionContextItem } from '../types';
 import { generateId } from '../utils/helpers';
+import { needsMigration, migrateFromLocalStorage, cleanupOldLocalStorage } from '../services/storage/migration';
+import { getStorage } from '../services/storage';
+import { MigrationDialog } from '../components/MigrationDialog';
+import { audioConcatenationService } from '../services/audioConcatenationService';
+import { keyMomentsDetectionService } from '../services/keyMomentsDetectionService';
 
 type AppAction =
+  // Session actions
+  | { type: 'START_SESSION'; payload: Omit<Session, 'id' | 'startTime' | 'screenshots' | 'extractedTaskIds' | 'extractedNoteIds'> }
+  | { type: 'END_SESSION'; payload: string }
+  | { type: 'PAUSE_SESSION'; payload: string }
+  | { type: 'RESUME_SESSION'; payload: string }
+  | { type: 'UPDATE_SESSION'; payload: Session }
+  | { type: 'DELETE_SESSION'; payload: string }
+  | { type: 'ADD_SESSION_SCREENSHOT'; payload: { sessionId: string; screenshot: SessionScreenshot } }
+  | { type: 'ADD_SESSION_AUDIO_SEGMENT'; payload: { sessionId: string; audioSegment: SessionAudioSegment } }
+  | { type: 'DELETE_AUDIO_SEGMENT_FILE'; payload: { sessionId: string; segmentId: string } }
+  | { type: 'UPDATE_SCREENSHOT_ANALYSIS'; payload: { screenshotId: string; analysis: SessionScreenshot['aiAnalysis']; analysisStatus: SessionScreenshot['analysisStatus']; analysisError?: string } }
+  | { type: 'ADD_SCREENSHOT_COMMENT'; payload: { screenshotId: string; comment: string } }
+  | { type: 'TOGGLE_SCREENSHOT_FLAG'; payload: string }
+  | { type: 'SET_ACTIVE_SESSION'; payload: string | undefined }
+  | { type: 'ADD_EXTRACTED_TASK_TO_SESSION'; payload: { sessionId: string; taskId: string } }
+  | { type: 'ADD_EXTRACTED_NOTE_TO_SESSION'; payload: { sessionId: string; noteId: string } }
+  | { type: 'ADD_SESSION_CONTEXT_ITEM'; payload: { sessionId: string; contextItem: SessionContextItem } }
   // Company actions
   | { type: 'ADD_COMPANY'; payload: Company }
   | { type: 'UPDATE_COMPANY'; payload: Company }
@@ -73,12 +95,23 @@ type AppAction =
   | { type: 'TOGGLE_QUICK_CAPTURE' }
   | { type: 'TOGGLE_COMMAND_PALETTE' }
 
+  // UI State - Ned Overlay
+  | { type: 'TOGGLE_NED_OVERLAY' }
+  | { type: 'OPEN_NED_OVERLAY' }
+  | { type: 'CLOSE_NED_OVERLAY' }
+
+  // UI State - Review
+  | { type: 'SET_PENDING_REVIEW_JOB'; payload: string | undefined }
+
   // UI State - Onboarding
   | { type: 'COMPLETE_ONBOARDING' }
   | { type: 'RESET_ONBOARDING' }
   | { type: 'DISMISS_TOOLTIP'; payload: string }
   | { type: 'MARK_FEATURE_INTRODUCED'; payload: keyof AppState['ui']['onboarding']['featureIntroductions'] }
   | { type: 'INCREMENT_ONBOARDING_STAT'; payload: keyof AppState['ui']['onboarding']['stats'] }
+  | { type: 'SHOW_FEATURE_TOOLTIP'; payload: string }
+  | { type: 'INCREMENT_TOOLTIP_STAT'; payload: 'shown' | 'dismissed' }
+  | { type: 'COMPLETE_FIRST_CAPTURE' }
 
   // Search History
   | { type: 'ADD_SEARCH_HISTORY'; payload: Omit<SearchHistoryItem, 'id' | 'timestamp'> }
@@ -164,6 +197,7 @@ const defaultPreferences: AppState['ui']['preferences'] = {
   dateFormat: '12h',
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   weekStartsOn: 'sunday',
+  zoomLevel: 100,
 };
 
 const defaultOnboardingState: AppState['ui']['onboarding'] = {
@@ -177,12 +211,25 @@ const defaultOnboardingState: AppState['ui']['onboarding'] = {
     filters: false,
     inlineEdit: false,
     cmdK: false,
+    backgroundProcessing: false,
+    nedAssistant: false,
+    referencePanel: false,
+    sessions: false,
+    taskDetailSidebar: false,
+    taskViews: false,
   },
   stats: {
     captureCount: 0,
     taskCount: 0,
     sessionCount: 0,
+    noteCount: 0,
+    nedQueryCount: 0,
+    tooltipsShown: 0,
+    tooltipsDismissed: 0,
+    lastActiveDate: new Date().toISOString(),
   },
+  firstCaptureCompleted: false,
+  interactiveTutorialShown: false,
 };
 
 const defaultNedSettings: AppState['nedSettings'] = {
@@ -213,6 +260,9 @@ const defaultUIState: AppState['ui'] = {
   selectedTasks: [],
   showCommandPalette: false,
   onboarding: defaultOnboardingState,
+  nedOverlay: {
+    isOpen: false,
+  },
 };
 
 const initialState: AppState = {
@@ -221,6 +271,8 @@ const initialState: AppState = {
   topics: [],
   notes: [],
   tasks: [],
+  sessions: [],
+  activeSessionId: undefined,
   ui: defaultUIState,
   currentZone: 'capture',
   searchHistory: [],
@@ -243,6 +295,277 @@ const initialState: AppState = {
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    // Session actions
+    case 'START_SESSION': {
+      const newSession: Session = {
+        ...action.payload,
+        id: generateId(),
+        startTime: new Date().toISOString(),
+        screenshots: [],
+        extractedTaskIds: [],
+        extractedNoteIds: [],
+        status: 'active',
+      };
+      return {
+        ...state,
+        sessions: [...state.sessions, newSession],
+        activeSessionId: newSession.id,
+      };
+    }
+
+    case 'END_SESSION': {
+      const sessionId = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session => {
+          if (session.id !== sessionId) return session;
+
+          const endTime = new Date().toISOString();
+          let totalDuration: number | undefined;
+
+          if (session.startTime) {
+            const startMs = new Date(session.startTime).getTime();
+            const endMs = new Date(endTime).getTime();
+            let totalPausedMs = session.totalPausedTime || 0;
+
+            // If currently paused, add current pause duration
+            if (session.status === 'paused' && session.pausedAt) {
+              const currentPauseDuration = endMs - new Date(session.pausedAt).getTime();
+              totalPausedMs += currentPauseDuration;
+            }
+
+            // Calculate duration: (end - start - total paused time) in minutes
+            const activeMs = endMs - startMs - totalPausedMs;
+            totalDuration = Math.floor(activeMs / 60000);
+          }
+
+          return {
+            ...session,
+            status: 'completed',
+            endTime,
+            totalDuration,
+            pausedAt: undefined, // Clear pause timestamp
+          };
+        }),
+        activeSessionId: state.activeSessionId === sessionId ? undefined : state.activeSessionId,
+      };
+    }
+
+    case 'PAUSE_SESSION': {
+      const sessionId = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session =>
+          session.id === sessionId
+            ? {
+                ...session,
+                status: 'paused',
+                pausedAt: new Date().toISOString(),
+              }
+            : session
+        ),
+      };
+    }
+
+    case 'RESUME_SESSION': {
+      const sessionId = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session => {
+          if (session.id !== sessionId) return session;
+
+          // Calculate pause duration if session was paused
+          let additionalPausedTime = 0;
+          if (session.pausedAt) {
+            const pauseStart = new Date(session.pausedAt).getTime();
+            const pauseEnd = new Date().getTime();
+            additionalPausedTime = pauseEnd - pauseStart;
+          }
+
+          return {
+            ...session,
+            status: 'active',
+            pausedAt: undefined, // Clear pause timestamp
+            totalPausedTime: (session.totalPausedTime || 0) + additionalPausedTime,
+          };
+        }),
+        activeSessionId: sessionId,
+      };
+    }
+
+    case 'UPDATE_SESSION': {
+      return {
+        ...state,
+        sessions: state.sessions.map(session =>
+          session.id === action.payload.id ? { ...session, ...action.payload } : session
+        ),
+      };
+    }
+
+    case 'DELETE_SESSION': {
+      // Clear session-specific caches when deleting a session
+      audioConcatenationService.clearCache(action.payload);
+      keyMomentsDetectionService.clearCache(action.payload);
+
+      return {
+        ...state,
+        sessions: state.sessions.filter(session => session.id !== action.payload),
+        activeSessionId: state.activeSessionId === action.payload ? undefined : state.activeSessionId,
+      };
+    }
+
+    case 'ADD_SESSION_SCREENSHOT': {
+      const { sessionId, screenshot } = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session =>
+          session.id === sessionId
+            ? {
+                ...session,
+                screenshots: [...session.screenshots, screenshot],
+                lastScreenshotTime: screenshot.timestamp,
+              }
+            : session
+        ),
+      };
+    }
+
+    case 'ADD_SESSION_AUDIO_SEGMENT': {
+      const { sessionId, audioSegment } = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session =>
+          session.id === sessionId
+            ? {
+                ...session,
+                audioSegments: [...(session.audioSegments || []), audioSegment],
+              }
+            : session
+        ),
+      };
+    }
+
+    case 'DELETE_AUDIO_SEGMENT_FILE': {
+      const { sessionId, segmentId } = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session =>
+          session.id === sessionId
+            ? {
+                ...session,
+                audioSegments: (session.audioSegments || []).map(segment =>
+                  segment.id === segmentId
+                    ? { ...segment, filePath: undefined }
+                    : segment
+                ),
+              }
+            : session
+        ),
+      };
+    }
+
+    case 'UPDATE_SCREENSHOT_ANALYSIS': {
+      const { screenshotId, analysis, analysisStatus, analysisError } = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session => ({
+          ...session,
+          screenshots: (session.screenshots || []).map(screenshot =>
+            screenshot.id === screenshotId
+              ? {
+                  ...screenshot,
+                  aiAnalysis: analysis,
+                  analysisStatus,
+                  analysisError,
+                }
+              : screenshot
+          ),
+        })),
+      };
+    }
+
+    case 'ADD_SCREENSHOT_COMMENT': {
+      const { screenshotId, comment } = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session => ({
+          ...session,
+          screenshots: (session.screenshots || []).map(screenshot =>
+            screenshot.id === screenshotId
+              ? { ...screenshot, userComment: comment }
+              : screenshot
+          ),
+        })),
+      };
+    }
+
+    case 'TOGGLE_SCREENSHOT_FLAG': {
+      const screenshotId = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session => ({
+          ...session,
+          screenshots: (session.screenshots || []).map(screenshot =>
+            screenshot.id === screenshotId
+              ? { ...screenshot, flagged: !screenshot.flagged }
+              : screenshot
+          ),
+        })),
+      };
+    }
+
+    case 'SET_ACTIVE_SESSION': {
+      return {
+        ...state,
+        activeSessionId: action.payload,
+      };
+    }
+
+    case 'ADD_EXTRACTED_TASK_TO_SESSION': {
+      const { sessionId, taskId } = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session =>
+          session.id === sessionId
+            ? {
+                ...session,
+                extractedTaskIds: [...session.extractedTaskIds, taskId],
+              }
+            : session
+        ),
+      };
+    }
+
+    case 'ADD_EXTRACTED_NOTE_TO_SESSION': {
+      const { sessionId, noteId } = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session =>
+          session.id === sessionId
+            ? {
+                ...session,
+                extractedNoteIds: [...session.extractedNoteIds, noteId],
+              }
+            : session
+        ),
+      };
+    }
+
+    case 'ADD_SESSION_CONTEXT_ITEM': {
+      const { sessionId, contextItem } = action.payload;
+      return {
+        ...state,
+        sessions: state.sessions.map(session =>
+          session.id === sessionId
+            ? {
+                ...session,
+                contextItems: [...(session.contextItems || []), contextItem],
+              }
+            : session
+        ),
+      };
+    }
+
     // Company actions
     case 'ADD_COMPANY':
       return { ...state, companies: [...state.companies, action.payload] };
@@ -606,7 +929,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
       // Create entity if needed
       let topicId = noteData.topicId;
-      let updatedState = { ...state };
+      const updatedState = { ...state };
 
       if (!topicId && noteData.newTopicName) {
         const newId = generateId();
@@ -958,6 +1281,47 @@ function appReducer(state: AppState, action: AppAction): AppState {
         ui: { ...state.ui, showCommandPalette: !state.ui.showCommandPalette },
       };
 
+    // UI State - Ned Overlay
+    case 'TOGGLE_NED_OVERLAY':
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          nedOverlay: {
+            isOpen: !state.ui.nedOverlay.isOpen,
+          },
+        },
+      };
+
+    case 'OPEN_NED_OVERLAY':
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          nedOverlay: {
+            isOpen: true,
+          },
+        },
+      };
+
+    case 'CLOSE_NED_OVERLAY':
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          nedOverlay: {
+            isOpen: false,
+          },
+        },
+      };
+
+    // UI State - Review
+    case 'SET_PENDING_REVIEW_JOB':
+      return {
+        ...state,
+        ui: { ...state.ui, pendingReviewJobId: action.payload },
+      };
+
     // UI State - Onboarding
     case 'COMPLETE_ONBOARDING':
       return {
@@ -1012,6 +1376,49 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'INCREMENT_ONBOARDING_STAT': {
       const statKey = action.payload;
+      const currentValue = state.ui.onboarding.stats[statKey];
+
+      // Only increment if the value is a number (not lastActiveDate which is a string)
+      if (typeof currentValue === 'number') {
+        return {
+          ...state,
+          ui: {
+            ...state.ui,
+            onboarding: {
+              ...state.ui.onboarding,
+              stats: {
+                ...state.ui.onboarding.stats,
+                [statKey]: currentValue + 1,
+              },
+            },
+          },
+        };
+      }
+
+      // If it's not a number, return state unchanged
+      return state;
+    }
+
+    case 'SHOW_FEATURE_TOOLTIP': {
+      const tooltipId = action.payload;
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          onboarding: {
+            ...state.ui.onboarding,
+            stats: {
+              ...state.ui.onboarding.stats,
+              tooltipsShown: state.ui.onboarding.stats.tooltipsShown + 1,
+            },
+          },
+        },
+      };
+    }
+
+    case 'INCREMENT_TOOLTIP_STAT': {
+      const statType = action.payload;
+      const statKey = statType === 'shown' ? 'tooltipsShown' : 'tooltipsDismissed';
       return {
         ...state,
         ui: {
@@ -1026,6 +1433,18 @@ function appReducer(state: AppState, action: AppAction): AppState {
         },
       };
     }
+
+    case 'COMPLETE_FIRST_CAPTURE':
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          onboarding: {
+            ...state.ui.onboarding,
+            firstCaptureCompleted: true,
+          },
+        },
+      };
 
     // Search History
     case 'ADD_SEARCH_HISTORY': {
@@ -1245,46 +1664,109 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, initialState);
+  const [state, baseDispatch] = useReducer(appReducer, initialState);
   const [hasLoaded, setHasLoaded] = React.useState(false);
+  const [showMigrationDialog, setShowMigrationDialog] = React.useState(false);
+  const [migrationError, setMigrationError] = React.useState<Error | null>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const stateRef = useRef(state);
+
+  // Keep stateRef up to date
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  // Critical actions that need immediate save
+  // CRITICAL: Screenshots and audio must be saved immediately to prevent data loss
+  const CRITICAL_ACTIONS = new Set([
+    'END_SESSION',
+    'DELETE_SESSION',
+    'START_SESSION',
+    'UPDATE_SESSION',
+    'ADD_SESSION_SCREENSHOT',      // CRITICAL: Save screenshots immediately
+    'ADD_SESSION_AUDIO_SEGMENT',    // CRITICAL: Save audio segments immediately
+    'UPDATE_SCREENSHOT_ANALYSIS',   // CRITICAL: Save AI analysis immediately
+    'ADD_SESSION_CONTEXT_ITEM',     // CRITICAL: Save manual notes immediately
+  ]);
 
   /**
-   * STORAGE STRATEGY
+   * Custom dispatch wrapper that immediately saves for critical actions
+   */
+  const dispatch = React.useCallback((action: AppAction) => {
+    baseDispatch(action);
+
+    // If critical action, save immediately (after state update)
+    if (CRITICAL_ACTIONS.has(action.type)) {
+      // Use queueMicrotask + requestAnimationFrame to ensure React finishes all state updates
+      queueMicrotask(async () => {
+        // Wait for React to flush all pending updates
+        await new Promise(resolve => requestAnimationFrame(resolve));
+
+        console.log(`🔴 Critical action ${action.type} - saving immediately`);
+        try {
+          const storage = await getStorage();
+          await storage.save('sessions', stateRef.current.sessions);
+          await storage.save('settings', {
+            aiSettings: stateRef.current.aiSettings,
+            learningSettings: stateRef.current.learningSettings,
+            userProfile: stateRef.current.userProfile,
+            learnings: stateRef.current.learnings,
+            searchHistory: stateRef.current.searchHistory,
+            activeSessionId: stateRef.current.activeSessionId,
+            nedSettings: { ...stateRef.current.nedSettings, sessionPermissions: [] },
+            ui: {
+              preferences: stateRef.current.ui.preferences,
+              pinnedNotes: stateRef.current.ui.pinnedNotes,
+              onboarding: stateRef.current.ui.onboarding,
+            },
+          });
+          console.log('✅ Critical data saved immediately');
+        } catch (error) {
+          console.error('❌ Failed to save critical data:', error);
+          // Fallback to localStorage
+          try {
+            const dataToSave = {
+              sessions: stateRef.current.sessions,
+              activeSessionId: stateRef.current.activeSessionId,
+              timestamp: Date.now(),
+            };
+            localStorage.setItem('taskerino-critical-save', JSON.stringify(dataToSave));
+            console.warn('⚠️ Critical data saved to localStorage fallback');
+          } catch (fallbackError) {
+            console.error('❌ Fallback save also failed:', fallbackError);
+          }
+        }
+      });
+    }
+  }, []);
+
+  /**
+   * STORAGE STRATEGY - UPDATED
    *
-   * Current: localStorage (browser-native, ~5-10MB, client-side only)
-   * - Pros: Zero setup, no CORS, works offline, completely private
-   * - Cons: Single device, limited storage, can be cleared by browser
+   * New system:
+   * - Desktop (Tauri): File system storage (unlimited)
+   * - Web: IndexedDB storage (100s of MB)
+   * - localStorage: Only used during migration transition
    *
-   * Future considerations:
-   * 1. IndexedDB: For larger storage (100s of MB) without CORS issues
-   * 2. Cloud sync: Optional multi-device sync via Supabase/Firebase
-   * 3. Hybrid: localStorage + periodic cloud backup
+   * Migration:
+   * - Automatically migrates from old localStorage format
+   * - Keeps backup for 7 days
+   * - Verifies migration success before marking complete
    *
-   * Current approach is ideal for:
-   * - Personal use on a single device
-   * - Privacy-first (all data stays local)
-   * - Offline-first operation
-   *
-   * Export/Import JSON (already implemented in Settings) provides manual backup.
+   * Benefits:
+   * - Unlimited storage for desktop app
+   * - Much larger storage for web (IndexedDB vs localStorage)
+   * - Automatic backups
+   * - Data integrity verification
    */
 
   /**
    * MIGRATION: Convert old topics with type field to new Company/Contact/Topic structure
-   *
-   * Old structure: Topic had a 'type' field ('company', 'person', 'other')
-   * New structure:
-   *   - Company (for 'company' type topics)
-   *   - Contact (for 'person' type topics)
-   *   - Topic (for 'other' type topics, no type field)
-   *
-   * This function also updates notes to use the new multiple relationship arrays
    */
   const migrateTopicsToEntities = (state: any): any => {
-    // Check if we need to migrate (look for topics with type field)
     const topicsWithType = state.topics?.filter((t: any) => t.type) || [];
 
     if (topicsWithType.length === 0) {
-      // No migration needed
       return state;
     }
 
@@ -1297,10 +1779,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const topics: Topic[] = [];
     const idMappings = new Map<string, { newId: string; entityType: 'company' | 'contact' | 'topic' }>();
 
-    // Convert each old topic to appropriate entity type
     topicsWithType.forEach((oldTopic: any) => {
       const baseEntity = {
-        id: oldTopic.id, // Keep same ID for easier migration
+        id: oldTopic.id,
         name: oldTopic.name,
         createdAt: oldTopic.createdAt,
         lastUpdated: oldTopic.lastUpdated,
@@ -1308,41 +1789,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
 
       if (oldTopic.type === 'company') {
-        companies.push({
-          ...baseEntity,
-          profile: {},
-        });
+        companies.push({ ...baseEntity, profile: {} });
         idMappings.set(oldTopic.id, { newId: oldTopic.id, entityType: 'company' });
       } else if (oldTopic.type === 'person') {
-        contacts.push({
-          ...baseEntity,
-          profile: {},
-        });
+        contacts.push({ ...baseEntity, profile: {} });
         idMappings.set(oldTopic.id, { newId: oldTopic.id, entityType: 'contact' });
       } else {
-        // type === 'other' or any other value
         topics.push(baseEntity);
         idMappings.set(oldTopic.id, { newId: oldTopic.id, entityType: 'topic' });
       }
     });
 
-    // Update all notes to use new relationship arrays
     const migratedNotes = (state.notes || []).map((note: any) => {
       const companyIds: string[] = [];
       const contactIds: string[] = [];
       const topicIds: string[] = [];
 
-      // Convert legacy topicId to appropriate array
       if (note.topicId) {
         const mapping = idMappings.get(note.topicId);
         if (mapping) {
-          if (mapping.entityType === 'company') {
-            companyIds.push(mapping.newId);
-          } else if (mapping.entityType === 'contact') {
-            contactIds.push(mapping.newId);
-          } else {
-            topicIds.push(mapping.newId);
-          }
+          if (mapping.entityType === 'company') companyIds.push(mapping.newId);
+          else if (mapping.entityType === 'contact') contactIds.push(mapping.newId);
+          else topicIds.push(mapping.newId);
         }
       }
 
@@ -1351,7 +1819,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         companyIds: companyIds.length > 0 ? companyIds : undefined,
         contactIds: contactIds.length > 0 ? contactIds : undefined,
         topicIds: topicIds.length > 0 ? topicIds : undefined,
-        // Keep legacy topicId for backwards compatibility during transition
         topicId: note.topicId,
       };
     });
@@ -1363,96 +1830,336 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notesUpdated: migratedNotes.length,
     });
 
-    return {
-      ...state,
-      companies,
-      contacts,
-      topics,
-      notes: migratedNotes,
-    };
+    return { ...state, companies, contacts, topics, notes: migratedNotes };
   };
 
-  // Load state from localStorage on mount
+  /**
+   * Initialize storage and check for migration
+   */
   useEffect(() => {
-    const savedState = localStorage.getItem('taskerino-v3-state');
-    if (savedState) {
+    async function initializeApp() {
       try {
-        let parsed = JSON.parse(savedState);
-        // Ensure currentZone is valid (defaults to 'capture' if invalid)
-        const validZones = ['assistant', 'capture', 'tasks', 'library', 'profile'];
-        if (parsed.currentZone && !validZones.includes(parsed.currentZone)) {
-          parsed.currentZone = 'capture';
-        }
-        // Ensure learnings exists (backwards compatibility)
-        if (!parsed.learnings) {
-          parsed.learnings = defaultLearnings;
-        }
-        // Ensure learningSettings exists (backwards compatibility)
-        if (!parsed.learningSettings) {
-          parsed.learningSettings = defaultLearningSettings;
-        }
-        // Ensure nedSettings exists (backwards compatibility)
-        if (!parsed.nedSettings) {
-          parsed.nedSettings = defaultNedSettings;
-        }
-        // Ensure UI state exists (backwards compatibility)
-        if (!parsed.ui) {
-          parsed.ui = defaultUIState;
-        } else {
-          // Merge with defaults to ensure all properties exist
-          parsed.ui = {
-            ...defaultUIState,
-            ...parsed.ui,
-            preferences: {
-              ...defaultPreferences,
-              ...(parsed.ui.preferences || {}),
-            },
-            backgroundProcessing: {
-              ...defaultUIState.backgroundProcessing,
-              ...(parsed.ui.backgroundProcessing || {}),
-            },
-            onboarding: {
-              ...defaultOnboardingState,
-              ...(parsed.ui.onboarding || {}),
-            },
-          };
-        }
-        // Ensure searchHistory exists
-        if (!parsed.searchHistory) {
-          parsed.searchHistory = [];
-        }
-        // Ensure companies and contacts exist (backwards compatibility)
-        if (!parsed.companies) {
-          parsed.companies = [];
-        }
-        if (!parsed.contacts) {
-          parsed.contacts = [];
-        }
+        console.log('🔄 Initializing app...');
 
-        // Run migration if needed
-        parsed = migrateTopicsToEntities(parsed);
+        // Try new storage system first, but always fall back to localStorage
+        try {
+          const shouldMigrate = await needsMigration();
 
-        dispatch({ type: 'LOAD_STATE', payload: parsed });
-        console.log('✅ Loaded state from localStorage:', {
-          companies: parsed.companies?.length || 0,
-          contacts: parsed.contacts?.length || 0,
-          topics: parsed.topics?.length || 0,
-          notes: parsed.notes?.length || 0,
-          tasks: parsed.tasks?.length || 0,
-          learnings: parsed.learnings?.learnings?.length || 0,
-        });
+          if (shouldMigrate) {
+            console.log('🔄 Migration needed from localStorage');
+            setShowMigrationDialog(true);
+            return;
+          }
+
+          // Load from new storage system
+          await loadFromStorage();
+
+          // Cleanup old localStorage data if migration was completed >7 days ago
+          cleanupOldLocalStorage();
+        } catch (storageError) {
+          console.warn('⚠️  New storage system not available, using localStorage:', storageError);
+          await loadFromLocalStorage();
+        }
       } catch (error) {
-        console.error('❌ Failed to load saved state:', error);
+        console.error('❌ Failed to initialize app:', error);
+        // Last resort: start fresh
+        setHasLoaded(true);
       }
-    } else {
-      console.log('ℹ️  No saved state found, starting fresh');
     }
-    setHasLoaded(true);
+
+    initializeApp();
   }, []);
 
-  // Save state to localStorage whenever it changes (but only after initial load)
+  /**
+   * Save on window/app close - critical safety net
+   */
   useEffect(() => {
-    if (!hasLoaded) return; // Don't save until we've loaded existing data
+    const handleBeforeUnload = async () => {
+      console.log('🛑 App closing - forcing final save');
+      try {
+        const storage = await getStorage();
+        await storage.save('sessions', stateRef.current.sessions);
+        await storage.save('settings', {
+          aiSettings: stateRef.current.aiSettings,
+          learningSettings: stateRef.current.learningSettings,
+          userProfile: stateRef.current.userProfile,
+          learnings: stateRef.current.learnings,
+          searchHistory: stateRef.current.searchHistory,
+          activeSessionId: stateRef.current.activeSessionId,
+          nedSettings: { ...stateRef.current.nedSettings, sessionPermissions: [] },
+          ui: {
+            preferences: stateRef.current.ui.preferences,
+            pinnedNotes: stateRef.current.ui.pinnedNotes,
+            onboarding: stateRef.current.ui.onboarding,
+          },
+        });
+        console.log('✅ Final save complete');
+      } catch (error) {
+        console.error('❌ Failed final save:', error);
+        // Last ditch attempt: localStorage
+        try {
+          const dataToSave = {
+            sessions: stateRef.current.sessions,
+            activeSessionId: stateRef.current.activeSessionId,
+          };
+          localStorage.setItem('taskerino-emergency-save', JSON.stringify(dataToSave));
+        } catch {}
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  /**
+   * Periodic auto-save for active sessions - limits data loss to 30 seconds in case of crash
+   */
+  useEffect(() => {
+    if (!hasLoaded || !state.activeSessionId) return;
+
+    console.log('⏰ Starting periodic auto-save for active session');
+
+    const interval = setInterval(async () => {
+      console.log('⏰ Periodic auto-save for active session');
+      try {
+        const storage = await getStorage();
+        await storage.save('sessions', stateRef.current.sessions);
+        console.log('✅ Periodic auto-save complete');
+      } catch (error) {
+        console.error('❌ Periodic auto-save failed:', error);
+      }
+    }, 30000); // Every 30 seconds
+
+    return () => {
+      console.log('⏰ Stopping periodic auto-save');
+      clearInterval(interval);
+    };
+  }, [hasLoaded, state.activeSessionId]);
+
+  /**
+   * Load state from new storage system
+   */
+  async function loadFromStorage() {
+    try {
+      const storage = await getStorage();
+
+      const [companies, contacts, topics, notes, tasks, sessions, settings] = await Promise.all([
+        storage.load('companies'),
+        storage.load('contacts'),
+        storage.load('topics'),
+        storage.load('notes'),
+        storage.load('tasks'),
+        storage.load('sessions'),
+        storage.load('settings')
+      ]);
+
+      const loadedState: Partial<AppState> = {
+        companies: Array.isArray(companies) ? companies : [],
+        contacts: Array.isArray(contacts) ? contacts : [],
+        topics: Array.isArray(topics) ? topics : [],
+        notes: Array.isArray(notes) ? notes : [],
+        tasks: Array.isArray(tasks) ? tasks : [],
+        sessions: Array.isArray(sessions) ? sessions : [],
+      };
+
+      if (settings && typeof settings === 'object') {
+        const settingsObj = settings as any;
+        loadedState.aiSettings = settingsObj.aiSettings || defaultAISettings;
+        loadedState.learningSettings = settingsObj.learningSettings || defaultLearningSettings;
+        loadedState.userProfile = settingsObj.userProfile || defaultUserProfile;
+        loadedState.learnings = settingsObj.learnings || defaultLearnings;
+        loadedState.nedSettings = settingsObj.nedSettings || defaultNedSettings;
+        loadedState.searchHistory = Array.isArray(settingsObj.searchHistory) ? settingsObj.searchHistory : [];
+        loadedState.activeSessionId = settingsObj.activeSessionId;
+
+        if (settingsObj.ui && typeof settingsObj.ui === 'object') {
+          loadedState.ui = {
+            ...defaultUIState,
+            ...settingsObj.ui,
+            preferences: { ...defaultPreferences, ...(settingsObj.ui.preferences || {}) },
+            onboarding: { ...defaultOnboardingState, ...(settingsObj.ui.onboarding || {}) },
+          };
+        }
+      }
+
+      const migratedState = migrateTopicsToEntities(loadedState);
+      dispatch({ type: 'LOAD_STATE', payload: migratedState });
+
+      console.log('✅ Loaded state from new storage system:', {
+        companies: loadedState.companies?.length || 0,
+        contacts: loadedState.contacts?.length || 0,
+        topics: loadedState.topics?.length || 0,
+        notes: loadedState.notes?.length || 0,
+        tasks: loadedState.tasks?.length || 0,
+        sessions: loadedState.sessions?.length || 0,
+      });
+
+      setHasLoaded(true);
+    } catch (error) {
+      console.error('❌ Failed to load from storage:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fallback: Load from localStorage (legacy)
+   */
+  async function loadFromLocalStorage() {
+    const savedState = localStorage.getItem('taskerino-v3-state');
+
+    if (!savedState) {
+      console.log('ℹ️  No saved state found, starting fresh');
+      setHasLoaded(true);
+      return;
+    }
+
+    try {
+      let parsed = JSON.parse(savedState);
+
+      if (parsed.sessions && JSON.stringify(parsed.sessions).length > 5 * 1024 * 1024) {
+        console.warn('⚠️  Sessions data is very large (>5MB), clearing to prevent errors');
+        parsed.sessions = [];
+        parsed.activeSessionId = undefined;
+      }
+
+      const validZones = ['assistant', 'capture', 'tasks', 'notes', 'profile'];
+      if (parsed.currentZone && !validZones.includes(parsed.currentZone)) {
+        parsed.currentZone = 'capture';
+      }
+
+      parsed.learnings = parsed.learnings || defaultLearnings;
+      parsed.learningSettings = parsed.learningSettings || defaultLearningSettings;
+      parsed.nedSettings = parsed.nedSettings || defaultNedSettings;
+      parsed.searchHistory = parsed.searchHistory || [];
+      parsed.companies = parsed.companies || [];
+      parsed.contacts = parsed.contacts || [];
+      parsed.sessions = parsed.sessions || [];
+      parsed.topics = parsed.topics || [];
+
+      if (!parsed.ui) {
+        parsed.ui = defaultUIState;
+      } else {
+        parsed.ui = {
+          ...defaultUIState,
+          ...parsed.ui,
+          preferences: { ...defaultPreferences, ...(parsed.ui.preferences || {}) },
+          backgroundProcessing: { ...defaultUIState.backgroundProcessing, ...(parsed.ui.backgroundProcessing || {}) },
+          onboarding: { ...defaultOnboardingState, ...(parsed.ui.onboarding || {}) },
+        };
+      }
+
+      parsed = migrateTopicsToEntities(parsed);
+      dispatch({ type: 'LOAD_STATE', payload: parsed });
+
+      console.log('✅ Loaded state from localStorage (fallback):', {
+        companies: parsed.companies?.length || 0,
+        contacts: parsed.contacts?.length || 0,
+        topics: parsed.topics?.length || 0,
+        notes: parsed.notes?.length || 0,
+        tasks: parsed.tasks?.length || 0,
+        sessions: parsed.sessions?.length || 0,
+      });
+
+      setHasLoaded(true);
+    } catch (error) {
+      console.error('❌ Failed to load saved state:', error);
+      console.warn('⚠️  Clearing corrupted localStorage and starting fresh');
+      localStorage.removeItem('taskerino-v3-state');
+      setHasLoaded(true);
+    }
+  }
+
+  /**
+   * Save state to new storage system (debounced)
+   */
+  useEffect(() => {
+    if (!hasLoaded) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await saveToStorage();
+      } catch (error) {
+        console.error('❌ Failed to save state:', error);
+        try {
+          saveToLocalStorage();
+        } catch (fallbackError) {
+          console.error('❌ Fallback save also failed:', fallbackError);
+        }
+      }
+    }, 5000); // Increased from 2s to 5s for better performance
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [hasLoaded, state.companies, state.contacts, state.topics, state.notes, state.tasks, state.sessions, state.activeSessionId, state.aiSettings, state.learningSettings, state.userProfile, state.learnings, state.searchHistory, state.nedSettings, state.ui.preferences, state.ui.pinnedNotes, state.ui.onboarding]);
+
+  /**
+   * Save to new storage system
+   */
+  async function saveToStorage() {
+    try {
+      const storage = await getStorage();
+
+      const settings = {
+        aiSettings: state.aiSettings,
+        learningSettings: state.learningSettings,
+        userProfile: state.userProfile,
+        learnings: state.learnings,
+        searchHistory: state.searchHistory,
+        activeSessionId: state.activeSessionId,
+        nedSettings: { ...state.nedSettings, sessionPermissions: [] },
+        ui: {
+          preferences: state.ui.preferences,
+          pinnedNotes: state.ui.pinnedNotes,
+          onboarding: state.ui.onboarding,
+        },
+      };
+
+      await Promise.all([
+        storage.save('companies', state.companies),
+        storage.save('contacts', state.contacts),
+        storage.save('topics', state.topics),
+        storage.save('notes', state.notes),
+        storage.save('tasks', state.tasks),
+        storage.save('sessions', state.sessions),
+        storage.save('settings', settings),
+      ]);
+
+      console.log('💾 Saved state to storage:', {
+        companies: state.companies.length,
+        contacts: state.contacts.length,
+        topics: state.topics.length,
+        notes: state.notes.length,
+        tasks: state.tasks.length,
+        sessions: state.sessions.length,
+      });
+    } catch (error) {
+      console.error('❌ Failed to save to storage:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fallback: Save to localStorage (legacy)
+   */
+  function saveToLocalStorage() {
+    const cleanSessions = state.sessions.map(session => ({
+      ...session,
+      screenshots: session.screenshots.map(screenshot => {
+        const cleanScreenshot: any = { ...screenshot };
+        delete cleanScreenshot.attachmentData;
+        return cleanScreenshot as SessionScreenshot;
+      }),
+    }));
 
     const dataToSave = {
       companies: state.companies,
@@ -1460,16 +2167,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       topics: state.topics,
       notes: state.notes,
       tasks: state.tasks,
+      sessions: cleanSessions,
+      activeSessionId: state.activeSessionId,
       aiSettings: state.aiSettings,
       learningSettings: state.learningSettings,
       userProfile: state.userProfile,
       learnings: state.learnings,
       searchHistory: state.searchHistory,
-      nedSettings: {
-        ...state.nedSettings,
-        sessionPermissions: [], // Don't persist session permissions
-      },
-      // Only save preferences, pinned notes, and onboarding from UI state (not transient state like notifications)
+      nedSettings: { ...state.nedSettings, sessionPermissions: [] },
       ui: {
         preferences: state.ui.preferences,
         pinnedNotes: state.ui.pinnedNotes,
@@ -1479,21 +2184,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       localStorage.setItem('taskerino-v3-state', JSON.stringify(dataToSave));
-      console.log('💾 Saved state to localStorage:', {
-        companies: state.companies.length,
-        contacts: state.contacts.length,
-        topics: state.topics.length,
-        notes: state.notes.length,
-        tasks: state.tasks.length,
-      });
+      console.log('💾 Saved state to localStorage (fallback)');
     } catch (error) {
-      console.error('❌ Failed to save state (quota exceeded?):', error);
-      // If quota exceeded, could implement cleanup or notify user
+      console.error('❌ Failed to save state to localStorage:', error);
+      try {
+        const reducedDataToSave = { ...dataToSave, sessions: [], activeSessionId: undefined };
+        localStorage.setItem('taskerino-v3-state', JSON.stringify(reducedDataToSave));
+        console.warn('⚠️  Saved state without sessions due to storage quota');
+      } catch (fallbackError) {
+        console.error('❌ Failed to save even without sessions:', fallbackError);
+      }
     }
-  }, [hasLoaded, state.companies, state.contacts, state.topics, state.notes, state.tasks, state.aiSettings, state.learningSettings, state.userProfile, state.learnings, state.searchHistory, state.nedSettings.permissions, state.nedSettings.chattiness, state.nedSettings.showThinking, state.nedSettings.tokenUsage, state.ui.preferences, state.ui.pinnedNotes, state.ui.onboarding]);
+  }
+
+  /**
+   * Handle migration completion
+   */
+  function handleMigrationComplete() {
+    setShowMigrationDialog(false);
+    setMigrationError(null);
+    loadFromStorage();
+  }
+
+  /**
+   * Handle migration error
+   */
+  function handleMigrationError(error: Error) {
+    console.error('Migration error:', error);
+    setMigrationError(error);
+  }
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
+      {showMigrationDialog && (
+        <MigrationDialog
+          onComplete={handleMigrationComplete}
+          onError={handleMigrationError}
+        />
+      )}
       {children}
     </AppContext.Provider>
   );

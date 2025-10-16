@@ -126,7 +126,7 @@ export function AppSidebar({
         </div>
 
         {/* Frosted Glass Container */}
-        <div className="h-full ml-1.5 bg-white/70 backdrop-blur-2xl border-l-2 border-white/50 shadow-2xl flex flex-col">
+        <div className="h-full ml-1.5 bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20 backdrop-blur-2xl border-l-2 border-white/50 shadow-2xl flex flex-col">
           {/* Header */}
           <div className="flex-shrink-0 px-6 py-4 border-b-2 border-white/50 bg-white/30 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-2">
@@ -156,6 +156,7 @@ export function AppSidebar({
                 className="p-2 hover:bg-white/80 rounded-xl transition-all hover:scale-105 active:scale-95 ml-auto"
                 aria-label="Close sidebar"
                 title="Close (Esc)"
+                type="button"
               >
                 <X className="w-5 h-5 text-gray-600" />
               </button>
@@ -182,7 +183,7 @@ export function AppSidebar({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="flex-1 overflow-y-auto">
             {children}
           </div>
         </div>

@@ -1,25 +1,132 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { AppProvider, useApp } from './context/AppContext';
+import { SettingsProvider } from './context/SettingsContext';
+import { UIProvider, useUI } from './context/UIContext';
+import { EntitiesProvider } from './context/EntitiesContext';
+import { NotesProvider } from './context/NotesContext';
+import { TasksProvider } from './context/TasksContext';
+import { EnrichmentProvider } from './context/EnrichmentContext';
+import { SessionsProvider } from './context/SessionsContext';
 import { TopNavigation } from './components/TopNavigation';
-import { NotificationCenter } from './components/NotificationCenter';
 import { ReferencePanel } from './components/ReferencePanel';
 import { QuickTaskModal } from './components/QuickTaskModal';
-import { CaptureZone } from './components/CaptureZone';
-import { TasksZone } from './components/TasksZone';
-import { LibraryZone } from './components/LibraryZone';
-import { AssistantZone } from './components/AssistantZone';
-import { ProfileZone } from './components/ProfileZone';
 import { TaskDetailSidebar } from './components/TaskDetailSidebar';
 import { NoteDetailSidebar } from './components/NoteDetailSidebar';
 import { WelcomeFlow } from './components/WelcomeFlow';
+import { FloatingControls } from './components/FloatingControls';
+import { NedOverlay } from './components/NedOverlay';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { FeatureTooltip } from './components/FeatureTooltip';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { claudeService } from './services/claudeService';
+import { sessionsAgentService } from './services/sessionsAgentService';
+import { nedService } from './services/nedService';
+import { contextAgent } from './services/contextAgent';
+import { sessionsQueryAgent } from './services/sessionsQueryAgent';
+import { migrateApiKeysToTauri } from './utils/apiKeyMigration';
+import { getStorage } from './services/storage';
+
+// Lazy load zone components for better performance
+const CaptureZone = lazy(() => import('./components/CaptureZone'));
+const TasksZone = lazy(() => import('./components/TasksZone'));
+const NotesZone = lazy(() => import('./components/LibraryZone'));
+const SessionsZone = lazy(() => import('./components/SessionsZone'));
+const AssistantZone = lazy(() => import('./components/AssistantZone'));
+const ProfileZone = lazy(() => import('./components/ProfileZone'));
+
+function ZoneLoadingFallback() {
+  return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 function MainApp() {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
+  const { state: uiState, dispatch: uiDispatch } = useUI();
 
   // Enable global keyboard shortcuts
   useKeyboardShortcuts();
+
+  // Tooltip state
+  const [showCmdKTooltip, setShowCmdKTooltip] = useState(false);
+  const [showShortcutsTooltip, setShowShortcutsTooltip] = useState(false);
+
+  // Get zoom level from preferences
+  const zoomLevel = uiState.preferences.zoomLevel || 100;
+
+  // Apply zoom to document body (browser-native zoom)
+  useEffect(() => {
+    (document.body as any).style.zoom = `${zoomLevel}%`;
+    return () => {
+      (document.body as any).style.zoom = '100%';
+    };
+  }, [zoomLevel]);
+
+  // Zoom keyboard shortcuts
+  useEffect(() => {
+    const handleZoom = (e: KeyboardEvent) => {
+      // Check for Cmd (Mac) or Ctrl (Windows/Linux)
+      if (e.metaKey || e.ctrlKey) {
+        const currentZoom = uiState.preferences.zoomLevel || 100;
+
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          const newZoom = Math.min(currentZoom + 10, 200);
+          uiDispatch({ type: 'UPDATE_PREFERENCES', payload: { zoomLevel: newZoom } });
+        } else if (e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          const newZoom = Math.max(currentZoom - 10, 50);
+          uiDispatch({ type: 'UPDATE_PREFERENCES', payload: { zoomLevel: newZoom } });
+        } else if (e.key === '0') {
+          e.preventDefault();
+          uiDispatch({ type: 'UPDATE_PREFERENCES', payload: { zoomLevel: 100 } });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleZoom);
+    return () => window.removeEventListener('keydown', handleZoom);
+  }, [uiState.preferences.zoomLevel, uiDispatch]);
+
+  // Tooltip #7: Command Palette (⌘K) - Show after 5 total activities
+  useEffect(() => {
+    const totalActivity =
+      uiState.onboarding.stats.captureCount +
+      uiState.onboarding.stats.taskCount;
+
+    if (totalActivity >= 5 && !uiState.onboarding.featureIntroductions.cmdK) {
+      setShowCmdKTooltip(true);
+    }
+  }, [
+    uiState.onboarding.stats.captureCount,
+    uiState.onboarding.stats.taskCount,
+    uiState.onboarding.featureIntroductions.cmdK,
+  ]);
+
+  // Tooltip #8: Keyboard Shortcuts - Show after 10 total activities and cmdK seen
+  useEffect(() => {
+    const totalActivity =
+      uiState.onboarding.stats.captureCount +
+      uiState.onboarding.stats.taskCount;
+
+    // Only show if they've seen cmdK tooltip first
+    if (totalActivity >= 10 &&
+        uiState.onboarding.featureIntroductions.cmdK &&
+        !uiState.onboarding.featureIntroductions.quickAdd) {
+      setShowShortcutsTooltip(true);
+    }
+  }, [
+    uiState.onboarding.stats.captureCount,
+    uiState.onboarding.stats.taskCount,
+    uiState.onboarding.featureIntroductions.cmdK,
+    uiState.onboarding.featureIntroductions.quickAdd,
+  ]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
@@ -28,24 +135,115 @@ function MainApp() {
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-hidden">
-        {state.ui.activeTab === 'capture' && <CaptureZone />}
-        {state.ui.activeTab === 'tasks' && <TasksZone />}
-        {state.ui.activeTab === 'library' && <LibraryZone />}
-        {state.ui.activeTab === 'assistant' && <AssistantZone />}
-        {state.ui.activeTab === 'profile' && <ProfileZone />}
+        <Suspense fallback={<ZoneLoadingFallback />}>
+          {uiState.activeTab === 'capture' && (
+            <ErrorBoundary>
+              <CaptureZone />
+            </ErrorBoundary>
+          )}
+          {uiState.activeTab === 'tasks' && (
+            <ErrorBoundary>
+              <TasksZone />
+            </ErrorBoundary>
+          )}
+          {uiState.activeTab === 'notes' && (
+            <ErrorBoundary>
+              <NotesZone />
+            </ErrorBoundary>
+          )}
+          {uiState.activeTab === 'sessions' && (
+            <ErrorBoundary>
+              <SessionsZone />
+            </ErrorBoundary>
+          )}
+          {uiState.activeTab === 'assistant' && (
+            <ErrorBoundary>
+              <AssistantZone />
+            </ErrorBoundary>
+          )}
+          {uiState.activeTab === 'profile' && (
+            <ErrorBoundary>
+              <ProfileZone />
+            </ErrorBoundary>
+          )}
+        </Suspense>
       </main>
 
       {/* Global Overlays */}
-      <NotificationCenter />
       <ReferencePanel />
       <QuickTaskModal />
+      <FloatingControls />
+      <NedOverlay />
 
       {/* Sidebar (for task/note details) */}
-      {state.sidebar.isOpen && state.sidebar.type === 'task' && state.sidebar.itemId && (
-        <TaskDetailSidebar taskId={state.sidebar.itemId} />
+      {uiState.sidebar.isOpen && uiState.sidebar.type === 'task' && uiState.sidebar.itemId && (
+        <TaskDetailSidebar taskId={uiState.sidebar.itemId} />
       )}
-      {state.sidebar.isOpen && state.sidebar.type === 'note' && state.sidebar.itemId && (
-        <NoteDetailSidebar noteId={state.sidebar.itemId} />
+      {uiState.sidebar.isOpen && uiState.sidebar.type === 'note' && uiState.sidebar.itemId && (
+        <NoteDetailSidebar noteId={uiState.sidebar.itemId} />
+      )}
+
+      {/* Onboarding Tooltips */}
+      {showCmdKTooltip && (
+        <FeatureTooltip
+          show={true}
+          onDismiss={() => {
+            setShowCmdKTooltip(false);
+            uiDispatch({ type: 'MARK_FEATURE_INTRODUCED', payload: 'cmdK' });
+          }}
+          position="center"
+          title="💡 Pro Tip: Command Palette"
+          message={
+            <div>
+              <p>Press <kbd className="px-2 py-1 bg-gray-200 rounded">⌘K</kbd> anytime to quickly:</p>
+              <ul className="list-disc ml-4 mt-2 space-y-1">
+                <li>Search everything</li>
+                <li>Navigate zones</li>
+                <li>Create tasks</li>
+                <li>Take actions</li>
+              </ul>
+              <p className="mt-2 font-medium text-cyan-600">Power users live in ⌘K!</p>
+            </div>
+          }
+          primaryAction={{
+            label: "Try it now",
+            onClick: () => {
+              // Open command palette
+              uiDispatch({ type: 'TOGGLE_COMMAND_PALETTE' });
+            },
+          }}
+          secondaryAction={{
+            label: "Dismiss",
+            onClick: () => {},
+          }}
+        />
+      )}
+
+      {showShortcutsTooltip && (
+        <FeatureTooltip
+          show={true}
+          onDismiss={() => {
+            setShowShortcutsTooltip(false);
+            uiDispatch({ type: 'MARK_FEATURE_INTRODUCED', payload: 'quickAdd' });
+          }}
+          position="center"
+          title="⌨️ Pro Tip: Keyboard Shortcuts"
+          message={
+            <div>
+              <p>You're getting the hang of this! Here are shortcuts to speed up your workflow:</p>
+              <ul className="list-none mt-2 space-y-1">
+                <li><kbd className="px-2 py-1 bg-gray-200 rounded">⌘K</kbd> - Command Palette (search everything)</li>
+                <li><kbd className="px-2 py-1 bg-gray-200 rounded">⌘Enter</kbd> - Submit capture</li>
+                <li><kbd className="px-2 py-1 bg-gray-200 rounded">⌘+/-</kbd> - Zoom in/out</li>
+                <li><strong>Double-click task</strong> - Quick edit</li>
+              </ul>
+            </div>
+          }
+          primaryAction={{
+            label: "Got it",
+            onClick: () => {},
+          }}
+        />
       )}
     </div>
   );
@@ -54,20 +252,76 @@ function MainApp() {
 function AppContent() {
   const { state, dispatch } = useApp();
   const [isReady, setIsReady] = useState(false);
+  const [hasApiKeys, setHasApiKeys] = useState(false);
 
   useEffect(() => {
-    // Load API key on mount
-    const savedKey = localStorage.getItem('claude-api-key');
-    if (savedKey) {
-      claudeService.setApiKey(savedKey);
-    }
-    setIsReady(true);
+    const initializeApp = async () => {
+      // Run migration from localStorage to Tauri secure storage
+      const migrationResult = await migrateApiKeysToTauri();
+      if (migrationResult.migrated) {
+        console.log('API keys migrated successfully:', migrationResult);
+      }
+
+      // Load API keys on mount from Tauri secure storage
+      const savedClaudeKey = await invoke<string | null>('get_claude_api_key');
+      if (savedClaudeKey) {
+        claudeService.setApiKey(savedClaudeKey);
+        sessionsAgentService.setApiKey(savedClaudeKey);
+        await nedService.setApiKey(savedClaudeKey);
+        contextAgent.setApiKey(savedClaudeKey);
+        await sessionsQueryAgent.setApiKey(savedClaudeKey);
+      }
+
+      // Load OpenAI API key
+      const savedOpenAIKey = await invoke<string | null>('get_openai_api_key');
+      if (savedOpenAIKey) {
+        const { openAIService } = await import('./services/openAIService');
+        openAIService.setApiKey(savedOpenAIKey);
+      }
+
+      // Set hasApiKeys flag based on whether we have both required keys
+      setHasApiKeys(!!savedClaudeKey && !!savedOpenAIKey);
+      setIsReady(true);
+    };
+    initializeApp();
   }, []);
 
-  const handleWelcomeComplete = (name: string, apiKey: string) => {
-    // Save API key
-    localStorage.setItem('claude-api-key', apiKey);
-    claudeService.setApiKey(apiKey);
+  // Graceful shutdown: flush pending writes on app close
+  useEffect(() => {
+    const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
+      try {
+        console.log('[APP] Flushing pending writes before shutdown...');
+        const storage = await getStorage();
+        await storage.shutdown();
+        console.log('[APP] Graceful shutdown complete');
+      } catch (error) {
+        console.error('[APP] Failed to flush writes on shutdown:', error);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  const handleWelcomeComplete = async (name: string, anthropicKey: string, openAIKey: string) => {
+    // Save Anthropic API key to Tauri secure storage
+    await invoke('set_claude_api_key', { apiKey: anthropicKey });
+    claudeService.setApiKey(anthropicKey);
+    sessionsAgentService.setApiKey(anthropicKey);
+    await nedService.setApiKey(anthropicKey);
+    contextAgent.setApiKey(anthropicKey);
+    await sessionsQueryAgent.setApiKey(anthropicKey);
+
+    // Save OpenAI API key to Tauri secure storage
+    await invoke('set_openai_api_key', { apiKey: openAIKey });
+    const { openAIService } = await import('./services/openAIService');
+    openAIService.setApiKey(openAIKey);
+
+    // Update hasApiKeys flag
+    setHasApiKeys(true);
 
     // Save user name
     dispatch({ type: 'UPDATE_USER_PROFILE', payload: { name } });
@@ -97,11 +351,12 @@ function AppContent() {
     );
   }
 
-  // Check if this is first launch (no existing data and onboarding not completed)
-  const hasExistingData = state.notes.length > 0 || state.tasks.length > 0 || state.topics.length > 0 || state.companies.length > 0 || state.contacts.length > 0;
-  const needsOnboarding = !state.ui.onboarding.completed && !hasExistingData;
+  // Check if onboarding should be shown
+  // Show welcome flow if onboarding is not completed AND we don't have API keys
+  // This prevents showing onboarding during hot reloads when we already have keys
+  const needsOnboarding = !state.ui.onboarding.completed && !hasApiKeys;
 
-  // Show welcome flow for first-time users
+  // Show welcome flow for users who need onboarding
   if (needsOnboarding) {
     return <WelcomeFlow onComplete={handleWelcomeComplete} />;
   }
@@ -112,8 +367,23 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <SettingsProvider>
+      <UIProvider>
+        <EntitiesProvider>
+          <NotesProvider>
+            <TasksProvider>
+              <EnrichmentProvider>
+                <SessionsProvider>
+                  {/* OLD AppProvider - TODO: Remove once all components are migrated (13 remaining) */}
+                  <AppProvider>
+                    <AppContent />
+                  </AppProvider>
+                </SessionsProvider>
+              </EnrichmentProvider>
+            </TasksProvider>
+          </NotesProvider>
+        </EntitiesProvider>
+      </UIProvider>
+    </SettingsProvider>
   );
 }

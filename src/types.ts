@@ -1,7 +1,7 @@
 // Core Data Types
 
 // Attachment Types
-export type AttachmentType = 'image' | 'video' | 'file' | 'link' | 'screenshot';
+export type AttachmentType = 'image' | 'video' | 'file' | 'link' | 'screenshot' | 'audio';
 
 export interface Attachment {
   id: string;
@@ -28,6 +28,10 @@ export interface Attachment {
     detectedObjects?: string[];
     confidence: number;
   };
+
+  // Audio-specific fields
+  waveform?: number[];             // Simplified waveform data for visualization (0-1 normalized)
+  compressed?: string;             // Compressed audio (MP3 base64) for AI processing
 }
 
 // Company profile with detailed information
@@ -106,6 +110,7 @@ export interface Note {
   source: 'call' | 'email' | 'thought' | 'other';
   tags: string[]; // Auto-extracted by AI
   parentNoteId?: string; // For threading/nesting
+  sourceSessionId?: string; // Link back to originating session
   updates?: NoteUpdate[]; // History of additions/updates (newest first)
   attachments?: Attachment[]; // Multi-modal attachments
   metadata?: {
@@ -146,6 +151,7 @@ export interface Task {
 
   // Source tracking (for agent capabilities)
   sourceNoteId?: string; // NEW: Link back to originating note
+  sourceSessionId?: string; // Link back to originating session
   sourceExcerpt?: string; // NEW: Exact text that triggered this task
   contextForAgent?: string; // NEW: AI-generated context for future agents
 
@@ -228,7 +234,7 @@ export interface AIQueryResponse {
 
 // UI & Navigation Types
 
-export type TabType = 'capture' | 'tasks' | 'library' | 'assistant' | 'profile';
+export type TabType = 'capture' | 'tasks' | 'notes' | 'sessions' | 'assistant' | 'profile';
 
 export interface ProcessingJob {
   id: string;
@@ -287,6 +293,7 @@ export interface UserPreferences {
   dateFormat: '12h' | '24h';
   timezone: string; // IANA timezone string
   weekStartsOn: 'sunday' | 'monday';
+  zoomLevel?: number; // zoom percentage (50-200, default: 100)
 }
 
 export interface SearchHistoryItem {
@@ -308,12 +315,25 @@ export interface OnboardingState {
     filters: boolean;
     inlineEdit: boolean;
     cmdK: boolean;
+    backgroundProcessing: boolean;
+    nedAssistant: boolean;
+    referencePanel: boolean;
+    sessions: boolean;
+    taskDetailSidebar: boolean;
+    taskViews: boolean;
   };
   stats: {
     captureCount: number;
     taskCount: number;
     sessionCount: number;
+    noteCount: number;
+    nedQueryCount: number;
+    tooltipsShown: number;
+    tooltipsDismissed: number;
+    lastActiveDate: string;
   };
+  firstCaptureCompleted: boolean;
+  interactiveTutorialShown: boolean;
 }
 
 export interface UIState {
@@ -332,6 +352,10 @@ export interface UIState {
   selectedTasks: string[]; // Task IDs
   showCommandPalette: boolean;
   onboarding: OnboardingState;
+  pendingReviewJobId?: string; // Job ID to open for review in CaptureZone
+  nedOverlay: {
+    isOpen: boolean;
+  };
 }
 
 // AI Settings Type
@@ -378,7 +402,7 @@ export interface NedPermission {
 
 // Ned Conversation
 export interface NedMessageContent {
-  type: 'text' | 'task-list' | 'note-list' | 'tool-use' | 'tool-result' | 'error' | 'thinking';
+  type: 'text' | 'task-list' | 'note-list' | 'tool-use' | 'tool-result' | 'error' | 'thinking' | 'task-update' | 'note-update' | 'task-created' | 'note-created' | 'session-list';
   content?: string;
   tasks?: Task[];
   notes?: Note[];
@@ -406,11 +430,15 @@ export interface AppState {
   notes: Note[];
   tasks: Task[];
 
+  // Sessions State - NEW
+  sessions: Session[];
+  activeSessionId?: string; // Currently active session
+
   // UI State - NEW
   ui: UIState;
 
   // Legacy zone state (keep for migration)
-  currentZone: 'capture' | 'tasks' | 'library' | 'assistant' | 'profile';
+  currentZone: 'capture' | 'tasks' | 'notes' | 'sessions' | 'assistant' | 'profile';
   activeTopicId?: string;
   activeNoteId?: string;
 
@@ -536,6 +564,472 @@ export interface ManualTaskData {
   dueDate?: string;
   topicId?: string;
   tags?: string[];
+}
+
+// Sessions Feature Types
+
+// Session Summary - AI-generated synthesis of session activity
+export interface SessionSummary {
+  // The story
+  narrative: string; // "Started by researching X, then built Y feature, encountered Z issue..."
+
+  // Live session snapshot (only for active sessions)
+  liveSnapshot?: {
+    currentFocus: string; // What they're doing RIGHT NOW (1 sentence, present tense)
+    progressToday: string[]; // Up to 3 achievements SO FAR (e.g., "Set up OAuth", "Fixed login bug")
+    momentum: 'high' | 'medium' | 'low'; // Current work momentum
+  };
+
+  // Key outcomes
+  achievements: string[]; // ["Completed login flow", "Fixed 3 critical bugs"]
+  blockers: string[]; // ["Waiting on API key", "Build errors in CI"]
+
+  // Actionable items (consolidated from all screenshots)
+  recommendedTasks: Array<{
+    title: string;
+    priority: 'low' | 'medium' | 'high' | 'urgent';
+    context: string; // Why this task matters
+    relatedScreenshotIds: string[]; // Which screenshots led to this
+  }>;
+
+  // Important observations
+  keyInsights: Array<{
+    insight: string;
+    timestamp: string;
+    screenshotIds: string[];
+  }>;
+
+  // Patterns & productivity
+  focusAreas: Array<{
+    area: string;
+    duration: number; // minutes
+    percentage: number;
+  }>;
+
+  // Metadata
+  lastUpdated: string;
+  screenshotCount: number; // How many screenshots were analyzed
+
+  // DEPRECATED: Legacy properties for backward compatibility
+  summary?: string;
+  extractedTasks?: Array<{title: string; priority: string; context: string}>;
+  extractedNotes?: Array<{content: string; tags: string[]}>;
+  timeBreakdown?: Array<{activity: string; duration: number; percentage: number}>;
+  keyActivities?: string[];
+}
+
+export interface Session {
+  id: string;
+  name: string; // User-provided or AI-generated
+  description: string; // What user is working on
+
+  // Lifecycle
+  status: 'active' | 'paused' | 'completed' | 'interrupted';
+  startTime: string;
+  endTime?: string;
+  lastScreenshotTime?: string;
+
+  // Pause tracking
+  pausedAt?: string; // Timestamp when session was last paused
+  totalPausedTime?: number; // Total paused time in milliseconds
+
+  // Configuration
+  screenshotInterval: number; // Minutes (default: 2), or -1 for adaptive mode
+  autoAnalysis: boolean; // Auto-analyze screenshots
+  enableScreenshots: boolean; // Enable/disable screenshot capture (default: true)
+  audioMode: AudioMode; // Audio recording mode (default: 'off')
+  audioRecording: boolean; // Currently recording audio
+
+  // References
+  trackingNoteId?: string; // Session tracking note
+  screenshots: SessionScreenshot[];
+  audioSegments?: SessionAudioSegment[]; // Real-time audio recordings (Whisper-1 transcripts)
+  extractedTaskIds: string[]; // Task IDs created from this session
+  extractedNoteIds: string[]; // Note IDs created from this session
+  contextItems?: SessionContextItem[]; // User-added context during session
+
+  // ONE-TIME Audio Review (cached, never re-processed)
+  audioReviewCompleted: boolean; // Has comprehensive audio review been done?
+  fullAudioAttachmentId?: string; // Complete concatenated audio file (downsampled)
+  fullTranscription?: string; // Full transcript from GPT-4o-audio-preview
+  audioInsights?: AudioInsights; // Comprehensive audio analysis (emotions, patterns, context)
+  transcriptUpgradeCompleted?: boolean; // Has word-level transcript upgrade been done?
+
+  // AI-Generated Summary (synthesized every 5 min + on session end)
+  summary?: SessionSummary;
+
+  // DEPRECATED: Legacy audio fields
+  audioKeyMoments?: AudioKeyMoment[]; // Replaced by audioInsights.keyMoments
+
+  // Metadata
+  tags: string[];
+  category?: string; // AI-assigned primary category: "Deep Work", "Meetings", "Research", etc.
+  subCategory?: string; // AI-assigned sub-category: "API Development", "Client Presentation", etc.
+  activityType?: string; // "email-writing", "presentation", "coding", etc.
+  totalDuration?: number; // Total minutes (calculated)
+
+  // Video Recording (Phase 1)
+  video?: SessionVideo;
+  videoRecording?: boolean; // Enable/disable video recording (user setting)
+
+  /**
+   * Enrichment Status - Comprehensive tracking of post-session enrichment pipeline
+   *
+   * Tracks the state of audio review, video chapter generation, and summary creation.
+   * Each stage can be independently processed, retried, or skipped. All fields are optional
+   * for backward compatibility with existing sessions.
+   *
+   * Status lifecycle:
+   * - idle: No enrichment has been started
+   * - pending: Enrichment is queued/waiting to start
+   * - in-progress: Currently processing one or more stages
+   * - completed: All enabled stages successfully completed
+   * - failed: One or more stages failed critically
+   * - partial: Some stages completed, others skipped or failed
+   */
+  enrichmentStatus?: {
+    /** Overall enrichment pipeline status */
+    status: 'idle' | 'pending' | 'in-progress' | 'completed' | 'failed' | 'partial';
+
+    /** When enrichment pipeline was first initiated (ISO 8601) */
+    startedAt?: string;
+
+    /** When all enrichment stages finished (ISO 8601) */
+    completedAt?: string;
+
+    /** Overall progress percentage (0-100) across all enabled stages */
+    progress: number;
+
+    /** Current stage being processed */
+    currentStage: 'audio' | 'video' | 'summary' | 'complete';
+
+    /**
+     * Audio Review Stage - GPT-4o audio analysis for emotional journey and key moments
+     *
+     * This stage processes the full session audio to extract emotional patterns,
+     * key moments, and work patterns. It's a ONE-TIME operation that's never re-run.
+     */
+    audio: {
+      /** Status of audio review processing */
+      status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
+      /** When audio review started (ISO 8601) */
+      startedAt?: string;
+
+      /** When audio review completed (ISO 8601) */
+      completedAt?: string;
+
+      /** Error message if audio review failed */
+      error?: string;
+
+      /** Cost of audio review in USD (GPT-4o audio API pricing) */
+      cost?: number;
+    };
+
+    /**
+     * Video Chapter Generation Stage - AI-detected semantic boundaries in session video
+     *
+     * Analyzes video frames to identify topic changes and create navigable chapters.
+     * Helps users quickly find relevant parts of long session recordings.
+     */
+    video: {
+      /** Status of video chapter generation */
+      status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
+      /** When video chapter generation started (ISO 8601) */
+      startedAt?: string;
+
+      /** When video chapter generation completed (ISO 8601) */
+      completedAt?: string;
+
+      /** Error message if video processing failed */
+      error?: string;
+
+      /** Cost of video analysis in USD (vision API pricing) */
+      cost?: number;
+    };
+
+    /**
+     * Summary Generation Stage - Comprehensive session summary synthesis
+     *
+     * Combines data from screenshots, audio, video, and user actions to create
+     * a narrative summary of the session. Always runs last after other stages.
+     */
+    summary: {
+      /** Status of summary generation */
+      status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
+      /** Error message if summary generation failed */
+      error?: string;
+    };
+
+    /** Total cost across all enrichment stages in USD */
+    totalCost: number;
+
+    /** Array of error messages from any failed stages */
+    errors: string[];
+
+    /** Array of non-critical warnings (e.g., "No audio available for review") */
+    warnings: string[];
+
+    /** Whether enrichment can be resumed from current state (e.g., after failure or interruption) */
+    canResume: boolean;
+  };
+
+  /**
+   * Enrichment Configuration - User preferences for post-session enrichment
+   *
+   * Controls which enrichment stages should run and under what conditions.
+   * All fields optional for backward compatibility. Defaults are applied at runtime.
+   */
+  enrichmentConfig?: {
+    /** Whether to perform comprehensive audio review (GPT-4o audio analysis) */
+    includeAudioReview: boolean;
+
+    /** Whether to generate video chapter markers for navigation */
+    includeVideoChapters: boolean;
+
+    /** Whether to automatically start enrichment when session is completed */
+    autoEnrichOnComplete: boolean;
+
+    /** Maximum total cost threshold in USD - enrichment stops if this is exceeded */
+    maxCostThreshold?: number;
+  };
+
+  /**
+   * Enrichment Lock - Prevents concurrent enrichment processing
+   *
+   * Ensures only one enrichment process runs at a time for this session.
+   * Lock expires automatically after timeout to prevent orphaned locks.
+   */
+  enrichmentLock?: {
+    /** Identifier of the process/worker that acquired the lock */
+    lockedBy: string;
+
+    /** When the lock was acquired (ISO 8601) */
+    lockedAt: string;
+
+    /** When the lock will expire if not released (ISO 8601) */
+    expiresAt: string;
+  };
+}
+
+// Video Frame - Extracted frame from video for AI analysis
+export interface VideoFrame {
+  timestamp: number; // Seconds from session start
+  dataUri: string; // Base64 PNG data URI
+  width: number;
+  height: number;
+}
+
+// Video Chapter - Semantic segment of a session video
+export interface VideoChapter {
+  id: string;
+  sessionId: string;
+  startTime: number; // Seconds from session start
+  endTime: number; // Seconds from session start
+  title: string; // e.g., "Setting Up Development Environment"
+  summary?: string; // AI-generated summary
+  keyTopics?: string[]; // ["git", "npm install", "VS Code setup"]
+  thumbnail?: string; // Base64 data URI from first frame
+  confidence?: number; // 0-1, how confident AI is about this boundary
+  createdAt: string;
+}
+
+// Session Video - Full session screen recording with intelligent chunking
+export interface SessionVideo {
+  id: string;
+  sessionId: string;
+  fullVideoAttachmentId: string; // Complete session recording file
+  chunks?: SessionVideoChunk[]; // Topic-aligned video segments
+  chapters?: VideoChapter[]; // AI-detected chapter markers
+  duration: number; // Total duration in seconds
+  chunkingStatus: 'pending' | 'processing' | 'complete' | 'error';
+  processedAt?: string; // When chunking completed
+  chunkingError?: string; // Error message if chunking failed
+
+  // DEPRECATED: Legacy properties for backward compatibility
+  startTime?: number;
+  endTime?: number;
+}
+
+// Session Video Chunk - Topic-aligned video segment (30s-5min)
+export interface SessionVideoChunk {
+  id: string;
+  videoId: string;
+  sessionId: string;
+  attachmentId: string; // Chunked video file
+  startTime: number; // Seconds from session start
+  endTime: number; // Seconds from session start
+  topic: string; // AI-detected topic (e.g., "Authentication Development")
+  description: string; // Brief description of what happened
+  transcriptExcerpt: string; // Audio transcript for this time range
+  relatedScreenshotIds: string[]; // Screenshots within this time range
+  relatedAudioSegmentIds: string[]; // Audio segments within this time range
+
+  // On-demand analysis tracking
+  analyzed: boolean; // Has this chunk been analyzed by video agent?
+  analysisCache?: string; // Cached analysis from video agent
+  lastAnalyzedAt?: string; // When last analyzed
+}
+
+export interface SessionScreenshot {
+  id: string;
+  sessionId: string;
+  timestamp: string;
+  attachmentId: string; // Reference to Attachment entity
+
+  // DEPRECATED: Legacy property for backward compatibility
+  path?: string;
+
+  // AI Analysis (from Sessions Agent)
+  aiAnalysis?: {
+    summary: string; // What's happening in this screenshot
+    detectedActivity: string; // "writing-email", "editing-slides", etc.
+    extractedText?: string; // OCR results
+    keyElements: string[]; // ["Gmail", "Draft to customer", etc.]
+    suggestedActions?: string[]; // Tasks the agent noticed
+    contextDelta?: string; // What changed since last screenshot
+    confidence: number;
+    curiosity?: number; // 0-1 score: how much AI wants to see next screenshot sooner (for adaptive scheduling)
+    curiosityReason?: string; // Brief explanation for curiosity score
+    progressIndicators?: {
+      achievements?: string[]; // Things completed or accomplished
+      blockers?: string[]; // Issues or obstacles encountered
+      insights?: string[]; // Important learnings or observations
+    };
+  };
+
+  // User interaction
+  userComment?: string;
+  flagged?: boolean; // User can flag important moments
+
+  // Status
+  analysisStatus: 'pending' | 'analyzing' | 'complete' | 'error';
+  analysisError?: string;
+}
+
+// Audio Recording Types
+export type AudioMode = 'off' | 'transcription' | 'description'; // DEPRECATED: Will be removed
+
+export interface SessionAudioSegment {
+  id: string;
+  sessionId: string;
+  timestamp: string;
+  duration: number; // seconds
+  transcription: string; // Speech-to-text (always from Whisper-1)
+  attachmentId?: string; // Reference to audio WAV file in storage
+
+  // DEPRECATED: Legacy property for backward compatibility
+  startTime?: number;
+
+  // Transcript quality tracking
+  transcriptionQuality?: 'draft' | 'final'; // draft = 10s chunk, final = word-level upgrade
+  draftTranscription?: string; // Original 10s chunk transcript (for comparison)
+  enrichedTranscription?: string; // Word-accurate transcript from full session re-transcription
+
+  // AI-extracted metadata
+  keyPhrases?: string[]; // Important phrases from this segment
+  sentiment?: 'positive' | 'neutral' | 'negative';
+  containsTask?: boolean; // AI detected action item
+  containsBlocker?: boolean; // AI detected problem
+
+  // DEPRECATED: Legacy fields for migration compatibility
+  description?: string; // No longer used
+  mode?: 'transcription' | 'description'; // No longer used
+  model?: string; // No longer used
+}
+
+// Audio key moment - AI-identified important timestamp
+export interface AudioKeyMoment {
+  id: string;
+  timestamp: number; // Seconds from session start
+  label: string; // "Started debugging", "Completed feature", etc.
+  type: 'achievement' | 'blocker' | 'decision' | 'insight';
+  segmentId: string; // Which audio segment this came from
+  excerpt: string; // What the user said
+}
+
+// Audio Insights - Comprehensive post-session audio analysis
+export interface AudioInsights {
+  // Overall narrative
+  narrative: string; // Story of the session from audio perspective
+
+  // Emotional journey over time
+  emotionalJourney: Array<{
+    timestamp: number; // Seconds from session start
+    emotion: string; // "focused", "frustrated", "excited", "confused", etc.
+    description: string; // Context for the emotion
+  }>;
+
+  // Key moments identified by GPT-4o
+  keyMoments: Array<{
+    timestamp: number; // Seconds from session start
+    type: 'achievement' | 'blocker' | 'decision' | 'insight';
+    description: string; // What happened
+    context: string; // Why it matters
+    excerpt: string; // What the user said
+  }>;
+
+  // Work patterns observed
+  workPatterns: {
+    focusLevel: 'high' | 'medium' | 'low';
+    interruptions: number;
+    flowStates: Array<{
+      start: number; // Timestamp in seconds
+      end: number; // Timestamp in seconds
+      description: string; // What they were doing
+    }>;
+  };
+
+  // Environmental context
+  environmentalContext: {
+    ambientNoise: string; // Description of background sounds
+    workSetting: string; // "quiet office", "busy café", etc.
+    timeOfDay: string; // Inferred from audio cues
+  };
+
+  // AI processing metadata
+  processedAt: string; // ISO timestamp
+  modelUsed: string; // e.g., "gpt-4o-audio-preview"
+  processingDuration: number; // Seconds taken to analyze
+
+  // DEPRECATED: Legacy properties for backward compatibility
+  summary?: string;
+  extractedTasks?: Array<{title: string; priority: string; context: string}>;
+  extractedNotes?: Array<{content: string; tags: string[]}>;
+  timeBreakdown?: Array<{activity: string; duration: number; percentage: number}>;
+  keyActivities?: string[];
+}
+
+// Session Context Item - user-added context during session
+export interface SessionContextItem {
+  id: string;
+  sessionId: string;
+  timestamp: string;
+  type: 'note' | 'task' | 'marker';
+  content: string;
+
+  // NEW: Link to existing note/task (when user associates existing item)
+  linkedItemId?: string; // ID of existing Note or Task
+
+  // DEPRECATED: Legacy fields (will be removed)
+  // If type === 'note', this links to created Note
+  noteId?: string;
+
+  // If type === 'task', this links to created Task
+  taskId?: string;
+}
+
+// Activity Monitoring Types (for Adaptive Screenshots)
+
+// Activity metrics from Rust activity monitor
+export interface ActivityMetrics {
+  appSwitches: number;           // Number of app switches in time window
+  mouseClicks: number;           // Number of mouse clicks in time window
+  keyboardEvents: number;        // Number of keyboard events in time window
+  windowFocusChanges: number;    // Number of window focus changes in time window
+  timestamp: string;             // ISO 8601 timestamp of measurement
 }
 
 // Legacy types (for backward compatibility during refactor)

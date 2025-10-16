@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useUI } from '../context/UIContext';
+import { useNotes } from '../context/NotesContext';
+import { useEntities } from '../context/EntitiesContext';
 import { X, Copy, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import { truncateText, formatRelativeTime } from '../utils/helpers';
 
 export function ReferencePanel() {
-  const { state, dispatch } = useApp();
+  const { state: uiState, dispatch: uiDispatch } = useUI();
+  const { state: notesState } = useNotes();
+  const { state: entitiesState } = useEntities();
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
-  const [width, setWidth] = useState(state.ui.preferences.referencePanelWidth);
+  const [width, setWidth] = useState(uiState.preferences.referencePanelWidth);
   const [isResizing, setIsResizing] = useState(false);
 
-  if (!state.ui.referencePanelOpen || state.ui.pinnedNotes.length === 0) {
+  if (!uiState.referencePanelOpen || uiState.pinnedNotes.length === 0) {
     return null;
   }
 
   const handleUnpin = (noteId: string) => {
-    dispatch({ type: 'UNPIN_NOTE', payload: noteId });
+    uiDispatch({ type: 'UNPIN_NOTE', payload: noteId });
     setExpandedNotes(prev => {
       const next = new Set(prev);
       next.delete(noteId);
@@ -25,7 +29,7 @@ export function ReferencePanel() {
   const handleCopyContent = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content);
-      dispatch({
+      uiDispatch({
         type: 'ADD_NOTIFICATION',
         payload: {
           type: 'success',
@@ -33,8 +37,8 @@ export function ReferencePanel() {
           message: 'Note content copied to clipboard',
         }
       });
-    } catch (error) {
-      dispatch({
+    } catch {
+      uiDispatch({
         type: 'ADD_NOTIFICATION',
         payload: {
           type: 'error',
@@ -46,9 +50,9 @@ export function ReferencePanel() {
   };
 
   const handleOpenInSidebar = (noteId: string) => {
-    const note = state.notes.find(n => n.id === noteId);
+    const note = notesState.notes.find(n => n.id === noteId);
     if (note) {
-      dispatch({
+      uiDispatch({
         type: 'OPEN_SIDEBAR',
         payload: { type: 'note', itemId: noteId, label: note.summary }
       });
@@ -80,7 +84,7 @@ export function ReferencePanel() {
     setWidth(clampedWidth);
 
     // Save to preferences
-    dispatch({
+    uiDispatch({
       type: 'UPDATE_PREFERENCES',
       payload: { referencePanelWidth: clampedWidth }
     });
@@ -105,7 +109,7 @@ export function ReferencePanel() {
   return (
     <>
       <div
-        className="fixed top-16 bottom-0 right-0 bg-white border-l-2 border-gray-200 shadow-2xl flex flex-col z-30 transition-transform"
+        className="fixed top-16 bottom-0 right-0 bg-white/30 backdrop-blur-2xl border-l-2 border-white/50 shadow-2xl flex flex-col z-30 transition-transform"
         style={{ width: `${width}%` }}
       >
         {/* Resize Handle */}
@@ -117,16 +121,16 @@ export function ReferencePanel() {
         </div>
 
         {/* Header */}
-        <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-cyan-50 to-blue-50">
+        <div className="p-4 border-b border-white/50 bg-white/20 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-gray-900">📌 References</h3>
               <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs font-bold rounded-full">
-                {state.ui.pinnedNotes.length}/5
+                {uiState.pinnedNotes.length}/5
               </span>
             </div>
             <button
-              onClick={() => dispatch({ type: 'TOGGLE_REFERENCE_PANEL' })}
+              onClick={() => uiDispatch({ type: 'TOGGLE_REFERENCE_PANEL' })}
               className="p-1 hover:bg-white rounded-lg transition-colors"
               title="Close reference panel (⌘⇧R)"
             >
@@ -137,17 +141,17 @@ export function ReferencePanel() {
 
         {/* Notes List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {state.ui.pinnedNotes.map(noteId => {
-            const note = state.notes.find(n => n.id === noteId);
+          {uiState.pinnedNotes.map(noteId => {
+            const note = notesState.notes.find(n => n.id === noteId);
             if (!note) return null;
 
-            const topic = state.topics.find(t => t.id === note.topicId);
+            const topic = entitiesState.topics.find(t => t.id === note.topicId);
             const isExpanded = expandedNotes.has(noteId);
 
             return (
               <div
                 key={noteId}
-                className="bg-gradient-to-br from-white to-cyan-50/30 rounded-xl border-2 border-gray-200 overflow-hidden hover:border-cyan-300 transition-all"
+                className="bg-white/20 backdrop-blur-sm rounded-[24px] border-2 border-white/50 overflow-hidden hover:border-cyan-300 transition-all"
               >
                 {/* Note Header */}
                 <div className="p-3 border-b border-gray-200 bg-white/50">
@@ -213,17 +217,17 @@ export function ReferencePanel() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-2 pt-2 border-t border-gray-200">
+                    <div className="flex gap-2 pt-2 border-t border-white/50">
                       <button
                         onClick={() => handleCopyContent(note.content)}
-                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/30 hover:bg-white/50 backdrop-blur-sm rounded-[16px] text-sm font-medium transition-colors"
                       >
                         <Copy className="w-4 h-4" />
                         Copy
                       </button>
                       <button
                         onClick={() => handleOpenInSidebar(noteId)}
-                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-cyan-100 hover:bg-cyan-200 text-cyan-700 rounded-lg text-sm font-medium transition-colors"
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/30 hover:bg-white/50 backdrop-blur-sm text-cyan-700 rounded-[16px] text-sm font-medium transition-colors"
                       >
                         <ExternalLink className="w-4 h-4" />
                         Open
@@ -246,7 +250,7 @@ export function ReferencePanel() {
         </div>
 
         {/* Footer */}
-        {state.ui.pinnedNotes.length >= 5 && (
+        {uiState.pinnedNotes.length >= 5 && (
           <div className="p-3 border-t border-gray-200 bg-gray-50">
             <p className="text-xs text-gray-600 text-center">
               Maximum 5 notes pinned. Unpin a note to add another.

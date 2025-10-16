@@ -88,6 +88,86 @@ export const NED_TOOLS = {
     },
   },
 
+  // ==================== SESSION TOOLS ====================
+
+  query_sessions: {
+    name: 'query_sessions',
+    description: 'Search for work sessions using an AI agent that understands semantic queries. The agent can search by session content, activities detected in screenshots, dates, duration, and more. Supports multi-turn conversations for refining results. Use this when you need to find sessions based on what the user was actually doing (e.g., "sessions where I worked on authentication", "long coding sessions from last week").',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Natural language search query. Be specific about what you\'re looking for (e.g., "sessions where I worked on the dashboard", "coding sessions from yesterday", "sessions about customer feedback")',
+        },
+        agent_thread_id: {
+          type: 'string',
+          description: 'Optional: Thread ID for continuing a previous search conversation with the agent. Use this to refine or follow up on previous session searches.',
+        },
+      },
+      required: ['query'],
+    },
+  },
+
+  get_session_details: {
+    name: 'get_session_details',
+    description: 'Get complete details for a specific session including all screenshots, AI analysis, extracted tasks, and notes.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        session_id: {
+          type: 'string',
+          description: 'ID of the session to fetch',
+        },
+      },
+      required: ['session_id'],
+    },
+  },
+
+  get_session_summary: {
+    name: 'get_session_summary',
+    description: 'Generate an AI-powered summary of a session including key activities, time breakdown, and extracted insights. This runs AI analysis on the session screenshots.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        session_id: {
+          type: 'string',
+          description: 'ID of the session to summarize',
+        },
+      },
+      required: ['session_id'],
+    },
+  },
+
+  get_active_session: {
+    name: 'get_active_session',
+    description: 'Get the currently active session (if any) with real-time status.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+
+  get_screenshot_image: {
+    name: 'get_screenshot_image',
+    description: 'Load and view a specific screenshot image for visual analysis. **EXPENSIVE - ONLY USE WHEN NECESSARY!** Use this ONLY when: (1) User explicitly asks to see a specific screenshot, (2) The existing AI analysis is insufficient to answer the question, (3) You need to verify specific visual details. DO NOT use this for general session review - the AI analysis already contains the key information.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        screenshot_id: {
+          type: 'string',
+          description: 'ID of the screenshot to load and view',
+        },
+        reason: {
+          type: 'string',
+          description: 'Brief explanation of why you need to view this screenshot (helps track usage)',
+        },
+      },
+      required: ['screenshot_id', 'reason'],
+    },
+  },
+
   // ==================== WRITE TOOLS (Permission Required) ====================
 
   create_task: {
@@ -178,13 +258,13 @@ export const NED_TOOLS = {
 
   create_note: {
     name: 'create_note',
-    description: 'Create a new note. Requires user permission.',
+    description: 'Create a new note. Requires user permission. IMPORTANT: Use plain markdown formatting (not HTML). Use # for headers, ** for bold, * for bullets, etc.',
     input_schema: {
       type: 'object' as const,
       properties: {
         content: {
           type: 'string',
-          description: 'Note content (markdown)',
+          description: 'Note content in plain markdown format (NOT HTML). Use markdown syntax: # for headers, ** for bold, - for bullets, etc.',
         },
         topic_id: {
           type: 'string',
@@ -202,7 +282,7 @@ export const NED_TOOLS = {
 
   update_note: {
     name: 'update_note',
-    description: 'Update an existing note. Requires user permission.',
+    description: 'Update an existing note. Requires user permission. IMPORTANT: Use plain markdown formatting (not HTML). Use # for headers, ** for bold, * for bullets, etc.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -212,7 +292,7 @@ export const NED_TOOLS = {
         },
         content: {
           type: 'string',
-          description: 'New content for the note',
+          description: 'New content for the note in plain markdown format (NOT HTML)',
         },
       },
       required: ['note_id', 'content'],
@@ -252,6 +332,7 @@ export const NED_TOOLS = {
       },
       required: ['memory_type', 'content'],
     },
+    cache_control: { type: 'ephemeral' },
   },
 };
 
@@ -265,6 +346,11 @@ export const READ_TOOLS = [
   'get_user_context',
   'recall_memory',
   'get_item_details',
+  'query_sessions',
+  'get_session_details',
+  'get_session_summary',
+  'get_active_session',
+  'get_screenshot_image',
 ];
 
 export const WRITE_TOOLS = [
@@ -295,6 +381,17 @@ export interface ToolResult {
   // UI-only data (not sent to Claude)
   full_notes?: Note[];
   full_tasks?: Task[];
+  full_sessions?: any[]; // Session type - using any[] to avoid circular import
+  // Change tracking for UI notifications
+  operation?: 'create' | 'update' | 'delete';
+  item_type?: 'task' | 'note';
+  item?: Task | Note;
+  changes?: Array<{
+    field: string;
+    label: string;
+    oldValue: any;
+    newValue: any;
+  }>;
 }
 
 // Context Agent Response

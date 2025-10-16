@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Taskerino",
   "version": "0.1.0",
-  "identifier": "com.taskerino.app",
+  "identifier": "com.taskerino.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -10,7 +10,7 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "windows": [
       {
         "title": "Taskerino",
@@ -25,12 +25,18 @@
         "alwaysOnTop": false,
         "skipTaskbar": false,
         "visible": true,
-        "titleBarStyle": "Transparent",
-        "hiddenTitle": true
+        "visibleOnAllWorkspaces": false,
+        "hiddenTitle": false,
+        "transparent": false,
+        "theme": "Light"
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' asset:; connect-src 'self' https://api.openai.com https://api.anthropic.com; font-src 'self';",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**"]
+      }
     }
   },
   "bundle": {
@@ -48,10 +54,10 @@
     "longDescription": "Taskerino is a smart task and note management app with AI-powered features",
     "macOS": {
       "frameworks": [],
-      "minimumSystemVersion": "10.13",
+      "minimumSystemVersion": "12.3",
       "exceptionDomain": "",
       "signingIdentity": null,
-      "entitlements": null
+      "entitlements": "entitlements.plist"
     }
   }
 }
