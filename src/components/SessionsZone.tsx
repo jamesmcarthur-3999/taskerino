@@ -33,6 +33,9 @@ import { SessionsSortMenu } from './sessions/SessionsSortMenu';
 import { SessionsSearchBar } from './sessions/SessionsSearchBar';
 import { BulkOperationsBar } from './sessions/BulkOperationsBar';
 import { ActiveFiltersDisplay } from './sessions/ActiveFiltersDisplay';
+import { SessionsFilterMenu } from './sessions/SessionsFilterMenu';
+import { SessionListGroup } from './sessions/SessionListGroup';
+import { SessionCard } from './sessions/SessionCard';
 
 /**
  * Helper function to group sessions by date ranges
@@ -1611,127 +1614,15 @@ export default function SessionsZone() {
                 <div className="h-8 w-px bg-white/30"></div>
 
                 {/* Filters Button */}
-                <div className="relative">
-                  <DropdownTrigger
-                    icon={SlidersHorizontal}
-                    label="Filter"
-                    active={showFilterDropdown}
-                    onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                    badge={
-                      (selectedCategories.length > 0 || selectedSubCategories.length > 0 || selectedTags.length > 0)
-                        ? selectedCategories.length + selectedSubCategories.length + selectedTags.length
-                        : undefined
-                    }
-                  />
-
-                  {/* Filter Dropdown Panel */}
-                  {showFilterDropdown && (
-                    <div className="absolute top-full left-0 mt-2 w-80 bg-white backdrop-blur-xl rounded-[20px] border-2 border-cyan-400/80 shadow-2xl z-[9999] max-h-96 overflow-y-auto">
-                          <div className="p-5 space-y-5">
-                            {/* Header */}
-                            <div className="flex items-center justify-between pb-3 border-b-2 border-gray-200">
-                              <h3 className="text-base font-bold text-gray-900">Filter Sessions</h3>
-                              {(selectedCategories.length > 0 || selectedSubCategories.length > 0 || selectedTags.length > 0) && (
-                                <button
-                                  onClick={() => {
-                                    setSelectedCategories([]);
-                                    setSelectedSubCategories([]);
-                                    setSelectedTags([]);
-                                  }}
-                                  className="text-xs text-cyan-600 hover:text-cyan-800 font-bold underline transition-colors"
-                                >
-                                  Clear all
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Categories Section */}
-                            {uniqueCategories.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Categories</h4>
-                                <div className="space-y-2">
-                                  {uniqueCategories.map(category => (
-                                    <label key={category} className="flex items-center gap-3 cursor-pointer group py-1 px-2 -mx-2 rounded-lg hover:bg-cyan-50 transition-colors">
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedCategories.includes(category)}
-                                        onChange={(e) => {
-                                          if (e.target.checked) {
-                                            setSelectedCategories([...selectedCategories, category]);
-                                          } else {
-                                            setSelectedCategories(selectedCategories.filter(c => c !== category));
-                                          }
-                                        }}
-                                        className="w-4 h-4 rounded border-2 border-gray-300 text-cyan-600 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 cursor-pointer transition-all"
-                                      />
-                                      <span className="text-sm font-medium text-gray-800 group-hover:text-cyan-700 transition-colors">
-                                        {category}
-                                      </span>
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Sub-Categories Section */}
-                            {uniqueSubCategories.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Sub-Categories</h4>
-                                <div className="space-y-2">
-                                  {uniqueSubCategories.map(subCategory => (
-                                    <label key={subCategory} className="flex items-center gap-3 cursor-pointer group py-1 px-2 -mx-2 rounded-lg hover:bg-cyan-50 transition-colors">
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedSubCategories.includes(subCategory)}
-                                        onChange={(e) => {
-                                          if (e.target.checked) {
-                                            setSelectedSubCategories([...selectedSubCategories, subCategory]);
-                                          } else {
-                                            setSelectedSubCategories(selectedSubCategories.filter(sc => sc !== subCategory));
-                                          }
-                                        }}
-                                        className="w-4 h-4 rounded border-2 border-gray-300 text-cyan-600 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 cursor-pointer transition-all"
-                                      />
-                                      <span className="text-sm font-medium text-gray-800 group-hover:text-cyan-700 transition-colors">
-                                        {subCategory}
-                                      </span>
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Tags Section */}
-                            {uniqueTags.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Tags</h4>
-                                <div className="space-y-2">
-                                  {uniqueTags.map(tag => (
-                                    <label key={tag} className="flex items-center gap-3 cursor-pointer group py-1 px-2 -mx-2 rounded-lg hover:bg-purple-50 transition-colors">
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedTags.includes(tag)}
-                                        onChange={(e) => {
-                                          if (e.target.checked) {
-                                            setSelectedTags([...selectedTags, tag]);
-                                          } else {
-                                            setSelectedTags(selectedTags.filter(t => t !== tag));
-                                          }
-                                        }}
-                                        className="w-4 h-4 rounded border-2 border-gray-300 text-purple-600 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 cursor-pointer transition-all"
-                                      />
-                                      <span className="text-sm font-medium text-gray-800 group-hover:text-purple-700 transition-colors">
-                                        {tag}
-                                      </span>
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                <SessionsFilterMenu
+                  sessions={sessions}
+                  selectedCategories={selectedCategories}
+                  selectedSubCategories={selectedSubCategories}
+                  selectedTags={selectedTags}
+                  onCategoriesChange={setSelectedCategories}
+                  onSubCategoriesChange={setSelectedSubCategories}
+                  onTagsChange={setSelectedTags}
+                />
 
                     {/* Sort Dropdown */}
                     <SessionsSortMenu
@@ -1971,125 +1862,23 @@ export default function SessionsZone() {
                 </div>
               )}
 
-              {/* Today */}
-              {groupedSessions.today.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
-                    Today
-                  </h3>
-                  <div className="space-y-3">
-                    {groupedSessions.today.map(session => (
-                      <SessionCard
-                        key={session.id}
-                        session={session}
-                        onClick={() => setSelectedSessionId(session.id)}
-                        bulkSelectMode={bulkSelectMode}
-                        isSelected={selectedSessionIds.has(session.id)}
-                        onSelect={(id) => {
-                          const newSet = new Set(selectedSessionIds);
-                          if (newSet.has(id)) {
-                            newSet.delete(id);
-                          } else {
-                            newSet.add(id);
-                          }
-                          setSelectedSessionIds(newSet);
-                        }}
-                        isNewlyCompleted={isSessionNewlyCompleted(session.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Yesterday */}
-              {groupedSessions.yesterday.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
-                    Yesterday
-                  </h3>
-                  <div className="space-y-3">
-                    {groupedSessions.yesterday.map(session => (
-                      <SessionCard
-                        key={session.id}
-                        session={session}
-                        onClick={() => setSelectedSessionId(session.id)}
-                        bulkSelectMode={bulkSelectMode}
-                        isSelected={selectedSessionIds.has(session.id)}
-                        onSelect={(id) => {
-                          const newSet = new Set(selectedSessionIds);
-                          if (newSet.has(id)) {
-                            newSet.delete(id);
-                          } else {
-                            newSet.add(id);
-                          }
-                          setSelectedSessionIds(newSet);
-                        }}
-                        isNewlyCompleted={isSessionNewlyCompleted(session.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* This Week */}
-              {groupedSessions.thisWeek.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
-                    This Week
-                  </h3>
-                  <div className="space-y-3">
-                    {groupedSessions.thisWeek.map(session => (
-                      <SessionCard
-                        key={session.id}
-                        session={session}
-                        onClick={() => setSelectedSessionId(session.id)}
-                        bulkSelectMode={bulkSelectMode}
-                        isSelected={selectedSessionIds.has(session.id)}
-                        onSelect={(id) => {
-                          const newSet = new Set(selectedSessionIds);
-                          if (newSet.has(id)) {
-                            newSet.delete(id);
-                          } else {
-                            newSet.add(id);
-                          }
-                          setSelectedSessionIds(newSet);
-                        }}
-                        isNewlyCompleted={isSessionNewlyCompleted(session.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Earlier */}
-              {groupedSessions.earlier.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
-                    Earlier
-                  </h3>
-                  <div className="space-y-3">
-                    {groupedSessions.earlier.map(session => (
-                      <SessionCard
-                        key={session.id}
-                        session={session}
-                        onClick={() => setSelectedSessionId(session.id)}
-                        bulkSelectMode={bulkSelectMode}
-                        isSelected={selectedSessionIds.has(session.id)}
-                        onSelect={(id) => {
-                          const newSet = new Set(selectedSessionIds);
-                          if (newSet.has(id)) {
-                            newSet.delete(id);
-                          } else {
-                            newSet.add(id);
-                          }
-                          setSelectedSessionIds(newSet);
-                        }}
-                        isNewlyCompleted={isSessionNewlyCompleted(session.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Grouped Sessions */}
+              <SessionListGroup
+                groupedSessions={groupedSessions}
+                bulkSelectMode={bulkSelectMode}
+                selectedSessionIds={selectedSessionIds}
+                onSessionClick={setSelectedSessionId}
+                onSessionSelect={(id) => {
+                  const newSet = new Set(selectedSessionIds);
+                  if (newSet.has(id)) {
+                    newSet.delete(id);
+                  } else {
+                    newSet.add(id);
+                  }
+                  setSelectedSessionIds(newSet);
+                }}
+                isSessionNewlyCompleted={isSessionNewlyCompleted}
+              />
             </div>
             )}
           </div>
@@ -3026,211 +2815,4 @@ function EmptySessionCard({ onStart }: { onStart: (data: Partial<Session>) => vo
   );
 }
 
-function SessionCard({
-  session,
-  onClick,
-  bulkSelectMode = false,
-  isSelected = false,
-  onSelect,
-  onTagClick,
-  isNewlyCompleted = false,
-}: {
-  session: Session;
-  onClick: () => void;
-  bulkSelectMode?: boolean;
-  isSelected?: boolean;
-  onSelect?: (sessionId: string) => void;
-  onTagClick?: (tag: string) => void;
-  isNewlyCompleted?: boolean;
-}) {
-  const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment } = useSessions();
-  const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
-  const startDate = new Date(session.startTime);
-  const endDate = session.endTime ? new Date(session.endTime) : null;
-
-  // Handler to extract all recommended tasks from summary
-  const handleExtractAllTasks = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent opening detail view
-
-    if (!session.summary?.recommendedTasks || session.summary.recommendedTasks.length === 0) {
-      addNotification({
-        type: 'info',
-        title: 'No Tasks Available',
-        message: 'This session has no recommended tasks to extract.',
-      });
-      return;
-    }
-
-    // Create tasks from all recommendations
-    session.summary.recommendedTasks.forEach(taskRec => {
-      const newTask = {
-        id: `task-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-        title: taskRec.title,
-        done: false,
-        priority: taskRec.priority,
-        status: 'todo' as const,
-        createdBy: 'ai' as const,
-        createdAt: new Date().toISOString(),
-        sourceSessionId: session.id,
-        sourceExcerpt: taskRec.title,
-        description: taskRec.context || `Extracted from session: ${session.name}`,
-        contextForAgent: taskRec.context
-          ? `This task was identified during the session "${session.name}". Context: ${taskRec.context}`
-          : `This task was identified during the session "${session.name}".`,
-        tags: [],
-      };
-
-      tasksDispatch({ type: 'ADD_TASK', payload: newTask });
-      addExtractedTask(session.id, newTask.id);
-    });
-
-    addNotification({
-      type: 'success',
-      title: 'Tasks Extracted',
-      message: `${session.summary.recommendedTasks.length} tasks added from session "${session.name}"`,
-    });
-  };
-
-  // Handler to delete session
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent opening detail view
-
-    if (window.confirm(`Delete session "${session.name}"? This action cannot be undone.`)) {
-      deleteSession(session.id,
-      );
-
-      addNotification({
-        type: 'success',
-        title: 'Session Deleted',
-        message: `"${session.name}" has been deleted.`,
-      });
-    }
-  };
-
-  const handleCardClick = () => {
-    if (bulkSelectMode && onSelect) {
-      onSelect(session.id);
-    } else {
-      onClick();
-    }
-  };
-
-  return (
-    <div
-      onClick={handleCardClick}
-      className={`group relative backdrop-blur-xl rounded-[24px] border-2 p-4 hover:shadow-md transition-all cursor-pointer overflow-hidden ${
-        isNewlyCompleted
-          ? 'bg-gradient-to-br from-green-100/80 via-cyan-100/80 to-blue-100/80 border-green-400 shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-500'
-          : bulkSelectMode && isSelected
-          ? 'bg-cyan-100/50 border-cyan-400 shadow-lg'
-          : 'bg-white/40 border-white/60 hover:bg-white/60 hover:border-cyan-300/60'
-      }`}
-    >
-      {/* NEW badge for newly completed sessions */}
-      {isNewlyCompleted && (
-        <div className="absolute top-3 right-3 px-2.5 py-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1">
-          <Sparkles size={12} />
-          <span>NEW</span>
-        </div>
-      )}
-      {/* Checkbox - Shows in bulk select mode */}
-      {bulkSelectMode && (
-        <div
-          className="absolute top-3 left-3 z-10"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={() => onSelect?.(session.id)}
-            className="w-5 h-5 rounded border-2 border-gray-300 text-cyan-600 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 cursor-pointer transition-all"
-          />
-        </div>
-      )}
-
-      {/* Delete Button - Appears on hover (hidden in bulk select mode) */}
-      {!bulkSelectMode && (
-        <button
-          onClick={handleDelete}
-          className="absolute top-3 right-3 p-1.5 bg-white/80 hover:bg-red-50 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"
-          title="Delete session"
-        >
-          <Trash2 size={14} className="text-gray-400 hover:text-red-600" />
-        </button>
-      )}
-
-      {/* Minimal Card Content */}
-      <div className={bulkSelectMode ? "pl-8 pr-4" : "pr-8"}>
-        {/* Session Name */}
-        <h4 className="font-semibold text-gray-900 mb-2 leading-tight">
-          {session.name}
-        </h4>
-
-        {/* Description - 2 lines max */}
-        {session.description && (
-          <p className="text-sm text-gray-600 mb-3 line-clamp-2 leading-relaxed">
-            {session.description}
-          </p>
-        )}
-
-        {/* Category & Sub-Category */}
-        {(session.category || session.subCategory) && (
-          <div className="flex items-center gap-2 mb-3">
-            {session.category && (
-              <span className="px-2.5 py-1 bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 rounded-full text-xs font-semibold border border-cyan-200">
-                {session.category}
-              </span>
-            )}
-            {session.subCategory && (
-              <span className="px-2.5 py-1 bg-white/60 text-gray-700 rounded-full text-xs font-medium border border-gray-200">
-                {session.subCategory}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Condensed Stats - Single Row */}
-        <div className="flex items-center gap-3 text-xs text-gray-600">
-          <span>{startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-          <span className="text-gray-300">•</span>
-          <span>
-            {session.totalDuration
-              ? session.totalDuration < 60
-                ? `${session.totalDuration}m`
-                : `${Math.floor(session.totalDuration / 60)}h ${session.totalDuration % 60}m`
-              : '0m'}
-          </span>
-          {(session.screenshots?.length || 0) > 0 && (
-            <>
-              <span className="text-gray-300">•</span>
-              <span>{session.screenshots.length} screenshots</span>
-            </>
-          )}
-          {session.audioSegments && session.audioSegments.length > 0 && (
-            <>
-              <span className="text-gray-300">•</span>
-              <span>{Math.floor(session.audioSegments.reduce((sum, seg) => sum + seg.duration, 0) / 60)}m audio</span>
-            </>
-          )}
-        </div>
-
-        {/* Optional: Small tags if present */}
-        {session.tags && session.tags.length > 0 && (
-          <div className="mt-2">
-            <InlineTagManager
-              tags={session.tags}
-              onTagsChange={(newTags) => {
-                updateSession({ ...session, tags: newTags });
-              }}
-              allTags={tagUtils.getTopTags(sessions, (s) => s.tags || [], 20)}
-              onTagClick={onTagClick ? (tag) => onTagClick(tag) : undefined}
-              maxDisplayed={5}
-              editable={true}
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
