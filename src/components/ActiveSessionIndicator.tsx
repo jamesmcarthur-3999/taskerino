@@ -3,6 +3,7 @@ import { Activity, Play, Pause, Square, Clock } from 'lucide-react';
 import { useSession } from '../hooks/useSession';
 import { useUI } from '../context/UIContext';
 import { audioStorageService } from '../services/audioStorageService';
+import { getGlassClasses, SHADOWS, TRANSITIONS } from '../design-system/theme';
 
 /**
  * ActiveSessionIndicator
@@ -107,9 +108,9 @@ export function ActiveSessionIndicator() {
   return (
     <div
       onClick={handleViewSession}
-      className="flex items-center gap-2 px-3 py-2 bg-white/60 backdrop-blur-2xl rounded-2xl shadow-xl
-                 border-2 border-white/50 ring-1 ring-black/5 transition-all duration-300 hover:scale-105
-                 hover:shadow-2xl cursor-pointer group"
+      className={`flex items-center gap-2 px-3 py-2 ${getGlassClasses('strong')} rounded-2xl ${SHADOWS.elevated}
+                 ring-1 ring-black/5 ${TRANSITIONS.standard} hover:scale-105
+                 hover:shadow-2xl cursor-pointer group`}
       style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
       title="Click to view session details"
     >
@@ -141,7 +142,7 @@ export function ActiveSessionIndicator() {
       </div>
 
       {/* Quick Controls */}
-      <div className="flex items-center gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity"
+      <div className={`flex items-center gap-1 ml-1 opacity-0 group-hover:opacity-100 ${TRANSITIONS.opacity}`}
            onClick={(e) => e.stopPropagation()}>
         {isSessionActive ? (
           <button
@@ -149,8 +150,7 @@ export function ActiveSessionIndicator() {
               e.stopPropagation();
               pauseSession();
             }}
-            className="p-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-700 rounded-lg
-                     transition-colors"
+            className={`p-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-700 rounded-lg ${TRANSITIONS.colors}`}
             title="Pause session"
           >
             <Pause className="w-3 h-3" />
@@ -161,8 +161,7 @@ export function ActiveSessionIndicator() {
               e.stopPropagation();
               resumeSession();
             }}
-            className="p-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-700 rounded-lg
-                     transition-colors"
+            className={`p-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-700 rounded-lg ${TRANSITIONS.colors}`}
             title="Resume session"
           >
             <Play className="w-3 h-3" />
@@ -174,8 +173,8 @@ export function ActiveSessionIndicator() {
             handleEndSession();
           }}
           disabled={isStitching}
-          className="p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-700 rounded-lg
-                   transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`p-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-700 rounded-lg
+                   ${TRANSITIONS.colors} disabled:opacity-50 disabled:cursor-not-allowed`}
           title={isStitching ? "Stitching audio..." : "End session"}
         >
           {isStitching ? (

@@ -8,7 +8,7 @@
 import React from 'react';
 import { CheckCircle, Circle, Loader2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { getModalClasses } from '../design-system/theme';
+import { getModalClasses, getModalHeaderClasses, getGlassClasses, getRadiusClass } from '../design-system/theme';
 
 export interface AudioReviewProgress {
   stage: 'preparing' | 'concatenating' | 'analyzing' | 'complete';
@@ -76,7 +76,7 @@ export function AudioReviewProgressModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-6 border-b-2 border-white/30 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 backdrop-blur-sm rounded-t-[32px]">
+        <div className={getModalHeaderClasses(colorScheme)}>
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent mb-1">
@@ -113,7 +113,7 @@ export function AudioReviewProgressModal({
           </div>
 
           {/* Stage-by-Stage Progress */}
-          <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 space-y-3 border border-white/60 shadow-sm">
+          <div className={`${getGlassClasses('subtle')} ${getRadiusClass('field')} p-4 space-y-3`}>
             {stages.map((stage) => {
               const status = getStageStatus(stage.id);
 

@@ -1,14 +1,15 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Calendar, Clock, Activity, Tag, Download, Trash2, CheckSquare, FileText, BookOpen, CheckCircle2, AlertCircle, Target, Lightbulb, Plus, Music, Camera, RefreshCw, ChevronDown, Columns, Focus } from 'lucide-react';
 import type { Session, Task, Note } from '../types';
 import { SessionActivityTimeline } from './SessionActivityTimeline';
-import { SessionReview } from './SessionReview';
 import { calculateActivityStats } from '../utils/activityUtils';
 import { groupActivitiesIntoBlocks } from '../utils/activityUtils';
 import { useUI } from '../context/UIContext';
 import { useTasks } from '../context/TasksContext';
 import { useNotes } from '../context/NotesContext';
 import { useSessions } from '../context/SessionsContext';
+import { useEnrichmentContext } from '../context/EnrichmentContext';
+import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
 import { generateId, stripHtmlTags } from '../utils/helpers';
 import { exportSessionJSON, exportSessionMarkdown } from '../utils/sessionExport';
 import { audioExportService } from '../services/audioExportService';
@@ -16,7 +17,26 @@ import { InlineTagManager } from './InlineTagManager';
 import { RainbowBorderProgressIndicator } from './RainbowBorderProgressIndicator';
 import { sessionEnrichmentService } from '../services/sessionEnrichmentService';
 import { getStorage } from '../services/storage';
-import { ICON_SIZES, SHADOWS } from '../design-system/theme';
+import {
+  ICON_SIZES,
+  SHADOWS,
+  BACKGROUND_GRADIENT,
+  getGlassClasses,
+  getStatusBadgeClasses,
+  getSuccessGradient,
+  getDangerGradient,
+  getInfoGradient,
+  getWarningGradient,
+  PRIORITY_COLORS,
+  STATS_CARD_GRADIENTS,
+  getRadiusClass,
+  TRANSITIONS,
+} from '../design-system/theme';
+import { LoadingSpinner } from './LoadingSpinner';
+
+// Lazy load SessionReview and CanvasView to reduce initial bundle size
+const SessionReview = lazy(() => import('./SessionReview').then(module => ({ default: module.SessionReview })));
+const CanvasView = lazy(() => import('./CanvasView').then(module => ({ default: module.CanvasView })));
 
 interface SessionDetailViewProps {
   session: Session;
@@ -41,10 +61,11 @@ export function SessionDetailView({
   const { addTask } = useTasks();
   const { addNote } = useNotes();
   const { sessions: allSessions, updateSession: updateSessionInContext } = useSessions();
+  const { getActiveEnrichment } = useEnrichmentContext();
+  const { scrollProgress, isScrolled, registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [activeView, setActiveView] = useState<'overview' | 'review'>('overview');
-  const [isScrolled, setIsScrolled] = useState(false);
+  const [activeView, setActiveView] = useState<'overview' | 'review' | 'canvas'>('overview');
   const [isExportingAudio, setIsExportingAudio] = useState(false);
   const [currentSession, setCurrentSession] = useState<Session>(session);
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
@@ -53,6 +74,9 @@ export function SessionDetailView({
   const contentRef = React.useRef<HTMLDivElement>(null);
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
   const reEnrichMenuRef = React.useRef<HTMLDivElement>(null);
+
+  // Get active enrichment for real-time tracking
+  const activeEnrichment = getActiveEnrichment(currentSession.id);
 
   // Sync currentSession with session prop when it changes
   useEffect(() => {
@@ -440,31 +464,25 @@ export function SessionDetailView({
   }, [showExportMenu, showReEnrichMenu]);
 
 
-  // Track scroll progress for smooth animations
-  const [scrollProgress, setScrollProgress] = React.useState(0);
-
-  // Detect scroll position for floating UI
+  // Register content container with ScrollAnimationContext for RAF-based scroll detection
   useEffect(() => {
     const contentElement = contentRef.current;
     if (!contentElement) return;
 
-    const handleScroll = () => {
-      const scrollTop = contentElement.scrollTop;
-      // Calculate progress from 0 to 1 over 200px of scrolling
-      const progress = Math.min(scrollTop / 200, 1);
-      setScrollProgress(progress);
-      setIsScrolled(scrollTop > 100);
-    };
+    // Register the scroll container
+    registerScrollContainer(contentElement);
 
-    contentElement.addEventListener('scroll', handleScroll);
-    return () => contentElement.removeEventListener('scroll', handleScroll);
-  }, []);
+    // Cleanup: unregister on unmount
+    return () => {
+      unregisterScrollContainer(contentElement);
+    };
+  }, [registerScrollContainer, unregisterScrollContainer]);
 
   return (
-    <div className="h-full w-full bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20 rounded-[24px] shadow-xl overflow-hidden relative flex flex-col">
+    <div className={`h-full w-full ${BACKGROUND_GRADIENT.primary} ${getRadiusClass('card')} shadow-xl overflow-hidden relative flex flex-col`}>
         {/* Rainbow border during enrichment */}
-        {currentSession.enrichmentStatus?.status === 'in-progress' && (
-          <div className="absolute inset-0 pointer-events-none z-50 rounded-[24px] overflow-hidden">
+        {(activeEnrichment || currentSession.enrichmentStatus?.status === 'in-progress') && (
+          <div className={`absolute inset-0 pointer-events-none z-50 ${getRadiusClass('card')} overflow-hidden`}>
             <RainbowBorderProgressIndicator />
           </div>
         )}
@@ -472,47 +490,63 @@ export function SessionDetailView({
         <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none" />
 
         {/* Header */}
-        <div className="relative z-10 flex-shrink-0 bg-white/50 backdrop-blur-2xl border-b-2 border-white/60 shadow-xl px-6 py-6">
+        <div
+          className={`relative z-10 flex-shrink-0 ${getGlassClasses('medium')} border-b-2 shadow-xl transition-all duration-300`}
+          style={{
+            paddingLeft: '1.5rem',
+            paddingRight: '1.5rem',
+            paddingTop: isScrolled ? '1rem' : '1.5rem',
+            paddingBottom: isScrolled ? '1rem' : '1.5rem',
+          }}
+        >
         <div className="max-w-7xl mx-auto flex items-start justify-between gap-8">
-          <div className="flex-1 min-w-0 space-y-1.5">
+          <div
+            className="flex-1 min-w-0 transition-all duration-300"
+            style={{
+              gap: isScrolled ? '0.25rem' : '0.375rem',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
             {/* Title & Status */}
             <div className="flex items-center gap-3">
               <h1 className={`font-bold text-gray-900 truncate transition-all duration-300 ${
                 isScrolled ? 'text-xl' : 'text-2xl'
               }`}>{session.name}</h1>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm flex-shrink-0 ${
-                session.status === 'active' ? 'bg-green-100 text-green-700 border border-green-200' :
-                session.status === 'paused' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
-                'bg-gray-100 text-gray-700 border border-gray-200'
-              }`}>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm flex-shrink-0 ${getStatusBadgeClasses(session.status as any)}`}>
                 {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
               </span>
             </div>
 
             {/* Category & Tags - Combined Row - Hide completely when scrolled */}
             <div
-              className="flex items-center gap-3 flex-wrap overflow-hidden transition-all duration-300"
+              className="flex items-center gap-3 transition-all duration-300"
               style={{
                 maxHeight: isScrolled ? '0px' : '48px',
                 opacity: isScrolled ? 0 : 1,
                 marginBottom: isScrolled ? '0px' : '6px',
+                overflow: isScrolled ? 'hidden' : 'visible',
               }}
             >
-              <InlineCategoryManager session={currentSession} />
-              <InlineTagManager
-                tags={currentSession.tags || []}
-                onTagsChange={(newTags) => {
-                  updateSessionInContext({
-                      ...currentSession,
-                      tags: newTags,
-                  });
-                }}
-                allTags={useMemo(() =>
-                  Array.from(new Set(allSessions.flatMap(s => s.tags || []))),
-                  [allSessions]
-                )}
-                editable={true}
-              />
+              <div className="flex-shrink-0">
+                <InlineCategoryManager session={currentSession} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <InlineTagManager
+                  tags={currentSession.tags || []}
+                  onTagsChange={(newTags) => {
+                    updateSessionInContext({
+                        ...currentSession,
+                        tags: newTags,
+                    });
+                  }}
+                  allTags={useMemo(() =>
+                    Array.from(new Set(allSessions.flatMap(s => s.tags || []))),
+                    [allSessions]
+                  )}
+                  editable={true}
+                />
+              </div>
             </div>
 
             {/* Quick Stats - Compact Row */}
@@ -555,7 +589,7 @@ export function SessionDetailView({
                 <button
                   onClick={() => setShowReEnrichMenu(!showReEnrichMenu)}
                   disabled={isReEnriching}
-                  className="w-11 h-11 bg-gradient-to-r from-green-100 to-emerald-100 hover:from-green-200 hover:to-emerald-200 backdrop-blur-sm rounded-full transition-all hover:scale-105 active:scale-95 border-2 border-green-300 shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`w-11 h-11 ${getSuccessGradient('light').container} hover:from-green-200 rounded-full transition-all hover:scale-105 active:scale-95 border-2 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed`}
                   title="Re-enrich session"
                 >
                   {isReEnriching ? (
@@ -567,14 +601,14 @@ export function SessionDetailView({
 
                 {/* Re-enrichment dropdown */}
                 {showReEnrichMenu && !isReEnriching && (
-                  <div className="absolute top-full right-0 mt-2 w-52 bg-white/95 backdrop-blur-xl rounded-[20px] border-2 border-white/80 shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className={`absolute top-full right-0 mt-2 w-52 ${getGlassClasses('extra-strong')} ${getRadiusClass('field')} shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200`}>
                     <div className="px-3 py-2 text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">
                       Re-Enrich Session
                     </div>
                     {currentSession.audioSegments && currentSession.audioSegments.length > 0 && (
                       <button
                         onClick={() => handleReEnrich({ audio: true, video: false })}
-                        className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-green-500/20 hover:to-emerald-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900"
+                        className={`w-full px-4 py-3 text-left hover:${getSuccessGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900`}
                       >
                         <RefreshCw size={16} />
                         <div>
@@ -586,7 +620,7 @@ export function SessionDetailView({
                     {currentSession.video?.fullVideoAttachmentId && (
                       <button
                         onClick={() => handleReEnrich({ audio: false, video: true })}
-                        className={`w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-green-500/20 hover:to-emerald-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 ${currentSession.audioSegments?.length ? 'border-t border-gray-100' : ''}`}
+                        className={`w-full px-4 py-3 text-left hover:${getSuccessGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 ${currentSession.audioSegments?.length ? 'border-t border-gray-100' : ''}`}
                       >
                         <RefreshCw size={16} />
                         <div>
@@ -598,7 +632,7 @@ export function SessionDetailView({
                     {currentSession.audioSegments?.length && currentSession.video?.fullVideoAttachmentId && (
                       <button
                         onClick={() => handleReEnrich({ audio: true, video: true })}
-                        className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-green-500/20 hover:to-emerald-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 border-t border-gray-100"
+                        className={`w-full px-4 py-3 text-left hover:${getSuccessGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 border-t border-gray-100`}
                       >
                         <RefreshCw size={16} />
                         <div>
@@ -609,7 +643,7 @@ export function SessionDetailView({
                     )}
                     <button
                       onClick={() => handleReEnrich({ audio: false, video: false })}
-                      className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-green-500/20 hover:to-emerald-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 border-t border-gray-100"
+                      className={`w-full px-4 py-3 text-left hover:${getSuccessGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 border-t border-gray-100`}
                     >
                       <RefreshCw size={16} />
                       <div>
@@ -629,7 +663,7 @@ export function SessionDetailView({
                 className={`
                   w-11 h-11 rounded-full transition-all hover:scale-105 active:scale-95 shadow-md flex items-center justify-center
                   ${isSidebarExpanded
-                    ? 'bg-white/60 hover:bg-white/80 border-2 border-white/60 text-gray-700'
+                    ? `${getGlassClasses('medium')} text-gray-700`
                     : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 border-2 border-cyan-400 text-white shadow-cyan-200/50'
                   }
                 `}
@@ -647,7 +681,7 @@ export function SessionDetailView({
             <div ref={exportMenuRef} className="relative">
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
-                className="w-11 h-11 bg-white/70 hover:bg-white/90 backdrop-blur-sm rounded-full transition-all hover:scale-105 active:scale-95 border-2 border-white/60 shadow-md flex items-center justify-center"
+                className={`w-11 h-11 ${getGlassClasses('strong')} rounded-full transition-all hover:scale-105 active:scale-95 shadow-md flex items-center justify-center`}
                 title="Export session"
               >
                 <Download size={20} className="text-gray-700" />
@@ -655,7 +689,7 @@ export function SessionDetailView({
 
               {/* Dropdown Menu */}
               {showExportMenu && (
-                <div className="absolute top-full right-0 mt-2 w-64 bg-white/95 backdrop-blur-xl rounded-[20px] border-2 border-white/80 shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200 max-h-96 overflow-y-auto">
+                <div className={`absolute top-full right-0 mt-2 w-64 ${getGlassClasses('extra-strong')} ${getRadiusClass('field')} shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200 max-h-96 overflow-y-auto`}>
                   {/* Session Export Section */}
                   <div className="px-3 py-2 text-xs font-bold text-gray-500 uppercase tracking-wide">
                     Session Data
@@ -670,7 +704,7 @@ export function SessionDetailView({
                         message: 'Session exported as JSON',
                       });
                     }}
-                    className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900"
+                    className={`w-full px-4 py-3 text-left hover:${getInfoGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900`}
                   >
                     <FileText size={18} />
                     <div>
@@ -688,7 +722,7 @@ export function SessionDetailView({
                         message: 'Session exported as Markdown',
                       });
                     }}
-                    className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900"
+                    className={`w-full px-4 py-3 text-left hover:${getInfoGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900`}
                   >
                     <BookOpen size={18} />
                     <div>
@@ -701,7 +735,7 @@ export function SessionDetailView({
                       handleExportPDF();
                       setShowExportMenu(false);
                     }}
-                    className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900"
+                    className={`w-full px-4 py-3 text-left hover:${getInfoGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900`}
                   >
                     <Download size={18} />
                     <div>
@@ -719,7 +753,7 @@ export function SessionDetailView({
                       <button
                         onClick={handleExportAudioMP3}
                         disabled={isExportingAudio}
-                        className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={`w-full px-4 py-3 text-left hover:${getInfoGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         <Music size={18} />
                         <div>
@@ -730,7 +764,7 @@ export function SessionDetailView({
                       <button
                         onClick={handleExportAudioWAV}
                         disabled={isExportingAudio}
-                        className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={`w-full px-4 py-3 text-left hover:${getInfoGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         <Music size={18} />
                         <div>
@@ -740,7 +774,7 @@ export function SessionDetailView({
                       </button>
                       <button
                         onClick={handleExportTranscriptionSRT}
-                        className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900"
+                        className={`w-full px-4 py-3 text-left hover:${getInfoGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900`}
                       >
                         <FileText size={18} />
                         <div>
@@ -750,7 +784,7 @@ export function SessionDetailView({
                       </button>
                       <button
                         onClick={handleExportTranscriptionVTT}
-                        className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900"
+                        className={`w-full px-4 py-3 text-left hover:${getInfoGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900`}
                       >
                         <FileText size={18} />
                         <div>
@@ -760,7 +794,7 @@ export function SessionDetailView({
                       </button>
                       <button
                         onClick={handleExportTranscriptionTXT}
-                        className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900"
+                        className={`w-full px-4 py-3 text-left hover:${getInfoGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900`}
                       >
                         <FileText size={18} />
                         <div>
@@ -770,7 +804,7 @@ export function SessionDetailView({
                       </button>
                       <button
                         onClick={handleExportAudioMarkdown}
-                        className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900"
+                        className={`w-full px-4 py-3 text-left hover:${getInfoGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900`}
                       >
                         <BookOpen size={18} />
                         <div>
@@ -786,7 +820,7 @@ export function SessionDetailView({
             {onDelete && session.status === 'completed' && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                className="w-11 h-11 bg-red-100 hover:bg-red-200 rounded-full transition-all hover:scale-105 active:scale-95 border-2 border-red-200 shadow-md flex items-center justify-center"
+                className={`w-11 h-11 ${getDangerGradient('light').container} hover:bg-red-200 rounded-full transition-all hover:scale-105 active:scale-95 border-2 shadow-md flex items-center justify-center`}
                 title="Delete session"
               >
                 <Trash2 size={20} className="text-red-700" />
@@ -800,7 +834,7 @@ export function SessionDetailView({
         <div className={`absolute top-6 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${
           isScrolled ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'
         }`}>
-          <div className="flex gap-2 bg-white/20 backdrop-blur-xl rounded-full p-1.5 border border-white/40 shadow-2xl">
+          <div className={`flex gap-2 ${getGlassClasses('subtle')} ${getRadiusClass('pill')} p-1.5 shadow-2xl`}>
             <button
               onClick={() => setActiveView('overview')}
               className={`px-6 py-2 rounded-full font-semibold text-sm transition-all ${
@@ -821,17 +855,34 @@ export function SessionDetailView({
             >
               Review
             </button>
+            <button
+              onClick={() => setActiveView('canvas')}
+              className={`px-6 py-2 rounded-full font-semibold text-sm transition-all ${
+                activeView === 'canvas'
+                  ? 'bg-white/90 shadow-lg text-gray-900'
+                  : 'text-white hover:text-gray-900 hover:bg-white/50'
+              }`}
+            >
+              Canvas
+            </button>
           </div>
         </div>
 
         {/* Content */}
-        <div ref={contentRef} className="relative z-0 flex-1 overflow-y-auto px-6 pb-8 pt-6">
+        <div
+          ref={contentRef}
+          className="relative z-0 flex-1 overflow-y-auto px-6 transition-all duration-300"
+          style={{
+            paddingTop: isScrolled ? '1rem' : '1.5rem',
+            paddingBottom: isScrolled ? '1rem' : '2rem',
+          }}
+        >
           {/* View Tabs */}
           <div className="mb-6 flex justify-center">
-            <div className="flex gap-2 bg-white/40 backdrop-blur-md rounded-[20px] p-1.5 border-2 border-white/60 inline-flex shadow-lg">
+            <div className={`flex gap-2 ${getGlassClasses('medium')} ${getRadiusClass('field')} p-1.5 inline-flex shadow-lg`}>
               <button
                 onClick={() => setActiveView('overview')}
-                className={`px-8 py-2.5 rounded-[16px] font-semibold text-sm transition-all ${
+                className={`px-8 py-2.5 ${getRadiusClass('element')} font-semibold text-sm transition-all ${
                   activeView === 'overview'
                     ? 'bg-white shadow-lg text-gray-900'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
@@ -841,7 +892,7 @@ export function SessionDetailView({
               </button>
               <button
                 onClick={() => setActiveView('review')}
-                className={`px-8 py-2.5 rounded-[16px] font-semibold text-sm transition-all ${
+                className={`px-8 py-2.5 ${getRadiusClass('element')} font-semibold text-sm transition-all ${
                   activeView === 'review'
                     ? 'bg-white shadow-lg text-gray-900'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
@@ -849,15 +900,32 @@ export function SessionDetailView({
               >
                 Review
               </button>
+              <button
+                onClick={() => setActiveView('canvas')}
+                className={`px-8 py-2.5 ${getRadiusClass('element')} font-semibold text-sm transition-all ${
+                  activeView === 'canvas'
+                    ? 'bg-white shadow-lg text-gray-900'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                }`}
+              >
+                Canvas
+              </button>
             </div>
           </div>
 
           {activeView === 'overview' ? (
             <div className="max-w-7xl mx-auto">
-            <div className="space-y-6">
+            <div
+              className="transition-all duration-300"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: isScrolled ? '1rem' : '1.5rem',
+              }}
+            >
               {/* Enrichment Loading Indicator - Shows when enrichment is in progress */}
-              {currentSession.enrichmentStatus?.status === 'in-progress' && (
-                <div className="bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-purple-500/10 backdrop-blur-xl rounded-[24px] border-2 border-cyan-300/40 p-4 shadow-lg">
+              {(activeEnrichment || currentSession.enrichmentStatus?.status === 'in-progress') && (
+                <div className={`${getInfoGradient('light').container} ${getRadiusClass('card')} p-4 shadow-lg`}>
                   <div className="flex items-center gap-4">
                     {/* Animated icon */}
                     <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 flex items-center justify-center shadow-lg">
@@ -872,14 +940,14 @@ export function SessionDetailView({
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="text-sm font-bold text-gray-900">Enriching session with AI...</h4>
                         <span className="text-xs font-semibold text-cyan-600">
-                          {Math.round(currentSession.enrichmentStatus.progress || 0)}%
+                          {Math.round(activeEnrichment?.progress ?? currentSession.enrichmentStatus?.progress ?? 0)}%
                         </span>
                       </div>
                       <p className="text-xs text-gray-600">
-                        {currentSession.enrichmentStatus.currentStage === 'audio' && 'Analyzing audio and generating transcript...'}
-                        {currentSession.enrichmentStatus.currentStage === 'video' && 'Generating video chapters...'}
-                        {currentSession.enrichmentStatus.currentStage === 'summary' && 'Creating session summary...'}
-                        {!currentSession.enrichmentStatus.currentStage && 'Processing...'}
+                        {(activeEnrichment?.stage ?? currentSession.enrichmentStatus?.currentStage) === 'audio' && 'Analyzing audio and generating transcript...'}
+                        {(activeEnrichment?.stage ?? currentSession.enrichmentStatus?.currentStage) === 'video' && 'Generating video chapters...'}
+                        {(activeEnrichment?.stage ?? currentSession.enrichmentStatus?.currentStage) === 'summary' && 'Creating session summary...'}
+                        {!(activeEnrichment?.stage ?? currentSession.enrichmentStatus?.currentStage) && 'Processing...'}
                       </p>
                     </div>
 
@@ -888,7 +956,7 @@ export function SessionDetailView({
                       <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 transition-all duration-500 relative overflow-hidden"
-                          style={{ width: `${currentSession.enrichmentStatus.progress || 0}%` }}
+                          style={{ width: `${activeEnrichment?.progress ?? currentSession.enrichmentStatus?.progress ?? 0}%` }}
                         >
                           {/* Shimmer effect */}
                           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
@@ -901,12 +969,12 @@ export function SessionDetailView({
 
               {/* Session Summary - AI Synthesis */}
               {currentSession.summary && (
-                <div className="relative bg-white/40 backdrop-blur-xl rounded-[32px] border-2 border-white/50 p-8 shadow-xl">
+                <div className={`relative ${getGlassClasses('medium')} ${getRadiusClass('modal')} p-8 shadow-xl`}>
                   {/* Loading overlay when regenerating */}
                   {isRegeneratingSummary && (
-                    <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-[32px] flex items-center justify-center z-10">
+                    <div className={`absolute inset-0 ${getGlassClasses('strong')} ${getRadiusClass('modal')} flex items-center justify-center z-10`}>
                       <div className="text-center">
-                        <div className="inline-flex items-center gap-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white px-6 py-4 rounded-[20px] shadow-lg">
+                        <div className={`inline-flex items-center gap-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white px-6 py-4 ${getRadiusClass('field')} shadow-lg`}>
                           <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -930,7 +998,7 @@ export function SessionDetailView({
                     <button
                       onClick={() => handleExtractNote(currentSession.summary!.narrative)}
                       disabled={isRegeneratingSummary}
-                      className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-[16px] text-xs font-semibold transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className={`px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white ${getRadiusClass('element')} text-xs font-semibold transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       <FileText size={14} />
                       Save as Note
@@ -938,7 +1006,7 @@ export function SessionDetailView({
                   </div>
 
                   {/* Narrative */}
-                  <div className="bg-white/40 backdrop-blur-sm rounded-[20px] p-6 mb-6 border-2 border-white/60">
+                  <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-6 mb-6`}>
                     <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{currentSession.summary.narrative}</p>
                   </div>
 
@@ -946,7 +1014,7 @@ export function SessionDetailView({
                   <div className="grid grid-cols-2 gap-6 mb-6">
                     {/* Achievements */}
                     {currentSession.summary?.achievements && currentSession.summary?.achievements.length > 0 && (
-                      <div className="bg-white/40 backdrop-blur-xl rounded-[20px] p-5 border-2 border-white/60">
+                      <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-5`}>
                         <div className="flex items-center gap-2 mb-4">
                           <CheckCircle2 className="w-5 h-5 text-green-600" />
                           <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-700">
@@ -966,7 +1034,7 @@ export function SessionDetailView({
 
                     {/* Blockers */}
                     {currentSession.summary?.blockers && currentSession.summary?.blockers.length > 0 && (
-                      <div className="bg-white/40 backdrop-blur-xl rounded-[20px] p-5 border-2 border-white/60">
+                      <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-5`}>
                         <div className="flex items-center gap-2 mb-4">
                           <AlertCircle className="w-5 h-5 text-red-600" />
                           <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-700">
@@ -987,7 +1055,7 @@ export function SessionDetailView({
 
                   {/* Recommended Tasks */}
                   {currentSession.summary?.recommendedTasks && currentSession.summary?.recommendedTasks.length > 0 && (
-                    <div className="bg-white/40 backdrop-blur-xl rounded-[20px] p-6 border-2 border-white/60 mb-6">
+                    <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-6 mb-6`}>
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                           <Target className="w-5 h-5 text-cyan-600" />
@@ -1002,7 +1070,7 @@ export function SessionDetailView({
                               handleExtractTask(task.title, task.priority, task.context);
                             });
                           }}
-                          className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-[16px] text-xs font-semibold transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1"
+                          className={`px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white ${getRadiusClass('element')} text-xs font-semibold transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-1`}
                         >
                           <CheckSquare size={14} />
                           Create All
@@ -1010,21 +1078,22 @@ export function SessionDetailView({
                       </div>
                       <div className="space-y-3">
                         {currentSession.summary!.recommendedTasks.map((task, i) => (
-                          <div key={i} className="group bg-white/40 backdrop-blur-sm rounded-[16px] p-4 border-2 border-white/60 hover:border-white/80 transition-all">
+                          <div key={i} className={`group ${getGlassClasses('medium')} ${getRadiusClass('element')} p-4 hover:border-white/80 transition-all`}>
                             <div className="flex items-start justify-between gap-3 mb-2">
                               <h5 className="font-semibold text-gray-900 flex-1">{task.title}</h5>
                               <div className="flex items-center gap-2">
                                 <span className={`px-3 py-1 rounded-full text-xs font-bold flex-shrink-0 ${
-                                  task.priority === 'urgent' ? 'bg-red-100 text-red-700 border border-red-200' :
-                                  task.priority === 'high' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-                                  task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
-                                  'bg-gray-100 text-gray-700 border border-gray-200'
+                                  PRIORITY_COLORS[task.priority as 'critical' | 'important' | 'normal' | 'low']?.bg || 'bg-gray-100'
+                                } ${
+                                  PRIORITY_COLORS[task.priority as 'critical' | 'important' | 'normal' | 'low']?.text || 'text-gray-700'
+                                } border ${
+                                  PRIORITY_COLORS[task.priority as 'critical' | 'important' | 'normal' | 'low']?.border || 'border-gray-200'
                                 }`}>
                                   {task.priority}
                                 </span>
                                 <button
                                   onClick={() => handleExtractTask(task.title, task.priority, task.context)}
-                                  className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-[12px] text-xs font-medium transition-all hover:scale-105 active:scale-95 shadow-sm"
+                                  className={`opacity-0 group-hover:opacity-100 flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white ${getRadiusClass('pill')} text-xs font-medium transition-all hover:scale-105 active:scale-95 shadow-sm`}
                                   title="Add to Tasks"
                                 >
                                   <Plus size={12} />
@@ -1041,7 +1110,7 @@ export function SessionDetailView({
 
                   {/* Key Insights */}
                   {currentSession.summary?.keyInsights && currentSession.summary?.keyInsights.length > 0 && (
-                    <div className="bg-white/40 backdrop-blur-xl rounded-[20px] p-6 border-2 border-white/60">
+                    <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-6`}>
                       <div className="flex items-center gap-2 mb-4">
                         <Lightbulb className="w-5 h-5 text-amber-600" />
                         <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-700">
@@ -1050,7 +1119,7 @@ export function SessionDetailView({
                       </div>
                       <div className="space-y-3">
                         {currentSession.summary!.keyInsights.map((item, i) => (
-                          <div key={i} className="group bg-white/40 backdrop-blur-sm rounded-[16px] p-4 border-2 border-white/60 hover:border-white/80 transition-all">
+                          <div key={i} className={`group ${getGlassClasses('medium')} ${getRadiusClass('element')} p-4 hover:border-white/80 transition-all`}>
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1">
                                 <p className="text-sm text-gray-800 font-medium mb-1">{item.insight}</p>
@@ -1060,7 +1129,7 @@ export function SessionDetailView({
                               </div>
                               <button
                                 onClick={() => handleExtractNote(item.insight)}
-                                className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-[12px] text-xs font-medium transition-all hover:scale-105 active:scale-95 shadow-sm"
+                                className={`opacity-0 group-hover:opacity-100 flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white ${getRadiusClass('pill')} text-xs font-medium transition-all hover:scale-105 active:scale-95 shadow-sm`}
                                 title="Save as Note"
                               >
                                 <FileText size={12} />
@@ -1076,46 +1145,46 @@ export function SessionDetailView({
               )}
 
               {/* Activity Timeline */}
-              <div className="bg-white/40 backdrop-blur-xl rounded-[32px] border-2 border-white/50 p-8 shadow-xl">
+              <div className={`${getGlassClasses('medium')} ${getRadiusClass('modal')} p-8 shadow-xl`}>
                 <SessionActivityTimeline session={session} />
               </div>
 
               {/* Stats Grid */}
               <div className="grid grid-cols-3 gap-6">
                 {/* Duration */}
-                <div className="bg-gradient-to-br from-blue-500/30 via-cyan-500/20 to-blue-400/30 backdrop-blur-xl rounded-[24px] border-2 border-blue-300/50 p-6 shadow-lg hover:shadow-xl transition-shadow">
+                <div className={`bg-gradient-to-br ${STATS_CARD_GRADIENTS.duration.bg} ${getGlassClasses('medium').split(' ').filter(c => c.includes('backdrop')).join(' ')} ${getRadiusClass('card')} border-2 ${STATS_CARD_GRADIENTS.duration.border} p-6 shadow-lg hover:shadow-xl transition-shadow`}>
                   <div className="flex items-center gap-2 text-blue-700 mb-3">
-                    <Clock size={20} className="text-blue-600" />
+                    <Clock size={20} className={STATS_CARD_GRADIENTS.duration.icon} />
                     <span className="text-sm font-semibold uppercase tracking-wide">Duration</span>
                   </div>
-                  <p className="text-4xl font-bold text-blue-900">
+                  <p className={`text-4xl font-bold ${STATS_CARD_GRADIENTS.duration.text}`}>
                     {Math.floor(duration / 60)}h {duration % 60}m
                   </p>
-                  <p className="text-sm text-blue-700/80 mt-2">
+                  <p className={`text-sm ${STATS_CARD_GRADIENTS.duration.text} opacity-80 mt-2`}>
                     {new Date(session.startTime).toLocaleTimeString()} - {session.endTime ? new Date(session.endTime).toLocaleTimeString() : 'Ongoing'}
                   </p>
                 </div>
 
                 {/* Screenshots */}
-                <div className="bg-gradient-to-br from-purple-500/30 via-pink-500/20 to-purple-400/30 backdrop-blur-xl rounded-[24px] border-2 border-purple-300/50 p-6 shadow-lg hover:shadow-xl transition-shadow">
+                <div className={`bg-gradient-to-br ${STATS_CARD_GRADIENTS.screenshots.bg} ${getGlassClasses('medium').split(' ').filter(c => c.includes('backdrop')).join(' ')} ${getRadiusClass('card')} border-2 ${STATS_CARD_GRADIENTS.screenshots.border} p-6 shadow-lg hover:shadow-xl transition-shadow`}>
                   <div className="flex items-center gap-2 text-purple-700 mb-3">
-                    <Activity size={20} className="text-purple-600" />
+                    <Activity size={20} className={STATS_CARD_GRADIENTS.screenshots.icon} />
                     <span className="text-sm font-semibold uppercase tracking-wide">Screenshots</span>
                   </div>
-                  <p className="text-4xl font-bold text-purple-900">{session.screenshots.length}</p>
-                  <p className="text-sm text-purple-700/80 mt-2">
+                  <p className={`text-4xl font-bold ${STATS_CARD_GRADIENTS.screenshots.text}`}>{session.screenshots.length}</p>
+                  <p className={`text-sm ${STATS_CARD_GRADIENTS.screenshots.text} opacity-80 mt-2`}>
                     Captured every {session.screenshotInterval} minutes
                   </p>
                 </div>
 
                 {/* Activities */}
-                <div className="bg-gradient-to-br from-teal-500/30 via-emerald-500/20 to-teal-400/30 backdrop-blur-xl rounded-[24px] border-2 border-teal-300/50 p-6 shadow-lg hover:shadow-xl transition-shadow">
+                <div className={`bg-gradient-to-br ${STATS_CARD_GRADIENTS.activities.bg} ${getGlassClasses('medium').split(' ').filter(c => c.includes('backdrop')).join(' ')} ${getRadiusClass('card')} border-2 ${STATS_CARD_GRADIENTS.activities.border} p-6 shadow-lg hover:shadow-xl transition-shadow`}>
                   <div className="flex items-center gap-2 text-teal-700 mb-3">
-                    <Tag size={20} className="text-teal-600" />
+                    <Tag size={20} className={STATS_CARD_GRADIENTS.activities.icon} />
                     <span className="text-sm font-semibold uppercase tracking-wide">Activities</span>
                   </div>
-                  <p className="text-4xl font-bold text-teal-900">{activityStats.activities.length}</p>
-                  <p className="text-sm text-teal-700/80 mt-2">
+                  <p className={`text-4xl font-bold ${STATS_CARD_GRADIENTS.activities.text}`}>{activityStats.activities.length}</p>
+                  <p className={`text-sm ${STATS_CARD_GRADIENTS.activities.text} opacity-80 mt-2`}>
                     {activityStats.activities[0]?.name || 'No activities'} (top)
                   </p>
                 </div>
@@ -1123,7 +1192,7 @@ export function SessionDetailView({
 
               {/* Activity Breakdown */}
               {activityStats.activities.length > 0 && (
-                <div className="bg-gradient-to-br from-indigo-500/20 via-purple-500/10 to-pink-500/20 backdrop-blur-xl rounded-[32px] border-2 border-indigo-300/40 p-8 shadow-xl">
+                <div className={`bg-gradient-to-br from-indigo-500/20 via-purple-500/10 to-pink-500/20 backdrop-blur-xl ${getRadiusClass('modal')} border-2 border-indigo-300/40 p-8 shadow-xl`}>
                   <h3 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-6">Activity Breakdown</h3>
 
                   <div className="space-y-5">
@@ -1159,11 +1228,11 @@ export function SessionDetailView({
 
               {/* Extracted Items Summary */}
               {((session.extractedTaskIds?.length || 0) > 0 || (session.extractedNoteIds?.length || 0) > 0) && (
-                <div className="bg-gradient-to-br from-amber-500/20 via-orange-500/10 to-amber-400/20 backdrop-blur-xl rounded-[32px] border-2 border-amber-300/40 p-8 shadow-xl">
+                <div className={`${getWarningGradient('light').container} ${getRadiusClass('modal')} p-8 shadow-xl`}>
                   <h3 className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent mb-6">Extracted from this Session</h3>
 
                   <div className="grid grid-cols-2 gap-6">
-                    <div className="bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-2xl p-5 border-2 border-cyan-300/50 shadow-md">
+                    <div className={`${getInfoGradient('light').container} ${getRadiusClass('field')} p-5 shadow-md`}>
                       <div className="text-sm font-semibold text-cyan-700 uppercase tracking-wide mb-3">
                         Tasks Created
                       </div>
@@ -1171,7 +1240,7 @@ export function SessionDetailView({
                         {session.extractedTaskIds?.length || 0}
                       </div>
                     </div>
-                    <div className="bg-gradient-to-br from-purple-500/20 to-violet-500/20 rounded-2xl p-5 border-2 border-purple-300/50 shadow-md">
+                    <div className={`bg-gradient-to-br from-purple-500/20 to-violet-500/20 ${getRadiusClass('field')} p-5 border-2 border-purple-300/50 shadow-md`}>
                       <div className="text-sm font-semibold text-purple-700 uppercase tracking-wide mb-3">
                         Notes Captured
                       </div>
@@ -1184,42 +1253,56 @@ export function SessionDetailView({
               )}
             </div>
             </div>
-          ) : (
-            <SessionReview
-              session={currentSession}
-              onAddComment={onAddComment}
-              onToggleFlag={onToggleFlag}
-              showContextCapture={session.status === 'active'}
-              onSessionUpdate={async (updatedSession) => {
-                // Reload session from storage to get saved chapters
-                const { getStorage } = await import('../services/storage');
-                const storage = await getStorage();
-                const sessions = await storage.load<Session[]>('sessions') || [];
+          ) : activeView === 'review' ? (
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <LoadingSpinner size="lg" message="Loading review..." />
+              </div>
+            }>
+              <SessionReview
+                session={currentSession}
+                onAddComment={onAddComment}
+                onToggleFlag={onToggleFlag}
+                showContextCapture={session.status === 'active'}
+                onSessionUpdate={async (updatedSession) => {
+                  // Reload session from storage to get saved chapters
+                  const { getStorage } = await import('../services/storage');
+                  const storage = await getStorage();
+                  const sessions = await storage.load<Session[]>('sessions') || [];
 
-                if (Array.isArray(sessions)) {
-                  const freshSession = sessions.find((s: Session) => s.id === session.id);
-                  if (freshSession) {
-                    setCurrentSession(freshSession);
-                    // CRITICAL: Update SessionsContext so chapters persist when navigating away
-                    updateSessionInContext(freshSession);
+                  if (Array.isArray(sessions)) {
+                    const freshSession = sessions.find((s: Session) => s.id === session.id);
+                    if (freshSession) {
+                      setCurrentSession(freshSession);
+                      // CRITICAL: Update SessionsContext so chapters persist when navigating away
+                      updateSessionInContext(freshSession);
+                    }
                   }
-                }
 
-                // Show success notification
-                addNotification({
-                  type: 'success',
-                  title: 'Chapters Saved',
-                  message: 'Chapter markers have been added to the video',
-                });
-              }}
-            />
+                  // Show success notification
+                  addNotification({
+                    type: 'success',
+                    title: 'Chapters Saved',
+                    message: 'Chapter markers have been added to the video',
+                  });
+                }}
+              />
+            </Suspense>
+          ) : (
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <LoadingSpinner size="lg" message="Loading canvas..." />
+              </div>
+            }>
+              <CanvasView session={currentSession} />
+            </Suspense>
           )}
         </div>
 
       {/* Delete Confirmation */}
       {showDeleteConfirm && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-[32px] p-8 max-w-md mx-4 shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+        <div className={`absolute inset-0 z-20 flex items-center justify-center ${getGlassClasses('subtle').split(' ').slice(0,2).join(' ')} bg-black/50 animate-in fade-in duration-200`}>
+          <div className={`bg-white ${getRadiusClass('modal')} p-8 max-w-md mx-4 shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300`}>
             <h3 className="text-2xl font-bold text-gray-900 mb-4">Delete Session?</h3>
             <p className="text-gray-700 mb-6">
               This will permanently delete "{session.name}" and all {session.screenshots.length} screenshots. This action cannot be undone.
@@ -1227,13 +1310,13 @@ export function SessionDetailView({
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 rounded-[20px] font-medium transition-all"
+                className={`flex-1 px-6 py-3 ${getGlassClasses('medium')} hover:bg-gray-200 ${getRadiusClass('field')} font-medium transition-all`}
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
-                className="flex-1 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-[20px] font-medium transition-all"
+                className={`flex-1 px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white ${getRadiusClass('field')} font-medium transition-all`}
               >
                 Delete
               </button>
@@ -1301,7 +1384,7 @@ function InlineCategoryManager({ session }: { session: Session }) {
           }}
           placeholder="Category..."
           list="categories"
-          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-cyan-400 rounded-full text-xs font-semibold text-gray-800 outline-none w-32"
+          className={`px-3 py-1.5 ${getGlassClasses('strong')} border-2 border-cyan-400 ${getRadiusClass('pill')} text-xs font-semibold text-gray-800 outline-none w-32`}
         />
         <input
           type="text"
@@ -1313,17 +1396,17 @@ function InlineCategoryManager({ session }: { session: Session }) {
           }}
           placeholder="Sub-category..."
           list="subcategories"
-          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-cyan-400 rounded-full text-xs font-semibold text-gray-800 outline-none w-32"
+          className={`px-3 py-1.5 ${getGlassClasses('strong')} border-2 border-cyan-400 ${getRadiusClass('pill')} text-xs font-semibold text-gray-800 outline-none w-32`}
         />
         <button
           onClick={handleSave}
-          className="px-2 py-1 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full text-xs font-semibold transition-all"
+          className={`px-2 py-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white ${getRadiusClass('pill')} text-xs font-semibold transition-all`}
         >
           Save
         </button>
         <button
           onClick={handleCancel}
-          className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full text-xs font-semibold transition-all"
+          className={`px-2 py-1 ${getGlassClasses('medium')} hover:bg-gray-300 text-gray-700 ${getRadiusClass('pill')} text-xs font-semibold transition-all`}
         >
           Cancel
         </button>
@@ -1346,7 +1429,7 @@ function InlineCategoryManager({ session }: { session: Session }) {
       {session.category && (
         <button
           onClick={() => setIsEditing(true)}
-          className="group px-3 py-1.5 bg-gradient-to-r from-cyan-100/80 to-blue-100/80 hover:from-cyan-200/90 hover:to-blue-200/90 border border-cyan-300/60 rounded-full text-xs font-semibold text-cyan-800 transition-all flex items-center gap-1.5"
+          className={`group px-3 py-1.5 bg-gradient-to-r from-cyan-500/10 via-blue-500/5 to-cyan-400/10 hover:from-cyan-200/90 hover:to-blue-200/90 ${getRadiusClass('pill')} text-xs font-semibold text-cyan-800 transition-all flex items-center gap-1.5`}
         >
           <span>{session.category}</span>
         </button>
@@ -1354,7 +1437,7 @@ function InlineCategoryManager({ session }: { session: Session }) {
       {session.subCategory && (
         <button
           onClick={() => setIsEditing(true)}
-          className="group px-3 py-1.5 bg-white/60 hover:bg-white/80 border border-gray-300 rounded-full text-xs font-semibold text-gray-700 transition-all flex items-center gap-1.5"
+          className={`group px-3 py-1.5 ${getGlassClasses('medium')} hover:bg-white/80 ${getRadiusClass('pill')} text-xs font-semibold text-gray-700 transition-all flex items-center gap-1.5`}
         >
           <span>{session.subCategory}</span>
         </button>
@@ -1362,7 +1445,7 @@ function InlineCategoryManager({ session }: { session: Session }) {
       {!session.category && !session.subCategory && (
         <button
           onClick={() => setIsEditing(true)}
-          className="px-3 py-1.5 bg-white/40 hover:bg-white/60 border border-dashed border-gray-400 hover:border-cyan-400 rounded-full text-xs text-gray-500 hover:text-cyan-700 font-medium transition-all flex items-center gap-1.5"
+          className={`px-3 py-1.5 ${getGlassClasses('medium')} hover:bg-white/60 border border-dashed border-gray-400 hover:border-cyan-400 ${getRadiusClass('pill')} text-xs text-gray-500 hover:text-cyan-700 font-medium transition-all flex items-center gap-1.5`}
         >
           <Plus size={12} />
           <span>Add Category</span>

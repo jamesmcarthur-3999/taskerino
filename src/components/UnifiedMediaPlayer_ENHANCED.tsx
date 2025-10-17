@@ -1,6 +1,11 @@
 // This is a temporary file with the enhanced UnifiedTimeline component
 // To be merged into UnifiedMediaPlayer.tsx
 
+import React, { useState, useRef, useEffect } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import type { Session, SessionScreenshot, SessionAudioSegment, AudioKeyMoment } from '../types';
+import { attachmentStorage } from '../services/attachmentStorage';
+
 interface TimelineTooltipProps {
   visible: boolean;
   x: number;
@@ -25,6 +30,24 @@ function TimelineTooltip({ visible, x, y, content }: TimelineTooltipProps) {
       </div>
     </div>
   );
+}
+
+// Helper function for time formatting
+function formatTimeSimple(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Interface for UnifiedTimeline props
+interface UnifiedTimelineProps {
+  currentTime: number;
+  duration: number;
+  screenshots: SessionScreenshot[];
+  audioSegments: SessionAudioSegment[];
+  keyMoments: AudioKeyMoment[];
+  session: Session;
+  onSeek: (time: number) => void;
 }
 
 function UnifiedTimeline({
@@ -58,7 +81,7 @@ function UnifiedTimeline({
         const attachment = await attachmentStorage.getAttachment(hoveredScreenshot.attachmentId);
         if (attachment?.path) {
           const url = convertFileSrc(attachment.path);
-          setScreenshotThumbnails((prev) => new Map(prev).set(hoveredScreenshot.id, url));
+          setScreenshotThumbnails((prev: Map<string, string>) => new Map(prev).set(hoveredScreenshot.id, url));
         }
       } catch (err) {
         console.error('[TIMELINE] Failed to load screenshot thumbnail:', err);
@@ -173,7 +196,7 @@ function UnifiedTimeline({
       {/* Key Moment Markers Row */}
       {keyMoments.length > 0 && (
         <div className="relative h-6 mb-2">
-          {keyMoments.map((moment) => {
+          {keyMoments.map((moment: AudioKeyMoment) => {
             const position = (moment.timestamp / duration) * 100;
             const colorClass = getMomentColor(moment.type);
             const isHovered = hoveredMoment?.id === moment.id;
@@ -227,7 +250,7 @@ function UnifiedTimeline({
         )}
 
         {/* Screenshot Markers */}
-        {screenshots.map((screenshot) => {
+        {screenshots.map((screenshot: SessionScreenshot) => {
           const sessionStart = new Date(session.startTime).getTime();
           const screenshotTime = (new Date(screenshot.timestamp).getTime() - sessionStart) / 1000;
           const position = (screenshotTime / duration) * 100;

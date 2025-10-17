@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { useSessions } from '../context/SessionsContext';
 import { useUI } from '../context/UIContext';
 import { useTasks } from '../context/TasksContext';
@@ -12,8 +12,16 @@ import { videoStorageService } from '../services/videoStorageService';
 import { sessionsAgentService } from '../services/sessionsAgentService';
 import { attachmentStorage } from '../services/attachmentStorage';
 import { SessionTimeline } from './SessionTimeline';
-import { SessionDetailView } from './SessionDetailView';
 import { checkScreenRecordingPermission, showMacOSPermissionInstructions } from '../utils/permissions';
+import { LoadingSpinner } from './LoadingSpinner';
+import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
+import { clamp, easeOutQuart } from '../utils/easing';
+import { BACKGROUND_GRADIENT, getGlassClasses, getRadiusClass, getToastClasses } from '../design-system/theme';
+import { useTheme } from '../context/ThemeContext';
+
+// Lazy load heavy components to reduce initial bundle size
+const SessionDetailView = lazy(() => import('./SessionDetailView').then(module => ({ default: module.SessionDetailView })));
+const ActiveSessionView = lazy(() => import('./ActiveSessionView').then(module => ({ default: module.ActiveSessionView })));
 import { listen } from '@tauri-apps/api/event';
 import { getTemplates, saveTemplate, type SessionTemplate } from '../utils/sessionTemplates';
 import { loadLastSessionSettings, saveLastSessionSettings, getSettingsSummary, type LastSessionSettings } from '../utils/lastSessionSettings';
@@ -36,12 +44,15 @@ import { ActiveFiltersDisplay } from './sessions/ActiveFiltersDisplay';
 import { SessionsFilterMenu } from './sessions/SessionsFilterMenu';
 import { SessionListGroup } from './sessions/SessionListGroup';
 import { SessionCard } from './sessions/SessionCard';
+import { SessionsTopBar } from './sessions/SessionsTopBar';
+import { SessionsListPanel } from './sessions/SessionsListPanel';
 import { groupSessionsByDate, calculateTotalStats } from '../utils/sessionHelpers';
 
 export default function SessionsZone() {
   const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment, updateScreenshotAnalysis, addScreenshotComment, toggleScreenshotFlag, setActiveSession, addExtractedTask, addExtractedNote, addContextItem } = useSessions();
   const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
+  const { scrollY } = useScrollAnimation();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [lastMetadataUpdate, setLastMetadataUpdate] = useState<string | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
@@ -50,7 +61,7 @@ export default function SessionsZone() {
 
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'duration-desc' | 'duration-asc' | 'screenshots' | 'tasks'>('date-desc');
+  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'duration-desc' | 'duration-asc'>('date-desc');
 
   // Session ending state management
   const { isEnding, completedSessionId, shouldAutoNavigate, handleEndSession, clearAutoNavigation, isSessionNewlyCompleted } = useSessionEnding();
@@ -154,6 +165,12 @@ export default function SessionsZone() {
 
   // Ref for session list scroll container (enables auto-scroll to live session)
   const sessionListScrollRef = useRef<HTMLDivElement>(null);
+
+  // Ref for content container (enables scroll-driven expansion)
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Ref for main container to apply dynamic top padding
+  const mainContainerRef = useRef<HTMLDivElement>(null);
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
 
@@ -329,10 +346,6 @@ export default function SessionsZone() {
           return (b.totalDuration || 0) - (a.totalDuration || 0);
         case 'duration-asc':
           return (a.totalDuration || 0) - (b.totalDuration || 0);
-        case 'screenshots':
-          return (b.screenshots?.length || 0) - (a.screenshots?.length || 0);
-        case 'tasks':
-          return (b.extractedTaskIds?.length || 0) - (a.extractedTaskIds?.length || 0);
         default:
           return 0;
       }
@@ -978,6 +991,29 @@ export default function SessionsZone() {
   }, []); // Empty dependencies - listener is set up once and uses refs for current values
 
   /**
+   * Scroll-driven content expansion
+   * Reduces top padding as the menu bar scrolls away to fill the space naturally
+   */
+  useEffect(() => {
+    if (!mainContainerRef.current) return;
+
+    const container = mainContainerRef.current;
+
+    // Initial padding is pt-24 (96px)
+    const initialPadding = 96;
+    // Menu bar scrolls away over 200px (same as SessionsTopBar transform)
+    const scrollRange = 200;
+
+    // Calculate reduced padding based on scroll
+    // As scrollY goes from 0 to 200, padding goes from 96 to ~20px (keeping some minimum)
+    const minPadding = 20;
+    const paddingReduction = Math.min(scrollY, scrollRange) / scrollRange * (initialPadding - minPadding);
+    const newPadding = initialPadding - paddingReduction;
+
+    container.style.paddingTop = `${newPadding}px`;
+  }, [scrollY]);
+
+  /**
    * Auto-generate session metadata with intelligent throttling
    * - Triggers every 5 screenshots OR 10 minutes (whichever comes first)
    * - Prevents race conditions by using state from Redux store
@@ -1231,7 +1267,7 @@ export default function SessionsZone() {
   };
 
   // Session settings state (for top controls)
-  const [lastSettings, setLastSettings] = useState(() => loadLastSessionSettings());
+  const [lastSettings, setLastSettings] = useState<LastSessionSettings>(() => loadLastSessionSettings());
 
   // Quick start handler for top control - with delightful countdown
   const handleQuickStart = async () => {
@@ -1302,17 +1338,19 @@ export default function SessionsZone() {
   };
 
   // Get current settings (from active session if running, otherwise from last settings)
-  const currentSettings = activeSession ? {
+  const currentSettings: LastSessionSettings = activeSession ? {
     enableScreenshots: activeSession.enableScreenshots,
     audioRecording: activeSession.audioRecording,
     videoRecording: activeSession.videoRecording,
-    screenshotInterval: activeSession.screenshotInterval
+    screenshotInterval: activeSession.screenshotInterval,
+    autoAnalysis: activeSession.autoAnalysis,
+    lastUsed: new Date().toISOString(),
   } : lastSettings;
 
   return (
-    <div className="h-full w-full relative flex flex-col bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20 overflow-hidden">
+    <div className={`h-full w-full relative flex flex-col ${BACKGROUND_GRADIENT.primary} overflow-hidden`}>
       {/* Animated gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none" />
+      <div className={`absolute inset-0 ${BACKGROUND_GRADIENT.secondary} pointer-events-none`} />
 
       {/* Sessions Introduction Tooltip */}
       <div className="absolute top-32 left-1/2 -translate-x-1/2 z-[200]">
@@ -1349,551 +1387,159 @@ export default function SessionsZone() {
       </div>
 
       {/* Main content with padding */}
-      <div className="relative z-10 flex-1 flex flex-col pt-24 px-6 pb-6 min-h-0">
-        {/* Top Controls Bar */}
-        <div className="mb-4 flex items-center justify-between relative z-50">
-          <div className="flex items-center gap-3 bg-white/40 backdrop-blur-xl border-2 border-white/50 rounded-[24px] p-1.5 shadow-lg">
-            {activeSession ? (
-              <>
-                {/* Active Session Controls */}
-                <div className="flex items-center gap-2 px-3 py-2">
-                  <div className={`w-3 h-3 rounded-full ${activeSession.status === 'paused' ? 'bg-yellow-400 shadow-lg shadow-yellow-400/50' : 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50'}`} />
-                  <span className="text-sm font-bold text-gray-900">{activeSession.name}</span>
-                </div>
-
-                <div className="h-8 w-px bg-white/30"></div>
-
-                {/* Pause/Resume Button */}
-                {activeSession.status === 'paused' ? (
-                  <button
-                    onClick={() => resumeSession(activeSession.id)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent"
-                  >
-                    <Play size={16} />
-                    <span>Resume</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => pauseSession(activeSession.id)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent"
-                  >
-                    <Pause size={16} />
-                    <span>Pause</span>
-                  </button>
-                )}
-
-                {/* Stop Button - with delightful UX */}
-                <button
-                  onClick={() => handleEndSession(activeSession.id)}
-                  disabled={isEnding}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
-                >
-                  {isEnding ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Square size={16} />
-                      <span>Stop</span>
-                    </>
-                  )}
-                </button>
-              </>
-            ) : (
-              <>
-                {/* Start Session Button */}
-                <button
-                  onClick={handleQuickStart}
-                  disabled={isStarting}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-white shadow-md font-semibold text-sm transition-all border-2 border-transparent disabled:cursor-not-allowed ${
-                    isStarting
-                      ? 'bg-gradient-to-r from-cyan-500 to-blue-500 animate-pulse shadow-lg shadow-cyan-500/50'
-                      : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:shadow-lg hover:scale-[1.02] active:scale-95'
-                  }`}
-                >
-                  {isStarting ? (
-                    countdown !== null && countdown > 0 ? (
-                      <>
-                        <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center border border-white/40">
-                          <span className="text-sm font-bold">{countdown}</span>
-                        </div>
-                        <span>Starting in {countdown}...</span>
-                      </>
-                    ) : countdown === 0 ? (
-                      <>
-                        <CheckCircle2 size={16} className="animate-pulse" />
-                        <span>Recording!</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>Starting...</span>
-                      </>
-                    )
-                  ) : (
-                    <>
-                      <Play size={16} />
-                      <span>Start Session</span>
-                    </>
-                  )}
-                </button>
-              </>
-            )}
-
-            <div className="h-8 w-px bg-white/30"></div>
-
-            {/* Settings Controls - Always visible */}
-            <ToggleButton
-              icon={CameraIcon}
-              label="Screenshots"
-              active={currentSettings.enableScreenshots}
-              onChange={updateScreenshots}
-              size="sm"
-            />
-
-            <ToggleButton
-              icon={Mic}
-              label="Audio"
-              active={currentSettings.audioRecording}
-              onChange={updateAudio}
-              size="sm"
-            />
-
-            <ToggleButton
-              icon={Video}
-              label="Video"
-              active={currentSettings.videoRecording || false}
-              onChange={updateVideo}
-              size="sm"
-            />
-
-            {/* Interval Selector - Show when screenshots enabled */}
-            {currentSettings.enableScreenshots && (
-              <div className="relative">
-                <DropdownTrigger
-                  icon={Clock}
-                  label={
-                    currentSettings.screenshotInterval === -1 ? '🧠 Adaptive' :
-                    currentSettings.screenshotInterval === 10/60 ? 'Every 10s' :
-                    currentSettings.screenshotInterval === 0.5 ? 'Every 30s' :
-                    currentSettings.screenshotInterval === 1 ? 'Every 1m' :
-                    currentSettings.screenshotInterval === 2 ? 'Every 2m' :
-                    currentSettings.screenshotInterval === 3 ? 'Every 3m' :
-                    currentSettings.screenshotInterval === 5 ? 'Every 5m' : ''
-                  }
-                  active={showIntervalDropdown}
-                  onClick={() => setShowIntervalDropdown(!showIntervalDropdown)}
-                />
-
-                {/* Interval Dropdown Panel */}
-                {showIntervalDropdown && (
-                  <div className="absolute top-full left-0 mt-2 w-56 bg-white backdrop-blur-xl rounded-[20px] border-2 border-cyan-400/80 shadow-2xl z-[9999]">
-                    <div className="p-3 space-y-1">
-                      <button
-                        onClick={() => { updateInterval(-1); setShowIntervalDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                          currentSettings.screenshotInterval === -1
-                            ? 'bg-gradient-to-r from-purple-100 to-cyan-100 text-purple-900 border-2 border-purple-300'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        🧠 Adaptive (AI-driven)
-                      </button>
-                      <div className="border-t border-gray-200 my-2"></div>
-                      <button
-                        onClick={() => { updateInterval(10/60); setShowIntervalDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          currentSettings.screenshotInterval === 10/60
-                            ? 'bg-cyan-100 text-cyan-900'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        Every 10 seconds
-                      </button>
-                      <button
-                        onClick={() => { updateInterval(0.5); setShowIntervalDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          currentSettings.screenshotInterval === 0.5
-                            ? 'bg-cyan-100 text-cyan-900'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        Every 30 seconds
-                      </button>
-                      <button
-                        onClick={() => { updateInterval(1); setShowIntervalDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          currentSettings.screenshotInterval === 1
-                            ? 'bg-cyan-100 text-cyan-900'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        Every 1 minute
-                      </button>
-                      <button
-                        onClick={() => { updateInterval(2); setShowIntervalDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          currentSettings.screenshotInterval === 2
-                            ? 'bg-cyan-100 text-cyan-900'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        Every 2 minutes
-                      </button>
-                      <button
-                        onClick={() => { updateInterval(3); setShowIntervalDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          currentSettings.screenshotInterval === 3
-                            ? 'bg-cyan-100 text-cyan-900'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        Every 3 minutes
-                      </button>
-                      <button
-                        onClick={() => { updateInterval(5); setShowIntervalDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          currentSettings.screenshotInterval === 5
-                            ? 'bg-cyan-100 text-cyan-900'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        Every 5 minutes
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Filter, Sort, Select Controls - Always visible */}
-            {allPastSessions.length > 0 && (
-              <>
-                <div className="h-8 w-px bg-white/30"></div>
-
-                {/* Filters Button */}
-                <SessionsFilterMenu
-                  sessions={sessions}
-                  selectedCategories={selectedCategories}
-                  selectedSubCategories={selectedSubCategories}
-                  selectedTags={selectedTags}
-                  onCategoriesChange={setSelectedCategories}
-                  onSubCategoriesChange={setSelectedSubCategories}
-                  onTagsChange={setSelectedTags}
-                />
-
-                    {/* Sort Dropdown */}
-                    <SessionsSortMenu
-                      sortBy={sortBy}
-                      onSortChange={setSortBy}
-                    />
-
-                {/* Select Button */}
-                <button
-                  onClick={() => {
-                    setBulkSelectMode(!bulkSelectMode);
-                    if (bulkSelectMode) {
-                      setSelectedSessionIds(new Set());
-                    }
-                  }}
-                  className={`px-4 py-2 backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${
-                    bulkSelectMode
-                      ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md border-transparent'
-                      : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-cyan-300'
-                  } focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none`}
-                  title="Select multiple sessions"
-                >
-                  <CheckCheck size={16} />
-                  <span>{bulkSelectMode ? 'Cancel' : 'Select'}</span>
-                  {selectedSessionIds.size > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 bg-white/30 text-white text-[10px] font-bold rounded-full">
-                      {selectedSessionIds.size}
-                    </span>
-                  )}
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Stats Pill - Right Side */}
-          <SessionsStatsBar sessions={sessions} />
-        </div>
+      <div ref={mainContainerRef} className="relative z-10 flex-1 flex flex-col px-6 pb-6 min-h-0" style={{ paddingTop: '96px' }}>
+        {/* Top Controls Bar - In Normal Flow */}
+        <SessionsTopBar
+          activeSession={activeSession}
+          sessions={sessions}
+          allPastSessions={allPastSessions}
+          isStarting={isStarting}
+          isEnding={isEnding}
+          countdown={countdown}
+          handleQuickStart={handleQuickStart}
+          handleEndSession={handleEndSession}
+          pauseSession={pauseSession}
+          resumeSession={resumeSession}
+          currentSettings={currentSettings}
+          updateScreenshots={updateScreenshots}
+          updateAudio={updateAudio}
+          updateVideo={updateVideo}
+          updateInterval={updateInterval}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          selectedCategories={selectedCategories}
+          selectedSubCategories={selectedSubCategories}
+          selectedTags={selectedTags}
+          onCategoriesChange={setSelectedCategories}
+          onSubCategoriesChange={setSelectedSubCategories}
+          onTagsChange={setSelectedTags}
+          bulkSelectMode={bulkSelectMode}
+          selectedSessionIds={selectedSessionIds}
+          onBulkSelectModeChange={setBulkSelectMode}
+          onSelectedSessionIdsChange={setSelectedSessionIds}
+        />
 
         {/* Two-Panel Layout */}
-        <div className="flex-1 flex gap-4 min-h-0 relative">
-          {/* LEFT PANEL - Past Sessions List (wrapped in CollapsibleSidebar) */}
-          <CollapsibleSidebar
-            width="420px"
-            peekWidth="20px"
-            collapseBreakpoint={1280}
-            side="left"
-            isExpanded={isSidebarExpanded}
-            onExpandedChange={handleSidebarToggle}
-          >
-            <div className="h-full bg-white/30 backdrop-blur-xl rounded-[24px] border-2 border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col overflow-hidden">
-            {/* Scrollable Content */}
-            <div ref={sessionListScrollRef} className="flex-1 overflow-y-auto px-6 py-6">
-              {/* Metadata Error Notification */}
-              {metadataError && (
-                <div className="mb-4 p-4 bg-red-100/80 backdrop-blur-sm border-2 border-red-300 rounded-[20px] flex items-start gap-3">
-                  <div className="flex-shrink-0">
-                    <span className="text-2xl">⚠️</span>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-bold text-red-900 mb-1">AI Narrator Update Failed</h4>
-                    <p className="text-sm text-red-800">
-                      Couldn't update session title/description: {metadataError}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setMetadataError(null)}
-                    className="flex-shrink-0 text-red-600 hover:text-red-800 font-bold"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-
-              {/* Active Filters Display */}
-              <ActiveFiltersDisplay
-                selectedCategories={selectedCategories}
-                selectedSubCategories={selectedSubCategories}
-                selectedTags={selectedTags}
-                onRemoveCategory={(category) => setSelectedCategories(selectedCategories.filter(c => c !== category))}
-                onRemoveSubCategory={(subCategory) => setSelectedSubCategories(selectedSubCategories.filter(sc => sc !== subCategory))}
-                onRemoveTag={(tag) => setSelectedTags(selectedTags.filter(t => t !== tag))}
-                onClearAll={() => {
-                  setSelectedCategories([]);
-                  setSelectedSubCategories([]);
-                  setSelectedTags([]);
-                }}
-              />
-
-              {/* Bulk Operations Bar */}
-              {bulkSelectMode && selectedSessionIds.size > 0 && (
-                <BulkOperationsBar
-                  selectedCount={selectedSessionIds.size}
-                  totalFilteredCount={filteredSessions.length}
-                  onSelectAll={() => {
-                    const newSet = new Set<string>();
-                    filteredSessions.forEach(s => newSet.add(s.id));
-                    setSelectedSessionIds(newSet);
-                  }}
-                  onDelete={() => {
-                    if (window.confirm(`Delete ${selectedSessionIds.size} session${selectedSessionIds.size !== 1 ? 's' : ''}? This action cannot be undone.`)) {
-                      selectedSessionIds.forEach(id => {
-                        deleteSession(id);
-                      });
-                      addNotification({
-                        type: 'success',
-                        title: 'Sessions Deleted',
-                        message: `${selectedSessionIds.size} session${selectedSessionIds.size !== 1 ? 's' : ''} deleted successfully`,
-                      });
-                      setSelectedSessionIds(new Set());
-                      setBulkSelectMode(false);
-                    }
-                  }}
-                  onCategorize={() => {
-                    alert('Bulk categorize feature coming soon!');
-                  }}
-                  onTag={() => {
-                    alert('Bulk tag feature coming soon!');
-                  }}
-                  onExport={() => {
-                    alert('Bulk export feature coming soon!');
-                  }}
-                />
-              )}
-
-              {/* Past Sessions - Grouped Timeline */}
-              {allPastSessions.length > 0 ? (
-                <div>
-                {/* Search Bar */}
-                <div className="mb-4 space-y-3">
-                  {/* Search Bar */}
-                  <SessionsSearchBar
-                    value={searchQuery}
-                    onChange={setSearchQuery}
-                  />
-
-              {/* Active Search Indicator */}
-              {(searchQuery.trim() || selectedFilter !== 'all') && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Active Filters:</span>
-                  {searchQuery.trim() && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-100 border border-cyan-300 rounded-full text-xs font-semibold text-cyan-700">
-                      <Search size={12} />
-                      <span>"{searchQuery}"</span>
-                      <button
-                        onClick={() => setSearchQuery('')}
-                        className="ml-1 hover:text-cyan-900 transition-colors"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                  {selectedFilter !== 'all' && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 border border-purple-300 rounded-full text-xs font-semibold text-purple-700">
-                      <Tag size={12} />
-                      <span>{selectedFilter}</span>
-                      <button
-                        onClick={() => setSelectedFilter('all')}
-                        className="ml-1 hover:text-purple-900 transition-colors"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setSelectedFilter('all');
-                    }}
-                    className="text-xs text-gray-500 hover:text-gray-700 font-semibold underline"
-                  >
-                    Clear all
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Session Groups */}
-            {filteredSessions.length === 0 && !activeSession ? (
-              <div className="bg-white/40 backdrop-blur-xl rounded-[24px] border-2 border-white/50 p-12 text-center">
-                <Search className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No sessions found</h3>
-                <p className="text-gray-600">Try adjusting your filters or search query</p>
-              </div>
-            ) : (
-            <div className="space-y-8">
-              {/* Live Session - Always at Top */}
-              {activeSession && (
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3 flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${activeSession.status === 'paused' ? 'bg-yellow-400' : 'bg-green-500 animate-pulse'}`} />
-                    Live Session
-                  </h3>
-                  <div
-                    onClick={() => setSelectedSessionId(activeSession.id)}
-                    className="group relative backdrop-blur-xl rounded-[24px] border-2 p-4 transition-all overflow-hidden bg-white/40 border-white/60 hover:bg-white/50 hover:border-white/80 cursor-pointer"
-                  >
-                    {/* Minimal Card Content */}
-                    <div>
-                      {/* Session Name with Live Badge */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-semibold text-gray-900 leading-tight flex-1">
-                          {activeSession.name}
-                        </h4>
-                        <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full uppercase tracking-wide animate-pulse">
-                          LIVE
-                        </span>
-                      </div>
-
-                      {/* Description - 2 lines max */}
-                      {activeSession.description && (
-                        <p className="text-sm text-gray-600 mb-3 line-clamp-2 leading-relaxed">
-                          {activeSession.description}
-                        </p>
-                      )}
-
-                      {/* Condensed Stats - Single Row */}
-                      <div className="flex items-center gap-3 text-xs text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <Clock size={12} />
-                          {activeSession.status === 'paused' ? 'Paused' : 'Recording'}
-                        </span>
-                        {(activeSession.screenshots?.length || 0) > 0 && (
-                          <>
-                            <span className="text-gray-300">•</span>
-                            <span>{activeSession.screenshots.length} screenshots</span>
-                          </>
-                        )}
-                        {activeSession.audioSegments && activeSession.audioSegments.length > 0 && (
-                          <>
-                            <span className="text-gray-300">•</span>
-                            <span>{activeSession.audioSegments.length} audio</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Grouped Sessions */}
-              <SessionListGroup
-                groupedSessions={groupedSessions}
-                bulkSelectMode={bulkSelectMode}
-                selectedSessionIds={selectedSessionIds}
-                onSessionClick={setSelectedSessionId}
-                onSessionSelect={(id) => {
-                  const newSet = new Set(selectedSessionIds);
-                  if (newSet.has(id)) {
-                    newSet.delete(id);
-                  } else {
-                    newSet.add(id);
-                  }
-                  setSelectedSessionIds(newSet);
-                }}
-                isSessionNewlyCompleted={isSessionNewlyCompleted}
-              />
-            </div>
-            )}
-          </div>
-          ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center px-6">
-                <div className="bg-white/40 backdrop-blur-xl rounded-[24px] p-8 border-2 border-white/50">
-                  <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <h3 className="text-base font-semibold text-gray-900 mb-1">No Past Sessions</h3>
-                  <p className="text-xs text-gray-600">
-                    Start tracking a session to see your work history
-                  </p>
-                </div>
-              </div>
-          )}
-        </div>
-        {/* End of Scrollable Content */}
-            </div>
-          </CollapsibleSidebar>
+        <div ref={contentRef} className="flex-1 flex gap-4 min-h-0 relative mt-4">
+          {/* LEFT PANEL - Past Sessions List */}
+          <SessionsListPanel
+            sessions={sessions}
+            allPastSessions={allPastSessions}
+            groupedSessions={groupedSessions}
+            filteredSessions={filteredSessions}
+            activeSession={activeSession ?? null}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            selectedFilter={selectedFilter}
+            onSelectedFilterChange={setSelectedFilter}
+            selectedCategories={selectedCategories}
+            selectedSubCategories={selectedSubCategories}
+            selectedTags={selectedTags}
+            onRemoveCategory={(category) => setSelectedCategories(selectedCategories.filter(c => c !== category))}
+            onRemoveSubCategory={(subCategory) => setSelectedSubCategories(selectedSubCategories.filter(sc => sc !== subCategory))}
+            onRemoveTag={(tag) => setSelectedTags(selectedTags.filter(t => t !== tag))}
+            onClearAllFilters={() => {
+              setSelectedCategories([]);
+              setSelectedSubCategories([]);
+              setSelectedTags([]);
+            }}
+            bulkSelectMode={bulkSelectMode}
+            selectedSessionIds={selectedSessionIds}
+            onSelectAll={() => {
+              const newSet = new Set<string>();
+              filteredSessions.forEach(s => newSet.add(s.id));
+              setSelectedSessionIds(newSet);
+            }}
+            onDelete={() => {
+              if (window.confirm(`Delete ${selectedSessionIds.size} session${selectedSessionIds.size !== 1 ? 's' : ''}? This action cannot be undone.`)) {
+                selectedSessionIds.forEach(id => {
+                  deleteSession(id);
+                });
+                addNotification({
+                  type: 'success',
+                  title: 'Sessions Deleted',
+                  message: `${selectedSessionIds.size} session${selectedSessionIds.size !== 1 ? 's' : ''} deleted successfully`,
+                });
+                setSelectedSessionIds(new Set());
+                setBulkSelectMode(false);
+              }
+            }}
+            onCategorize={() => {
+              alert('Bulk categorize feature coming soon!');
+            }}
+            onTag={() => {
+              alert('Bulk tag feature coming soon!');
+            }}
+            onExport={() => {
+              alert('Bulk export feature coming soon!');
+            }}
+            selectedSessionId={selectedSessionId}
+            onSessionClick={setSelectedSessionId}
+            onSessionSelect={(id) => {
+              const newSet = new Set(selectedSessionIds);
+              if (newSet.has(id)) {
+                newSet.delete(id);
+              } else {
+                newSet.add(id);
+              }
+              setSelectedSessionIds(newSet);
+            }}
+            isSessionNewlyCompleted={isSessionNewlyCompleted}
+            isSidebarExpanded={isSidebarExpanded}
+            onSidebarToggle={handleSidebarToggle}
+            sessionListScrollRef={sessionListScrollRef as React.RefObject<HTMLDivElement>}
+            metadataError={metadataError}
+            onDismissMetadataError={() => setMetadataError(null)}
+          />
         {/* End of LEFT PANEL */}
 
         {/* RIGHT PANEL - Selected Session or Active Session */}
-        <div className="flex-1 bg-white/30 backdrop-blur-xl rounded-[24px] border-2 border-white/60 shadow-xl flex flex-col overflow-hidden">
+        <div className={`flex-1 ${getGlassClasses('strong')} ${getRadiusClass('card')} flex flex-col overflow-hidden`}>
           {selectedSessionForDetail ? (
             // Show selected session detail (can be active or past session)
             selectedSessionForDetail.status === 'active' || selectedSessionForDetail.status === 'paused' ? (
               // Selected session is the active one - show ActiveSessionView
-              <ActiveSessionView session={selectedSessionForDetail} />
+              <Suspense fallback={
+                <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-cyan-500/10 to-blue-500/10 backdrop-blur-xl rounded-[24px]">
+                  <LoadingSpinner size="lg" message="Loading active session..." colorScheme="ocean" />
+                </div>
+              }>
+                <ActiveSessionView session={selectedSessionForDetail} />
+              </Suspense>
             ) : (
               // Selected session is a completed past session - show SessionDetailView
-              <SessionDetailView
-                session={selectedSessionForDetail}
-                onClose={() => setSelectedSessionId(null)}
-                onDelete={(sessionId) => {
-                  deleteSession(sessionId );
-                  setSelectedSessionId(null);
-                }}
-                onAddComment={(screenshotId, comment) => {
-                  addScreenshotComment(screenshotId, comment);
-                }}
-                onToggleFlag={(screenshotId) => {
-                  toggleScreenshotFlag(screenshotId);
-                }}
-                isSidebarExpanded={isSidebarExpanded}
-                onToggleSidebar={() => handleSidebarToggle(!isSidebarExpanded)}
-              />
+              <Suspense fallback={
+                <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-cyan-500/10 to-blue-500/10 backdrop-blur-xl rounded-[24px]">
+                  <LoadingSpinner size="lg" message="Loading session details..." colorScheme="ocean" />
+                </div>
+              }>
+                <SessionDetailView
+                  session={selectedSessionForDetail}
+                  onClose={() => setSelectedSessionId(null)}
+                  onDelete={(sessionId) => {
+                    deleteSession(sessionId );
+                    setSelectedSessionId(null);
+                  }}
+                  onAddComment={(screenshotId, comment) => {
+                    addScreenshotComment(screenshotId, comment);
+                  }}
+                  onToggleFlag={(screenshotId) => {
+                    toggleScreenshotFlag(screenshotId);
+                  }}
+                  isSidebarExpanded={isSidebarExpanded}
+                  onToggleSidebar={() => handleSidebarToggle(!isSidebarExpanded)}
+                />
+              </Suspense>
             )
           ) : activeSession ? (
             // No session selected, but there's an active session - show it
-            <ActiveSessionView session={activeSession} />
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-cyan-500/10 to-blue-500/10 backdrop-blur-xl rounded-[24px]">
+                <LoadingSpinner size="lg" message="Loading active session..." colorScheme="ocean" />
+              </div>
+            }>
+              <ActiveSessionView session={activeSession} />
+            </Suspense>
           ) : (
             // Empty state
             <div className="flex items-center justify-center h-full text-center px-12">
@@ -1916,7 +1562,7 @@ export default function SessionsZone() {
 
       {/* Subtle toast notification during countdown */}
       {isStarting && countdown !== null && countdown > 0 && (
-        <div className="fixed bottom-6 right-6 bg-white/95 backdrop-blur-xl rounded-2xl p-4 shadow-2xl border-2 border-cyan-400/60 animate-in slide-in-from-bottom-4 z-50">
+        <div className={`fixed bottom-6 right-6 ${getToastClasses('info')} animate-in slide-in-from-bottom-4 z-50`}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg shadow-lg animate-pulse">
               {countdown}
@@ -1934,254 +1580,6 @@ export default function SessionsZone() {
 }
 
 // Active Session View Component
-function ActiveSessionView({ session }: { session: Session }) {
-  const [liveElapsed, setLiveElapsed] = useState(0);
-  const [countdown, setCountdown] = useState(0);
-
-  const isPaused = session.status === 'paused';
-
-  // Live timer
-  useEffect(() => {
-    if (isPaused) return;
-
-    const updateElapsed = () => {
-      if (session.startTime) {
-        const elapsed = Math.floor((Date.now() - new Date(session.startTime).getTime()) / 1000);
-        setLiveElapsed(elapsed);
-      }
-    };
-
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-  }, [session.startTime, isPaused]);
-
-  // Format elapsed time
-  const formatElapsed = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Countdown timer for next screenshot
-  useEffect(() => {
-    if (isPaused || !session.enableScreenshots) {
-      setCountdown(0);
-      return;
-    }
-
-    const updateCountdown = () => {
-      const now = Date.now();
-      let nextShot: number;
-
-      // Check if using adaptive mode
-      if (session.screenshotInterval === -1 && adaptiveScreenshotScheduler.isActive()) {
-        // Adaptive mode - use scheduler's actual next capture time
-        const schedulerState = adaptiveScreenshotScheduler.getState();
-        if (schedulerState.nextCaptureTime) {
-          nextShot = schedulerState.nextCaptureTime;
-        } else {
-          // Scheduler hasn't set next capture time yet
-          setCountdown(0);
-          return;
-        }
-      } else {
-        // Fixed interval mode - calculate based on last screenshot + interval
-        if (!session.lastScreenshotTime) {
-          setCountdown(0);
-          return;
-        }
-        const lastShot = new Date(session.lastScreenshotTime).getTime();
-        const intervalMs = session.screenshotInterval === -1 ? 2 * 60 * 1000 : session.screenshotInterval * 60 * 1000;
-        nextShot = lastShot + intervalMs;
-      }
-
-      const remaining = Math.max(0, Math.ceil((nextShot - now) / 1000));
-      setCountdown(remaining);
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [session.lastScreenshotTime, session.screenshotInterval, isPaused, session.enableScreenshots]);
-
-  const handleAddContext = (contextItem: SessionContextItem) => {
-    addContextItem(session.id, contextItem);
-  };
-
-  return (
-    <div className="h-full w-full flex flex-col overflow-hidden">
-      {/* Header with live stats */}
-      <div className="p-6 border-b-2 border-white/40">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">{session.name}</h2>
-            <p className="text-sm text-gray-600">{session.description}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Live Duration Timer */}
-            <div className="px-4 py-2 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 backdrop-blur-sm rounded-[20px] border-2 border-blue-400/60 flex items-center gap-2 shadow-md">
-              <Clock size={18} className="text-blue-600" />
-              <span className="text-lg font-bold text-gray-900 font-mono tracking-wider">
-                {formatElapsed(liveElapsed)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Row */}
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Next Capture Countdown */}
-          {session.enableScreenshots && !isPaused && countdown > 0 && (() => {
-            const isAdaptiveMode = session.screenshotInterval === -1;
-            const schedulerState = isAdaptiveMode ? adaptiveScreenshotScheduler.getState() : null;
-            const activityLevel = schedulerState?.lastActivityScore || 0;
-            const urgency = schedulerState?.lastUrgency || 0;
-
-            // Color intensity based on urgency (higher urgency = more intense color)
-            const urgencyClass = isAdaptiveMode
-              ? urgency > 0.7 ? 'from-orange-500/40 to-red-500/40 border-orange-500/80'
-                : urgency > 0.4 ? 'from-cyan-500/30 to-blue-500/30 border-cyan-500/70'
-                : 'from-teal-500/20 to-emerald-500/20 border-teal-400/60'
-              : 'from-cyan-500/30 to-teal-500/30 border-cyan-400/70';
-
-            const iconClass = isAdaptiveMode
-              ? urgency > 0.7 ? 'text-orange-700'
-                : urgency > 0.4 ? 'text-cyan-700'
-                : 'text-teal-600'
-              : 'text-cyan-700';
-
-            const textClass = isAdaptiveMode
-              ? urgency > 0.7 ? 'text-orange-900'
-                : urgency > 0.4 ? 'text-cyan-900'
-                : 'text-teal-900'
-              : 'text-cyan-900';
-
-            return (
-              <div className={`px-4 py-2 bg-gradient-to-r ${urgencyClass} backdrop-blur-sm rounded-[20px] border-2 flex items-center gap-2 shadow-md ${isAdaptiveMode ? 'animate-pulse' : ''}`}>
-                <Camera size={16} className={iconClass} />
-                <span className={`text-sm font-bold ${textClass}`}>
-                  {isAdaptiveMode && <span className="mr-1">🧠</span>}
-                  Next in <span className="font-mono">{countdown}s</span>
-                  {isAdaptiveMode && schedulerState && (
-                    <span className="ml-2 text-xs opacity-75">
-                      ({Math.round(activityLevel * 100)}% active)
-                    </span>
-                  )}
-                </span>
-              </div>
-            );
-          })()}
-
-          {/* Screenshots Count */}
-          {session.enableScreenshots && (
-            <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 flex items-center gap-2">
-              <Camera size={16} className="text-cyan-600" />
-              <span className="text-sm font-bold text-gray-900">{session.screenshots?.length || 0} shots</span>
-            </div>
-          )}
-
-          {/* Audio */}
-          {session.audioRecording && (
-            <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 flex items-center gap-2">
-              <Mic size={16} className="text-red-600" />
-              <span className="text-sm font-bold text-gray-900">{session.audioSegments?.length || 0}</span>
-              {!isPaused && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
-            </div>
-          )}
-
-          {/* Tasks */}
-          <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-[20px] border-2 border-white/60 flex items-center gap-2">
-            <CheckSquare size={16} className="text-purple-600" />
-            <span className="text-sm font-bold text-gray-900">{session.extractedTaskIds?.length || 0}</span>
-          </div>
-
-          {/* AI Learning Indicator */}
-          {session.screenshots?.some(s => s.analysisStatus === 'analyzing') && (
-            <div className="px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-400/40 rounded-full flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-              <span className="text-xs font-bold text-purple-700">AI Learning</span>
-            </div>
-          )}
-        </div>
-
-        {/* Adaptive Scheduler Debug Panel */}
-        {session.screenshotInterval === -1 && session.enableScreenshots && !isPaused && (
-          <AdaptiveSchedulerDebug isActive={true} />
-        )}
-
-        {/* AI Summary */}
-        {session.summary?.liveSnapshot && (
-          <div className="mt-4 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 backdrop-blur-sm rounded-[20px] border border-cyan-300/30 p-4">
-            <div className="flex items-start gap-2 mb-3">
-              <Sparkles className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-xs font-semibold text-cyan-700 uppercase tracking-wide mb-1">
-                  Right Now
-                </p>
-                <p className="text-sm text-gray-800 leading-relaxed">
-                  {session.summary.liveSnapshot.currentFocus}
-                </p>
-              </div>
-            </div>
-
-            {/* Progress Bullets */}
-            {session.summary.liveSnapshot.progressToday && session.summary.liveSnapshot.progressToday.length > 0 && (
-              <div className="ml-6 space-y-1 mb-3">
-                {session.summary.liveSnapshot.progressToday.slice(0, 3).map((item, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-xs text-gray-700">{item}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Momentum Indicator */}
-            {session.summary.liveSnapshot.momentum && (
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">Momentum:</span>
-                <div className="flex items-center gap-1.5">
-                  <div className={`h-1.5 w-12 rounded-full transition-all ${
-                    session.summary.liveSnapshot.momentum === 'high'
-                      ? 'bg-gradient-to-r from-green-400 to-green-500'
-                      : session.summary.liveSnapshot.momentum === 'medium'
-                      ? 'bg-gradient-to-r from-yellow-400 to-yellow-500'
-                      : 'bg-gradient-to-r from-gray-300 to-gray-400'
-                  }`} />
-                  <span className={`text-[10px] font-semibold ${
-                    session.summary.liveSnapshot.momentum === 'high'
-                      ? 'text-green-600'
-                      : session.summary.liveSnapshot.momentum === 'medium'
-                      ? 'text-yellow-600'
-                      : 'text-gray-600'
-                  }`}>
-                    {session.summary.liveSnapshot.momentum.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Timeline - Scrollable */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <SessionTimeline
-          session={session}
-          onAddComment={(screenshotId, comment) => {
-            addScreenshotComment(screenshotId, comment);
-          }}
-          onToggleFlag={(screenshotId) => {
-            toggleScreenshotFlag(screenshotId);
-          }}
-          onAddContext={handleAddContext}
-        />
-      </div>
-    </div>
-  );
-}
 
 
 

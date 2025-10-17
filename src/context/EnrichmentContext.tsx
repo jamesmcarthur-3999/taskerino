@@ -18,7 +18,7 @@ export interface ActiveEnrichment {
   sessionId: string;
   sessionName: string;
   progress: number; // 0-100
-  stage: 'audio' | 'video' | 'summary';
+  stage: 'validating' | 'estimating' | 'locking' | 'checkpointing' | 'audio' | 'video' | 'summary' | 'complete' | 'error';
   startTime: number;
   lastUpdate: number;
 }

@@ -17,6 +17,7 @@ import {
   PlayCircle,
   PauseCircle,
   CheckCircle2,
+  AlertCircle,
   Clock,
   Camera,
   Tag,
@@ -31,6 +32,7 @@ import {
 } from 'lucide-react';
 import type { Session } from '../../types';
 import { EnrichmentLoadingBar } from './EnrichmentLoadingBar';
+import { getGlassClasses, getRadiusClass, TRANSITIONS, getStatusBadgeClasses } from '../../design-system/theme';
 
 interface SessionCardProps {
   session: Session;
@@ -40,30 +42,33 @@ interface SessionCardProps {
 }
 
 const STATUS_COLORS = {
-  active: 'border-l-green-500 bg-green-50/70',
-  paused: 'border-l-orange-500 bg-orange-50/70',
+  active: 'border-l-green-500 bg-green-50/50',
+  paused: 'border-l-yellow-500 bg-yellow-50/50',
   completed: 'border-l-gray-500 bg-white/50',
+  interrupted: 'border-l-red-500 bg-red-50/50',
 };
 
 const STATUS_ICONS = {
   active: PlayCircle,
   paused: PauseCircle,
   completed: CheckCircle2,
+  interrupted: AlertCircle,
 };
 
 const STATUS_ICON_COLORS = {
   active: 'text-green-600',
-  paused: 'text-orange-600',
+  paused: 'text-yellow-600',
   completed: 'text-gray-600',
+  interrupted: 'text-red-600',
 };
 
 const ACTIVITY_COLORS = {
-  coding: 'bg-blue-100/70 text-blue-700',
-  meeting: 'bg-purple-100/70 text-purple-700',
-  research: 'bg-cyan-100/70 text-cyan-700',
-  design: 'bg-pink-100/70 text-pink-700',
-  email: 'bg-green-100/70 text-green-700',
-  other: 'bg-gray-100/70 text-gray-700',
+  coding: 'bg-blue-100 text-blue-800',
+  meeting: 'bg-purple-100 text-purple-800',
+  research: 'bg-cyan-100 text-cyan-800',
+  design: 'bg-pink-100 text-pink-800',
+  email: 'bg-emerald-100 text-emerald-800',
+  other: 'bg-gray-100 text-gray-700',
 };
 
 export const SessionCard = React.memo<SessionCardProps>(({
@@ -138,7 +143,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/70 backdrop-blur-xl border-2 border-white/60 shadow-lg shadow-cyan-100/30 cursor-pointer hover:border-cyan-300/60 hover:shadow-cyan-200/40 transition-all"
+        className={`flex items-center gap-2 px-3 py-2 ${getRadiusClass('field')} ${getGlassClasses('medium')} cursor-pointer hover:border-cyan-300/60 hover:shadow-cyan-200/40 ${TRANSITIONS.standard}`}
         onClick={() => onView?.(session.id)}
       >
         <StatusIcon className={`w-4 h-4 ${STATUS_ICON_COLORS[session.status]} flex-shrink-0`} />
@@ -162,14 +167,14 @@ export const SessionCard = React.memo<SessionCardProps>(({
       animate={{ opacity: 1, y: 0 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`rounded-xl border-2 border-l-4 overflow-hidden transition-all ${
+      className={`${getRadiusClass('card')} border-2 border-l-4 overflow-hidden ${TRANSITIONS.standard} ${
         STATUS_COLORS[session.status]
       } backdrop-blur-xl border-white/60 shadow-lg shadow-cyan-100/30 hover:shadow-xl hover:shadow-cyan-200/40`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 p-4 border-b border-white/60">
         <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className="p-2 rounded-lg bg-cyan-100/70 flex-shrink-0">
+          <div className={`p-2 ${getRadiusClass('field')} bg-cyan-100 flex-shrink-0`}>
             <StatusIcon className={`w-4 h-4 ${STATUS_ICON_COLORS[session.status]}`} />
           </div>
           <div className="flex-1 min-w-0">
@@ -206,11 +211,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
                 </span>
               )}
               {/* Status Badge */}
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                session.status === 'active' ? 'bg-green-100/70 text-green-700' :
-                session.status === 'paused' ? 'bg-orange-100/70 text-orange-700' :
-                'bg-gray-100/70 text-gray-700'
-              }`}>
+              <span className={`px-2 py-0.5 ${getRadiusClass('pill')} text-xs font-medium border ${getStatusBadgeClasses(session.status)}`}>
                 {session.status}
               </span>
             </div>
@@ -228,7 +229,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -5 }}
                     onClick={handleAskNed}
-                    className="p-1.5 rounded-lg hover:bg-purple-100/70 transition-all hover:shadow-md"
+                    className={`p-1.5 ${getRadiusClass('field')} hover:bg-purple-100 ${TRANSITIONS.standard} hover:shadow-md`}
                     title="Ask Ned about this session"
                   >
                     <MessageCircle className="w-4 h-4 text-purple-600" />
@@ -241,7 +242,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
                     exit={{ opacity: 0, x: -5 }}
                     transition={{ delay: 0.05 }}
                     onClick={() => onView(session.id)}
-                    className="p-1.5 rounded-lg hover:bg-white/80 transition-all hover:shadow-md"
+                    className={`p-1.5 ${getRadiusClass('field')} hover:bg-white/80 ${TRANSITIONS.standard} hover:shadow-md`}
                     title="View full session"
                   >
                     <ExternalLink className="w-4 h-4 text-gray-600" />
@@ -258,7 +259,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
         <div className="px-4 py-3 border-b border-white/60">
           <button
             onClick={() => setShowActivities(!showActivities)}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-cyan-600 transition-colors mb-2"
+            className={`flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-cyan-600 ${TRANSITIONS.colors} mb-2`}
           >
             <Activity className="w-3.5 h-3.5" />
             <span>Recent Activities</span>
@@ -293,7 +294,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
         <div className="px-4 py-3">
           <button
             onClick={() => setShowExtracted(!showExtracted)}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-cyan-600 transition-colors"
+            className={`flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-cyan-600 ${TRANSITIONS.colors}`}
           >
             <ListTodo className="w-3.5 h-3.5" />
             <span>
@@ -311,7 +312,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="mt-2 p-3 rounded-lg bg-white/50 border border-white/60"
+                className={`mt-2 p-3 ${getRadiusClass('field')} bg-white/50 border border-white/60`}
               >
                 <div className="flex items-center gap-4 text-xs text-gray-600">
                   {session.extractedTaskIds.length > 0 && (
@@ -350,7 +351,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
                   {session.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="px-2 py-0.5 text-xs rounded-full bg-cyan-100/70 text-cyan-700 hover:bg-cyan-200/70 transition-colors cursor-pointer flex-shrink-0"
+                      className={`px-2 py-0.5 text-xs ${getRadiusClass('pill')} bg-cyan-100 text-cyan-800 hover:bg-cyan-200 ${TRANSITIONS.colors} cursor-pointer flex-shrink-0`}
                     >
                       {tag}
                     </span>

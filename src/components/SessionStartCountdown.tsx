@@ -40,7 +40,7 @@ export function SessionStartCountdown({ countdown, sessionName }: SessionStartCo
   const isRecording = countdown === 0;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
       <div className="flex flex-col items-center gap-8">
         {/* Countdown Circle */}
         <div className="relative">
@@ -127,36 +127,6 @@ export function SessionStartCountdown({ countdown, sessionName }: SessionStartCo
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-
-        @keyframes float {
-          0%, 100% {
-            transform: translateY(0) scale(0);
-            opacity: 0;
-          }
-          50% {
-            transform: translateY(-100px) scale(1);
-            opacity: 1;
-          }
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
-
-        .animate-float {
-          animation: float 3s ease-in-out infinite;
-        }
-      `}</style>
     </div>,
     document.body
   );

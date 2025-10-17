@@ -1,6 +1,14 @@
 import React, { type ReactNode } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { RADIUS, getGlassClasses } from '../design-system/theme';
+import {
+  RADIUS,
+  getGlassClasses,
+  getRadiusClass,
+  getSuccessGradient,
+  getWarningGradient,
+  getDangerGradient,
+  getInfoGradient
+} from '../design-system/theme';
 import type { ColorScheme } from '../design-system/theme';
 
 interface BadgeProps {
@@ -37,16 +45,20 @@ export const Badge = React.memo(function Badge({
         return getPrimaryGradient(colorScheme);
 
       case 'success':
-        return 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-200/60 backdrop-blur-sm';
+        const successGradient = getSuccessGradient('light');
+        return `${successGradient.container} ${successGradient.textPrimary}`;
 
       case 'warning':
-        return 'bg-gradient-to-r from-yellow-100 to-orange-100 text-orange-700 border border-orange-200/60 backdrop-blur-sm';
+        const warningGradient = getWarningGradient('light');
+        return `${warningGradient.container} ${warningGradient.textPrimary}`;
 
       case 'danger':
-        return 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border border-red-200/60 backdrop-blur-sm';
+        const dangerGradient = getDangerGradient('light');
+        return `${dangerGradient.container} ${dangerGradient.textPrimary}`;
 
       case 'info':
-        return 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border border-blue-200/60 backdrop-blur-sm';
+        const infoGradient = getInfoGradient('light');
+        return `${infoGradient.container} ${infoGradient.textPrimary}`;
     }
   };
 
@@ -73,7 +85,7 @@ export const Badge = React.memo(function Badge({
         className={`
           inline-block
           ${sizeClasses[size]}
-          ${RADIUS.pill}
+          ${getRadiusClass('pill')}
           ${getVariantClasses()}
         `.trim()}
       />
@@ -89,7 +101,7 @@ export const Badge = React.memo(function Badge({
         justify-center
         font-medium
         ${sizeClasses[size]}
-        ${rounded ? RADIUS.pill : RADIUS.element}
+        ${rounded ? getRadiusClass('pill') : getRadiusClass('element')}
         ${getVariantClasses()}
         whitespace-nowrap
       `.trim()}

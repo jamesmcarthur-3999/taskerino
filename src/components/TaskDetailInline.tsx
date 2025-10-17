@@ -5,6 +5,7 @@ import { useUI } from '../context/UIContext';
 import { Calendar, Clock, CheckSquare, Circle, Plus, X, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Task, SubTask } from '../types';
 import { formatRelativeTime, isTaskOverdue, isTaskDueToday, generateId } from '../utils/helpers';
+import { getRadiusClass } from '../design-system/theme';
 
 interface TaskDetailInlineProps {
   taskId: string;
@@ -155,7 +156,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
         {onClose && (
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 hover:bg-white/60 rounded-lg transition-all hover:scale-105 active:scale-95 z-10"
+            className={`absolute top-4 right-4 p-2 hover:bg-white/60 ${getRadiusClass('element')} transition-all hover:scale-105 active:scale-95 z-10`}
             aria-label="Close"
           >
             <X className="w-5 h-5 text-gray-600" />
@@ -168,7 +169,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as Task['status'])}
-            className={`inline-flex items-center gap-1 font-medium rounded-lg px-2 py-1 border transition-all ${
+            className={`inline-flex items-center gap-1 font-medium ${getRadiusClass('element')} px-2 py-1 border transition-all ${
               status === 'done' ? 'text-green-700 bg-green-50 border-green-200' :
               status === 'in-progress' ? 'text-cyan-700 bg-cyan-50 border-cyan-200' :
               status === 'blocked' ? 'text-red-700 bg-red-50 border-red-200' :
@@ -185,7 +186,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as Task['priority'])}
-            className={`inline-flex items-center gap-1 font-medium rounded-lg px-2 py-1 border transition-all ${
+            className={`inline-flex items-center gap-1 font-medium ${getRadiusClass('element')} px-2 py-1 border transition-all ${
               priority === 'urgent' ? 'text-red-700 bg-red-50 border-red-200' :
               priority === 'high' ? 'text-orange-700 bg-orange-50 border-orange-200' :
               priority === 'medium' ? 'text-yellow-700 bg-yellow-50 border-yellow-200' :
@@ -199,21 +200,21 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
           </select>
 
           {/* Created */}
-          <span className="inline-flex items-center gap-1 font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg px-2 py-1">
+          <span className={`inline-flex items-center gap-1 font-medium text-gray-700 bg-gray-100 border border-gray-200 ${getRadiusClass('element')} px-2 py-1`}>
             <Clock className="w-3 h-3" />
             <span>Created {formatRelativeTime(task.createdAt)}</span>
           </span>
 
           {/* Completed */}
           {task.completedAt && (
-            <span className="inline-flex items-center gap-1 font-medium text-green-700 bg-green-100 border border-green-200 rounded-lg px-2 py-1">
+            <span className={`inline-flex items-center gap-1 font-medium text-green-700 bg-green-100 border border-green-200 ${getRadiusClass('element')} px-2 py-1`}>
               <CheckCircle2 className="w-3 h-3" />
               <span>Completed {formatRelativeTime(task.completedAt)}</span>
             </span>
           )}
 
           {/* Save Status */}
-          <span className={`inline-flex items-center gap-1 font-medium rounded-lg px-2 py-1 ml-auto ${
+          <span className={`inline-flex items-center gap-1 font-medium ${getRadiusClass('element')} px-2 py-1 ml-auto ${
             saveStatus === 'saved' ? 'text-green-700 bg-green-50' :
             saveStatus === 'saving' ? 'text-blue-700 bg-blue-50' :
             'text-gray-700 bg-gray-50'
@@ -224,7 +225,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
           {/* Delete Button */}
           <button
             onClick={handleDelete}
-            className="inline-flex items-center gap-1 font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg px-2 py-1 transition-all"
+            className={`inline-flex items-center gap-1 font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 ${getRadiusClass('element')} px-2 py-1 transition-all`}
             title="Delete task"
           >
             <Trash2 className="w-3 h-3" />
@@ -250,7 +251,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className={`px-3 py-1.5 text-sm rounded-lg border transition-all ${
+              className={`px-3 py-1.5 text-sm ${getRadiusClass('element')} border transition-all ${
                 isOverdue ? 'border-red-300 bg-red-50 text-red-700' :
                 isDueToday ? 'border-cyan-300 bg-cyan-50 text-cyan-700' :
                 'border-gray-200 bg-white'
@@ -263,7 +264,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
               type="time"
               value={dueTime}
               onChange={(e) => setDueTime(e.target.value)}
-              className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-white"
+              className={`px-3 py-1.5 text-sm ${getRadiusClass('element')} border border-gray-200 bg-white`}
             />
           </div>
           {dueDate && (
@@ -286,7 +287,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
               <span>Progress</span>
               <span>{completedSubtasks}/{totalSubtasks} subtasks</span>
             </div>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className={`h-2 bg-gray-100 ${getRadiusClass('element')} overflow-hidden`}>
               <div
                 className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500"
                 style={{ width: `${progress}%` }}
@@ -304,7 +305,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={6}
-            className="w-full px-4 py-3 text-sm text-gray-700 bg-white/60 backdrop-blur-sm border-2 border-white/60 rounded-xl focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 transition-all resize-none"
+            className={`w-full px-4 py-3 text-sm text-gray-700 bg-white/60 backdrop-blur-sm border-2 border-white/60 ${getRadiusClass('field')} focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 transition-all resize-none`}
             placeholder="Add task description..."
           />
         </div>
@@ -318,7 +319,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
             {subtasks.map((subtask) => (
               <div
                 key={subtask.id}
-                className="flex items-center gap-2 p-2 bg-white/60 backdrop-blur-sm rounded-lg border border-white/60 group hover:border-cyan-200 transition-all"
+                className={`flex items-center gap-2 p-2 bg-white/60 backdrop-blur-sm ${getRadiusClass('element')} border border-white/60 group hover:border-cyan-200 transition-all`}
               >
                 <button
                   onClick={() => handleToggleSubtask(subtask.id)}
@@ -353,12 +354,12 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
                   }
                 }}
                 placeholder="Add a subtask..."
-                className="flex-1 px-3 py-2 text-sm bg-white/60 backdrop-blur-sm border-2 border-white/60 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 transition-all"
+                className={`flex-1 px-3 py-2 text-sm bg-white/60 backdrop-blur-sm border-2 border-white/60 ${getRadiusClass('element')} focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 transition-all`}
               />
               <button
                 onClick={handleAddSubtask}
                 disabled={!newSubtask.trim()}
-                className="px-3 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg hover:from-cyan-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className={`px-3 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white ${getRadiusClass('element')} hover:from-cyan-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all`}
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -375,7 +376,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
             {tags.map((tag) => (
               <span
                 key={tag}
-                className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-100 text-violet-700 rounded-lg text-xs font-medium"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 bg-violet-100 text-violet-700 ${getRadiusClass('element')} text-xs font-medium`}
               >
                 #{tag}
                 <button
@@ -399,12 +400,12 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
                 }
               }}
               placeholder="Add a tag..."
-              className="flex-1 px-3 py-2 text-sm bg-white/60 backdrop-blur-sm border-2 border-white/60 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 transition-all"
+              className={`flex-1 px-3 py-2 text-sm bg-white/60 backdrop-blur-sm border-2 border-white/60 ${getRadiusClass('element')} focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 transition-all`}
             />
             <button
               onClick={handleAddTag}
               disabled={!newTag.trim()}
-              className="px-3 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg hover:from-cyan-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className={`px-3 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white ${getRadiusClass('element')} hover:from-cyan-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all`}
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -413,7 +414,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
 
         {/* AI Context (if present) */}
         {task.aiContext && (
-          <div className="p-4 bg-purple-50/60 backdrop-blur-sm border border-purple-200 rounded-xl">
+          <div className={`p-4 bg-purple-50/60 backdrop-blur-sm border border-purple-200 ${getRadiusClass('field')}`}>
             <div className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-2">
               AI Context
             </div>

@@ -1,7 +1,9 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useTasks } from '../context/TasksContext';
 import { useUI } from '../context/UIContext';
 import { useEntities } from '../context/EntitiesContext';
+import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
+import { clamp, easeOutQuart } from '../utils/easing';
 import {
   CheckCircle2,
   Circle,
@@ -13,6 +15,7 @@ import {
   Trash2,
   ExternalLink,
   Flag,
+  Columns3,
 } from 'lucide-react';
 import type { Task } from '../types';
 import {
@@ -28,11 +31,24 @@ import { InlineTagManager } from './InlineTagManager';
 import { tagUtils } from '../utils/tagUtils';
 import { Button } from './Button';
 import { FeatureTooltip } from './FeatureTooltip';
+import { getTaskCardClasses, KANBAN } from '../design-system/theme';
 
 export default function TasksZone() {
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { state: entitiesState } = useEntities();
+  const { registerScrollContainer, unregisterScrollContainer, scrollY } = useScrollAnimation();
+
+  // Scroll container refs
+  const tableScrollContainerRef = useRef<HTMLDivElement>(null);
+  const kanbanColumnRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Content container refs for scroll-driven expansion
+  const tableContentRef = useRef<HTMLDivElement>(null);
+  const kanbanContentRef = useRef<HTMLDivElement>(null);
+
+  // Ref for main container to apply dynamic top padding
+  const mainContainerRef = useRef<HTMLDivElement>(null);
 
   // UI State
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
@@ -102,6 +118,34 @@ export default function TasksZone() {
     }
   };
 
+  // Register/unregister table scroll container
+  useEffect(() => {
+    if (viewMode === 'table' && tableScrollContainerRef.current) {
+      registerScrollContainer(tableScrollContainerRef.current);
+      return () => {
+        unregisterScrollContainer(tableScrollContainerRef.current);
+      };
+    }
+  }, [viewMode, registerScrollContainer, unregisterScrollContainer]);
+
+  // Register/unregister kanban column scroll containers
+  useEffect(() => {
+    if (viewMode === 'kanban') {
+      kanbanColumnRefs.current.forEach(ref => {
+        if (ref) {
+          registerScrollContainer(ref);
+        }
+      });
+      return () => {
+        kanbanColumnRefs.current.forEach(ref => {
+          if (ref) {
+            unregisterScrollContainer(ref);
+          }
+        });
+      };
+    }
+  }, [viewMode, registerScrollContainer, unregisterScrollContainer]);
+
   // Show task views tooltip when user first opens Tasks zone with tasks
   useEffect(() => {
     if (
@@ -130,6 +174,29 @@ export default function TasksZone() {
   const handleShowMeTaskViews = () => {
     setViewMode('kanban');
   };
+
+  /**
+   * Scroll-driven content expansion
+   * Reduces top padding as the menu bar scrolls away to fill the space naturally
+   */
+  useEffect(() => {
+    if (!mainContainerRef.current) return;
+
+    const container = mainContainerRef.current;
+
+    // Initial padding is pt-24 (96px)
+    const initialPadding = 96;
+    // Menu bar scrolls away over 200px (same as SpaceMenuBar transform)
+    const scrollRange = 200;
+
+    // Calculate reduced padding based on scroll
+    // As scrollY goes from 0 to 200, padding goes from 96 to ~20px (keeping some minimum)
+    const minPadding = 20;
+    const paddingReduction = Math.min(scrollY, scrollRange) / scrollRange * (initialPadding - minPadding);
+    const newPadding = initialPadding - paddingReduction;
+
+    container.style.paddingTop = `${newPadding}px`;
+  }, [scrollY]);
 
   // Get top tags for filter panel
   const topTags = useMemo(() => {
@@ -176,15 +243,6 @@ export default function TasksZone() {
     }
   };
 
-  const getPriorityColor = (priority: Task['priority']) => {
-    switch (priority) {
-      case 'urgent': return 'border-l-red-500';
-      case 'high': return 'border-l-orange-500';
-      case 'medium': return 'border-l-yellow-500';
-      case 'low': return 'border-l-blue-500';
-    }
-  };
-
   const handleDeleteTask = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm('Delete this task?')) {
@@ -213,13 +271,15 @@ export default function TasksZone() {
     status,
     tasks,
     onToggle,
-    onSelect
+    onSelect,
+    scrollRef
   }: {
     title: string;
     status: Task['status'];
     tasks: Task[];
     onToggle: (id: string) => void;
     onSelect: (id: string) => void;
+    scrollRef?: (ref: HTMLDivElement | null) => void;
   }) => {
     const [isDragOver, setIsDragOver] = useState(false);
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -285,12 +345,12 @@ export default function TasksZone() {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`bg-white/60 backdrop-blur-xl rounded-[24px] border overflow-hidden flex flex-col h-full transition-all duration-300 shadow-md hover:shadow-lg ${
-          isDragOver ? 'border-cyan-400 bg-cyan-50/40 shadow-2xl scale-[1.02]' : 'border-gray-200/60 hover:border-cyan-200'
+        className={`overflow-hidden flex flex-col h-full ${
+          isDragOver ? KANBAN.column.dragOver : KANBAN.column.default
         }`}
         style={{ transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
       >
-        <div className="px-4 py-3 border-b border-gray-200/50 bg-white/70 backdrop-blur-sm">
+        <div className={KANBAN.header}>
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-sm text-gray-900">
               {title}
@@ -310,7 +370,7 @@ export default function TasksZone() {
             </div>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 space-y-2">
           {tasks.map(task => {
             const taskTopic = topic(task);
             const isOverdue = isTaskOverdue(task);
@@ -318,6 +378,9 @@ export default function TasksZone() {
             const isUrgent = task.priority === 'urgent' || task.priority === 'high';
 
             const isEditing = editingTaskId === task.id;
+
+            const cardState = isOverdue ? 'overdue' : isDueToday ? 'dueToday' : 'default';
+            const cardClasses = getTaskCardClasses(task.priority, cardState);
 
             return (
               <div
@@ -328,13 +391,7 @@ export default function TasksZone() {
                   e.dataTransfer.setData('taskId', task.id);
                 }}
                 onClick={() => !isEditing && onSelect(task.id)}
-                className={`group relative bg-white/95 backdrop-blur-lg rounded-[16px] shadow-sm cursor-grab active:cursor-grabbing border-l-4 border-t border-r border-b transition-all duration-300 hover:shadow-lg hover:scale-[1.02] active:scale-98 will-change-transform overflow-hidden ${
-                  getPriorityColor(task.priority)
-                } ${
-                  isOverdue ? 'border-t-red-300 border-r-red-300 border-b-red-300 hover:shadow-red-100/50 bg-red-50/40' :
-                  isDueToday ? 'border-t-cyan-300 border-r-cyan-300 border-b-cyan-300 hover:shadow-cyan-100/50 bg-cyan-50/30' :
-                  'border-t-gray-200 border-r-gray-200 border-b-gray-200 hover:shadow-gray-100/50'
-                } ${isEditing ? 'ring-2 ring-cyan-400' : ''}`}
+                className={`${cardClasses} ${isEditing ? 'ring-2 ring-cyan-400' : ''}`}
                 style={{ transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
               >
                 {/* Quick Actions - Show on Hover */}
@@ -507,23 +564,22 @@ export default function TasksZone() {
         {/* Secondary animated gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none will-change-transform" />
 
-        <div className="relative z-10 flex-1 flex flex-col pt-24 px-6 pb-6">
-          <div className="relative">
-            <SpaceMenuBar
-              primaryAction={{
-                label: 'New Task',
-                icon: <Plus size={16} />,
-                onClick: handleCreateNewTask,
-                gradient: 'cyan',
-              }}
-              viewControls={{
-                views: [
-                  { id: 'table', label: 'Table', icon: <Rows3 size={16} /> },
-                  { id: 'kanban', label: 'Kanban', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg> },
-                ],
-                activeView: 'table',
-                onViewChange: (id) => id === 'kanban' && setViewMode('kanban'),
-              }}
+        <div ref={mainContainerRef} className="relative z-10 flex-1 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
+          <SpaceMenuBar
+            primaryAction={{
+              label: 'New Task',
+              icon: <Plus size={16} />,
+              onClick: handleCreateNewTask,
+              gradient: 'cyan',
+            }}
+            viewControls={{
+              views: [
+                { id: 'table', label: 'Table', icon: <Rows3 size={16} /> },
+                { id: 'kanban', label: 'Kanban', icon: <Columns3 size={16} /> },
+              ],
+              activeView: 'table',
+              onViewChange: (id) => id === 'kanban' && setViewMode('kanban'),
+            }}
             dropdowns={[
               {
                 label: 'Group',
@@ -606,10 +662,11 @@ export default function TasksZone() {
               total: tasksState.tasks.length,
               filtered: displayedTasks.length,
             }}
+            className="mb-4"
           />
 
-            {/* Task Views Tooltip */}
-            <FeatureTooltip
+          {/* Task Views Tooltip */}
+          <FeatureTooltip
               show={showTaskViewsTooltip}
               onDismiss={handleDismissTaskViewsTooltip}
               position="bottom-right"
@@ -634,29 +691,29 @@ export default function TasksZone() {
               delay={500}
             />
 
-            {/* Task Detail Sidebar Tooltip - positioned in sidebar when it opens */}
-            {uiState.sidebar.isOpen && uiState.sidebar.type === 'task' && (
-              <FeatureTooltip
-                show={showTaskDetailTooltip}
-                onDismiss={handleDismissTaskDetailTooltip}
-                position="left"
-                title="💡 Tip: Task Details"
-                message="Click any task to see full details, subtasks, source note, tags, and more. You can edit everything inline!"
-                primaryAction={{
-                  label: 'Got it',
-                  onClick: () => {},
-                }}
-              />
-            )}
-          </div>
+          {/* Task Detail Sidebar Tooltip - positioned in sidebar when it opens */}
+          {uiState.sidebar.isOpen && uiState.sidebar.type === 'task' && (
+            <FeatureTooltip
+              show={showTaskDetailTooltip}
+              onDismiss={handleDismissTaskDetailTooltip}
+              position="left"
+              title="💡 Tip: Task Details"
+              message="Click any task to see full details, subtasks, source note, tags, and more. You can edit everything inline!"
+              primaryAction={{
+                label: 'Got it',
+                onClick: () => {},
+              }}
+            />
+          )}
 
           {/* Table View Component */}
-          <div className="flex-1 flex overflow-hidden">
+          <div ref={tableContentRef} className="flex-1 flex overflow-hidden">
             <TaskTableView
               tasks={displayedTasks}
               onTaskClick={setSelectedTaskIdForInline}
               selectedTaskId={selectedTaskIdForInline}
               groupBy={groupBy}
+              scrollRef={tableScrollContainerRef as React.RefObject<HTMLDivElement>}
             />
           </div>
         </div>
@@ -671,23 +728,22 @@ export default function TasksZone() {
         {/* Secondary animated gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none will-change-transform" />
 
-        <div className="relative z-10 flex-1 flex flex-col pt-24 px-6 pb-6">
-          <div className="relative">
-            <SpaceMenuBar
-              primaryAction={{
-                label: 'New Task',
-                icon: <Plus size={16} />,
-                onClick: handleCreateNewTask,
-                gradient: 'cyan',
-              }}
-              viewControls={{
-                views: [
-                  { id: 'table', label: 'Table', icon: <Rows3 size={16} /> },
-                  { id: 'kanban', label: 'Kanban', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg> },
-                ],
-                activeView: 'kanban',
-                onViewChange: (id) => id === 'table' && setViewMode('table'),
-              }}
+        <div ref={mainContainerRef} className="relative z-10 flex-1 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
+          <SpaceMenuBar
+            primaryAction={{
+              label: 'New Task',
+              icon: <Plus size={16} />,
+              onClick: handleCreateNewTask,
+              gradient: 'cyan',
+            }}
+            viewControls={{
+              views: [
+                { id: 'table', label: 'Table', icon: <Rows3 size={16} /> },
+                { id: 'kanban', label: 'Kanban', icon: <Columns3 size={16} /> },
+              ],
+              activeView: 'kanban',
+              onViewChange: (id) => id === 'table' && setViewMode('table'),
+            }}
             dropdowns={[
               {
                 label: 'Group',
@@ -770,10 +826,11 @@ export default function TasksZone() {
               total: tasksState.tasks.length,
               filtered: displayedTasks.length,
             }}
+            className="mb-4"
           />
 
-            {/* Task Views Tooltip */}
-            <FeatureTooltip
+          {/* Task Views Tooltip */}
+          <FeatureTooltip
               show={showTaskViewsTooltip}
               onDismiss={handleDismissTaskViewsTooltip}
               position="bottom-right"
@@ -812,14 +869,41 @@ export default function TasksZone() {
                 }}
               />
             )}
-          </div>
 
           {/* Kanban Board */}
-          <div className="grid grid-cols-4 gap-4 flex-1 overflow-hidden">
-            <KanbanColumn title="📋 To Do" status="todo" tasks={displayedTasks.filter(t => t.status === 'todo')} onToggle={handleToggleTask} onSelect={handleSelectTask} />
-            <KanbanColumn title="🔄 In Progress" status="in-progress" tasks={displayedTasks.filter(t => t.status === 'in-progress')} onToggle={handleToggleTask} onSelect={handleSelectTask} />
-            <KanbanColumn title="🚫 Blocked" status="blocked" tasks={displayedTasks.filter(t => t.status === 'blocked')} onToggle={handleToggleTask} onSelect={handleSelectTask} />
-            <KanbanColumn title="✅ Done" status="done" tasks={displayedTasks.filter(t => t.status === 'done')} onToggle={handleToggleTask} onSelect={handleSelectTask} />
+          <div ref={kanbanContentRef} className="grid grid-cols-4 gap-4 flex-1 overflow-hidden">
+            <KanbanColumn
+              title="📋 To Do"
+              status="todo"
+              tasks={displayedTasks.filter(t => t.status === 'todo')}
+              onToggle={handleToggleTask}
+              onSelect={handleSelectTask}
+              scrollRef={(ref) => kanbanColumnRefs.current[0] = ref}
+            />
+            <KanbanColumn
+              title="🔄 In Progress"
+              status="in-progress"
+              tasks={displayedTasks.filter(t => t.status === 'in-progress')}
+              onToggle={handleToggleTask}
+              onSelect={handleSelectTask}
+              scrollRef={(ref) => kanbanColumnRefs.current[1] = ref}
+            />
+            <KanbanColumn
+              title="🚫 Blocked"
+              status="blocked"
+              tasks={displayedTasks.filter(t => t.status === 'blocked')}
+              onToggle={handleToggleTask}
+              onSelect={handleSelectTask}
+              scrollRef={(ref) => kanbanColumnRefs.current[2] = ref}
+            />
+            <KanbanColumn
+              title="✅ Done"
+              status="done"
+              tasks={displayedTasks.filter(t => t.status === 'done')}
+              onToggle={handleToggleTask}
+              onSelect={handleSelectTask}
+              scrollRef={(ref) => kanbanColumnRefs.current[3] = ref}
+            />
           </div>
         </div>
       </div>

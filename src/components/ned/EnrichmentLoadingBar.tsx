@@ -17,6 +17,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Film, Mic, FileText } from 'lucide-react';
 import type { Session } from '../../types';
+import { useEnrichmentContext } from '../../context/EnrichmentContext';
+import { useReducedMotion } from '../../lib/animations';
 
 interface EnrichmentLoadingBarProps {
   session: Session;
@@ -67,18 +69,24 @@ const getStageIcon = (stage: string) => {
  */
 export function EnrichmentLoadingBar({ session }: EnrichmentLoadingBarProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const { getActiveEnrichment } = useEnrichmentContext();
+  const prefersReducedMotion = useReducedMotion();
 
   const enrichmentStatus = session.enrichmentStatus;
+  const activeEnrichment = getActiveEnrichment(session.id);
 
-  // Only show if enrichment is in progress
-  if (!enrichmentStatus || enrichmentStatus.status !== 'in-progress') {
+  // Only show if enrichment is in progress (check both real-time and persisted state)
+  const isEnriching = activeEnrichment || enrichmentStatus?.status === 'in-progress';
+
+  if (!isEnriching) {
     return null;
   }
 
-  const progress = enrichmentStatus.progress || 0;
-  const currentStage = enrichmentStatus.currentStage;
+  // Prefer real-time data from EnrichmentContext, fallback to persisted session state
+  const progress = activeEnrichment?.progress ?? enrichmentStatus?.progress ?? 0;
+  const currentStage = activeEnrichment?.stage ?? enrichmentStatus?.currentStage ?? 'audio';
   const stageMessage = getStageMessage(session);
-  const stageIcon = getStageIcon(currentStage);
+  const stageIcon = getStageIcon(currentStage ?? 'audio');
 
   return (
     <div
@@ -96,20 +104,22 @@ export function EnrichmentLoadingBar({ session }: EnrichmentLoadingBarProps) {
           transition={{ duration: 0.5, ease: 'easeOut' }}
         >
           {/* Animated Shimmer Effect */}
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
-            animate={{
-              x: ['-100%', '200%'],
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: 'linear',
-            }}
-            style={{
-              width: '50%',
-            }}
-          />
+          {!prefersReducedMotion && (
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+              animate={{
+                x: ['-100%', '200%'],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                ease: 'linear',
+              }}
+              style={{
+                width: '50%',
+              }}
+            />
+          )}
         </motion.div>
       </div>
 
@@ -142,26 +152,26 @@ export function EnrichmentLoadingBar({ session }: EnrichmentLoadingBarProps) {
               {/* Progress Details */}
               <div className="space-y-1.5">
                 {/* Audio Stage */}
-                {enrichmentStatus.audio && (
+                {enrichmentStatus?.audio && (
                   <div className="flex items-center gap-2 text-[10px]">
                     <Mic className="w-3 h-3 flex-shrink-0" />
                     <span className="flex-1 text-gray-700">Audio Analysis</span>
                     <span
                       className={`font-semibold ${
-                        enrichmentStatus.audio.status === 'completed'
+                        enrichmentStatus?.audio?.status === 'completed'
                           ? 'text-green-600'
-                          : enrichmentStatus.audio.status === 'processing'
+                          : enrichmentStatus?.audio?.status === 'processing'
                           ? 'text-blue-600'
-                          : enrichmentStatus.audio.status === 'failed'
+                          : enrichmentStatus?.audio?.status === 'failed'
                           ? 'text-red-600'
                           : 'text-gray-400'
                       }`}
                     >
-                      {enrichmentStatus.audio.status === 'completed'
+                      {enrichmentStatus?.audio?.status === 'completed'
                         ? '✓'
-                        : enrichmentStatus.audio.status === 'processing'
+                        : enrichmentStatus?.audio?.status === 'processing'
                         ? '...'
-                        : enrichmentStatus.audio.status === 'failed'
+                        : enrichmentStatus?.audio?.status === 'failed'
                         ? '✗'
                         : '○'}
                     </span>
@@ -169,26 +179,26 @@ export function EnrichmentLoadingBar({ session }: EnrichmentLoadingBarProps) {
                 )}
 
                 {/* Video Stage */}
-                {enrichmentStatus.video && (
+                {enrichmentStatus?.video && (
                   <div className="flex items-center gap-2 text-[10px]">
                     <Film className="w-3 h-3 flex-shrink-0" />
                     <span className="flex-1 text-gray-700">Video Chapters</span>
                     <span
                       className={`font-semibold ${
-                        enrichmentStatus.video.status === 'completed'
+                        enrichmentStatus?.video?.status === 'completed'
                           ? 'text-green-600'
-                          : enrichmentStatus.video.status === 'processing'
+                          : enrichmentStatus?.video?.status === 'processing'
                           ? 'text-blue-600'
-                          : enrichmentStatus.video.status === 'failed'
+                          : enrichmentStatus?.video?.status === 'failed'
                           ? 'text-red-600'
                           : 'text-gray-400'
                       }`}
                     >
-                      {enrichmentStatus.video.status === 'completed'
+                      {enrichmentStatus?.video?.status === 'completed'
                         ? '✓'
-                        : enrichmentStatus.video.status === 'processing'
+                        : enrichmentStatus?.video?.status === 'processing'
                         ? '...'
-                        : enrichmentStatus.video.status === 'failed'
+                        : enrichmentStatus?.video?.status === 'failed'
                         ? '✗'
                         : '○'}
                     </span>
@@ -196,26 +206,26 @@ export function EnrichmentLoadingBar({ session }: EnrichmentLoadingBarProps) {
                 )}
 
                 {/* Summary Stage */}
-                {enrichmentStatus.summary && (
+                {enrichmentStatus?.summary && (
                   <div className="flex items-center gap-2 text-[10px]">
                     <FileText className="w-3 h-3 flex-shrink-0" />
                     <span className="flex-1 text-gray-700">Summary</span>
                     <span
                       className={`font-semibold ${
-                        enrichmentStatus.summary.status === 'completed'
+                        enrichmentStatus?.summary?.status === 'completed'
                           ? 'text-green-600'
-                          : enrichmentStatus.summary.status === 'processing'
+                          : enrichmentStatus?.summary?.status === 'processing'
                           ? 'text-blue-600'
-                          : enrichmentStatus.summary.status === 'failed'
+                          : enrichmentStatus?.summary?.status === 'failed'
                           ? 'text-red-600'
                           : 'text-gray-400'
                       }`}
                     >
-                      {enrichmentStatus.summary.status === 'completed'
+                      {enrichmentStatus?.summary?.status === 'completed'
                         ? '✓'
-                        : enrichmentStatus.summary.status === 'processing'
+                        : enrichmentStatus?.summary?.status === 'processing'
                         ? '...'
-                        : enrichmentStatus.summary.status === 'failed'
+                        : enrichmentStatus?.summary?.status === 'failed'
                         ? '✗'
                         : '○'}
                     </span>

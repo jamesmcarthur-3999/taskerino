@@ -1,7 +1,7 @@
 import React, { useState, forwardRef } from 'react';
 import { Search, Eye, EyeOff } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { getInputClasses, RADIUS, SHADOWS, TRANSITIONS } from '../design-system/theme';
+import { getInputClasses, RADIUS, SHADOWS, TRANSITIONS, getDangerGradient } from '../design-system/theme';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: React.ReactNode;
@@ -64,8 +64,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     const paddingRight = actualRightIcon ? 'pr-11' : 'pr-4';
 
     // Error state classes
+    const errorGradient = getDangerGradient('medium');
     const errorClasses = error
-      ? 'border-red-500 focus:ring-red-400 focus:border-red-500'
+      ? `${errorGradient.container.split(' ').filter(c => c.includes('border')).join(' ')} focus:ring-red-400 focus:border-red-500`
       : '';
 
     // Disabled state classes

@@ -14,6 +14,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { Button } from './Button';
+import { getGlassClasses, SHADOWS, Z_INDEX } from '../design-system/theme';
 
 export interface FeatureTooltipProps {
   show: boolean;
@@ -126,7 +127,7 @@ export const FeatureTooltip: React.FC<FeatureTooltipProps> = ({
             damping: 30,
             mass: 0.8,
           }}
-          className={`absolute z-[100] ${getPositionClasses()}`}
+          className={`absolute ${Z_INDEX.tooltip} ${getPositionClasses()}`}
           style={{ pointerEvents: 'auto' }}
         >
           {/* Arrow indicator */}
@@ -143,7 +144,7 @@ export const FeatureTooltip: React.FC<FeatureTooltipProps> = ({
               }`}
             >
               <div
-                className={`w-3 h-3 bg-white/90 backdrop-blur-2xl border-2 border-white/60 transform rotate-45 ${
+                className={`w-3 h-3 ${getGlassClasses('strong')} transform rotate-45 ${
                   position === 'bottom-right' ? 'translate-x-[200%]' : ''
                 }`}
               />
@@ -151,7 +152,7 @@ export const FeatureTooltip: React.FC<FeatureTooltipProps> = ({
           )}
 
           {/* Tooltip card */}
-          <div className="bg-white/90 backdrop-blur-2xl border-2 border-white/60 rounded-[24px] shadow-2xl shadow-cyan-200/30 p-5 max-w-sm">
+          <div className={`${getGlassClasses('strong')} rounded-[24px] ${SHADOWS.elevated} p-5 max-w-sm`}>
             {/* Close button */}
             <button
               onClick={onDismiss}

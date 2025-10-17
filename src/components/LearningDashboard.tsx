@@ -3,6 +3,17 @@ import type { Learning, AppState } from '../types';
 import { LearningService } from '../services/learningService';
 import { claudeService } from '../services/claudeService';
 import { useSettings } from '../context/SettingsContext';
+import {
+  getGlassClasses,
+  getRadiusClass,
+  getSuccessGradient,
+  getInfoGradient,
+  getActivityGradient,
+  getGradientClasses,
+  MODAL_OVERLAY,
+  TRANSITIONS,
+  SCALE,
+} from '../design-system/theme';
 
 interface LearningDashboardProps {
   onClose: () => void;
@@ -128,19 +139,19 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-gray-700">
+    <div className={`${MODAL_OVERLAY} flex items-center justify-center z-50 p-4`}>
+      <div className={`${getGlassClasses('medium')} ${getRadiusClass('modal')} max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b-2 border-white/30">
           <div>
-            <h2 className="text-2xl font-bold text-white">AI Learning System</h2>
-            <p className="text-sm text-gray-400 mt-1">
+            <h2 className="text-2xl font-bold text-gray-900">AI Learning System</h2>
+            <p className="text-sm text-gray-700 mt-1">
               View and manage what the AI has learned from your corrections
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            className={`text-gray-600 hover:text-gray-900 ${TRANSITIONS.fast}`}
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -149,58 +160,66 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
         </div>
 
         {/* Metrics Bar */}
-        <div className="bg-gray-800 px-6 py-4 border-b border-gray-700">
+        <div className={`${getGlassClasses('subtle')} px-6 py-4 border-b-2 border-white/30`}>
           <div className="grid grid-cols-4 gap-4">
-            <div>
-              <div className="text-xs text-gray-400 mb-1">Total Learnings</div>
-              <div className="text-2xl font-bold text-white">{metrics.totalLearnings}</div>
+            <div className={`p-4 ${getRadiusClass('field')} ${getGlassClasses('medium')}`}>
+              <div className="text-xs text-gray-700 mb-1">Total Learnings</div>
+              <div className="text-2xl font-bold text-gray-900">{metrics.totalLearnings}</div>
             </div>
-            <div>
-              <div className="text-xs text-gray-400 mb-1">Accuracy Rate</div>
-              <div className="text-2xl font-bold text-green-400">{(metrics.accuracy * 100).toFixed(1)}%</div>
+            <div className={`p-4 ${getRadiusClass('field')} ${getSuccessGradient('medium').container}`}>
+              <div className={`text-xs ${getSuccessGradient('medium').textSecondary} mb-1`}>Accuracy Rate</div>
+              <div className={`text-2xl font-bold ${getSuccessGradient('medium').textPrimary}`}>{(metrics.accuracy * 100).toFixed(1)}%</div>
             </div>
-            <div>
-              <div className="text-xs text-gray-400 mb-1">Active Rules</div>
-              <div className="text-2xl font-bold text-blue-400">{rules.length}</div>
+            <div className={`p-4 ${getRadiusClass('field')} ${getInfoGradient('medium').container}`}>
+              <div className={`text-xs ${getInfoGradient('medium').textSecondary} mb-1`}>Active Rules</div>
+              <div className={`text-2xl font-bold ${getInfoGradient('medium').textPrimary}`}>{rules.length}</div>
             </div>
-            <div>
-              <div className="text-xs text-gray-400 mb-1">Active Patterns</div>
-              <div className="text-2xl font-bold text-purple-400">{patterns.length}</div>
+            <div className={`p-4 ${getRadiusClass('field')} ${getActivityGradient('design').background} ${getGlassClasses('medium').split(' ').slice(1).join(' ')} border ${getActivityGradient('design').border}`}>
+              <div className={`text-xs ${getActivityGradient('design').text} mb-1`}>Active Patterns</div>
+              <div className={`text-2xl font-bold ${getActivityGradient('design').text}`}>{patterns.length}</div>
             </div>
           </div>
         </div>
 
         {/* Action Bar */}
-        <div className="bg-gray-800 px-6 py-3 border-b border-gray-700 flex items-center justify-between">
+        <div className={`${getGlassClasses('subtle')} px-6 py-3 border-b-2 border-white/30 flex items-center justify-between`}>
           <div className="flex gap-2">
             <button
               onClick={() => setSelectedCategory('all')}
-              className={`px-3 py-1 rounded text-sm transition-colors ${
-                selectedCategory === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              className={`px-3 py-1 ${getRadiusClass('element')} text-sm ${TRANSITIONS.fast} ${
+                selectedCategory === 'all'
+                  ? `${getGradientClasses('ocean', 'accent')} text-white shadow-md`
+                  : `${getGlassClasses('subtle')} text-gray-700 hover:${getGlassClasses('medium')}`
               }`}
             >
               All ({settingsState.learnings.learnings.length})
             </button>
             <button
               onClick={() => setSelectedCategory('rules')}
-              className={`px-3 py-1 rounded text-sm transition-colors ${
-                selectedCategory === 'rules' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              className={`px-3 py-1 ${getRadiusClass('element')} text-sm ${TRANSITIONS.fast} ${
+                selectedCategory === 'rules'
+                  ? `${getGradientClasses('ocean', 'accent')} text-white shadow-md`
+                  : `${getGlassClasses('subtle')} text-gray-700 hover:${getGlassClasses('medium')}`
               }`}
             >
               ✅ Rules ({rules.length})
             </button>
             <button
               onClick={() => setSelectedCategory('patterns')}
-              className={`px-3 py-1 rounded text-sm transition-colors ${
-                selectedCategory === 'patterns' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              className={`px-3 py-1 ${getRadiusClass('element')} text-sm ${TRANSITIONS.fast} ${
+                selectedCategory === 'patterns'
+                  ? `${getGradientClasses('ocean', 'accent')} text-white shadow-md`
+                  : `${getGlassClasses('subtle')} text-gray-700 hover:${getGlassClasses('medium')}`
               }`}
             >
               📊 Patterns ({patterns.length})
             </button>
             <button
               onClick={() => setSelectedCategory('observations')}
-              className={`px-3 py-1 rounded text-sm transition-colors ${
-                selectedCategory === 'observations' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              className={`px-3 py-1 ${getRadiusClass('element')} text-sm ${TRANSITIONS.fast} ${
+                selectedCategory === 'observations'
+                  ? `${getGradientClasses('ocean', 'accent')} text-white shadow-md`
+                  : `${getGlassClasses('subtle')} text-gray-700 hover:${getGlassClasses('medium')}`
               }`}
             >
               🔬 Observations ({observations.length})
@@ -211,7 +230,7 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
             <button
               onClick={handleOptimize}
               disabled={isOptimizing || metrics.totalLearnings < 5}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-sm transition-colors flex items-center gap-2"
+              className={`px-4 py-2 ${getRadiusClass('field')} ${getGradientClasses('lavender', 'accent')} hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm ${TRANSITIONS.fast} flex items-center gap-2 shadow-md`}
             >
               {isOptimizing ? (
                 <>
@@ -229,13 +248,13 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
             </button>
             <button
               onClick={handleExport}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors"
+              className={`px-4 py-2 ${getGlassClasses('medium')} ${getRadiusClass('field')} text-gray-700 hover:${getGlassClasses('strong')} text-sm ${TRANSITIONS.fast}`}
             >
               Export Profile
             </button>
             <button
               onClick={handleImport}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors"
+              className={`px-4 py-2 ${getGlassClasses('medium')} ${getRadiusClass('field')} text-gray-700 hover:${getGlassClasses('strong')} text-sm ${TRANSITIONS.fast}`}
             >
               Import Profile
             </button>
@@ -244,24 +263,24 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
 
         {/* Optimization Result */}
         {optimizationResult && (
-          <div className={`mx-6 mt-4 p-4 rounded border ${
+          <div className={`mx-6 mt-4 p-4 ${getRadiusClass('field')} ${
             optimizationResult.applied
-              ? 'bg-green-900/20 border-green-700'
-              : 'bg-blue-900/20 border-blue-700'
+              ? getSuccessGradient('medium').container
+              : getInfoGradient('medium').container
           }`}>
             <div className="flex items-start gap-2">
-              <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className={`w-5 h-5 mt-0.5 flex-shrink-0 ${optimizationResult.applied ? getSuccessGradient('medium').textSecondary : getInfoGradient('medium').textSecondary}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <div className="flex-1">
-                <div className="font-medium mb-1">
+                <div className={`font-medium mb-1 ${optimizationResult.applied ? getSuccessGradient('medium').textPrimary : getInfoGradient('medium').textPrimary}`}>
                   {optimizationResult.applied ? '✅ Parameters Optimized' : 'ℹ️ AI Analysis Complete'}
                 </div>
-                <div className="text-sm text-gray-300">{optimizationResult.reasoning}</div>
+                <div className="text-sm text-gray-700">{optimizationResult.reasoning}</div>
               </div>
               <button
                 onClick={() => setOptimizationResult(null)}
-                className="text-gray-400 hover:text-white"
+                className={`text-gray-600 hover:text-gray-900 ${TRANSITIONS.fast}`}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -275,7 +294,7 @@ export function LearningDashboard({ onClose }: LearningDashboardProps) {
         <div className="flex-1 overflow-y-auto p-6">
           {displayedLearnings.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-gray-500 text-lg mb-2">No learnings yet</div>
+              <div className="text-gray-700 text-lg mb-2">No learnings yet</div>
               <div className="text-gray-600 text-sm">
                 The AI will start learning as you edit tasks and notes
               </div>
@@ -313,34 +332,45 @@ interface LearningCardProps {
 function LearningCard({ learning, settings, isExpanded, onToggleExpand, onToggleFlag }: LearningCardProps) {
   const getStatusBadge = () => {
     if (learning.strength >= settings.thresholds.rule) {
-      return <span className="px-2 py-1 bg-green-900/50 border border-green-700 text-green-300 rounded text-xs font-medium">✅ RULE</span>;
+      return <span className={`px-2 py-1 ${getSuccessGradient('strong').container} ${getSuccessGradient('strong').textPrimary} ${getRadiusClass('element')} text-xs font-medium`}>✅ RULE</span>;
     } else if (learning.strength >= settings.thresholds.active) {
-      return <span className="px-2 py-1 bg-blue-900/50 border border-blue-700 text-blue-300 rounded text-xs font-medium">📊 PATTERN</span>;
+      return <span className={`px-2 py-1 ${getInfoGradient('strong').container} ${getInfoGradient('strong').textPrimary} ${getRadiusClass('element')} text-xs font-medium`}>📊 PATTERN</span>;
     } else {
-      return <span className="px-2 py-1 bg-gray-800 border border-gray-700 text-gray-400 rounded text-xs font-medium">🔬 OBSERVATION</span>;
+      return <span className={`px-2 py-1 ${getGlassClasses('subtle')} text-gray-700 ${getRadiusClass('element')} text-xs font-medium`}>🔬 OBSERVATION</span>;
     }
   };
 
   const getCategoryBadge = (category: string) => {
-    const colors: Record<string, string> = {
-      'task-creation': 'bg-purple-900/30 text-purple-300 border-purple-700',
-      'task-timing': 'bg-blue-900/30 text-blue-300 border-blue-700',
-      'task-priority': 'bg-red-900/30 text-red-300 border-red-700',
-      'topic-detection': 'bg-green-900/30 text-green-300 border-green-700',
-      'note-merging': 'bg-yellow-900/30 text-yellow-300 border-yellow-700',
-      'tagging': 'bg-pink-900/30 text-pink-300 border-pink-700',
-      'formatting': 'bg-indigo-900/30 text-indigo-300 border-indigo-700',
+    const getColorClasses = () => {
+      switch (category) {
+        case 'task-creation':
+          return `${getActivityGradient('design').background} ${getActivityGradient('design').text} border ${getActivityGradient('design').border}`;
+        case 'task-timing':
+          return `${getInfoGradient('strong').container} ${getInfoGradient('strong').textPrimary}`;
+        case 'task-priority':
+          return `${getActivityGradient('meeting').background} ${getActivityGradient('meeting').text} border ${getActivityGradient('meeting').border}`;
+        case 'topic-detection':
+          return `${getSuccessGradient('strong').container} ${getSuccessGradient('strong').textPrimary}`;
+        case 'note-merging':
+          return `${getActivityGradient('writing').background} ${getActivityGradient('writing').text} border ${getActivityGradient('writing').border}`;
+        case 'tagging':
+          return `${getActivityGradient('design').background} ${getActivityGradient('design').text} border ${getActivityGradient('design').border}`;
+        case 'formatting':
+          return `${getActivityGradient('document').background} ${getActivityGradient('document').text} border ${getActivityGradient('document').border}`;
+        default:
+          return `${getGlassClasses('subtle')} text-gray-700`;
+      }
     };
 
     return (
-      <span className={`px-2 py-1 border rounded text-xs ${colors[category] || 'bg-gray-800 text-gray-400 border-gray-700'}`}>
+      <span className={`px-2 py-1 backdrop-blur-xl ${getRadiusClass('element')} text-xs ${getColorClasses()}`}>
         {category.replace('-', ' ')}
       </span>
     );
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+    <div className={`${getGlassClasses('medium')} ${getRadiusClass('card')} overflow-hidden`}>
       <div className="p-4">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
@@ -348,25 +378,25 @@ function LearningCard({ learning, settings, isExpanded, onToggleExpand, onToggle
               {getStatusBadge()}
               {getCategoryBadge(learning.category)}
               {learning.isFlag && (
-                <span className="px-2 py-1 bg-orange-900/50 border border-orange-700 text-orange-300 rounded text-xs font-medium">
+                <span className={`px-2 py-1 ${getActivityGradient('writing').background} backdrop-blur-xl border ${getActivityGradient('writing').border} ${getActivityGradient('writing').text} ${getRadiusClass('element')} text-xs font-medium`}>
                   🚩 FLAGGED
                 </span>
               )}
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-gray-600">
                 Strength: {learning.strength.toFixed(1)}%
               </span>
             </div>
-            <div className="text-white font-medium mb-1">{learning.pattern}</div>
-            <div className="text-sm text-gray-400">{learning.action}</div>
+            <div className="text-gray-900 font-medium mb-1">{learning.pattern}</div>
+            <div className="text-sm text-gray-700">{learning.action}</div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={onToggleFlag}
-              className={`p-2 rounded transition-colors ${
+              className={`p-2 ${getRadiusClass('element')} ${TRANSITIONS.fast} ${
                 learning.isFlag
-                  ? 'bg-orange-900/30 text-orange-300 hover:bg-orange-900/50'
-                  : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                  ? `${getActivityGradient('writing').background} ${getActivityGradient('writing').text} hover:opacity-80`
+                  : `${getGlassClasses('subtle')} text-gray-600 hover:${getGlassClasses('medium')}`
               }`}
               title={learning.isFlag ? 'Remove flag' : 'Flag for faster learning'}
             >
@@ -376,7 +406,7 @@ function LearningCard({ learning, settings, isExpanded, onToggleExpand, onToggle
             </button>
             <button
               onClick={onToggleExpand}
-              className="p-2 bg-gray-700 text-gray-400 hover:bg-gray-600 rounded transition-colors"
+              className={`p-2 ${getGlassClasses('subtle')} text-gray-600 hover:${getGlassClasses('medium')} ${getRadiusClass('element')} ${TRANSITIONS.fast}`}
             >
               <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -385,7 +415,7 @@ function LearningCard({ learning, settings, isExpanded, onToggleExpand, onToggle
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-xs text-gray-500">
+        <div className="flex items-center gap-4 text-xs text-gray-600">
           <span>✓ {learning.timesConfirmed} confirmations</span>
           <span>✗ {learning.timesRejected} rejections</span>
           <span>↻ {learning.timesApplied} applications</span>
@@ -393,30 +423,30 @@ function LearningCard({ learning, settings, isExpanded, onToggleExpand, onToggle
       </div>
 
       {isExpanded && (
-        <div className="border-t border-gray-700 bg-gray-900/50 p-4">
-          <div className="text-sm text-gray-400 mb-3 font-medium">Evidence History</div>
+        <div className={`border-t-2 border-white/30 ${getGlassClasses('subtle')} p-4`}>
+          <div className="text-sm text-gray-700 mb-3 font-medium">Evidence History</div>
           {learning.evidence.length === 0 ? (
             <div className="text-sm text-gray-600">No evidence recorded yet</div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {learning.evidence.slice().reverse().map(evidence => (
-                <div key={evidence.id} className="bg-gray-800 border border-gray-700 rounded p-3">
+                <div key={evidence.id} className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-3`}>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      evidence.userAction === 'confirm' ? 'bg-green-900/30 text-green-300' :
-                      evidence.userAction === 'reject' ? 'bg-red-900/30 text-red-300' :
-                      evidence.userAction === 'modify' ? 'bg-yellow-900/30 text-yellow-300' :
-                      'bg-gray-700 text-gray-400'
+                    <span className={`px-2 py-0.5 ${getRadiusClass('element')} text-xs font-medium backdrop-blur-xl ${
+                      evidence.userAction === 'confirm' ? `${getSuccessGradient('strong').container} ${getSuccessGradient('strong').textPrimary}` :
+                      evidence.userAction === 'reject' ? `${getActivityGradient('meeting').background} ${getActivityGradient('meeting').text} border ${getActivityGradient('meeting').border}` :
+                      evidence.userAction === 'modify' ? `${getActivityGradient('writing').background} ${getActivityGradient('writing').text} border ${getActivityGradient('writing').border}` :
+                      `${getGlassClasses('subtle')} text-gray-700`
                     }`}>
                       {evidence.userAction}
                     </span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-600">
                       {new Date(evidence.timestamp).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="text-sm text-gray-300">{evidence.context}</div>
+                  <div className="text-sm text-gray-700">{evidence.context}</div>
                   {evidence.details && (evidence.details.before || evidence.details.after) && (
-                    <div className="mt-2 text-xs text-gray-500">
+                    <div className="mt-2 text-xs text-gray-600">
                       {evidence.details.before && <div>Before: {JSON.stringify(evidence.details.before)}</div>}
                       {evidence.details.after && <div>After: {JSON.stringify(evidence.details.after)}</div>}
                     </div>

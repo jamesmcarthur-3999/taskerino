@@ -30,7 +30,7 @@ import {
   X,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { getModalClasses } from '../design-system/theme';
+import { getModalClasses, getModalHeaderClasses, getGlassClasses, getRadiusClass, getSuccessGradient, getInfoGradient, getDangerGradient } from '../design-system/theme';
 import { Button } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
 import {
@@ -321,7 +321,7 @@ export function EnrichmentProgressModal({
   const getStageColor = (status: StageProgress['status']) => {
     switch (status) {
       case 'running':
-        return 'text-blue-600 bg-blue-100 border-blue-300';
+        return 'text-cyan-600 bg-cyan-100 border-cyan-300';
       case 'completed':
         return 'text-green-600 bg-green-100 border-green-300';
       case 'failed':
@@ -357,6 +357,9 @@ export function EnrichmentProgressModal({
   if (!isOpen) return null;
 
   const modalClasses = getModalClasses(colorScheme, glassStrength);
+  const infoGradient = getInfoGradient('light');
+  const successGradient = getSuccessGradient('light');
+  const dangerGradient = getDangerGradient('light');
 
   return (
     <>
@@ -366,10 +369,16 @@ export function EnrichmentProgressModal({
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="p-6 border-b-2 border-white/30 bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-sm rounded-t-[32px]">
+          <div className={getModalHeaderClasses(colorScheme)}>
             <div className="flex items-center justify-between">
               <div className="flex-1">
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-1">
+                <h2 className={`text-2xl font-bold mb-1 ${
+                  isComplete
+                    ? 'bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent'
+                    : hasError
+                    ? 'bg-gradient-to-r from-red-600 to-orange-600 bg-clip-text text-transparent'
+                    : 'bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent'
+                }`}>
                   {isComplete
                     ? 'Enrichment Complete!'
                     : hasError
@@ -408,7 +417,7 @@ export function EnrichmentProgressModal({
                 </div>
                 <div className="h-3 bg-gradient-to-r from-gray-100 to-gray-50 rounded-full overflow-hidden shadow-inner border border-gray-200/50">
                   <div
-                    className="h-full rounded-full transition-all duration-500 shadow-sm bg-gradient-to-r from-blue-500 to-purple-500"
+                    className="h-full rounded-full transition-all duration-500 shadow-sm bg-gradient-to-r from-cyan-500 to-blue-500"
                     style={{ width: `${overallProgress}%` }}
                   />
                 </div>
@@ -420,7 +429,7 @@ export function EnrichmentProgressModal({
             {!hasError && !isComplete && (
               <div className="space-y-4">
                 {/* Video Chaptering */}
-                <div className="bg-white/40 backdrop-blur-sm rounded-[20px] p-4 border border-white/60 shadow-sm">
+                <div className={`${getGlassClasses('subtle')} ${getRadiusClass('field')} p-4`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
                       <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border-2 ${getStageColor(videoProgress.status)}`}>
@@ -444,7 +453,7 @@ export function EnrichmentProgressModal({
                       </p>
                       <div className="ml-11 h-2 bg-gradient-to-r from-gray-100 to-gray-50 rounded-full overflow-hidden shadow-inner border border-gray-200/50">
                         <div
-                          className="h-full rounded-full transition-all duration-500 shadow-sm bg-gradient-to-r from-blue-500 to-blue-600"
+                          className="h-full rounded-full transition-all duration-500 shadow-sm bg-gradient-to-r from-cyan-500 to-blue-500"
                           style={{ width: `${videoProgress.progress}%` }}
                         />
                       </div>
@@ -456,7 +465,7 @@ export function EnrichmentProgressModal({
                 </div>
 
                 {/* Audio Analysis */}
-                <div className="bg-white/40 backdrop-blur-sm rounded-[20px] p-4 border border-white/60 shadow-sm">
+                <div className={`${getGlassClasses('subtle')} ${getRadiusClass('field')} p-4`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
                       <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border-2 ${getStageColor(audioProgress.status)}`}>
@@ -480,7 +489,7 @@ export function EnrichmentProgressModal({
                       </p>
                       <div className="ml-11 h-2 bg-gradient-to-r from-gray-100 to-gray-50 rounded-full overflow-hidden shadow-inner border border-gray-200/50">
                         <div
-                          className="h-full rounded-full transition-all duration-500 shadow-sm bg-gradient-to-r from-purple-500 to-purple-600"
+                          className="h-full rounded-full transition-all duration-500 shadow-sm bg-gradient-to-r from-purple-500 to-pink-500"
                           style={{ width: `${audioProgress.progress}%` }}
                         />
                       </div>
@@ -495,14 +504,14 @@ export function EnrichmentProgressModal({
 
             {/* Success Summary */}
             {isComplete && result && (
-              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-[20px] p-6 border border-green-200/50">
+              <div className={`${successGradient.container} ${getRadiusClass('field')} p-6`}>
                 <div className="flex items-center gap-3 mb-4">
-                  <CheckCircle className="w-8 h-8 text-green-600" />
+                  <CheckCircle className={`w-8 h-8 ${successGradient.iconColor}`} />
                   <div>
-                    <h3 className="text-lg font-bold text-green-900">
+                    <h3 className={`text-lg font-bold ${successGradient.textPrimary}`}>
                       Enrichment Successful!
                     </h3>
-                    <p className="text-sm text-green-700">
+                    <p className={`text-sm ${successGradient.textSecondary}`}>
                       Your session has been enhanced with AI insights
                     </p>
                   </div>
@@ -512,7 +521,7 @@ export function EnrichmentProgressModal({
                   {result.audio?.completed && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-700 flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <CheckCircle className={`w-4 h-4 ${successGradient.iconColor}`} />
                         Audio analysis complete
                       </span>
                       <span className="text-gray-600">${result.audio.cost.toFixed(1)}</span>
@@ -521,7 +530,7 @@ export function EnrichmentProgressModal({
                   {result.video?.completed && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-700 flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <CheckCircle className={`w-4 h-4 ${successGradient.iconColor}`} />
                         Video chapters generated
                       </span>
                       <span className="text-gray-600">${result.video.cost.toFixed(1)}</span>
@@ -530,7 +539,7 @@ export function EnrichmentProgressModal({
                   {result.summary?.completed && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-700 flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <CheckCircle className={`w-4 h-4 ${successGradient.iconColor}`} />
                         Summary regenerated
                       </span>
                     </div>
@@ -538,8 +547,8 @@ export function EnrichmentProgressModal({
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-green-200/50 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-green-900">Total Cost</span>
-                  <span className="text-lg font-bold text-green-900">${result.totalCost.toFixed(1)}</span>
+                  <span className={`text-sm font-semibold ${successGradient.textPrimary}`}>Total Cost</span>
+                  <span className={`text-lg font-bold ${successGradient.textPrimary}`}>${result.totalCost.toFixed(1)}</span>
                 </div>
 
                 {result.warnings.length > 0 && (
@@ -557,14 +566,14 @@ export function EnrichmentProgressModal({
 
             {/* Error State */}
             {hasError && (
-              <div className="bg-gradient-to-r from-red-500/10 to-orange-500/10 rounded-[20px] p-6 border border-red-200/50">
+              <div className={`${dangerGradient.container} ${getRadiusClass('field')} p-6`}>
                 <div className="flex items-center gap-3 mb-4">
-                  <XCircle className="w-8 h-8 text-red-600" />
+                  <XCircle className={`w-8 h-8 ${dangerGradient.iconColor}`} />
                   <div>
-                    <h3 className="text-lg font-bold text-red-900">
+                    <h3 className={`text-lg font-bold ${dangerGradient.textPrimary}`}>
                       Enrichment Failed
                     </h3>
-                    <p className="text-sm text-red-700">
+                    <p className={`text-sm ${dangerGradient.textSecondary}`}>
                       {errorMessage || 'An error occurred during enrichment'}
                     </p>
                   </div>
@@ -580,7 +589,7 @@ export function EnrichmentProgressModal({
 
             {/* Time Information */}
             {isProcessing && (
-              <div className="flex items-center justify-between text-sm text-gray-600 bg-white/20 backdrop-blur-sm rounded-[16px] p-4 border border-white/60">
+              <div className={`flex items-center justify-between text-sm text-gray-600 ${getGlassClasses('subtle')} ${getRadiusClass('element')} p-4`}>
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4" />
                   <span>Time Elapsed: {formatTime(elapsedTime)}</span>
@@ -593,7 +602,7 @@ export function EnrichmentProgressModal({
 
             {/* Info Note */}
             {isProcessing && (
-              <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 rounded-[16px] p-4 border border-blue-200/50">
+              <div className={`${infoGradient.container} ${getRadiusClass('element')} p-4`}>
                 <p className="text-sm text-gray-700 leading-relaxed">
                   <span className="font-semibold">What's happening:</span> We're using AI to analyze your session audio and video, generating chapters, transcripts, and insights. This usually takes 2-5 minutes.
                 </p>

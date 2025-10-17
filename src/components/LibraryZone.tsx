@@ -1,8 +1,10 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNotes } from '../context/NotesContext';
 import { useEntities } from '../context/EntitiesContext';
 import { useTasks } from '../context/TasksContext';
 import { useUI } from '../context/UIContext';
+import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
+import { clamp, easeOutQuart } from '../utils/easing';
 import { sortTopics, formatRelativeTime, truncateText, generateNoteTitle, generateId } from '../utils/helpers';
 import { Clock, FileText, Search, X, SlidersHorizontal, CheckSquare, Plus } from 'lucide-react';
 import { NoteDetailInline } from './NoteDetailInline';
@@ -12,12 +14,14 @@ import { StandardFilterPanel } from './StandardFilterPanel';
 import { InlineTagManager } from './InlineTagManager';
 import { CollapsibleSidebar } from './CollapsibleSidebar';
 import type { Note } from '../types';
+import { BACKGROUND_GRADIENT, getGlassClasses, getNoteCardClasses, PANEL_FOOTER } from '../design-system/theme';
 
 export default function LibraryZone() {
   const { state: notesState, dispatch: notesDispatch } = useNotes();
   const { state: entitiesState } = useEntities();
   const { state: tasksState } = useTasks();
   const { state: uiState, dispatch: uiDispatch } = useUI();
+  const { registerScrollContainer, unregisterScrollContainer, scrollY } = useScrollAnimation();
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | undefined>();
   const [selectedContactId, setSelectedContactId] = useState<string | undefined>();
   const [selectedTopicId, setSelectedTopicId] = useState<string | undefined>();
@@ -29,6 +33,15 @@ export default function LibraryZone() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedNoteIdForInline, setSelectedNoteIdForInline] = useState<string | undefined>();
+
+  // Ref for scrollable notes list container
+  const notesListScrollRef = useRef<HTMLDivElement>(null);
+
+  // Ref for content container (enables scroll-driven expansion)
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Ref for main container to apply dynamic top padding
+  const mainContainerRef = useRef<HTMLDivElement>(null);
 
   // Sidebar collapse state
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
@@ -89,6 +102,38 @@ export default function LibraryZone() {
       }
     }
   }, [uiState.activeNoteId, notesState.notes, uiDispatch]);
+
+  // Register scroll container with ScrollAnimationContext
+  useEffect(() => {
+    const container = notesListScrollRef.current;
+    if (container) {
+      registerScrollContainer(container);
+      return () => unregisterScrollContainer(container);
+    }
+  }, [registerScrollContainer, unregisterScrollContainer]);
+
+  /**
+   * Scroll-driven content expansion
+   * Reduces top padding as the menu bar scrolls away to fill the space naturally
+   */
+  useEffect(() => {
+    if (!mainContainerRef.current) return;
+
+    const container = mainContainerRef.current;
+
+    // Initial padding is pt-24 (96px)
+    const initialPadding = 96;
+    // Menu bar scrolls away over 200px (same as SpaceMenuBar transform)
+    const scrollRange = 200;
+
+    // Calculate reduced padding based on scroll
+    // As scrollY goes from 0 to 200, padding goes from 96 to ~20px (keeping some minimum)
+    const minPadding = 20;
+    const paddingReduction = Math.min(scrollY, scrollRange) / scrollRange * (initialPadding - minPadding);
+    const newPadding = initialPadding - paddingReduction;
+
+    container.style.paddingTop = `${newPadding}px`;
+  }, [scrollY]);
 
   const sortedCompanies = useMemo(() => {
     return [...entitiesState.companies].sort((a, b) => {
@@ -243,12 +288,12 @@ export default function LibraryZone() {
   }, [notesDispatch]);
 
   return (
-    <div className="h-full w-full relative flex flex-col bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20">
+    <div className={`h-full w-full relative flex flex-col ${BACKGROUND_GRADIENT.primary}`}>
       {/* Secondary animated gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none will-change-transform" />
+      <div className={`absolute inset-0 ${BACKGROUND_GRADIENT.secondary} pointer-events-none will-change-transform`} />
 
-      <div className="relative z-10 flex-1 min-h-0 flex flex-col pt-24 px-6 pb-6">
-        {/* Header - Menu Bar */}
+      <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
+        {/* Header - Menu Bar - In Normal Flow */}
         <SpaceMenuBar
           primaryAction={{
             label: 'New Note',
@@ -325,10 +370,11 @@ export default function LibraryZone() {
             total: notesState.notes.length,
             filtered: displayedNotes.length,
           }}
+          className="mb-4"
         />
 
         {/* Split-screen Layout */}
-        <div className="flex-1 min-h-0 flex gap-4 relative items-stretch">
+        <div ref={contentRef} className="flex-1 min-h-0 flex gap-4 relative items-stretch">
         {/* LEFT PANEL - Clean Glass Card */}
         <CollapsibleSidebar
           width="420px"
@@ -338,7 +384,7 @@ export default function LibraryZone() {
           isExpanded={isSidebarExpanded}
           onExpandedChange={handleSidebarToggle}
         >
-        <div className="h-full bg-white/40 backdrop-blur-xl rounded-[24px] border-2 border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col overflow-hidden">
+        <div className={`h-full ${getGlassClasses('medium')} rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col overflow-hidden`}>
           {/* Compact Header with Search */}
           <div className="p-4">
             {/* Search Bar - Glass Morphism */}
@@ -352,7 +398,7 @@ export default function LibraryZone() {
           </div>
 
           {/* Scrollable Note List */}
-          <div className="flex-1 overflow-y-auto">
+          <div ref={notesListScrollRef} className="flex-1 overflow-y-auto">
             {displayedNotes.length > 0 ? (
               <div className="space-y-2 p-4">
                 {displayedNotes.map((note) => {
@@ -378,11 +424,7 @@ export default function LibraryZone() {
                   return (
                     <div
                       key={note.id}
-                      className={`group relative bg-white/30 backdrop-blur-xl rounded-[24px] p-3 cursor-pointer border-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.99] will-change-transform ${
-                        isSelected
-                          ? 'border-cyan-400 bg-cyan-100/20 shadow-lg shadow-cyan-100/30'
-                          : 'border-white/60 hover:border-cyan-200/60 hover:shadow-md'
-                      }`}
+                      className={getNoteCardClasses(isSelected)}
                       onClick={(e) => handleNoteClick(note.id, e)}
                       style={{ transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
                     >
@@ -450,7 +492,7 @@ export default function LibraryZone() {
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center px-6">
-                <div className="bg-white/40 backdrop-blur-xl rounded-[24px] p-8 border-2 border-white/50">
+                <div className={`${getGlassClasses('medium')} rounded-[24px] p-8`}>
                   <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                   <h3 className="text-base font-semibold text-gray-900 mb-1">No notes found</h3>
                   <p className="text-xs text-gray-600">
@@ -464,7 +506,7 @@ export default function LibraryZone() {
           </div>
 
           {/* Footer with Note Count - Glass Morphism */}
-          <div className="px-4 py-3 border-t-2 border-white/50 bg-white/30 backdrop-blur-sm">
+          <div className={PANEL_FOOTER}>
             <div className="flex items-center justify-center gap-2 text-xs">
               <FileText className="w-3.5 h-3.5 text-gray-500" />
               <span className="font-medium text-gray-600">
@@ -479,7 +521,7 @@ export default function LibraryZone() {
         </CollapsibleSidebar>
 
         {/* RIGHT PANEL - Clean Glass Card */}
-        <div className="flex-1 min-h-0 bg-white/30 backdrop-blur-2xl rounded-[24px] border-2 border-white/60 shadow-xl flex flex-col overflow-hidden">
+        <div className={`flex-1 min-h-0 ${getGlassClasses('strong')} rounded-[24px] flex flex-col overflow-hidden`}>
           {selectedNoteIdForInline ? (
             <NoteDetailInline
               noteId={selectedNoteIdForInline}

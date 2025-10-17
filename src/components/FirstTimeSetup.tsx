@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { claudeService } from '../services/claudeService';
 import { Key, Sparkles } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { getModalClasses } from '../design-system/theme';
+import { getModalClasses, getRadiusClass } from '../design-system/theme';
 
 interface FirstTimeSetupProps {
   onComplete: () => void;
@@ -54,7 +54,7 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
         <div className={`${modalClasses.content} p-8 space-y-6`}>
           {/* Header */}
           <div className="text-center space-y-3">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-2xl mb-4">
+            <div className={`inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-violet-500 to-fuchsia-500 ${getRadiusClass('field')} mb-4`}>
               <Sparkles className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900">Welcome to Taskerino</h1>
@@ -75,7 +75,7 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-ant-..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-lg"
+                className={`w-full px-4 py-3 border border-gray-300 ${getRadiusClass('field')} focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-lg`}
                 autoFocus
                 disabled={isSubmitting}
               />
@@ -93,7 +93,7 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
             </div>
 
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+              <div className={`p-3 bg-red-50 border border-red-200 ${getRadiusClass('field')} text-red-700 text-sm`}>
                 {error}
               </div>
             )}
@@ -101,7 +101,7 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full px-6 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-xl font-medium text-lg hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className={`w-full px-6 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white ${getRadiusClass('field')} font-medium text-lg hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200`}
             >
               {isSubmitting ? 'Validating...' : 'Get Started'}
             </button>
@@ -112,8 +112,8 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
             <h3 className="font-semibold text-gray-900 text-center">How it works</h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="text-center p-4 bg-violet-50 rounded-xl">
-                <div className="inline-flex items-center justify-center w-10 h-10 bg-violet-100 text-violet-600 rounded-lg mb-2 font-bold">
+              <div className={`text-center p-4 bg-violet-50 ${getRadiusClass('field')}`}>
+                <div className={`inline-flex items-center justify-center w-10 h-10 bg-violet-100 text-violet-600 ${getRadiusClass('element')} mb-2 font-bold`}>
                   ⌘K
                 </div>
                 <h4 className="font-medium text-gray-900 mb-1">Command Palette</h4>
@@ -122,8 +122,8 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
                 </p>
               </div>
 
-              <div className="text-center p-4 bg-fuchsia-50 rounded-xl">
-                <div className="inline-flex items-center justify-center w-10 h-10 bg-fuchsia-100 text-fuchsia-600 rounded-lg mb-2">
+              <div className={`text-center p-4 bg-fuchsia-50 ${getRadiusClass('field')}`}>
+                <div className={`inline-flex items-center justify-center w-10 h-10 bg-fuchsia-100 text-fuchsia-600 ${getRadiusClass('element')} mb-2`}>
                   ✏️
                 </div>
                 <h4 className="font-medium text-gray-900 mb-1">Rich Editing</h4>
@@ -132,8 +132,8 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
                 </p>
               </div>
 
-              <div className="text-center p-4 bg-cyan-50 rounded-xl">
-                <div className="inline-flex items-center justify-center w-10 h-10 bg-cyan-100 text-cyan-600 rounded-lg mb-2 font-bold text-sm">
+              <div className={`text-center p-4 bg-cyan-50 ${getRadiusClass('field')}`}>
+                <div className={`inline-flex items-center justify-center w-10 h-10 bg-cyan-100 text-cyan-600 ${getRadiusClass('element')} mb-2 font-bold text-sm`}>
                   ⌘↑↓
                 </div>
                 <h4 className="font-medium text-gray-900 mb-1">Navigate Zones</h4>
@@ -142,8 +142,8 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
                 </p>
               </div>
 
-              <div className="text-center p-4 bg-green-50 rounded-xl">
-                <div className="inline-flex items-center justify-center w-10 h-10 bg-green-100 text-green-600 rounded-lg mb-2">
+              <div className={`text-center p-4 bg-green-50 ${getRadiusClass('field')}`}>
+                <div className={`inline-flex items-center justify-center w-10 h-10 bg-green-100 text-green-600 ${getRadiusClass('element')} mb-2`}>
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <h4 className="font-medium text-gray-900 mb-1">AI Processing</h4>

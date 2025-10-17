@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUI } from '../context/UIContext';
+import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
 import CaptureZone from './CaptureZone';
 import TasksZone from './TasksZone';
 import LibraryZone from './LibraryZone';
@@ -11,11 +12,13 @@ import { TaskDetailSidebar } from './TaskDetailSidebar';
 import { NoteDetailSidebar } from './NoteDetailSidebar';
 import { ChevronUp, ChevronDown, User } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getGradientClasses } from '../design-system/theme';
 
 type Zone = 'assistant' | 'capture' | 'tasks' | 'notes' | 'sessions' | 'profile';
 
 export function ZoneLayout() {
   const { state: uiState, dispatch: uiDispatch } = useUI();
+  const { resetScroll } = useScrollAnimation();
   const [currentZone, setCurrentZone] = useState<Zone>('capture');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -23,14 +26,18 @@ export function ZoneLayout() {
   const navigateToZone = useCallback((zone: Zone) => {
     setCurrentZone(zone);
     uiDispatch({ type: 'SET_ZONE', payload: zone });
-  }, [uiDispatch]);
+    // Reset scroll position when switching zones
+    resetScroll();
+  }, [uiDispatch, resetScroll]);
 
   // Listen for zone changes from app state (e.g., "View Notes" button)
   useEffect(() => {
     if (uiState.currentZone && uiState.currentZone !== currentZone) {
       setCurrentZone(uiState.currentZone);
+      // Reset scroll position when zone changes externally
+      resetScroll();
     }
-  }, [uiState.currentZone, currentZone]);
+  }, [uiState.currentZone, currentZone, resetScroll]);
 
   const handleNavClick = (direction: 'up' | 'down') => {
     if (direction === 'up') {
@@ -191,35 +198,35 @@ export function ZoneLayout() {
         <button
           onClick={() => navigateToZone('assistant')}
           className={`w-2 h-2 rounded-full transition-all duration-200 hover:scale-125 ${
-            currentZone === 'assistant' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 scale-150' : 'bg-gray-300'
+            currentZone === 'assistant' ? `${getGradientClasses('ocean', 'primary')} scale-150` : 'bg-gray-300'
           }`}
           aria-label="Go to Assistant"
         />
         <button
           onClick={() => navigateToZone('capture')}
           className={`w-2 h-2 rounded-full transition-all duration-200 hover:scale-125 ${
-            currentZone === 'capture' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 scale-150' : 'bg-gray-300'
+            currentZone === 'capture' ? `${getGradientClasses('ocean', 'primary')} scale-150` : 'bg-gray-300'
           }`}
           aria-label="Go to Capture"
         />
         <button
           onClick={() => navigateToZone('tasks')}
           className={`w-2 h-2 rounded-full transition-all duration-200 hover:scale-125 ${
-            currentZone === 'tasks' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 scale-150' : 'bg-gray-300'
+            currentZone === 'tasks' ? `${getGradientClasses('ocean', 'primary')} scale-150` : 'bg-gray-300'
           }`}
           aria-label="Go to Tasks"
         />
         <button
           onClick={() => navigateToZone('notes')}
           className={`w-2 h-2 rounded-full transition-all duration-200 hover:scale-125 ${
-            currentZone === 'notes' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 scale-150' : 'bg-gray-300'
+            currentZone === 'notes' ? `${getGradientClasses('ocean', 'primary')} scale-150` : 'bg-gray-300'
           }`}
           aria-label="Go to Notes"
         />
         <button
           onClick={() => navigateToZone('profile')}
           className={`w-2 h-2 rounded-full transition-all duration-200 hover:scale-125 ${
-            currentZone === 'profile' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 scale-150' : 'bg-gray-300'
+            currentZone === 'profile' ? `${getGradientClasses('ocean', 'primary')} scale-150` : 'bg-gray-300'
           }`}
           aria-label="Go to Profile"
         />
@@ -231,7 +238,7 @@ export function ZoneLayout() {
           onClick={() => navigateToZone('profile')}
           className={`p-4 bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200 group ${
             currentZone === 'profile'
-              ? 'bg-gradient-to-r from-cyan-500 to-blue-500 scale-110'
+              ? `${getGradientClasses('ocean', 'accent')} scale-110`
               : 'hover:scale-110'
           }`}
           aria-label="Go to Profile & Settings"

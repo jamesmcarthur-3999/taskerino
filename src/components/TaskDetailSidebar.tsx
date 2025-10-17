@@ -8,6 +8,15 @@ import { formatRelativeTime, isTaskOverdue, isTaskDueToday, generateId } from '.
 import { InlineTagManager } from './InlineTagManager';
 import { tagUtils } from '../utils/tagUtils';
 import { ConfirmDialog } from './ConfirmDialog';
+import {
+  MODAL_OVERLAY,
+  getGlassClasses,
+  getRadiusClass,
+  getStatusBadgeClasses,
+  PRIORITY_COLORS,
+  getDangerGradient,
+} from '../design-system/theme';
+import { useTheme } from '../context/ThemeContext';
 
 interface TaskDetailSidebarProps {
   taskId: string | undefined;
@@ -171,7 +180,7 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 ${
+        className={`${MODAL_OVERLAY} z-40 transition-opacity duration-300 ${
           uiState.sidebar.isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={() => uiDispatch({ type: 'CLOSE_SIDEBAR' })}
@@ -183,13 +192,13 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
           uiState.sidebar.isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <div className="h-full bg-white/80 backdrop-blur-3xl border-l border-white/40 shadow-2xl flex flex-col overflow-hidden">
+        <div className={`h-full ${getGlassClasses('extra-strong')} border-l border-white/40 shadow-2xl flex flex-col overflow-hidden`}>
           {/* Header Section - Glass Morphism */}
-          <div className="flex-shrink-0 bg-white/60 backdrop-blur-xl border-b border-gray-200/50 px-6 py-5">
+          <div className={`flex-shrink-0 ${getGlassClasses('medium')} border-b border-gray-200/50 px-6 py-5`}>
             {/* Close Button - Top Right */}
             <button
               onClick={() => uiDispatch({ type: 'CLOSE_SIDEBAR' })}
-              className="absolute top-6 right-6 p-2 hover:bg-white/80 rounded-xl transition-all hover:scale-105 active:scale-95 z-10"
+              className={`absolute top-6 right-6 p-2 hover:bg-white/80 ${getRadiusClass('field')} transition-all hover:scale-105 active:scale-95 z-10`}
               aria-label="Close"
               title="Close (Esc)"
             >
@@ -203,12 +212,7 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as Task['status'])}
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium shadow-sm transition-all ${
-                    status === 'done' ? 'text-green-700 bg-green-100/80 border-green-300' :
-                    status === 'in-progress' ? 'text-cyan-700 bg-cyan-100/80 border-cyan-300' :
-                    status === 'blocked' ? 'text-red-700 bg-red-100/80 border-red-300' :
-                    'text-gray-700 bg-white/60 border-gray-300'
-                  }`}
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium shadow-sm transition-all ${getStatusBadgeClasses(status as any)}`}
                 >
                   <option value="todo">To Do</option>
                   <option value="in-progress">In Progress</option>
@@ -221,10 +225,11 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as Task['priority'])}
                   className={`text-xs px-2.5 py-1 rounded-full font-medium shadow-sm transition-all ${
-                    priority === 'urgent' ? 'text-red-700 bg-red-100/80 border-red-300' :
-                    priority === 'high' ? 'text-orange-700 bg-orange-100/80 border-orange-300' :
-                    priority === 'medium' ? 'text-yellow-700 bg-yellow-100/80 border-yellow-300' :
-                    'text-blue-700 bg-blue-100/80 border-blue-300'
+                    PRIORITY_COLORS[priority === 'urgent' ? 'critical' : priority === 'high' ? 'important' : priority === 'medium' ? 'normal' : 'low']?.bg || 'bg-gray-100'
+                  } ${
+                    PRIORITY_COLORS[priority === 'urgent' ? 'critical' : priority === 'high' ? 'important' : priority === 'medium' ? 'normal' : 'low']?.text || 'text-gray-700'
+                  } border ${
+                    PRIORITY_COLORS[priority === 'urgent' ? 'critical' : priority === 'high' ? 'important' : priority === 'medium' ? 'normal' : 'low']?.border || 'border-gray-300'
                   }`}
                 >
                   <option value="low">Low</option>
@@ -285,7 +290,7 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
                     type="date"
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-all ${
+                    className={`px-3 py-1.5 text-sm ${getRadiusClass('element')} border transition-all ${
                       isOverdue ? 'border-red-300 bg-red-50 text-red-700' :
                       isDueToday ? 'border-cyan-300 bg-cyan-50 text-cyan-700' :
                       'border-gray-200 bg-white'
@@ -298,7 +303,7 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
                     type="time"
                     value={dueTime}
                     onChange={(e) => setDueTime(e.target.value)}
-                    className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-white"
+                    className={`px-3 py-1.5 text-sm ${getRadiusClass('element')} border border-gray-200 bg-white`}
                   />
                 </div>
                 {dueDate && (
@@ -317,12 +322,12 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
 
             {/* Progress Bar (if subtasks exist) */}
             {totalSubtasks > 0 && (
-              <div className="bg-gradient-to-r from-cyan-50 to-blue-50 rounded-[20px] border border-gray-200/60 p-4 shadow-sm">
+              <div className={`bg-gradient-to-r from-cyan-50 to-blue-50 ${getRadiusClass('field')} border border-gray-200/60 p-4 shadow-sm`}>
                 <div className="flex items-center justify-between text-xs text-gray-700 mb-2 font-semibold">
                   <span>Progress</span>
                   <span>{completedSubtasks}/{totalSubtasks} subtasks</span>
                 </div>
-                <div className="h-2.5 bg-white rounded-full overflow-hidden border border-gray-200">
+                <div className={`h-2.5 bg-white ${getRadiusClass('pill')} overflow-hidden border border-gray-200`}>
                   <div
                     className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500"
                     style={{ width: `${progress}%` }}
@@ -334,7 +339,7 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
             {/* Description */}
             <div>
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Description</h3>
-              <div className="bg-white/90 rounded-[24px] border border-gray-200/60 shadow-sm hover:border-cyan-300 transition-all">
+              <div className={`bg-white/90 ${getRadiusClass('card')} border border-gray-200/60 shadow-sm hover:border-cyan-300 transition-all`}>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -352,7 +357,7 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
                 {subtasks.map((subtask) => (
                   <div
                     key={subtask.id}
-                    className="flex items-center gap-2 p-3 bg-white/90 rounded-[20px] border border-gray-200/60 group hover:border-cyan-300 transition-all shadow-sm"
+                    className={`flex items-center gap-2 p-3 bg-white/90 ${getRadiusClass('field')} border border-gray-200/60 group hover:border-cyan-300 transition-all shadow-sm`}
                   >
                     <button
                       onClick={() => handleToggleSubtask(subtask.id)}
@@ -387,12 +392,12 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
                       }
                     }}
                     placeholder="Add a subtask..."
-                    className="flex-1 px-3 py-2 text-sm bg-white/90 border border-gray-200/60 rounded-[20px] focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 transition-all focus:outline-none"
+                    className={`flex-1 px-3 py-2 text-sm bg-white/90 border border-gray-200/60 ${getRadiusClass('field')} focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 transition-all focus:outline-none`}
                   />
                   <button
                     onClick={handleAddSubtask}
                     disabled={!newSubtask.trim()}
-                    className="px-3 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg hover:from-cyan-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                    className={`px-3 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white ${getRadiusClass('element')} hover:from-cyan-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm`}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -402,7 +407,7 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
 
             {/* AI Context (if present) */}
             {task.aiContext && (
-              <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-[24px] border border-purple-200/60 p-4 shadow-sm">
+              <div className={`bg-gradient-to-br from-purple-50 to-violet-50 ${getRadiusClass('card')} border border-purple-200/60 p-4 shadow-sm`}>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="text-sm font-bold text-purple-900 uppercase tracking-wide">AI Context</div>
                 </div>
@@ -435,10 +440,10 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
           </div>
 
           {/* Footer Actions - Glass Effect */}
-          <div className="flex-shrink-0 bg-white/60 backdrop-blur-xl border-t border-gray-200/50 p-4 flex gap-2">
+          <div className={`flex-shrink-0 ${getGlassClasses('medium')} border-t border-gray-200/50 p-4 flex gap-2`}>
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="px-4 py-2 bg-red-100 hover:bg-red-200 rounded-full border-2 border-red-200 hover:scale-105 active:scale-95 transition-all text-red-700 font-semibold text-sm flex items-center gap-2 shadow-md"
+              className={`px-4 py-2 ${getDangerGradient('light').container} hover:bg-red-200 ${getRadiusClass('pill')} border-2 hover:scale-105 active:scale-95 transition-all text-red-700 font-semibold text-sm flex items-center gap-2 shadow-md`}
             >
               <Trash2 className="w-4 h-4" />
               Delete
@@ -446,7 +451,7 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
 
             <button
               onClick={() => uiDispatch({ type: 'CLOSE_SIDEBAR' })}
-              className="flex-1 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all font-semibold text-sm"
+              className={`flex-1 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white ${getRadiusClass('pill')} shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all font-semibold text-sm`}
             >
               Close
             </button>

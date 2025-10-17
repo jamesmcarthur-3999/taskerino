@@ -14,6 +14,7 @@ import { NoteCard } from './NoteCard';
 import { SessionCard } from './SessionCard';
 import ReactMarkdown from 'react-markdown';
 import type { Task, Note, Session, Company, Contact } from '../../types';
+import { getGlassClasses, getRadiusClass, TRANSITIONS, getInfoGradient, getSuccessGradient } from '../../design-system/theme';
 
 // Snippet component for copyable text content (NOT code)
 const TextSnippet = ({ children }: { children: string }) => {
@@ -27,9 +28,9 @@ const TextSnippet = ({ children }: { children: string }) => {
 
   return (
     <div className="my-3">
-      <div className="bg-white/80 backdrop-blur-xl rounded-[20px] border-2 border-white/60 shadow-xl shadow-cyan-100/20 hover:shadow-2xl hover:shadow-cyan-200/30 transition-all duration-300 overflow-hidden group ring-1 ring-black/5">
+      <div className={`${getGlassClasses('extra-strong')} ${getRadiusClass('field')} shadow-xl shadow-cyan-100/20 hover:shadow-2xl hover:shadow-cyan-200/30 ${TRANSITIONS.standard} overflow-hidden group ring-1 ring-black/5`}>
         {/* Header with copy button */}
-        <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-cyan-50/80 via-blue-50/60 to-purple-50/60 backdrop-blur-sm border-b-2 border-white/50">
+        <div className={`flex items-center justify-between px-5 py-3 ${getInfoGradient('light').container} border-b-2 border-white/50`}>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
               <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -42,8 +43,8 @@ const TextSnippet = ({ children }: { children: string }) => {
             onClick={handleCopy}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 transform hover:scale-105 active:scale-95
                      ${copied
-                       ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg shadow-green-200/50'
-                       : 'bg-white/90 hover:bg-white text-cyan-700 border-2 border-white/60 hover:border-cyan-200/80 shadow-md hover:shadow-lg hover:shadow-cyan-100/30'
+                       ? `bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg shadow-green-200/50`
+                       : `${getGlassClasses('medium')} text-cyan-700 hover:border-cyan-200/80 shadow-md hover:shadow-lg hover:shadow-cyan-100/30`
                      }`}
           >
             {copied ? (
@@ -61,7 +62,7 @@ const TextSnippet = ({ children }: { children: string }) => {
         </div>
 
         {/* Content */}
-        <div className="p-5 bg-gradient-to-br from-white/90 to-white/70 backdrop-blur-sm">
+        <div className={`p-5 ${getGlassClasses('medium')}`}>
           <div className="text-gray-800 whitespace-pre-wrap leading-relaxed text-[15px] font-medium">
             {children}
           </div>
@@ -73,8 +74,9 @@ const TextSnippet = ({ children }: { children: string }) => {
 
 // Inline code component
 const InlineCode = ({ children }: { children: string }) => {
+  const infoGradient = getInfoGradient('light');
   return (
-    <code className="px-2 py-0.5 rounded-lg bg-gradient-to-r from-cyan-50/80 to-blue-50/80 text-cyan-700 text-sm font-mono font-semibold border-2 border-cyan-100/60 shadow-sm ring-1 ring-black/5">
+    <code className={`px-2 py-0.5 ${getRadiusClass('field')} ${infoGradient.container} ${infoGradient.textPrimary} text-sm font-mono font-semibold ring-1 ring-black/5`}>
       {children}
     </code>
   );
@@ -106,10 +108,10 @@ const SourcesSection = ({
     <div className="my-3">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between gap-3 px-5 py-3.5 rounded-[16px]
-                 bg-gradient-to-r from-slate-50/80 via-gray-50/60 to-slate-50/80 hover:from-slate-100/80 hover:to-slate-100/80
-                 backdrop-blur-xl border-2 border-white/60 hover:border-white/80
-                 transition-all duration-300 group shadow-lg shadow-slate-100/30 hover:shadow-xl hover:shadow-slate-200/40 ring-1 ring-black/5"
+        className={`w-full flex items-center justify-between gap-3 px-5 py-3.5 ${getRadiusClass('element')}
+                 ${getGlassClasses('medium')} hover:from-slate-100 hover:to-slate-100
+                 hover:border-white/80
+                 ${TRANSITIONS.standard} group shadow-lg shadow-slate-100/30 hover:shadow-xl hover:shadow-slate-200/40 ring-1 ring-black/5`}
       >
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 via-cyan-400 to-blue-600
@@ -182,11 +184,11 @@ const ChangeCard = ({
       animate={{ opacity: 1, y: 0 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="my-2 rounded-xl border-2 border-white/60 bg-white/70 backdrop-blur-xl overflow-hidden shadow-lg shadow-green-100/30 hover:shadow-xl hover:shadow-green-200/40 transition-all"
+      className={`my-2 ${getRadiusClass('card')} ${getGlassClasses('medium')} overflow-hidden shadow-lg shadow-green-100/30 hover:shadow-xl hover:shadow-green-200/40 ${TRANSITIONS.standard}`}
     >
       <div className="flex items-start gap-3 p-3">
         {/* Icon */}
-        <div className="flex-shrink-0 p-1.5 rounded-lg bg-green-100/70">
+        <div className={`flex-shrink-0 p-1.5 ${getRadiusClass('field')} bg-green-100`}>
           <Check className="w-4 h-4 text-green-600" />
         </div>
 
@@ -195,7 +197,7 @@ const ChangeCard = ({
           {/* Title and badge */}
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-medium text-gray-900 truncate">{title}</span>
-            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100/70 text-green-700 flex-shrink-0">
+            <span className={`px-2 py-0.5 text-xs font-medium ${getRadiusClass('pill')} bg-green-100 text-green-800 flex-shrink-0`}>
               Updated
             </span>
           </div>
@@ -309,11 +311,11 @@ const CreatedCard = ({
       animate={{ opacity: 1, y: 0 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="my-2 rounded-xl border-2 border-white/60 bg-white/70 backdrop-blur-xl overflow-hidden shadow-lg shadow-blue-100/30 hover:shadow-xl hover:shadow-blue-200/40 transition-all"
+      className={`my-2 ${getRadiusClass('card')} ${getGlassClasses('medium')} overflow-hidden shadow-lg shadow-blue-100/30 hover:shadow-xl hover:shadow-blue-200/40 ${TRANSITIONS.standard}`}
     >
       <div className="flex items-start gap-3 p-3">
         {/* Icon */}
-        <div className="flex-shrink-0 p-1.5 rounded-lg bg-blue-100/70">
+        <div className={`flex-shrink-0 p-1.5 ${getRadiusClass('field')} bg-blue-100`}>
           <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
@@ -324,7 +326,7 @@ const CreatedCard = ({
           {/* Title and badge */}
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-medium text-gray-900 truncate">{title}</span>
-            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100/70 text-blue-700 flex-shrink-0">
+            <span className={`px-2 py-0.5 text-xs font-medium ${getRadiusClass('pill')} bg-blue-100 text-blue-800 flex-shrink-0`}>
               Created
             </span>
           </div>
@@ -372,9 +374,9 @@ const CollapsibleList = ({ children, limit = 3 }: { children: React.ReactNode[];
       {hasMore && !expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="mt-3 px-5 py-2.5 rounded-[14px] bg-gradient-to-r from-cyan-50/80 to-blue-50/80 hover:from-cyan-100/80 hover:to-blue-100/80 backdrop-blur-xl border-2 border-white/60
-                   text-cyan-700 text-sm font-semibold transition-all duration-300 w-full shadow-md hover:shadow-lg hover:shadow-cyan-100/30
-                   flex items-center justify-center gap-2 group ring-1 ring-black/5"
+          className={`mt-3 px-5 py-2.5 ${getRadiusClass('element')} ${getInfoGradient('light').container} hover:from-cyan-100 hover:to-blue-100
+                   text-cyan-800 text-sm font-semibold ${TRANSITIONS.standard} w-full shadow-md hover:shadow-lg hover:shadow-cyan-100/30
+                   flex items-center justify-center gap-2 group ring-1 ring-black/5`}
         >
           <span>Show {remainingCount} more</span>
           <svg className="w-4 h-4 transition-transform group-hover:translate-y-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -385,9 +387,9 @@ const CollapsibleList = ({ children, limit = 3 }: { children: React.ReactNode[];
       {hasMore && expanded && (
         <button
           onClick={() => setExpanded(false)}
-          className="mt-3 px-5 py-2.5 rounded-[14px] bg-gradient-to-r from-gray-50/80 to-slate-50/80 hover:from-gray-100/80 hover:to-slate-100/80 backdrop-blur-xl border-2 border-white/60
-                   text-gray-600 text-sm font-semibold transition-all duration-300 w-full shadow-md hover:shadow-lg
-                   flex items-center justify-center gap-2 group ring-1 ring-black/5"
+          className={`mt-3 px-5 py-2.5 ${getRadiusClass('element')} ${getGlassClasses('medium')} hover:from-gray-100 hover:to-slate-100
+                   text-gray-600 text-sm font-semibold ${TRANSITIONS.standard} w-full shadow-md hover:shadow-lg
+                   flex items-center justify-center gap-2 group ring-1 ring-black/5`}
         >
           <span>Show less</span>
           <svg className="w-4 h-4 transition-transform group-hover:-translate-y-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -477,6 +479,8 @@ export const NedMessage: React.FC<NedMessageProps> = ({
   contacts = [],
 }) => {
   const isUser = message.role === 'user';
+  const infoGradient = getInfoGradient();
+  const successGradient = getSuccessGradient();
 
   // Helper to find source note for a task
   const findSourceNote = (task: Task) => {
@@ -517,7 +521,7 @@ export const NedMessage: React.FC<NedMessageProps> = ({
       transition={{ duration: 0.3, ease: [0.34, 1.56, 0.64, 1] }}
       className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
     >
-      {/* Avatar */}
+      {/* Avatar - using info gradient theme colors */}
       <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center shadow-xl ring-2 ring-white/60 transition-all duration-300 hover:scale-110 ${
         isUser
           ? 'bg-gradient-to-br from-cyan-600 via-cyan-500 to-blue-600 shadow-cyan-200/50 hover:shadow-cyan-300/60'
@@ -538,7 +542,7 @@ export const NedMessage: React.FC<NedMessageProps> = ({
               <div className={`rounded-[20px] px-5 py-3.5 shadow-xl transition-all duration-300 ${
                 isUser
                   ? 'bg-gradient-to-br from-cyan-600 via-cyan-500 to-blue-600 text-white ml-auto shadow-cyan-200/40 hover:shadow-cyan-300/50 ring-1 ring-white/20 rounded-tr-sm'
-                  : 'bg-white/80 backdrop-blur-2xl border-2 border-white/70 shadow-cyan-100/20 hover:shadow-cyan-200/30 ring-1 ring-black/5 rounded-tl-sm'
+                  : `${getGlassClasses('medium')} shadow-cyan-100/20 hover:shadow-cyan-200/30 ring-1 ring-black/5 rounded-tl-sm`
               }`}>
                 <div className={`prose prose-sm ${isUser ? 'prose-invert' : ''} max-w-none prose-p:leading-relaxed prose-p:text-[15px] prose-headings:font-bold prose-headings:tracking-tight prose-a:text-cyan-600 prose-a:no-underline hover:prose-a:underline prose-strong:font-bold prose-strong:text-gray-900 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-pre:p-0 prose-pre:m-0 prose-pre:bg-transparent prose-code:bg-transparent prose-code:text-current prose-code:before:content-none prose-code:after:content-none`}>
                   <ReactMarkdown
@@ -564,11 +568,11 @@ export const NedMessage: React.FC<NedMessageProps> = ({
             )}
 
             {content.type === 'thinking' && content.content && (
-              <div className="flex items-center gap-3 px-5 py-3 rounded-[16px] bg-gradient-to-r from-cyan-50/80 via-blue-50/60 to-purple-50/60 backdrop-blur-xl border-2 border-white/60 shadow-lg shadow-cyan-100/20 ring-1 ring-black/5">
+              <div className={`flex items-center gap-3 px-5 py-3 ${getRadiusClass('element')} ${getInfoGradient('light').container} shadow-lg shadow-cyan-100/20 ring-1 ring-black/5`}>
                 <div className="flex gap-1.5">
-                  <span className="w-2 h-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full animate-bounce [animation-delay:0ms] shadow-sm" />
-                  <span className="w-2 h-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full animate-bounce [animation-delay:150ms] shadow-sm" />
-                  <span className="w-2 h-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full animate-bounce [animation-delay:300ms] shadow-sm" />
+                  <span className={`w-2 h-2 bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} animate-bounce [animation-delay:0ms] shadow-sm`} />
+                  <span className={`w-2 h-2 bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} animate-bounce [animation-delay:150ms] shadow-sm`} />
+                  <span className={`w-2 h-2 bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} animate-bounce [animation-delay:300ms] shadow-sm`} />
                 </div>
                 <span className="text-sm font-semibold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
                   {content.content}
@@ -580,9 +584,9 @@ export const NedMessage: React.FC<NedMessageProps> = ({
             {content.type === 'tool-use' && null}
 
             {content.type === 'error' && content.content && (
-              <div className="px-5 py-3.5 rounded-[16px] bg-gradient-to-r from-red-50/80 to-rose-50/80 backdrop-blur-xl border-2 border-red-200/60 shadow-xl shadow-red-100/30 ring-1 ring-red-100/50">
+              <div className={`px-5 py-3.5 ${getRadiusClass('element')} ${getGlassClasses('medium')} bg-gradient-to-r from-red-50 to-rose-50 border-red-200 shadow-xl shadow-red-100/30 ring-1 ring-red-100/50`}>
                 <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-5 h-5 bg-gradient-to-br from-red-500 to-rose-600 rounded-lg flex items-center justify-center shadow-md">
+                  <div className={`flex-shrink-0 w-5 h-5 bg-gradient-to-br from-red-500 to-rose-600 ${getRadiusClass('field')} flex items-center justify-center shadow-md`}>
                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>

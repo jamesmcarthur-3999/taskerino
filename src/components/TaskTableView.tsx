@@ -31,6 +31,7 @@ interface TaskTableViewProps {
   onTaskClick: (taskId: string | undefined) => void;
   selectedTaskId?: string;
   groupBy: GroupByOption;
+  scrollRef?: React.RefObject<HTMLDivElement>;
 }
 
 type GroupByOption = 'due-date' | 'status' | 'priority' | 'topic' | 'tag' | 'none';
@@ -52,7 +53,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'topic', label: 'Topic', width: '140px', sortable: false },
 ];
 
-export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: TaskTableViewProps) {
+export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scrollRef }: TaskTableViewProps) {
   const { dispatch: tasksDispatch } = useTasks();
   const { dispatch: uiDispatch } = useUI();
   const { state: entitiesState } = useEntities();
@@ -602,7 +603,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy }: T
         </div>
 
         {/* Task Groups */}
-        <div className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
           {groupedTasks.map(({ key, label, tasks: groupTasks }) => (
             <div key={key} className="border-b border-white/30 last:border-b-0">
               {/* Group Header */}

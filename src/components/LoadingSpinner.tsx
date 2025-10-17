@@ -32,9 +32,14 @@ export const LoadingSpinner = React.memo(function LoadingSpinner({
 
   // Get theme color for the spinner
   const getSpinnerColor = (): string => {
-    const colors = COLOR_SCHEMES[colorScheme];
-    // Use the primary gradient's 'from' color
-    return `text-${colors.primary.from}`;
+    const colorMap = {
+      ocean: 'text-cyan-500',
+      sunset: 'text-orange-500',
+      forest: 'text-emerald-500',
+      lavender: 'text-purple-500',
+      monochrome: 'text-gray-500',
+    };
+    return colorMap[colorScheme];
   };
 
   // Spinner element
@@ -56,11 +61,11 @@ export const LoadingSpinner = React.memo(function LoadingSpinner({
 
   // Overlay variant - full-screen centered with glass background
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/40 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/40 backdrop-blur-xl">
       <div className={`flex flex-col items-center gap-4 ${TRANSITIONS.fast}`}>
         {spinner}
         {message && (
-          <p className="text-base font-medium text-gray-700 animate-pulse">
+          <p className="text-base font-medium text-gray-700">
             {message}
           </p>
         )}

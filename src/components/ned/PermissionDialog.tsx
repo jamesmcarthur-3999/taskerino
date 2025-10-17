@@ -8,6 +8,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Clock, AlertCircle } from 'lucide-react';
+import { getRadiusClass, MODAL_OVERLAY, TRANSITIONS } from '../../design-system/theme';
 
 interface PermissionDialogProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+            className={`${MODAL_OVERLAY} z-50`}
             onClick={onDeny}
           />
 
@@ -59,11 +60,11 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md"
           >
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className={`bg-white dark:bg-gray-800 ${getRadiusClass('modal')} shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden`}>
               {/* Header */}
               <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                  <div className={`p-2 bg-white/20 ${getRadiusClass('field')} backdrop-blur-sm`}>
                     <Shield className="w-6 h-6 text-white" />
                   </div>
                   <div>
@@ -81,7 +82,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
               <div className="p-6 space-y-4">
                 {/* Context */}
                 {context && (
-                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <div className={`bg-gray-50 dark:bg-gray-900/50 ${getRadiusClass('field')} p-4 border border-gray-200 dark:border-gray-700`}>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
                       What Ned wants to do:
                     </p>
@@ -101,7 +102,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
                   {/* Forever */}
                   <button
                     onClick={() => onGrant('forever')}
-                    className="w-full flex items-start gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-purple-500 dark:hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all group"
+                    className={`w-full flex items-start gap-3 p-4 ${getRadiusClass('field')} border-2 border-gray-200 dark:border-gray-700 hover:border-purple-500 dark:hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 ${TRANSITIONS.standard} group`}
                   >
                     <Shield className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                     <div className="text-left flex-1">
@@ -117,7 +118,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
                   {/* Session */}
                   <button
                     onClick={() => onGrant('session')}
-                    className="w-full flex items-start gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all group"
+                    className={`w-full flex items-start gap-3 p-4 ${getRadiusClass('field')} border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 ${TRANSITIONS.standard} group`}
                   >
                     <Clock className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
                     <div className="text-left flex-1">
@@ -133,7 +134,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
                   {/* Always Ask */}
                   <button
                     onClick={() => onGrant('always-ask')}
-                    className="w-full flex items-start gap-3 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-orange-500 dark:hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all group"
+                    className={`w-full flex items-start gap-3 p-4 ${getRadiusClass('field')} border-2 border-gray-200 dark:border-gray-700 hover:border-orange-500 dark:hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 ${TRANSITIONS.standard} group`}
                   >
                     <AlertCircle className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
                     <div className="text-left flex-1">
@@ -152,7 +153,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
               <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={onDeny}
-                  className="w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+                  className={`w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 ${TRANSITIONS.colors}`}
                 >
                   Cancel
                 </button>

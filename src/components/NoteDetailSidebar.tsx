@@ -10,6 +10,17 @@ import { getTasksByNoteId } from '../utils/navigation';
 import { RichTextEditor } from './RichTextEditor';
 import { InlineTagManager } from './InlineTagManager';
 import { ConfirmDialog } from './ConfirmDialog';
+import {
+  MODAL_OVERLAY,
+  getGlassClasses,
+  getRadiusClass,
+  getInfoGradient,
+  getDangerGradient,
+  getEntityPillClasses,
+  getWarningGradient,
+  getStatusBadgeClasses,
+  getSuccessGradient,
+} from '../design-system/theme';
 
 interface NoteDetailSidebarProps {
   noteId: string | undefined;
@@ -233,14 +244,14 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
 
   const getStatusBadge = (status: Task['status']) => {
     const badges = {
-      todo: { label: 'To Do', className: 'bg-gray-100 text-gray-700' },
-      'in-progress': { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
-      done: { label: 'Done', className: 'bg-green-100 text-green-700' },
-      blocked: { label: 'Blocked', className: 'bg-red-100 text-red-700' },
+      todo: { label: 'To Do' },
+      'in-progress': { label: 'In Progress' },
+      done: { label: 'Done' },
+      blocked: { label: 'Blocked' },
     };
     const badge = badges[status];
     return (
-      <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${badge.className}`}>
+      <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${getStatusBadgeClasses(status)}`}>
         {badge.label}
       </span>
     );
@@ -276,7 +287,7 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
             uiState.sidebar.isOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
-          <div className="h-full bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20 backdrop-blur-2xl border-l-2 border-white/50 shadow-2xl flex items-center justify-center">
+          <div className={`h-full ${getGlassClasses('extra-strong')} border-l border-white/40 shadow-2xl flex items-center justify-center`}>
             <p className="text-gray-500">Note not found</p>
           </div>
         </div>
@@ -287,10 +298,10 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
   // Render save status indicator
   const renderSaveStatus = () => {
     if (saveStatus === 'saving') {
-      return <span className="text-xs text-cyan-600 font-medium">Saving...</span>;
+      return <span className={`text-xs font-medium ${getInfoGradient('light').textSecondary}`}>Saving...</span>;
     }
     if (saveStatus === 'saved') {
-      return <span className="text-xs text-green-600 font-medium">✓ Saved</span>;
+      return <span className={`text-xs font-medium ${getSuccessGradient('light').textSecondary}`}>✓ Saved</span>;
     }
     return null;
   };
@@ -299,7 +310,7 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 ${
+        className={`${MODAL_OVERLAY} z-40 transition-opacity duration-300 ${
           uiState.sidebar.isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={() => uiDispatch({ type: 'CLOSE_SIDEBAR' })}
@@ -311,9 +322,9 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
           uiState.sidebar.isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <div className="h-full bg-white/80 backdrop-blur-3xl border-l border-white/40 shadow-2xl flex flex-col overflow-hidden">
+        <div className={`h-full ${getGlassClasses('extra-strong')} border-l border-white/40 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header Section - Glass Morphism */}
-        <div className="flex-shrink-0 bg-white/60 backdrop-blur-xl border-b border-gray-200/50 px-6 py-5">
+        <div className={`flex-shrink-0 ${getGlassClasses('medium')} border-b-2 border-white/30 px-6 py-5`}>
           {/* Close Button - Top Right */}
           <button
             onClick={() => uiDispatch({ type: 'CLOSE_SIDEBAR' })}
@@ -328,13 +339,13 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
           <div className="flex items-center justify-between gap-2 mb-2 pr-12">
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* Source badge */}
-              <span className="text-xs px-2.5 py-1 rounded-full bg-white/60 text-gray-600 capitalize font-medium shadow-sm">
+              <span className={`text-xs px-2.5 py-1 rounded-full ${getGlassClasses('strong')} text-gray-600 capitalize font-medium`}>
                 {note.source}
               </span>
 
               {/* Sentiment */}
               {note.metadata?.sentiment && (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-white/60 font-medium shadow-sm">
+                <span className={`text-xs px-2.5 py-1 rounded-full ${getGlassClasses('strong')} font-medium`}>
                   {note.metadata.sentiment === 'positive' ? '😊 Positive' :
                    note.metadata.sentiment === 'negative' ? '😞 Negative' : '😐 Neutral'}
                 </span>
@@ -361,12 +372,12 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
                     setIsEditingSummary(false);
                   }
                 }}
-                className="text-3xl font-bold text-gray-900 w-full border-b-2 border-cyan-500 focus:outline-none pb-2 bg-transparent"
+                className={`text-3xl font-bold text-gray-900 w-full border-b-2 ${getInfoGradient('light').textPrimary} focus:outline-none pb-2 bg-transparent`}
               />
             ) : (
               <h2
                 onClick={() => setIsEditingSummary(true)}
-                className="text-3xl font-bold text-gray-900 cursor-text hover:text-cyan-700 transition-all duration-300 pb-2"
+                className={`text-3xl font-bold text-gray-900 cursor-text transition-all duration-300 pb-2 ${getInfoGradient('light').textPrimary}`}
                 title="Click to edit title"
               >
                 {editedSummary}
@@ -416,7 +427,7 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
           {/* Content Editor - Always Editable */}
           <div>
             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Content</h3>
-            <div className="bg-white/90 rounded-[24px] border border-gray-200/60 shadow-sm hover:border-cyan-300 transition-all">
+            <div className={`${getGlassClasses('medium')} ${getRadiusClass('card')} hover:border-cyan-300 transition-all`}>
               <RichTextEditor
                 content={editedContent}
                 onChange={setEditedContent}
@@ -430,15 +441,15 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
 
           {/* Key Takeaways - Modern Glass Card */}
           {note.metadata?.keyPoints && note.metadata.keyPoints.length > 0 && (
-            <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-[24px] border border-cyan-200/60 p-6 shadow-sm">
+            <div className={`${getInfoGradient('light').container} ${getRadiusClass('card')} p-6`}>
               <div className="flex items-center gap-2 mb-4">
-                <Sparkles className="w-5 h-5 text-cyan-600" />
-                <h3 className="text-sm font-bold text-cyan-900 uppercase tracking-wide">Key Takeaways</h3>
+                <Sparkles className={`w-5 h-5 ${getInfoGradient('light').iconColor}`} />
+                <h3 className={`text-sm font-bold uppercase tracking-wide ${getInfoGradient('light').textPrimary}`}>Key Takeaways</h3>
               </div>
               <ul className="space-y-3">
                 {note.metadata.keyPoints.map((point, idx) => (
                   <li key={idx} className="text-sm text-gray-800 flex items-start gap-2">
-                    <span className="text-cyan-600 font-bold mt-0.5">•</span>
+                    <span className={`font-bold mt-0.5 ${getInfoGradient('light').textSecondary}`}>•</span>
                     <span className="flex-1">{point}</span>
                   </li>
                 ))}
@@ -448,11 +459,11 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
 
           {/* Linked Tasks - Modern Glass Container */}
           {linkedTasks.length > 0 && (
-            <div className="bg-white/90 rounded-[24px] border border-gray-200/60 overflow-hidden shadow-sm">
-              <div className="bg-gradient-to-r from-emerald-50 px-5 py-4 border-b border-gray-200/50">
+            <div className={`${getGlassClasses('medium')} ${getRadiusClass('card')} overflow-hidden`}>
+              <div className={`${getSuccessGradient('light').container} px-5 py-4 border-b-2 border-white/30`}>
                 <div className="flex items-center gap-2">
-                  <CheckSquare className="w-5 h-5 text-emerald-600" />
-                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+                  <CheckSquare className={`w-5 h-5 ${getSuccessGradient('light').iconColor}`} />
+                  <h3 className={`text-sm font-bold uppercase tracking-wide ${getSuccessGradient('light').textPrimary}`}>
                     Linked Tasks ({linkedTasks.length})
                   </h3>
                 </div>
@@ -463,7 +474,7 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
                   <div
                     key={task.id}
                     onClick={() => uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'task', itemId: task.id, label: task.title } })}
-                    className="bg-white rounded-[16px] border border-gray-200/60 hover:border-cyan-300 p-4 transition-all duration-300 hover:scale-[1.01] cursor-pointer shadow-sm"
+                    className={`${getGlassClasses('subtle')} ${getRadiusClass('element')} hover:border-cyan-300 p-4 transition-all duration-300 hover:scale-[1.01] cursor-pointer`}
                   >
                     <div className="flex items-start gap-2">
                       <span className="text-base mt-0.5">{getPriorityFlag(task.priority)}</span>
@@ -488,15 +499,15 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
 
           {/* Timeline - Modern Glass Container */}
           {note.updates && note.updates.length > 0 && (
-            <div className="bg-white/90 rounded-[24px] border border-gray-200/60 overflow-hidden shadow-sm">
+            <div className={`${getGlassClasses('medium')} ${getRadiusClass('card')} overflow-hidden`}>
               <button
                 onClick={() => setShowTimeline(!showTimeline)}
-                className="w-full bg-gradient-to-r from-blue-50 px-5 py-4 hover:from-blue-100 transition-colors text-left border-b border-gray-200/50"
+                className={`w-full ${getInfoGradient('light').container} px-5 py-4 transition-colors text-left border-b-2 border-white/30`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-blue-600" />
-                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+                    <Clock className={`w-5 h-5 ${getInfoGradient('light').iconColor}`} />
+                    <h3 className={`text-sm font-bold uppercase tracking-wide ${getInfoGradient('light').textPrimary}`}>
                       Timeline ({note.updates.length + 1} updates)
                     </h3>
                   </div>
@@ -512,10 +523,10 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
                 <div className="p-6">
                   <div className="space-y-4">
                     {/* Current content as latest entry */}
-                    <div className="relative pl-6 pb-4 border-l-2 border-blue-300">
-                      <div className="absolute left-[-5px] top-0 w-2 h-2 bg-blue-500 rounded-full shadow-md" />
+                    <div className={`relative pl-6 pb-4 border-l-2 ${getInfoGradient('light').textSecondary}`}>
+                      <div className={`absolute left-[-5px] top-0 w-2 h-2 ${getInfoGradient('light').iconBg} rounded-full shadow-md`} />
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Latest</span>
+                        <span className={`text-xs font-semibold uppercase tracking-wide ${getInfoGradient('light').textSecondary}`}>Latest</span>
                         <span className="text-xs text-gray-500">{formatRelativeTime(note.lastUpdated || note.timestamp)}</span>
                       </div>
                       <p className="text-sm text-gray-700">{note.summary}</p>
@@ -541,12 +552,12 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
                           )}
                           <button
                             onClick={() => toggleUpdateExpanded(update.id)}
-                            className="text-xs text-cyan-600 hover:text-cyan-700 font-semibold transition-colors"
+                            className={`text-xs font-semibold transition-colors ${getInfoGradient('light').textSecondary}`}
                           >
                             {isExpanded ? 'Hide' : 'View'} content
                           </button>
                           {isExpanded && (
-                            <div className="mt-3 bg-white rounded-[16px] p-4 border border-gray-200/60 shadow-sm">
+                            <div className={`mt-3 ${getGlassClasses('subtle')} ${getRadiusClass('element')} p-4`}>
                               <div
                                 className="prose prose-sm max-w-none text-gray-700"
                                 dangerouslySetInnerHTML={{ __html: formatNoteContent(update.content) }}
@@ -569,7 +580,7 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
               {note.metadata.relatedTopics.map((relatedTopic, idx) => (
                 <span
                   key={idx}
-                  className="px-2.5 py-1 bg-white/60 backdrop-blur-sm text-gray-700 rounded-full text-xs font-medium border border-white/60"
+                  className={`px-2.5 py-1 ${getGlassClasses('strong')} text-gray-700 rounded-full text-xs font-medium`}
                 >
                   {relatedTopic}
                 </span>
@@ -584,7 +595,7 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
                 <FileText className="w-4 h-4" />
                 View original input
               </summary>
-              <div className="mt-3 bg-white/90 rounded-[16px] p-4 border border-gray-200/60 shadow-sm">
+              <div className={`mt-3 ${getGlassClasses('medium')} ${getRadiusClass('element')} p-4`}>
                 <p className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
                   {note.sourceText}
                 </p>
@@ -597,10 +608,10 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
         </div>
 
         {/* Footer Actions - Glass Effect */}
-        <div className="flex-shrink-0 bg-white/60 backdrop-blur-xl border-t border-gray-200/50 p-4 flex gap-2">
+        <div className={`flex-shrink-0 ${getGlassClasses('medium')} border-t-2 border-white/30 p-4 flex gap-2`}>
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="px-4 py-2 bg-red-100 hover:bg-red-200 rounded-full border-2 border-red-200 hover:scale-105 active:scale-95 transition-all text-red-700 font-semibold text-sm flex items-center gap-2 shadow-md"
+            className={`px-4 py-2 ${getDangerGradient('light').container} rounded-full border-2 hover:scale-105 active:scale-95 transition-all ${getDangerGradient('light').textSecondary} font-semibold text-sm flex items-center gap-2`}
           >
             <Trash2 className="w-4 h-4" />
             Delete
@@ -608,7 +619,7 @@ export function NoteDetailSidebar({ noteId }: NoteDetailSidebarProps) {
 
           <button
             onClick={() => uiDispatch({ type: 'CLOSE_SIDEBAR' })}
-            className="flex-1 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all font-semibold text-sm"
+            className={`flex-1 px-4 py-2 ${getInfoGradient('medium').container} text-white rounded-full hover:scale-105 active:scale-95 transition-all font-semibold text-sm`}
           >
             Close
           </button>
@@ -690,7 +701,7 @@ function InlineRelationshipManager({
             setSelectedCompanyId(e.target.value);
             handleAddCompany(e.target.value);
           }}
-          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-blue-400 rounded-full text-xs font-semibold text-gray-800 outline-none shadow-sm"
+          className={`px-3 py-1.5 ${getGlassClasses('medium')} border-2 ${getEntityPillClasses('company')} rounded-full text-xs font-semibold text-gray-800 outline-none`}
         >
           <option value="">+ Company...</option>
           {entitiesState.companies.filter(c => !relatedCompanies.some(rc => rc.id === c.id)).map(company => (
@@ -705,7 +716,7 @@ function InlineRelationshipManager({
             setSelectedContactId(e.target.value);
             handleAddContact(e.target.value);
           }}
-          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-emerald-400 rounded-full text-xs font-semibold text-gray-800 outline-none shadow-sm"
+          className={`px-3 py-1.5 ${getGlassClasses('medium')} border-2 ${getEntityPillClasses('contact')} rounded-full text-xs font-semibold text-gray-800 outline-none`}
         >
           <option value="">+ Contact...</option>
           {entitiesState.contacts.filter(c => !relatedContacts.some(rc => rc.id === c.id)).map(contact => (
@@ -720,7 +731,7 @@ function InlineRelationshipManager({
             setSelectedTopicId(e.target.value);
             handleAddTopic(e.target.value);
           }}
-          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-amber-400 rounded-full text-xs font-semibold text-gray-800 outline-none shadow-sm"
+          className={`px-3 py-1.5 ${getGlassClasses('medium')} border-2 ${getEntityPillClasses('topic')} rounded-full text-xs font-semibold text-gray-800 outline-none`}
         >
           <option value="">+ Topic...</option>
           {entitiesState.topics.filter(t => !relatedTopics.some(rt => rt.id === t.id)).map(topic => (
@@ -730,7 +741,7 @@ function InlineRelationshipManager({
 
         <button
           onClick={() => setIsEditing(false)}
-          className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full text-xs font-semibold transition-all shadow-sm"
+          className={`px-3 py-1.5 ${getInfoGradient('medium').container} text-white rounded-full text-xs font-semibold transition-all`}
         >
           Done
         </button>
@@ -745,7 +756,7 @@ function InlineRelationshipManager({
         <button
           key={company.id}
           onClick={() => setIsEditing(true)}
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-100/80 to-cyan-100/80 hover:from-blue-200/90 hover:to-cyan-200/90 border border-blue-300/60 rounded-full text-xs font-semibold text-blue-800 transition-all shadow-sm"
+          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 ${getEntityPillClasses('company')} hover:from-blue-200/90 hover:to-cyan-200/90 rounded-full text-xs font-semibold transition-all shadow-sm`}
         >
           <Building2 className="w-3 h-3" />
           <span>{company.name}</span>
@@ -764,7 +775,7 @@ function InlineRelationshipManager({
         <button
           key={contact.id}
           onClick={() => setIsEditing(true)}
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-100/80 to-green-100/80 hover:from-emerald-200/90 hover:to-green-200/90 border border-emerald-300/60 rounded-full text-xs font-semibold text-emerald-800 transition-all shadow-sm"
+          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 ${getEntityPillClasses('contact')} hover:from-emerald-200/90 hover:to-green-200/90 rounded-full text-xs font-semibold transition-all shadow-sm`}
         >
           <UserCircle className="w-3 h-3" />
           <span>{contact.name}</span>
@@ -783,7 +794,7 @@ function InlineRelationshipManager({
         <button
           key={topic.id}
           onClick={() => setIsEditing(true)}
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-100/80 to-yellow-100/80 hover:from-amber-200/90 hover:to-yellow-200/90 border border-amber-300/60 rounded-full text-xs font-semibold text-amber-800 transition-all shadow-sm"
+          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 ${getEntityPillClasses('topic')} hover:from-amber-200/90 hover:to-yellow-200/90 rounded-full text-xs font-semibold transition-all shadow-sm`}
         >
           <Bookmark className="w-3 h-3" />
           <span>{topic.name}</span>
@@ -801,7 +812,7 @@ function InlineRelationshipManager({
       {!hasRelationships && (
         <button
           onClick={() => setIsEditing(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/40 hover:bg-white/60 border border-dashed border-gray-400 hover:border-cyan-400 rounded-full text-xs text-gray-500 hover:text-cyan-700 font-medium transition-all shadow-sm"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 ${getGlassClasses('subtle')} border border-dashed border-gray-400 hover:border-cyan-400 rounded-full text-xs text-gray-500 hover:text-cyan-700 font-medium transition-all`}
         >
           <Plus size={12} />
           <span>Add Relationships</span>

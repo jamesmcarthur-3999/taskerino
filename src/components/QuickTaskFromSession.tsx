@@ -5,6 +5,7 @@ import { useUI } from '../context/UIContext';
 import { X, Calendar, Flag, Zap } from 'lucide-react';
 import type { Task } from '../types';
 import { generateId } from '../utils/helpers';
+import { getGlassClasses, getRadiusClass, MODAL_SECTIONS } from '../design-system/theme';
 
 interface QuickTaskFromSessionProps {
   isOpen: boolean;
@@ -28,7 +29,7 @@ export function QuickTaskFromSession({
   suggestedContext,
 }: QuickTaskFromSessionProps) {
   const { addTask } = useTasks();
-  const { addExtractedTaskToSession } = useSessions();
+  const { addExtractedTask } = useSessions();
   const { addNotification } = useUI();
   const [title, setTitle] = useState(suggestedAction);
   const [priority, setPriority] = useState<Task['priority']>(suggestedPriority || 'medium');
@@ -77,7 +78,7 @@ export function QuickTaskFromSession({
     addTask(newTask);
 
     // Add task ID to session's extractedTaskIds
-    addExtractedTaskToSession(sessionId, newTask.id);
+    addExtractedTask(sessionId, newTask.id);
 
     addNotification({
       type: 'success',
@@ -111,11 +112,11 @@ export function QuickTaskFromSession({
       onClick={handleClose}
     >
       <div
-        className="bg-white/40 backdrop-blur-2xl border-2 border-white/50 rounded-[32px] shadow-2xl max-w-xl w-full"
+        className={`${getGlassClasses('strong')} ${getRadiusClass('modal')} max-w-xl w-full`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-6 border-b-2 border-white/30 bg-gradient-to-r from-purple-500/10 to-cyan-500/10 backdrop-blur-sm rounded-t-2xl">
+        <div className={`${MODAL_SECTIONS.header} bg-gradient-to-r from-purple-500/10 to-cyan-500/10`}>
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-cyan-600 bg-clip-text text-transparent flex items-center gap-2">
@@ -126,7 +127,7 @@ export function QuickTaskFromSession({
             </div>
             <button
               onClick={handleClose}
-              className="p-2 hover:bg-white/60 backdrop-blur-md rounded-xl transition-all duration-300 hover:scale-110 active:scale-95"
+              className={`p-2 ${getGlassClasses('medium')} hover:${getGlassClasses('extra-strong')} rounded-xl transition-all duration-300 hover:scale-110 active:scale-95`}
             >
               <X className="w-5 h-5" />
             </button>
@@ -145,7 +146,7 @@ export function QuickTaskFromSession({
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={3}
-              className="w-full px-4 py-3 bg-white/30 backdrop-blur-xl border border-white/60 rounded-[16px] focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all resize-none shadow-sm"
+              className={`w-full px-4 py-3 ${getGlassClasses('medium')} ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all resize-none`}
               autoFocus
             />
           </div>
@@ -160,7 +161,7 @@ export function QuickTaskFromSession({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={2}
-                className="w-full px-4 py-3 bg-white/30 backdrop-blur-xl border border-white/60 rounded-[16px] focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all resize-none shadow-sm"
+                className={`w-full px-4 py-3 ${getGlassClasses('medium')} ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all resize-none`}
               />
             </div>
           )}
@@ -175,7 +176,7 @@ export function QuickTaskFromSession({
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as Task['priority'])}
-                className="w-full px-3 py-2 bg-white/70 backdrop-blur-xl border border-white/60 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm"
+                className={`w-full px-3 py-2 ${getGlassClasses('medium')} ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all`}
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -193,13 +194,13 @@ export function QuickTaskFromSession({
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 bg-white/70 backdrop-blur-xl border border-white/60 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm"
+                className={`w-full px-3 py-2 ${getGlassClasses('medium')} ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all`}
               />
             </div>
           </div>
 
           {/* Info */}
-          <div className="bg-purple-50/50 backdrop-blur-sm border border-purple-200/50 rounded-[16px] p-3">
+          <div className={`bg-purple-50/50 backdrop-blur-sm border border-purple-200/50 ${getRadiusClass('field')} p-3`}>
             <p className="text-xs text-purple-700">
               <span className="font-semibold">💡 Context preserved:</span> This task will link back to the session and screenshot where it was suggested.
             </p>
@@ -207,14 +208,14 @@ export function QuickTaskFromSession({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t-2 border-white/30 bg-white/40 backdrop-blur-xl rounded-b-2xl flex items-center justify-between">
+        <div className={`${MODAL_SECTIONS.footer} flex items-center justify-between`}>
           <p className="text-sm text-gray-600">
-            Press <kbd className="px-2 py-1 bg-white/60 backdrop-blur-md border border-white/60 rounded text-xs font-mono shadow-sm">⌘↵</kbd> to create
+            Press <kbd className={`px-2 py-1 ${getGlassClasses('medium')} rounded text-xs font-mono`}>⌘↵</kbd> to create
           </p>
           <div className="flex gap-3">
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-gray-700 bg-white/60 backdrop-blur-md border border-white/60 hover:bg-white/80 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm"
+              className={`px-4 py-2 text-gray-700 ${getGlassClasses('medium')} hover:${getGlassClasses('extra-strong')} rounded-xl transition-all duration-300 hover:scale-105 active:scale-95`}
             >
               Cancel
             </button>

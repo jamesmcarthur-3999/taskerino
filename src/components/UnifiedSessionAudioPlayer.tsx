@@ -13,6 +13,7 @@ import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperat
 import { Play, Pause, SkipBack, SkipForward, Volume2, Search, Camera, Mic, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Session, SessionAudioSegment, SessionScreenshot, AudioKeyMoment } from '../types';
 import { audioConcatenationService } from '../services/audioConcatenationService';
+import { getGlassClasses, getRadiusClass } from '../design-system/theme';
 
 interface UnifiedSessionAudioPlayerProps {
   session: Session;
@@ -330,7 +331,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
 
   if (audioSegments.length === 0) {
     return (
-      <div className="bg-white/40 backdrop-blur-xl rounded-[24px] border-2 border-white/50 p-12 text-center">
+      <div className={`${getGlassClasses('subtle')} ${getRadiusClass('element')} p-12 text-center`}>
         <Mic size={64} className="mx-auto text-gray-400 mb-4" />
         <h3 className="text-xl font-bold text-gray-900 mb-2">No Audio Recorded</h3>
         <p className="text-gray-600">This session has no audio segments</p>
@@ -340,7 +341,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
 
   if (loading) {
     return (
-      <div className="bg-white/40 backdrop-blur-xl rounded-[24px] border-2 border-white/50 p-12 text-center">
+      <div className={`${getGlassClasses('subtle')} ${getRadiusClass('element')} p-12 text-center`}>
         <Mic size={64} className="mx-auto text-cyan-500 mb-4 animate-pulse" />
         <h3 className="text-xl font-bold text-gray-900 mb-2">Preparing Audio...</h3>
         <p className="text-gray-600">Concatenating {audioSegments.length} segments</p>
@@ -349,7 +350,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
   }
 
   return (
-    <div className="bg-white/40 backdrop-blur-xl rounded-[32px] border-2 border-white/50 p-6 shadow-xl">
+    <div className={`${getGlassClasses('subtle')} ${getRadiusClass('element')} p-6 shadow-xl`}>
       {/* Hidden HTML5 Audio Element */}
       {audioUrl && (
         <audio
@@ -411,7 +412,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
           onClick={handleSliderClick}
           onMouseMove={handleSliderMouseMove}
           onMouseLeave={handleSliderMouseLeave}
-          className="relative h-4 bg-white/40 backdrop-blur-md rounded-full border border-white/50 shadow-inner cursor-pointer group hover:bg-white/50 transition-colors"
+          className={`relative h-4 ${getGlassClasses('subtle')} ${getRadiusClass('pill')} shadow-inner cursor-pointer group hover:bg-white/50 transition-colors`}
         >
           {/* Progress Fill */}
           <div
@@ -435,7 +436,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
 
           {/* Playhead */}
           <div
-            className={`absolute w-6 h-6 bg-white/95 backdrop-blur-sm rounded-full shadow-2xl border-2 transition-opacity pointer-events-none z-20 ${
+            className={`absolute w-6 h-6 ${getGlassClasses('strong')} ${getRadiusClass('pill')} shadow-2xl border-2 transition-opacity pointer-events-none z-20 ${
               isPlaying
                 ? 'opacity-100 border-cyan-500'
                 : 'opacity-0 group-hover:opacity-100 border-cyan-400'
@@ -461,7 +462,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
               top: `${hoveredMoment.y - 10}px`,
             }}
           >
-            <div className="bg-gray-900 text-white px-3 py-2 rounded-lg shadow-xl max-w-xs">
+            <div className={`bg-gray-900 text-white px-3 py-2 ${getRadiusClass('element')} shadow-xl max-w-xs`}>
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-mono bg-white/20 px-2 py-0.5 rounded">
                   {formatTime(hoveredMoment.moment.timestamp)}
@@ -479,7 +480,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
 
       {/* Controls */}
       <div className="flex items-center gap-4 mb-4">
-        <button onClick={() => skip(-10)} className="p-2 hover:bg-gray-200/50 rounded-lg transition-colors" title="Skip back 10s">
+        <button onClick={() => skip(-10)} className={`p-2 hover:bg-gray-200/50 ${getRadiusClass('element')} transition-colors`} title="Skip back 10s">
           <SkipBack size={20} />
         </button>
 
@@ -490,7 +491,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
           {isPlaying ? <Pause size={28} /> : <Play size={28} />}
         </button>
 
-        <button onClick={() => skip(10)} className="p-2 hover:bg-gray-200/50 rounded-lg transition-colors" title="Skip forward 10s">
+        <button onClick={() => skip(10)} className={`p-2 hover:bg-gray-200/50 ${getRadiusClass('element')} transition-colors`} title="Skip forward 10s">
           <SkipForward size={20} />
         </button>
 
@@ -499,14 +500,14 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
             <div className="w-px h-8 bg-gray-300 mx-1" />
             <button
               onClick={jumpToPrevMoment}
-              className="p-2 hover:bg-purple-100 rounded-lg transition-colors text-purple-600 disabled:opacity-30"
+              className={`p-2 hover:bg-purple-100 ${getRadiusClass('element')} transition-colors text-purple-600 disabled:opacity-30`}
               disabled={!keyMoments.some(m => m.timestamp < currentTime - 0.5)}
             >
               <ChevronLeft size={20} />
             </button>
             <button
               onClick={jumpToNextMoment}
-              className="p-2 hover:bg-purple-100 rounded-lg transition-colors text-purple-600 disabled:opacity-30"
+              className={`p-2 hover:bg-purple-100 ${getRadiusClass('element')} transition-colors text-purple-600 disabled:opacity-30`}
               disabled={!keyMoments.some(m => m.timestamp > currentTime)}
             >
               <ChevronRight size={20} />
@@ -520,7 +521,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
 
         <button
           onClick={cyclePlaybackSpeed}
-          className="px-3 py-1 bg-white/60 hover:bg-white/80 rounded-lg text-sm font-semibold transition-colors"
+          className={`px-3 py-1 bg-white/60 hover:bg-white/80 ${getRadiusClass('element')} text-sm font-semibold transition-colors`}
         >
           {playbackRate}x
         </button>
@@ -549,12 +550,12 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            className="w-full pl-10 pr-4 py-2 bg-white/40 border border-white/60 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none transition-all"
+            className={`w-full pl-10 pr-4 py-2 bg-white/40 border border-white/60 ${getRadiusClass('element')} focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none transition-all`}
           />
         </div>
         <button
           onClick={handleSearch}
-          className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-lg font-semibold transition-all"
+          className={`px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white ${getRadiusClass('element')} font-semibold transition-all`}
         >
           Search
         </button>
@@ -568,7 +569,7 @@ export const UnifiedSessionAudioPlayer = forwardRef<UnifiedSessionAudioPlayerRef
             <button
               key={index}
               onClick={() => seekTo(result.time)}
-              className="w-full text-left px-4 py-2 bg-white/40 hover:bg-white/60 rounded-lg transition-all"
+              className={`w-full text-left px-4 py-2 bg-white/40 hover:bg-white/60 ${getRadiusClass('element')} transition-all`}
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-mono text-cyan-600">{formatTime(result.time)}</span>

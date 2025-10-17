@@ -11,6 +11,7 @@ import React, { useRef } from 'react';
 import { MessageSquare } from 'lucide-react';
 import type { SessionAudioSegment } from '../types';
 import { audioConcatenationService } from '../services/audioConcatenationService';
+import { getGlassClasses, RADIUS, TRANSITIONS, SCALE } from '../design-system/theme';
 
 interface TranscriptPanelProps {
   audioSegments: SessionAudioSegment[];
@@ -42,7 +43,7 @@ export function TranscriptPanel({
 
   if (audioSegments.length === 0) {
     return (
-      <div className="bg-white/40 backdrop-blur-xl rounded-[24px] border-2 border-white/50 p-8 text-center">
+      <div className={`${getGlassClasses('medium')} rounded-[24px] p-8 text-center`}>
         <MessageSquare size={48} className="mx-auto text-gray-400 mb-4" />
         <p className="text-gray-600">No transcript available</p>
       </div>
@@ -50,7 +51,7 @@ export function TranscriptPanel({
   }
 
   return (
-    <div className="bg-white/40 backdrop-blur-xl rounded-[24px] border-2 border-white/50 shadow-xl overflow-hidden">
+    <div className={`${getGlassClasses('medium')} rounded-[24px] shadow-xl overflow-hidden`}>
       {/* Header */}
       <div className="px-6 py-4 border-b border-white/30 bg-gradient-to-r from-cyan-500/10 to-blue-500/10">
         <div className="flex items-center gap-3">
@@ -77,10 +78,10 @@ export function TranscriptPanel({
             <div
               key={segment.id}
               onClick={() => onSeekToTime(sessionTime)}
-              className={`p-4 rounded-[16px] border-2 cursor-pointer transition-all ${
+              className={`p-4 rounded-[16px] border-2 cursor-pointer ${TRANSITIONS.standard} ${
                 isCurrentSegment
                   ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border-cyan-400 shadow-lg scale-[1.02]'
-                  : 'bg-white/40 border-white/60 hover:bg-white/60 hover:border-white/80 hover:scale-[1.01]'
+                  : `${getGlassClasses('subtle')} hover:bg-white/60 hover:border-white/80 ${SCALE.subtleHover}`
               }`}
             >
               {/* Time Badge */}

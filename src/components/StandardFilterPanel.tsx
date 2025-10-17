@@ -55,7 +55,7 @@ export function StandardFilterPanel({
         position: 'fixed',
         top: `${position.top}px`,
         left: `${position.left}px`,
-        zIndex: 99999
+        zIndex: 100
       }}
       className={`
         w-80

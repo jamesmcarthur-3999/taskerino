@@ -1,27 +1,29 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, forwardRef } from 'react';
 import type { Session } from '../../types';
 
 interface SessionsStatsBarProps {
   sessions: Session[];
 }
 
-export function SessionsStatsBar({ sessions }: SessionsStatsBarProps) {
-  const stats = useMemo(() => {
-    return {
-      totalSessions: sessions.length,
-      totalMinutes: sessions.reduce((sum, s) => sum + (s.totalDuration || 0), 0),
-      totalScreenshots: sessions.reduce((sum, s) => sum + (s.screenshots?.length || 0), 0),
-      totalTasks: sessions.reduce((sum, s) => sum + (s.extractedTaskIds?.length || 0), 0),
-    };
-  }, [sessions]);
+export const SessionsStatsBar = forwardRef<HTMLDivElement, SessionsStatsBarProps>(
+  function SessionsStatsBar({ sessions }, ref) {
+    const stats = useMemo(() => {
+      return {
+        totalSessions: sessions.length,
+        totalMinutes: sessions.reduce((sum, s) => sum + (s.totalDuration || 0), 0),
+        totalScreenshots: sessions.reduce((sum, s) => sum + (s.screenshots?.length || 0), 0),
+        totalTasks: sessions.reduce((sum, s) => sum + (s.extractedTaskIds?.length || 0), 0),
+      };
+    }, [sessions]);
 
-  if (sessions.length === 0) return null;
+    if (sessions.length === 0) return null;
 
-  return (
-    <div className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-full border border-white/60">
-      <span className="text-sm font-semibold text-gray-700">
-        {stats.totalSessions} sessions • {Math.floor(stats.totalMinutes / 60)}h tracked
-      </span>
-    </div>
-  );
-}
+    return (
+      <div ref={ref} className="px-4 py-2 bg-white/40 backdrop-blur-sm rounded-full border border-white/60">
+        <span className="text-sm font-semibold text-gray-700">
+          {stats.totalSessions} sessions • {Math.floor(stats.totalMinutes / 60)}h tracked
+        </span>
+      </div>
+    );
+  }
+);

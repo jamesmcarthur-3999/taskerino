@@ -6,6 +6,7 @@ import { useUI } from '../../context/UIContext';
 import { useTasks } from '../../context/TasksContext';
 import { InlineTagManager } from '../InlineTagManager';
 import { tagUtils } from '../../utils/tagUtils';
+import { getSuccessGradient, getInfoGradient, getGlassClasses } from '../../design-system/theme';
 
 interface SessionCardProps {
   session: Session;
@@ -15,6 +16,7 @@ interface SessionCardProps {
   onSelect?: (sessionId: string) => void;
   onTagClick?: (tag: string) => void;
   isNewlyCompleted?: boolean;
+  isViewing?: boolean;
 }
 
 export function SessionCard({
@@ -25,6 +27,7 @@ export function SessionCard({
   onSelect,
   onTagClick,
   isNewlyCompleted = false,
+  isViewing = false,
 }: SessionCardProps) {
   const { sessions, updateSession, deleteSession, addExtractedTask } = useSessions();
   const { addNotification } = useUI();
@@ -99,20 +102,26 @@ export function SessionCard({
     }
   };
 
+  // Get semantic gradients from design system
+  const successGradient = getSuccessGradient('light');
+  const infoGradient = getInfoGradient('light');
+
   return (
     <div
       onClick={handleCardClick}
       className={`group relative backdrop-blur-xl rounded-[24px] border-2 p-4 hover:shadow-md transition-all cursor-pointer overflow-hidden ${
         isNewlyCompleted
-          ? 'bg-gradient-to-br from-green-100/80 via-cyan-100/80 to-blue-100/80 border-green-400 shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-500'
+          ? `${successGradient.container} border-green-400 shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-500`
           : bulkSelectMode && isSelected
-          ? 'bg-cyan-100/50 border-cyan-400 shadow-lg'
-          : 'bg-white/40 border-white/60 hover:bg-white/60 hover:border-cyan-300/60'
+          ? `${infoGradient.container} border-cyan-400 shadow-lg`
+          : isViewing
+          ? `${getGlassClasses('medium')} border-cyan-400/80 shadow-lg shadow-cyan-200/20 ring-2 ring-cyan-400/30`
+          : `${getGlassClasses('subtle')} hover:bg-white/60 hover:border-cyan-300/60`
       }`}
     >
       {/* NEW badge for newly completed sessions */}
       {isNewlyCompleted && (
-        <div className="absolute top-3 right-3 px-2.5 py-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1">
+        <div className={`absolute top-3 right-3 px-2.5 py-1 ${getSuccessGradient('strong').container} text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1`}>
           <Sparkles size={12} />
           <span>NEW</span>
         </div>
@@ -161,12 +170,12 @@ export function SessionCard({
         {(session.category || session.subCategory) && (
           <div className="flex items-center gap-2 mb-3">
             {session.category && (
-              <span className="px-2.5 py-1 bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 rounded-full text-xs font-semibold border border-cyan-200">
+              <span className={`px-2.5 py-1 ${infoGradient.container} text-cyan-800 rounded-full text-xs font-semibold border border-cyan-200`}>
                 {session.category}
               </span>
             )}
             {session.subCategory && (
-              <span className="px-2.5 py-1 bg-white/60 text-gray-700 rounded-full text-xs font-medium border border-gray-200">
+              <span className={`px-2.5 py-1 ${getGlassClasses('medium')} text-gray-700 rounded-full text-xs font-medium border border-gray-200`}>
                 {session.subCategory}
               </span>
             )}

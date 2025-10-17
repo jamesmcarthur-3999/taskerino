@@ -14,6 +14,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react';
 import type { AudioKeyMoment } from '../types';
+import { getGlassClasses, RADIUS, TRANSITIONS, SCALE, SHADOWS } from '../design-system/theme';
 
 interface AudioPlayerProps {
   audioBase64: string;
@@ -105,7 +106,7 @@ export function AudioPlayer({
   };
 
   return (
-    <div className="bg-white/40 backdrop-blur-sm rounded-[20px] p-4 border border-white/60">
+    <div className={`${getGlassClasses('medium')} rounded-[20px] p-4`}>
       {/* Audio element */}
       <audio ref={audioRef} src={audioBase64} />
 
@@ -177,7 +178,7 @@ export function AudioPlayer({
         {/* Skip back */}
         <button
           onClick={() => skip(-10)}
-          className="p-2 hover:bg-gray-200/50 rounded-lg transition-colors"
+          className={`p-2 hover:bg-gray-200/50 rounded-lg ${TRANSITIONS.fast}`}
           title="Skip back 10s"
         >
           <SkipBack size={20} />
@@ -186,7 +187,7 @@ export function AudioPlayer({
         {/* Play/Pause */}
         <button
           onClick={togglePlayPause}
-          className="p-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-full transition-all shadow-lg"
+          className={`p-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-full ${TRANSITIONS.standard} ${SHADOWS.elevated}`}
         >
           {isPlaying ? <Pause size={24} /> : <Play size={24} />}
         </button>
@@ -194,7 +195,7 @@ export function AudioPlayer({
         {/* Skip forward */}
         <button
           onClick={() => skip(10)}
-          className="p-2 hover:bg-gray-200/50 rounded-lg transition-colors"
+          className={`p-2 hover:bg-gray-200/50 rounded-lg ${TRANSITIONS.fast}`}
           title="Skip forward 10s"
         >
           <SkipForward size={20} />
@@ -208,7 +209,7 @@ export function AudioPlayer({
         {/* Playback speed */}
         <button
           onClick={changeSpeed}
-          className="px-3 py-1 bg-white/60 hover:bg-white/80 rounded-lg text-sm font-semibold transition-colors"
+          className={`px-3 py-1 ${getGlassClasses('medium')} hover:bg-white/80 rounded-lg text-sm font-semibold ${TRANSITIONS.fast}`}
           title="Change playback speed"
         >
           {playbackRate}x

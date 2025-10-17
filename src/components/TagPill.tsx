@@ -75,7 +75,7 @@ export function TagPill({ text, type = 'default', onClick, className = '' }: Tag
       className={`
         inline-flex items-center
         px-2 py-0.5
-        rounded-[${RADIUS.pill}px]
+        rounded-full
         text-[10px] font-semibold
         ${colors.bg} ${colors.text}
         border ${colors.border}
