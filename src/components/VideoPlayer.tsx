@@ -11,6 +11,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import type { Session, Attachment, SessionScreenshot, VideoChapter } from '../types';
 import { videoStorageService } from '../services/videoStorageService';
 import { attachmentStorage } from '../services/attachmentStorage';
+import { getGlassClasses, RADIUS, SCALE, TRANSITIONS, SHADOWS } from '../design-system/theme';
 
 interface VideoPlayerProps {
   session: Session;
@@ -39,10 +40,10 @@ function ChapterChip({ chapter, isActive, onClick }: ChapterChipProps) {
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+      className={`px-3 py-1.5 rounded-full text-xs font-medium ${TRANSITIONS.standard} ${
         isActive
-          ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md'
-          : 'bg-white/60 text-gray-700 hover:bg-white/80 border border-gray-200'
+          ? `bg-gradient-to-r from-cyan-500 to-blue-500 text-white ${SHADOWS.button}`
+          : `${getGlassClasses('medium')} text-gray-700 hover:bg-white/80`
       }`}
     >
       {chapter.title}
@@ -285,8 +286,8 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
   // Loading state
   if (isLoading) {
     return (
-      <div className="bg-gradient-to-br from-purple-500/20 via-blue-500/20 to-cyan-500/20 backdrop-blur-xl rounded-[24px] border-2 border-white/50 p-12 text-center">
-        <div className="inline-flex items-center gap-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white px-6 py-4 rounded-[20px] shadow-lg">
+      <div className={`bg-gradient-to-br from-purple-500/20 via-blue-500/20 to-cyan-500/20 ${getGlassClasses('strong')} rounded-[${RADIUS.card}px] p-12 text-center`}>
+        <div className={`inline-flex items-center gap-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white px-6 py-4 rounded-[${RADIUS.field}px] ${SHADOWS.elevated}`}>
           <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -303,7 +304,7 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
   // Error state
   if (error || !videoUrl) {
     return (
-      <div className="bg-white/40 backdrop-blur-xl rounded-[24px] border-2 border-white/50 p-12">
+      <div className={`${getGlassClasses('medium')} rounded-[${RADIUS.card}px] p-12`}>
         <div className="text-red-600 mb-4 text-center">
           <svg className="w-16 h-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -330,7 +331,7 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
   }
 
   return (
-    <div className="bg-white/40 backdrop-blur-xl rounded-[24px] border-2 border-white/50 overflow-hidden shadow-xl">
+    <div className={`${getGlassClasses('medium')} rounded-[${RADIUS.card}px] overflow-hidden ${SHADOWS.elevated}`}>
       {/* Video Container */}
       <div className="relative bg-black aspect-video">
         <video
@@ -389,10 +390,10 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
 
         {/* Play Overlay (shown when paused) */}
         {!isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+          <div className={`absolute inset-0 flex items-center justify-center ${getGlassClasses('subtle')}`}>
             <button
               onClick={togglePlayPause}
-              className="w-20 h-20 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-2xl transition-all hover:scale-110 active:scale-95"
+              className={`w-20 h-20 bg-white/90 hover:bg-white rounded-full flex items-center justify-center ${SHADOWS.modal} ${TRANSITIONS.standard} ${SCALE.iconButtonHover} ${SCALE.iconButtonActive}`}
             >
               <Play size={40} className="text-gray-900 ml-1" />
             </button>
@@ -401,7 +402,7 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
       </div>
 
       {/* Controls */}
-      <div className="p-4 bg-white/60 backdrop-blur-sm">
+      <div className={`p-4 ${getGlassClasses('medium')}`}>
         {/* Timeline Scrubber */}
         <div className="mb-4">
           <div className="relative">
@@ -468,7 +469,7 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
             {/* Play/Pause */}
             <button
               onClick={togglePlayPause}
-              className="w-10 h-10 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-105 active:scale-95"
+              className={`w-10 h-10 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-full flex items-center justify-center ${SHADOWS.button} ${TRANSITIONS.standard} ${SCALE.buttonHover} ${SCALE.buttonActive}`}
             >
               {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
             </button>
@@ -476,7 +477,7 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
             {/* Restart */}
             <button
               onClick={restartVideo}
-              className="w-10 h-10 bg-white/70 hover:bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md transition-all hover:scale-105 active:scale-95 border border-white/60"
+              className={`w-10 h-10 ${getGlassClasses('strong')} rounded-full flex items-center justify-center ${SHADOWS.button} ${TRANSITIONS.standard} ${SCALE.buttonHover} ${SCALE.buttonActive}`}
               title="Restart"
             >
               <RotateCcw size={18} className="text-gray-700" />
@@ -486,7 +487,7 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
             <div className="flex items-center gap-2">
               <button
                 onClick={toggleMute}
-                className="w-10 h-10 bg-white/70 hover:bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md transition-all hover:scale-105 active:scale-95 border border-white/60"
+                className={`w-10 h-10 ${getGlassClasses('strong')} rounded-full flex items-center justify-center ${SHADOWS.button} ${TRANSITIONS.standard} ${SCALE.buttonHover} ${SCALE.buttonActive}`}
               >
                 {isMuted ? <VolumeX size={18} className="text-gray-700" /> : <Volume2 size={18} className="text-gray-700" />}
               </button>
@@ -505,7 +506,7 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
           {/* Fullscreen */}
           <button
             onClick={enterFullscreen}
-            className="w-10 h-10 bg-white/70 hover:bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md transition-all hover:scale-105 active:scale-95 border border-white/60"
+            className={`w-10 h-10 ${getGlassClasses('strong')} rounded-full flex items-center justify-center ${SHADOWS.button} ${TRANSITIONS.standard} ${SCALE.buttonHover} ${SCALE.buttonActive}`}
             title="Fullscreen"
           >
             <Maximize size={18} className="text-gray-700" />

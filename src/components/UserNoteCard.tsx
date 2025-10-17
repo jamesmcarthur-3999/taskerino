@@ -205,7 +205,7 @@ export function UserNoteCard({
       <div
         className={`
           relative
-          rounded-[${RADIUS.element}px]
+          rounded-[16px]
           bg-gradient-to-r ${NOTE_GRADIENTS.border}
           p-[2px]
           ${isActive ? 'animate-border-pulse' : ''}
@@ -218,7 +218,7 @@ export function UserNoteCard({
             relative
             bg-gradient-to-br ${NOTE_GRADIENTS.background}
             backdrop-blur-xl
-            rounded-[${RADIUS.element - 2}px]
+            rounded-[14px]
             p-4
             ${NOTE_GRADIENTS.shadow}
             ${isActive ? 'shadow-lg shadow-amber-300/40' : ''}
@@ -276,7 +276,7 @@ export function UserNoteCard({
                   px-3 py-2
                   bg-white/80
                   border-2 border-amber-400
-                  rounded-[${RADIUS.element}px]
+                  rounded-[16px]
                   text-base text-gray-900
                   placeholder:text-gray-500
                   focus:outline-none
@@ -307,7 +307,7 @@ export function UserNoteCard({
                     px-3 py-1
                     bg-gradient-to-r from-amber-500 to-amber-600
                     text-white text-xs font-bold
-                    rounded-[${RADIUS.element}px]
+                    rounded-[16px]
                     hover:from-amber-600 hover:to-amber-700
                     ${TRANSITIONS.fast}
                   `}
@@ -363,7 +363,7 @@ export function UserNoteCard({
                     px-2 py-1
                     bg-white/80
                     border border-amber-300
-                    rounded-[${RADIUS.element}px]
+                    rounded-[16px]
                     text-[10px] font-semibold
                     text-amber-700
                     hover:bg-amber-50
@@ -385,7 +385,7 @@ export function UserNoteCard({
                     px-2 py-1
                     bg-white/80
                     border border-blue-300
-                    rounded-[${RADIUS.element}px]
+                    rounded-[16px]
                     text-[10px] font-semibold
                     text-blue-700
                     hover:bg-blue-50
@@ -406,7 +406,7 @@ export function UserNoteCard({
                   px-2 py-1
                   bg-white/80
                   border border-gray-300
-                  rounded-[${RADIUS.element}px]
+                  rounded-[16px]
                   text-[10px] font-semibold
                   text-gray-700
                   hover:bg-gray-50
@@ -436,7 +436,7 @@ export function UserNoteCard({
                     px-2 py-1
                     bg-white/80
                     border border-red-300
-                    rounded-[${RADIUS.element}px]
+                    rounded-[16px]
                     text-[10px] font-semibold
                     text-red-700
                     hover:bg-red-50
@@ -452,21 +452,6 @@ export function UserNoteCard({
           )}
         </div>
       </div>
-
-      {/* Animated border pulse keyframe (injected into global styles) */}
-      <style jsx>{`
-        @keyframes border-pulse {
-          0%, 100% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.8;
-          }
-        }
-        .animate-border-pulse {
-          animation: border-pulse 2s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }

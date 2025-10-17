@@ -1,5 +1,5 @@
 import React, { type ReactNode } from 'react';
-import { RADIUS } from '../design-system/theme';
+import { RADIUS, getInfoGradient } from '../design-system/theme';
 
 type SkeletonVariant = 'card' | 'list' | 'text' | 'avatar' | 'custom';
 
@@ -15,7 +15,8 @@ export const SkeletonLoader = React.memo(function SkeletonLoader({
   className = '',
 }: SkeletonLoaderProps): ReactNode {
   // Base skeleton classes with glass morphism and animation
-  const baseClasses = 'bg-white/30 backdrop-blur-sm animate-skeleton';
+  const infoGradient = getInfoGradient('light');
+  const baseClasses = `${infoGradient.container} animate-pulse`;
 
   // Card variant - rectangular card placeholder
   if (variant === 'card') {

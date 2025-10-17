@@ -17,6 +17,7 @@ import { NedSettings } from './ned/NedSettings';
 import { Input } from './Input';
 import { Button } from './Button';
 import { StandardSelect } from './StandardSelect';
+import { BACKGROUND_GRADIENT, getGlassClasses, getRadiusClass, getTabClasses, getRadioCardClasses, SETTINGS, getInfoGradient, getDangerGradient } from '../design-system/theme';
 
 type SettingsTab = 'general' | 'ai' | 'ned' | 'sessions' | 'time' | 'data';
 
@@ -185,9 +186,9 @@ export default function ProfileZone() {
   ];
 
   return (
-    <div className="h-full w-full relative flex flex-col bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20 overflow-hidden">
+    <div className={`h-full w-full relative flex flex-col ${BACKGROUND_GRADIENT.primary} overflow-hidden`}>
       {/* Secondary animated gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none" />
+      <div className={`absolute inset-0 ${BACKGROUND_GRADIENT.secondary} pointer-events-none`} />
       <div className="relative z-10 h-full overflow-y-auto p-8 pt-24">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
@@ -197,18 +198,14 @@ export default function ProfileZone() {
           </div>
 
           {/* Tabs */}
-          <div className="backdrop-blur-2xl bg-white/30 rounded-[24px] shadow-xl border-2 border-white/50 overflow-hidden">
-            <div className="border-b border-gray-200 px-2 pt-2">
+          <div className={`backdrop-blur-2xl ${getGlassClasses('medium')} ${getRadiusClass('card')} overflow-hidden`}>
+            <div className="border-b border-white/40 px-2 pt-2">
               <div className="flex gap-1">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-t-[20px] font-medium transition-all ${
-                      activeTab === tab.id
-                        ? 'bg-white/80 backdrop-blur-sm text-cyan-700 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
-                    }`}
+                    className={getTabClasses(activeTab === tab.id)}
                   >
                     {tab.icon}
                     {tab.label}
@@ -218,7 +215,7 @@ export default function ProfileZone() {
             </div>
 
             {/* Tab Content */}
-            <div className="bg-white/20 backdrop-blur-xl p-8 space-y-8">
+            <div className={`${getGlassClasses('subtle')} p-8 space-y-8`}>
               {/* General Tab */}
               {activeTab === 'general' && (
                 <>
@@ -399,13 +396,7 @@ export default function ProfileZone() {
 
                     <div className="space-y-4">
                       {/* Optimized Preset */}
-                      <label
-                        className={`flex items-start gap-4 p-5 rounded-[20px] cursor-pointer transition-all border-2 ${
-                          audioQualityPreset === 'optimized'
-                            ? 'bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-400'
-                            : 'bg-white/20 backdrop-blur-sm border-white/40 hover:bg-white/30'
-                        }`}
-                      >
+                      <label className={getRadioCardClasses(audioQualityPreset === 'optimized')}>
                         <input
                           type="radio"
                           name="audioQuality"
@@ -433,13 +424,7 @@ export default function ProfileZone() {
                       </label>
 
                       {/* Balanced Preset */}
-                      <label
-                        className={`flex items-start gap-4 p-5 rounded-[20px] cursor-pointer transition-all border-2 ${
-                          audioQualityPreset === 'balanced'
-                            ? 'bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-400'
-                            : 'bg-white/20 backdrop-blur-sm border-white/40 hover:bg-white/30'
-                        }`}
-                      >
+                      <label className={getRadioCardClasses(audioQualityPreset === 'balanced')}>
                         <input
                           type="radio"
                           name="audioQuality"
@@ -461,13 +446,7 @@ export default function ProfileZone() {
                       </label>
 
                       {/* High Quality Preset */}
-                      <label
-                        className={`flex items-start gap-4 p-5 rounded-[20px] cursor-pointer transition-all border-2 ${
-                          audioQualityPreset === 'high'
-                            ? 'bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-400'
-                            : 'bg-white/20 backdrop-blur-sm border-white/40 hover:bg-white/30'
-                        }`}
-                      >
+                      <label className={getRadioCardClasses(audioQualityPreset === 'high')}>
                         <input
                           type="radio"
                           name="audioQuality"
@@ -493,9 +472,9 @@ export default function ProfileZone() {
 
                   <Divider />
 
-                  <div className="p-4 bg-blue-50/50 backdrop-blur-sm rounded-[20px] border border-blue-200">
-                    <h4 className="font-semibold text-blue-900 mb-2">About Audio Compression</h4>
-                    <ul className="text-sm text-blue-800 space-y-1">
+                  <div className={`p-4 ${getInfoGradient('light').container} ${getRadiusClass('field')}`}>
+                    <h4 className={`font-semibold mb-2 ${getInfoGradient('light').textPrimary}`}>About Audio Compression</h4>
+                    <ul className={`text-sm space-y-1 ${getInfoGradient('light').textSecondary}`}>
                       <li>• OpenAI Whisper was trained on 16kHz audio</li>
                       <li>• Higher sample rates don't improve transcription accuracy</li>
                       <li>• Compression happens after local storage (full quality preserved)</li>
@@ -568,15 +547,15 @@ export default function ProfileZone() {
                 <>
                   <Section title="Storage Info">
                     <div className="grid grid-cols-3 gap-4 text-center">
-                      <div className="p-4 bg-white/20 backdrop-blur-sm rounded-[20px] border border-white/40">
+                      <div className={SETTINGS.statCard}>
                         <div className="text-2xl font-bold text-gray-900">{entitiesState.topics.length}</div>
                         <div className="text-sm text-gray-600">Topics</div>
                       </div>
-                      <div className="p-4 bg-white/20 backdrop-blur-sm rounded-[20px] border border-white/40">
+                      <div className={SETTINGS.statCard}>
                         <div className="text-2xl font-bold text-gray-900">{notesState.notes.length}</div>
                         <div className="text-sm text-gray-600">Notes</div>
                       </div>
-                      <div className="p-4 bg-white/20 backdrop-blur-sm rounded-[20px] border border-white/40">
+                      <div className={SETTINGS.statCard}>
                         <div className="text-2xl font-bold text-gray-900">{tasksState.tasks.length}</div>
                         <div className="text-sm text-gray-600">Tasks</div>
                       </div>
@@ -679,7 +658,7 @@ function Textarea({
         onChange={onChange}
         rows={rows}
         placeholder={placeholder}
-        className="w-full px-4 py-3 bg-white/30 backdrop-blur-sm border border-white/60 rounded-[20px] focus:ring-2 focus:ring-cyan-500 focus:border-cyan-300 resize-none transition-all"
+        className={`w-full px-4 py-3 ${getGlassClasses('strong')} ${getRadiusClass('field')} focus:ring-2 focus:ring-cyan-500 focus:border-cyan-300 resize-none transition-all`}
       />
     </div>
   );
@@ -697,7 +676,7 @@ function Toggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between p-4 bg-white/20 backdrop-blur-sm rounded-[20px]">
+    <div className={`flex items-start justify-between p-4 ${getGlassClasses('subtle')} ${getRadiusClass('field')}`}>
       <div className="flex-1">
         <div className="font-semibold text-gray-900">{label}</div>
         <div className="text-sm text-gray-600 mt-1">{description}</div>

@@ -31,7 +31,7 @@ import { GradientIconBadge } from './GradientIconBadge';
 import { ScreenshotModal } from './ScreenshotModal';
 import type { SessionScreenshot, Attachment } from '../types';
 import { attachmentStorage } from '../services/attachmentStorage';
-import { RADIUS, ACTIVITY_COLORS, TRANSITIONS, ICON_SIZES } from '../design-system/theme';
+import { RADIUS, ACTIVITY_COLORS, TRANSITIONS, ICON_SIZES, getActivityGradient } from '../design-system/theme';
 
 interface ScreenshotCardProps {
   screenshot: SessionScreenshot;
@@ -79,66 +79,14 @@ const getActivityIcon = (activityType: keyof typeof ACTIVITY_COLORS) => {
   return icons[activityType] || Monitor;
 };
 
-// Activity-specific class mappings (simplified for minimal design)
-const getActivityClasses = (activityType: keyof typeof ACTIVITY_COLORS) => {
-  const classMap = {
-    code: {
-      border: 'border-blue-500/20',
-      overlay: 'bg-gradient-to-t from-blue-900/60 via-blue-900/20 to-transparent',
-      text: 'text-blue-900',
-      textLight: 'text-blue-700',
-    },
-    design: {
-      border: 'border-purple-500/20',
-      overlay: 'bg-gradient-to-t from-purple-900/60 via-purple-900/20 to-transparent',
-      text: 'text-purple-900',
-      textLight: 'text-purple-700',
-    },
-    email: {
-      border: 'border-green-500/20',
-      overlay: 'bg-gradient-to-t from-green-900/60 via-green-900/20 to-transparent',
-      text: 'text-green-900',
-      textLight: 'text-green-700',
-    },
-    browser: {
-      border: 'border-orange-500/20',
-      overlay: 'bg-gradient-to-t from-orange-900/60 via-orange-900/20 to-transparent',
-      text: 'text-orange-900',
-      textLight: 'text-orange-700',
-    },
-    meeting: {
-      border: 'border-red-500/20',
-      overlay: 'bg-gradient-to-t from-red-900/60 via-red-900/20 to-transparent',
-      text: 'text-red-900',
-      textLight: 'text-red-700',
-    },
-    document: {
-      border: 'border-indigo-500/20',
-      overlay: 'bg-gradient-to-t from-indigo-900/60 via-indigo-900/20 to-transparent',
-      text: 'text-indigo-900',
-      textLight: 'text-indigo-700',
-    },
-    terminal: {
-      border: 'border-gray-700/20',
-      overlay: 'bg-gradient-to-t from-gray-900/60 via-gray-900/20 to-transparent',
-      text: 'text-gray-900',
-      textLight: 'text-gray-700',
-    },
-    writing: {
-      border: 'border-amber-500/20',
-      overlay: 'bg-gradient-to-t from-amber-900/60 via-amber-900/20 to-transparent',
-      text: 'text-amber-900',
-      textLight: 'text-amber-700',
-    },
-    unknown: {
-      border: 'border-slate-500/20',
-      overlay: 'bg-gradient-to-t from-slate-900/60 via-slate-900/20 to-transparent',
-      text: 'text-slate-900',
-      textLight: 'text-slate-700',
-    },
+// Activity-specific class mappings using design system
+const getActivityClasses = (activityType: string) => {
+  const activityGradient = getActivityGradient(activityType);
+  return {
+    border: activityGradient.border,
+    overlay: `bg-gradient-to-t ${activityGradient.background}`,
+    text: activityGradient.text,
   };
-
-  return classMap[activityType];
 };
 
 export const ScreenshotCard = React.memo(function ScreenshotCard({
@@ -246,7 +194,7 @@ export const ScreenshotCard = React.memo(function ScreenshotCard({
           relative group cursor-pointer
           bg-white/80 backdrop-blur-xl
           border-2 ${activityClasses.border}
-          rounded-[${RADIUS.card}px]
+          rounded-[24px]
           shadow-md hover:shadow-lg
           ${TRANSITIONS.standard}
           hover:scale-[1.01]
@@ -289,9 +237,9 @@ export const ScreenshotCard = React.memo(function ScreenshotCard({
                     <GradientIconBadge
                       icon={ActivityIcon}
                       iconSize={12}
-                      gradientFrom={`from-${activityColors.bg}`}
-                      gradientTo={`to-${activityColors.bg}`}
-                      iconColor={`text-${activityColors.text}`}
+                      gradientFrom={activityColors.bg}
+                      gradientTo={activityColors.bg}
+                      iconColor={activityColors.text}
                       size={24}
                     />
                   </div>

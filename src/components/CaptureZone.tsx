@@ -16,7 +16,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { backgroundProcessor } from '../services/backgroundProcessor';
 import { Button } from './Button';
 import { FeatureTooltip } from './FeatureTooltip';
-import { RADIUS, ICON_SIZES, SHADOWS, getGlassmorphism } from '../design-system/theme';
+import { RADIUS, ICON_SIZES, SHADOWS, getGlassmorphism, getGlassClasses, getRadiusClass, getInfoGradient } from '../design-system/theme';
 
 type CaptureState = 'idle' | 'processing' | 'review' | 'complete';
 
@@ -474,12 +474,10 @@ export default function CaptureZone() {
 
     // Add to state using the SAME job from processor
     addProcessingJob({
-        id: job.id,
         type: job.type,
         input: job.input,
         status: job.status,
         progress: job.progress,
-        createdAt: job.createdAt,
       });
 
     // Track capture stat
@@ -816,7 +814,7 @@ export default function CaptureZone() {
 
             {/* Frosted Glass Capture Box with Drag-Drop */}
             <div
-              className={`relative ${getGlassmorphism('strong')} rounded-[${RADIUS.card}px] overflow-hidden`}
+              className={`relative ${getGlassClasses('strong')} ${getRadiusClass('card')} overflow-hidden`}
               onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
               onDragLeave={() => setDragActive(false)}
               onDrop={handleFileDrop}
@@ -825,7 +823,7 @@ export default function CaptureZone() {
             >
               {/* Drag Overlay */}
               {dragActive && (
-                <div className={`absolute inset-0 z-50 bg-cyan-500/20 backdrop-blur-sm border-2 border-dashed border-cyan-500 rounded-[${RADIUS.card}px] flex items-center justify-center transition-all duration-200`}>
+                <div className={`absolute inset-0 z-50 bg-cyan-500/20 backdrop-blur-sm border-2 border-dashed border-cyan-500 ${getRadiusClass('card')} flex items-center justify-center transition-all duration-200`}>
                   <div className="text-center">
                     <Upload size={ICON_SIZES['2xl']} className="text-cyan-600 mx-auto mb-4" />
                     <p className="text-2xl font-bold text-cyan-900">Drop files here</p>
@@ -858,7 +856,7 @@ export default function CaptureZone() {
                   <div className="grid grid-cols-4 gap-3">
                     {attachments.map(attachment => (
                       <div key={attachment.id} className="relative group">
-                        <div className={`aspect-square rounded-[${RADIUS.element}px] overflow-hidden bg-gray-100 border-2 border-white ${SHADOWS.input}`}>
+                        <div className={`aspect-square ${getRadiusClass('element')} overflow-hidden ${getGlassClasses('medium')} ${SHADOWS.input}`}>
                           {attachment.thumbnail ? (
                             <img
                               src={attachment.thumbnail}
@@ -906,7 +904,7 @@ export default function CaptureZone() {
                         onChange={handleFileSelect}
                         className="hidden"
                       />
-                      <div className={`flex items-center gap-2 px-4 py-2 bg-white/60 hover:bg-white/80 backdrop-blur-sm rounded-[${RADIUS.field}px] transition-all duration-300 text-sm font-semibold text-gray-700 hover:text-cyan-600`}>
+                      <div className={`flex items-center gap-2 px-4 py-2 ${getGlassClasses('medium')} ${getRadiusClass('field')} hover:bg-white/80 transition-all duration-300 text-sm font-semibold text-gray-700 hover:text-cyan-600`}>
                         <Upload size={ICON_SIZES.sm} />
                         Add Files
                       </div>
@@ -935,7 +933,7 @@ export default function CaptureZone() {
                         onChange={(e) => setAutoSave(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className={`w-11 h-6 bg-gray-300 peer-focus:outline-none ${RADIUS.pill === 9999 ? 'rounded-full' : `rounded-[${RADIUS.pill}px]`} peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-blue-500`}></div>
+                      <div className={`w-11 h-6 bg-white/40 backdrop-blur-sm peer-focus:outline-none ${getRadiusClass('pill')} peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:border-white/60 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-blue-500`}></div>
                     </div>
                     <div className="flex items-center gap-2">
                       <CheckCircle2 size={ICON_SIZES.sm} className="text-gray-600 group-hover:text-cyan-600 transition-colors" />
@@ -954,7 +952,7 @@ export default function CaptureZone() {
                         onChange={(e) => setExtractTasks(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className={`w-11 h-6 bg-gray-300 peer-focus:outline-none ${RADIUS.pill === 9999 ? 'rounded-full' : `rounded-[${RADIUS.pill}px]`} peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-blue-500`}></div>
+                      <div className={`w-11 h-6 bg-white/40 backdrop-blur-sm peer-focus:outline-none ${getRadiusClass('pill')} peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:border-white/60 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-blue-500`}></div>
                     </div>
                     <div className="flex items-center gap-2">
                       <CheckSquare size={ICON_SIZES.sm} className="text-gray-600 group-hover:text-cyan-600 transition-colors" />
@@ -968,7 +966,7 @@ export default function CaptureZone() {
             </div>
 
             {error && (
-              <div className={`mt-6 p-5 bg-red-500/10 backdrop-blur-2xl border-2 border-red-500/25 rounded-[${RADIUS.card}px] text-red-700 font-medium`}>
+              <div className={`mt-6 p-5 bg-gradient-to-r from-red-500/10 via-rose-500/5 to-red-400/10 backdrop-blur-2xl border-2 border-red-300/50 ${getRadiusClass('card')} text-red-700 font-medium shadow-lg`}>
                 {error}
               </div>
             )}
@@ -996,7 +994,7 @@ export default function CaptureZone() {
 
                 {/* Processing Jobs */}
                 {uiState.backgroundProcessing.queue.filter(j => j.status === 'processing' || j.status === 'queued').map(job => (
-                  <div key={job.id} className={`${getGlassmorphism('strong')} rounded-[${RADIUS.card}px] p-6`}>
+                  <div key={job.id} className={`${getGlassClasses('strong')} ${getRadiusClass('card')} p-6`}>
                     <div className="flex items-start gap-4">
                       <Loader2 size={ICON_SIZES.md} className="text-cyan-600 animate-spin flex-shrink-0 mt-1" />
                       <div className="flex-1 min-w-0">
@@ -1010,9 +1008,9 @@ export default function CaptureZone() {
                         {job.currentStep && (
                           <p className="text-xs text-cyan-700 mb-3">{job.currentStep}</p>
                         )}
-                        <div className={`h-2 bg-gray-200 ${RADIUS.pill === 9999 ? 'rounded-full' : `rounded-[${RADIUS.pill}px]`} overflow-hidden`}>
+                        <div className={`h-2 bg-white/40 ${getRadiusClass('pill')} overflow-hidden backdrop-blur-sm`}>
                           <div
-                            className={`h-full bg-gradient-to-r from-cyan-500 to-blue-500 ${RADIUS.pill === 9999 ? 'rounded-full' : `rounded-[${RADIUS.pill}px]`} transition-all duration-300`}
+                            className={`h-full bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} transition-all duration-300`}
                             style={{ width: `${job.progress}%` }}
                           />
                         </div>
@@ -1027,7 +1025,7 @@ export default function CaptureZone() {
                   const noteCount = job.result?.notes.length || 0;
 
                   return (
-                    <div key={job.id} className={`${getGlassmorphism('strong')} rounded-[${RADIUS.card}px] p-6 hover:border-cyan-300 transition-all duration-300`}>
+                    <div key={job.id} className={`${getGlassClasses('strong')} ${getRadiusClass('card')} p-6 hover:border-cyan-300 transition-all duration-300`}>
                       <div className="flex items-start gap-4">
                         <CheckCircle2 size={ICON_SIZES.md} className="text-green-600 flex-shrink-0 mt-1" />
                         <div className="flex-1 min-w-0">
@@ -1080,7 +1078,7 @@ export default function CaptureZone() {
 
                 {/* Error Jobs */}
                 {uiState.backgroundProcessing.queue.filter(j => j.status === 'error').map(job => (
-                  <div key={job.id} className={`backdrop-blur-2xl bg-red-50/60 rounded-[${RADIUS.card}px] ${SHADOWS.elevated} border-2 border-red-200 p-6`}>
+                  <div key={job.id} className={`bg-gradient-to-r from-red-500/20 via-rose-500/10 to-red-400/20 backdrop-blur-2xl ${getRadiusClass('card')} ${SHADOWS.elevated} border-2 border-red-300/50 p-6`}>
                     <div className="flex items-start gap-4">
                       <AlertCircle size={ICON_SIZES.md} className="text-red-600 flex-shrink-0 mt-1" />
                       <div className="flex-1 min-w-0">
@@ -1138,7 +1136,7 @@ export default function CaptureZone() {
         )}
 
         {captureState === 'complete' && (
-          <div className={`${getGlassmorphism('strong')} rounded-[${RADIUS.modal}px] p-10 space-y-6`}>
+          <div className={`${getGlassClasses('strong')} ${getRadiusClass('modal')} p-10 space-y-6`}>
             {/* Success Header */}
             <div className="flex items-center gap-4">
               <CheckCircle2 size={ICON_SIZES.xl} className="text-green-500" />
@@ -1151,7 +1149,7 @@ export default function CaptureZone() {
             </div>
 
             {/* AI Learning Badge */}
-            <div className={`p-5 bg-gradient-to-br from-cyan-50 to-blue-50 rounded-[${RADIUS.card}px] border border-cyan-200`}>
+            <div className={`p-5 ${getInfoGradient('light').container} ${getRadiusClass('card')}`}>
               <div className="flex items-center gap-3">
                 <Brain size={ICON_SIZES.md} className="text-cyan-600" />
                 <div className="flex-1">

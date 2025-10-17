@@ -1218,13 +1218,8 @@ export class SessionEnrichmentService {
       }
 
       // Update video results - save chapters atomically with other enrichment data
-      if (result.video?.completed && result.video.chapters) {
-        // Ensure video object exists
-        if (!updatedSession.video) {
-          updatedSession.video = {};
-        }
-
-        // Update chapters
+      if (result.video?.completed && result.video.chapters && updatedSession.video) {
+        // Update chapters (video object must already exist from session recording)
         updatedSession.video.chapters = result.video.chapters;
 
         logger.info('✅ Video chapters updated', {

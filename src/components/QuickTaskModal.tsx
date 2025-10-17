@@ -5,7 +5,9 @@ import { useTasks } from '../context/TasksContext';
 import { X, Calendar, Flag, Tag, Folder } from 'lucide-react';
 import type { Task } from '../types';
 import { useTheme } from '../context/ThemeContext';
-import { getModalClasses } from '../design-system/theme';
+import { getModalClasses, getModalHeaderClasses, getInputContainerClasses, MODAL_SECTIONS } from '../design-system/theme';
+import { Button } from './Button';
+import { generateId } from '../utils/helpers';
 
 export function QuickTaskModal() {
   const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
@@ -85,12 +87,17 @@ export function QuickTaskModal() {
     if (!parsedTask.title?.trim()) return;
 
     addTask({
+      id: generateId(),
       title: parsedTask.title,
+      done: false,
       priority: parsedTask.priority || 'medium',
       dueDate: parsedTask.dueDate,
       tags: parsedTask.tags,
       topicId: parsedTask.topicId,
       description: parsedTask.description,
+      status: 'todo',
+      createdBy: 'manual',
+      createdAt: new Date().toISOString(),
     });
 
     addNotification({
@@ -123,17 +130,21 @@ export function QuickTaskModal() {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-6 border-b-2 border-white/30 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 backdrop-blur-sm rounded-t-2xl">
+        <div className={getModalHeaderClasses(colorScheme)}>
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
               ⚡ Quick Add Task
             </h2>
-            <button
+            <Button
               onClick={handleClose}
-              className="p-2 hover:bg-white/60 backdrop-blur-md rounded-xl transition-all duration-300 hover:scale-110 active:scale-95"
+              variant="ghost"
+              size="sm"
+              className="rounded-xl p-2"
+              aria-label="Close quick task modal"
+              title="Close (Esc)"
             >
               <X className="w-5 h-5" />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -159,7 +170,7 @@ export function QuickTaskModal() {
           </div>
 
           {/* Parsed Fields (editable) */}
-          <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 space-y-4 border border-white/60 shadow-sm">
+          <div className={`${getInputContainerClasses('highlighted')} space-y-4`}>
             <h3 className="font-semibold text-gray-900 flex items-center gap-2">
               <span>📋 Parsed Task</span>
             </h3>
@@ -262,24 +273,29 @@ export function QuickTaskModal() {
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t-2 border-white/30 bg-white/40 backdrop-blur-xl rounded-b-2xl flex items-center justify-between">
+        <div className={`${MODAL_SECTIONS.footer} flex items-center justify-between`}>
           <p className="text-sm text-gray-600">
             Press <kbd className="px-2 py-1 bg-white/60 backdrop-blur-md border border-white/60 rounded text-xs font-mono shadow-sm">⌘↵</kbd> to create
           </p>
           <div className="flex gap-3">
-            <button
+            <Button
               onClick={handleClose}
-              className="px-4 py-2 text-gray-700 bg-white/60 backdrop-blur-md border border-white/60 hover:bg-white/80 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm"
+              variant="secondary"
+              size="md"
+              className="rounded-xl"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handleCreate}
               disabled={!parsedTask.title?.trim()}
-              className="px-6 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl hover:shadow-xl hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg shadow-cyan-200/50"
+              variant="primary"
+              size="md"
+              colorScheme={colorScheme}
+              className="rounded-xl"
             >
               Create Task
-            </button>
+            </Button>
           </div>
         </div>
       </div>

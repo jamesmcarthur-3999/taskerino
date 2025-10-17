@@ -1,17 +1,6 @@
 import type { Session } from '../../types';
-
-interface SessionCardProps {
-  session: Session;
-  onClick: () => void;
-  bulkSelectMode: boolean;
-  isSelected: boolean;
-  onSelect: (id: string) => void;
-  isNewlyCompleted: boolean;
-}
-
-// SessionCard is currently defined inside SessionsZone.tsx
-// This import will need to be updated once SessionCard is extracted
-declare function SessionCard(props: SessionCardProps): JSX.Element;
+import { SessionCard } from './SessionCard';
+import { VirtualizedSessionList } from './VirtualizedSessionList';
 
 interface SessionListGroupProps {
   groupedSessions: {
@@ -22,107 +11,95 @@ interface SessionListGroupProps {
   };
   bulkSelectMode: boolean;
   selectedSessionIds: Set<string>;
+  selectedSessionId: string | null;
   onSessionClick: (sessionId: string) => void;
   onSessionSelect: (sessionId: string) => void;
   isSessionNewlyCompleted: (sessionId: string) => boolean;
 }
 
+// Threshold for enabling virtualization - only virtualize if group has more than this many items
+const VIRTUALIZATION_THRESHOLD = 20;
+
 export function SessionListGroup({
   groupedSessions,
   bulkSelectMode,
   selectedSessionIds,
+  selectedSessionId,
   onSessionClick,
   onSessionSelect,
   isSessionNewlyCompleted,
 }: SessionListGroupProps) {
+  // Helper function to render a session group with or without virtualization
+  const renderSessionGroup = (
+    title: string,
+    sessions: Session[],
+    shouldVirtualize: boolean
+  ) => {
+    if (sessions.length === 0) return null;
+
+    return (
+      <div>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
+          {title}
+        </h3>
+        {shouldVirtualize ? (
+          <VirtualizedSessionList
+            sessions={sessions}
+            bulkSelectMode={bulkSelectMode}
+            selectedSessionIds={selectedSessionIds}
+            selectedSessionId={selectedSessionId}
+            onSessionClick={onSessionClick}
+            onSessionSelect={onSessionSelect}
+            isSessionNewlyCompleted={isSessionNewlyCompleted}
+          />
+        ) : (
+          <div className="space-y-3">
+            {sessions.map(session => (
+              <SessionCard
+                key={session.id}
+                session={session}
+                onClick={() => onSessionClick(session.id)}
+                bulkSelectMode={bulkSelectMode}
+                isSelected={selectedSessionIds.has(session.id)}
+                onSelect={(id) => onSessionSelect(id)}
+                isNewlyCompleted={isSessionNewlyCompleted(session.id)}
+                isViewing={session.id === selectedSessionId}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       {/* Today */}
-      {groupedSessions.today.length > 0 && (
-        <div>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
-            Today
-          </h3>
-          <div className="space-y-3">
-            {groupedSessions.today.map(session => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                onClick={() => onSessionClick(session.id)}
-                bulkSelectMode={bulkSelectMode}
-                isSelected={selectedSessionIds.has(session.id)}
-                onSelect={(id) => onSessionSelect(id)}
-                isNewlyCompleted={isSessionNewlyCompleted(session.id)}
-              />
-            ))}
-          </div>
-        </div>
+      {renderSessionGroup(
+        'Today',
+        groupedSessions.today,
+        groupedSessions.today.length > VIRTUALIZATION_THRESHOLD
       )}
 
       {/* Yesterday */}
-      {groupedSessions.yesterday.length > 0 && (
-        <div>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
-            Yesterday
-          </h3>
-          <div className="space-y-3">
-            {groupedSessions.yesterday.map(session => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                onClick={() => onSessionClick(session.id)}
-                bulkSelectMode={bulkSelectMode}
-                isSelected={selectedSessionIds.has(session.id)}
-                onSelect={(id) => onSessionSelect(id)}
-                isNewlyCompleted={isSessionNewlyCompleted(session.id)}
-              />
-            ))}
-          </div>
-        </div>
+      {renderSessionGroup(
+        'Yesterday',
+        groupedSessions.yesterday,
+        groupedSessions.yesterday.length > VIRTUALIZATION_THRESHOLD
       )}
 
       {/* This Week */}
-      {groupedSessions.thisWeek.length > 0 && (
-        <div>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
-            This Week
-          </h3>
-          <div className="space-y-3">
-            {groupedSessions.thisWeek.map(session => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                onClick={() => onSessionClick(session.id)}
-                bulkSelectMode={bulkSelectMode}
-                isSelected={selectedSessionIds.has(session.id)}
-                onSelect={(id) => onSessionSelect(id)}
-                isNewlyCompleted={isSessionNewlyCompleted(session.id)}
-              />
-            ))}
-          </div>
-        </div>
+      {renderSessionGroup(
+        'This Week',
+        groupedSessions.thisWeek,
+        groupedSessions.thisWeek.length > VIRTUALIZATION_THRESHOLD
       )}
 
       {/* Earlier */}
-      {groupedSessions.earlier.length > 0 && (
-        <div>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-3">
-            Earlier
-          </h3>
-          <div className="space-y-3">
-            {groupedSessions.earlier.map(session => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                onClick={() => onSessionClick(session.id)}
-                bulkSelectMode={bulkSelectMode}
-                isSelected={selectedSessionIds.has(session.id)}
-                onSelect={(id) => onSessionSelect(id)}
-                isNewlyCompleted={isSessionNewlyCompleted(session.id)}
-              />
-            ))}
-          </div>
-        </div>
+      {renderSessionGroup(
+        'Earlier',
+        groupedSessions.earlier,
+        groupedSessions.earlier.length > VIRTUALIZATION_THRESHOLD
       )}
     </>
   );

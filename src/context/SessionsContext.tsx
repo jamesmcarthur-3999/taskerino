@@ -510,7 +510,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
             console.log('[AUTO-ENRICH] Session data:', {
               id: endedSession.id,
               audioSegments: endedSession.audioSegments?.length || 0,
-              videoAttachment: !!endedSession.video?.attachment,
+              videoAttachment: !!endedSession.video?.fullVideoAttachmentId,
               hasEnrichmentStatus: !!endedSession.enrichmentStatus,
             });
 
@@ -683,17 +683,19 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
               console.log(`[ENRICHMENT CRASH RECOVERY] Marking enrichment failed for "${session.name}" (${session.id})`);
 
               // Update enrichmentStatus to failed state
-              const updatedSession = {
+              const updatedSession: Session = {
                 ...session,
-                enrichmentStatus: {
+                enrichmentStatus: session.enrichmentStatus ? {
                   ...session.enrichmentStatus,
                   status: 'failed' as const,
+                  progress: session.enrichmentStatus.progress ?? 0,
+                  currentStage: session.enrichmentStatus.currentStage ?? 'audio',
                   errors: [
                     ...(session.enrichmentStatus.errors || []),
                     'Enrichment interrupted due to app crash or unexpected closure'
                   ],
                   completedAt: new Date().toISOString(),
-                },
+                } : undefined,
               };
 
               dispatch({

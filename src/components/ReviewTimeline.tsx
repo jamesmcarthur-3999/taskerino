@@ -22,7 +22,7 @@ import { AudioSegmentCard } from './AudioSegmentCard';
 import { ScreenshotCard } from './ScreenshotCard';
 import { UserNoteCard } from './UserNoteCard';
 import { useUI } from '../context/UIContext';
-import { RADIUS } from '../design-system/theme';
+import { RADIUS, getGlassClasses, getRadiusClass } from '../design-system/theme';
 
 // Timeline item type
 type TimelineItem =
@@ -329,23 +329,14 @@ export function ReviewTimeline({
 
   if (sortedTimelineItems.length === 0) {
     return (
-      <div className={`bg-white/40 backdrop-blur-xl rounded-[${RADIUS.field}px] border border-white/60 p-8 text-center`}>
+      <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} border border-white/60 p-8 text-center`}>
         <p className="text-gray-600">No timeline items yet</p>
       </div>
     );
   }
 
   return (
-    <div className={`
-  relative
-  bg-gradient-to-br from-white/60 via-white/50 to-white/40
-  backdrop-blur-xl
-  rounded-[${RADIUS.card}px]
-  shadow-[0_8px_32px_rgba(0,0,0,0.08),0_2px_8px_rgba(0,0,0,0.04)]
-  border border-white/60
-  ring-1 ring-black/5
-  overflow-visible
-`}>
+    <div className={`relative w-full h-full ${getGlassClasses('medium')} ${getRadiusClass('card')} overflow-hidden`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4 px-8 pt-8">
         <h4 className="text-sm font-bold text-gray-900">Timeline</h4>
@@ -366,14 +357,14 @@ export function ReviewTimeline({
 
       {/* Context Input */}
       {showContextInput && onAddContext && (
-        <div className={`bg-white/60 backdrop-blur-sm rounded-[${RADIUS.element}px] border border-white/60 p-4 mb-4 mx-8 animate-in fade-in slide-in-from-top-2 duration-200`}>
+        <div className={`${getGlassClasses('subtle')} ${getRadiusClass('element')} border border-white/60 p-4 mb-4 mx-8 animate-in fade-in slide-in-from-top-2 duration-200`}>
           <input
             ref={contextInputRef}
             type="text"
             value={quickNoteContent}
             onChange={(e) => setQuickNoteContent(e.target.value)}
             placeholder="Type your note and press Enter..."
-            className={`w-full px-3 py-2 bg-white/60 backdrop-blur-sm border border-white/80 rounded-[${RADIUS.element}px] focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none transition-all text-sm text-gray-900 placeholder:text-gray-500`}
+            className={`w-full px-3 py-2 ${getGlassClasses('subtle')} border border-white/80 ${getRadiusClass('element')} focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none transition-all text-sm text-gray-900 placeholder:text-gray-500`}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && quickNoteContent.trim()) {
                 handleAddQuickNote();
@@ -430,17 +421,17 @@ export function ReviewTimeline({
               <div key={chapter.id} className="mb-6">
                 {/* Chapter Header - Gradient Border */}
                 <div className={`
-                  bg-gradient-to-r rounded-[${RADIUS.field}px] p-[2px] transition-all mb-4
+                  bg-gradient-to-r ${getRadiusClass('field')} p-[2px] transition-all mb-4
                   ${isActive
                     ? 'from-violet-500 via-purple-500 to-pink-500 shadow-[0_8px_32px_rgba(139,92,246,0.3),0_0_24px_rgba(236,72,153,0.2)] scale-[1.02]'
                     : 'from-gray-200 to-gray-300 shadow-sm'
                   }
                 `}>
-                  <div className={`bg-white/90 backdrop-blur-xl rounded-[${RADIUS.field - 2}px]`}>
+                  <div className={`bg-white/90 backdrop-blur-xl ${getRadiusClass('field')}`}>
                     {/* Clickable Header */}
                     <button
                       onClick={() => handleChapterClick(chapter)}
-                      className={`w-full text-left p-4 hover:bg-white/50 transition-colors rounded-[${RADIUS.field - 2}px]`}
+                      className={`w-full text-left p-4 hover:bg-white/50 transition-colors ${getRadiusClass('field')}`}
                     >
                       <div className="flex items-start gap-3">
                         {/* Number Badge */}

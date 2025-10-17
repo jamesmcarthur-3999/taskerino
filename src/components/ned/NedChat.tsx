@@ -23,6 +23,7 @@ import { NedMessage } from './NedMessage';
 import { PermissionDialog } from './PermissionDialog';
 import { TOOL_DESCRIPTIONS } from '../../services/nedTools';
 import { FeatureTooltip } from '../FeatureTooltip';
+import { CHAT_STYLES } from '../../design-system/theme';
 import type { Task, Note } from '../../types';
 
 const CONVERSATION_ID = 'main'; // For now, single conversation
@@ -615,7 +616,7 @@ export const NedChat: React.FC = () => {
   return (
     <div className="h-full flex flex-col px-6 pb-6 pt-4">
       {/* Messages Area - Scrollable, glassy container */}
-      <div className="flex-1 mb-4 bg-white/30 backdrop-blur-xl border-2 border-white/60 shadow-xl rounded-[32px] overflow-hidden flex flex-col relative">
+      <div className={`${CHAT_STYLES.container} mb-4 overflow-hidden flex flex-col relative`}>
         {/* Ned Welcome Tooltip */}
         <FeatureTooltip
           show={showNedWelcome}
@@ -655,7 +656,7 @@ export const NedChat: React.FC = () => {
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6 space-y-6 scrollbar-hide">
           {/* API Key Warning */}
           {!hasApiKey && (
-            <div className="flex items-center gap-3 px-5 py-3.5 bg-gradient-to-r from-yellow-50/80 to-amber-50/80 backdrop-blur-xl border-2 border-yellow-200/60 rounded-[20px] shadow-xl shadow-yellow-100/30 ring-1 ring-yellow-100/50">
+            <div className={CHAT_STYLES.banner.warning}>
               <div className="flex-shrink-0 w-5 h-5 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg flex items-center justify-center shadow-md">
                 <AlertCircle className="w-3 h-3 text-white" />
               </div>
@@ -704,7 +705,7 @@ export const NedChat: React.FC = () => {
           ))}
 
           {isProcessing && (
-            <div className="flex items-center gap-4 px-5 py-3.5 bg-gradient-to-r from-cyan-50/80 via-blue-50/60 to-purple-50/60 backdrop-blur-xl border-2 border-white/70 rounded-[20px] shadow-xl shadow-cyan-100/20 ring-1 ring-black/5">
+            <div className={CHAT_STYLES.banner.info}>
               <motion.div
                 className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 via-teal-400 to-teal-500 flex items-center justify-center shadow-xl ring-2 ring-white/60"
                 animate={{
@@ -756,7 +757,7 @@ export const NedChat: React.FC = () => {
 
       {/* Floating Input Bar - Glassy Pill */}
       <div className="flex-shrink-0">
-        <div className="bg-white/50 backdrop-blur-xl border-2 border-white/60 shadow-2xl shadow-cyan-200/30 px-4 py-3 rounded-full">
+        <div className={CHAT_STYLES.inputBar}>
           <div className="flex items-center gap-3">
             {messages.length > 0 && !isProcessing && (
               <button

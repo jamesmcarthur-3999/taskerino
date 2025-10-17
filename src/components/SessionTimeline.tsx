@@ -8,7 +8,7 @@ import { useUI } from '../context/UIContext';
 import { useTasks } from '../context/TasksContext';
 import { useNotes } from '../context/NotesContext';
 import { generateId } from '../utils/helpers';
-import { RADIUS } from '../design-system/theme';
+import { RADIUS, getGlassClasses, getRadiusClass, TRANSITIONS, SCALE } from '../design-system/theme';
 
 interface SessionTimelineProps {
   session: Session;
@@ -89,7 +89,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
 
   if (timelineItems.length === 0) {
     return (
-      <div className={`bg-white/40 backdrop-blur-xl rounded-[${RADIUS.card}px] border-2 border-white/50 p-12 text-center`}>
+      <div className={`${getGlassClasses('medium')} ${getRadiusClass('card')} p-12 text-center`}>
         <ImageIcon size={64} className="mx-auto text-gray-400 mb-4" />
         <h3 className="text-xl font-bold text-gray-900 mb-2">No Timeline Items Yet</h3>
         <p className="text-gray-600">
@@ -294,10 +294,10 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
         {onAddContext && session.status === 'active' && (
           <button
             onClick={() => setShowContextInput(!showContextInput)}
-            className={`px-3 py-1.5 rounded-[12px] font-semibold text-xs transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 ${getRadiusClass('element')} font-semibold text-xs ${TRANSITIONS.standard} flex items-center gap-1.5 ${
               showContextInput
                 ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md'
-                : 'bg-white/40 backdrop-blur-sm text-gray-700 hover:bg-white/60 border border-white/60 hover:scale-105'
+                : `${getGlassClasses('medium')} text-gray-700 hover:bg-white/60 ${SCALE.buttonHover}`
             }`}
           >
             <Plus size={14} />
@@ -308,15 +308,15 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
 
       {/* Inline Context Capture - Redesigned */}
       {showContextInput && onAddContext && (
-        <div className={`bg-white/40 backdrop-blur-xl rounded-[${RADIUS.field}px] border-2 border-white/60 p-4 animate-in slide-in-from-top-2 fade-in duration-200 shadow-lg`}>
+        <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 animate-in slide-in-from-top-2 fade-in duration-200 shadow-lg`}>
           {/* Mode Toggle */}
           <div className="flex items-center gap-2 mb-3">
             <button
               onClick={() => setContextMode('quick')}
-              className={`flex-1 px-3 py-2 rounded-[12px] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+              className={`flex-1 px-3 py-2 ${getRadiusClass('element')} text-xs font-semibold ${TRANSITIONS.standard} flex items-center justify-center gap-1.5 ${
                 contextMode === 'quick'
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md'
-                  : 'bg-white/60 text-gray-700 hover:bg-white/80 border border-white/80'
+                  : `${getGlassClasses('medium')} text-gray-700 hover:bg-white/80`
               }`}
             >
               <Edit3 size={12} />
@@ -324,10 +324,10 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
             </button>
             <button
               onClick={() => setContextMode('link')}
-              className={`flex-1 px-3 py-2 rounded-[12px] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+              className={`flex-1 px-3 py-2 ${getRadiusClass('element')} text-xs font-semibold ${TRANSITIONS.standard} flex items-center justify-center gap-1.5 ${
                 contextMode === 'link'
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md'
-                  : 'bg-white/60 text-gray-700 hover:bg-white/80 border border-white/80'
+                  : `${getGlassClasses('medium')} text-gray-700 hover:bg-white/80`
               }`}
             >
               <LinkIcon size={12} />
@@ -344,7 +344,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
                 value={quickNoteContent}
                 onChange={(e) => setQuickNoteContent(e.target.value)}
                 placeholder="Type your note and press Enter..."
-                className="w-full px-3 py-2 bg-white/60 backdrop-blur-sm border border-white/80 rounded-[12px] focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none transition-all text-sm text-gray-900 placeholder:text-gray-500"
+                className={`w-full px-3 py-2 bg-white/60 backdrop-blur-sm border border-white/80 ${getRadiusClass('element')} focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none transition-all text-sm text-gray-900 placeholder:text-gray-500`}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && quickNoteContent.trim()) {
                     handleAddQuickNote();
@@ -373,20 +373,20 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
               <div className="flex gap-2">
                 <button
                   onClick={() => setSelectedLinkType('note')}
-                  className={`flex-1 px-3 py-1.5 rounded-[10px] text-xs font-semibold transition-all ${
+                  className={`flex-1 px-3 py-1.5 ${getRadiusClass('element')} text-xs font-semibold ${TRANSITIONS.standard} ${
                     selectedLinkType === 'note'
-                      ? 'bg-white/80 text-gray-900 border border-cyan-300 shadow-sm'
-                      : 'bg-white/40 text-gray-600 border border-white/60 hover:bg-white/60'
+                      ? 'bg-white/80 text-gray-900 border-2 border-cyan-300 shadow-sm'
+                      : `${getGlassClasses('subtle')} text-gray-600 hover:bg-white/60`
                   }`}
                 >
                   📝 Notes
                 </button>
                 <button
                   onClick={() => setSelectedLinkType('task')}
-                  className={`flex-1 px-3 py-1.5 rounded-[10px] text-xs font-semibold transition-all ${
+                  className={`flex-1 px-3 py-1.5 ${getRadiusClass('element')} text-xs font-semibold ${TRANSITIONS.standard} ${
                     selectedLinkType === 'task'
-                      ? 'bg-white/80 text-gray-900 border border-cyan-300 shadow-sm'
-                      : 'bg-white/40 text-gray-600 border border-white/60 hover:bg-white/60'
+                      ? 'bg-white/80 text-gray-900 border-2 border-cyan-300 shadow-sm'
+                      : `${getGlassClasses('subtle')} text-gray-600 hover:bg-white/60`
                   }`}
                 >
                   ✓ Tasks
@@ -399,7 +399,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={`Search ${selectedLinkType === 'note' ? 'notes' : 'tasks'}...`}
-                className="w-full px-3 py-2 bg-white/60 backdrop-blur-sm border border-white/80 rounded-[12px] focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none transition-all text-sm text-gray-900 placeholder:text-gray-500"
+                className={`w-full px-3 py-2 ${getGlassClasses('medium')} border-2 border-white/80 ${getRadiusClass('element')} focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none ${TRANSITIONS.fast} text-sm text-gray-900 placeholder:text-gray-500`}
               />
 
               {/* Results */}
@@ -410,7 +410,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
                       <button
                         key={note.id}
                         onClick={() => handleLinkItem(note.id, 'note')}
-                        className="w-full text-left px-3 py-2 bg-white/60 hover:bg-white/80 backdrop-blur-sm border border-white/60 hover:border-cyan-300 rounded-[10px] transition-all group"
+                        className={`w-full text-left px-3 py-2 ${getGlassClasses('medium')} hover:bg-white/80 border-2 border-white/60 hover:border-cyan-300 ${getRadiusClass('element')} ${TRANSITIONS.standard} group`}
                       >
                         <div className="text-xs font-semibold text-gray-900 mb-0.5 truncate">
                           {note.summary || note.content.substring(0, 50)}
@@ -429,7 +429,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
                       <button
                         key={task.id}
                         onClick={() => handleLinkItem(task.id, 'task')}
-                        className="w-full text-left px-3 py-2 bg-white/60 hover:bg-white/80 backdrop-blur-sm border border-white/60 hover:border-cyan-300 rounded-[10px] transition-all group"
+                        className={`w-full text-left px-3 py-2 ${getGlassClasses('medium')} hover:bg-white/80 border-2 border-white/60 hover:border-cyan-300 ${getRadiusClass('element')} ${TRANSITIONS.standard} group`}
                       >
                         <div className="flex items-center gap-2">
                           <CheckSquare size={12} className={task.done ? 'text-green-600' : 'text-gray-400'} />
@@ -490,7 +490,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
                 </div>
 
                 {/* Context Card */}
-                <div className={`flex-1 bg-white/60 backdrop-blur-sm rounded-[${RADIUS.field}px] border-l-4 border-l-amber-400 border-t border-r border-b border-gray-200/50 p-4 hover:shadow-md transition-all duration-200`}>
+                <div className={`flex-1 ${getGlassClasses('medium')} ${getRadiusClass('field')} border-l-4 border-l-amber-400 border-t-2 border-r-2 border-b-2 border-t-gray-200/50 border-r-gray-200/50 border-b-gray-200/50 p-4 hover:shadow-md ${TRANSITIONS.standard}`}>
                   <div className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5">
                     <Edit3 size={12} />
                     User Context

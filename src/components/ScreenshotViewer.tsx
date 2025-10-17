@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2, Clock, MessageSquare, Flag } from 'lucide-react';
 import type { Session, SessionScreenshot } from '../types';
 import { attachmentStorage } from '../services/attachmentStorage';
+import { getGlassClasses, RADIUS, SCALE, TRANSITIONS, MODAL_OVERLAY } from '../design-system/theme';
 
 interface ScreenshotViewerProps {
   screenshot: SessionScreenshot;
@@ -157,7 +158,7 @@ export function ScreenshotViewer({
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm overflow-hidden">
+    <div className={`fixed inset-0 z-50 overflow-hidden ${MODAL_OVERLAY}`}>
       <div className="absolute inset-0 flex items-center justify-center p-6 overflow-hidden">
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent p-6">
@@ -182,7 +183,7 @@ export function ScreenshotViewer({
 
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            className={`p-2 hover:bg-white/10 rounded-lg ${TRANSITIONS.fast}`}
             title="Close (ESC)"
           >
             <X size={24} className="text-white" />
@@ -194,7 +195,7 @@ export function ScreenshotViewer({
       {hasPrev && onPrev && (
         <button
           onClick={onPrev}
-          className="absolute left-6 top-1/2 -translate-y-1/2 z-10 p-4 bg-black/60 hover:bg-black/80 text-white rounded-full transition-all hover:scale-110 active:scale-95"
+          className={`absolute left-6 top-1/2 -translate-y-1/2 z-10 p-4 ${getGlassClasses('strong')} bg-black/60 hover:bg-black/80 text-white rounded-full ${TRANSITIONS.standard} ${SCALE.iconButtonHover} ${SCALE.iconButtonActive}`}
           title="Previous (←)"
         >
           <ChevronLeft size={32} />
@@ -204,7 +205,7 @@ export function ScreenshotViewer({
       {hasNext && onNext && (
         <button
           onClick={onNext}
-          className="absolute right-6 top-1/2 -translate-y-1/2 z-10 p-4 bg-black/60 hover:bg-black/80 text-white rounded-full transition-all hover:scale-110 active:scale-95"
+          className={`absolute right-6 top-1/2 -translate-y-1/2 z-10 p-4 ${getGlassClasses('strong')} bg-black/60 hover:bg-black/80 text-white rounded-full ${TRANSITIONS.standard} ${SCALE.iconButtonHover} ${SCALE.iconButtonActive}`}
           title="Next (→)"
         >
           <ChevronRight size={32} />
@@ -259,7 +260,7 @@ export function ScreenshotViewer({
         {/* Right Side - AI Analysis & Info (scrollable) */}
         <div className="w-[400px] flex-shrink-0 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 120px)' }}>
           {screenshot.aiAnalysis && (
-            <div className="bg-white/10 backdrop-blur-md rounded-[20px] p-5 text-white mb-4">
+            <div className={`${getGlassClasses('medium')} rounded-[20px] p-5 text-white mb-4`}>
               <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
                 <span className="text-cyan-400">✨</span> AI Analysis
               </h3>
@@ -320,7 +321,7 @@ export function ScreenshotViewer({
 
           {/* User Comment */}
           {screenshot.userComment && (
-            <div className="bg-blue-500/20 backdrop-blur-md rounded-[20px] p-4 border border-blue-400/30 mb-4">
+            <div className={`${getGlassClasses('medium')} rounded-[20px] p-4 border-2 border-blue-400/40 mb-4`}>
               <div className="flex items-center gap-2 text-blue-300 text-xs font-medium mb-2">
                 <MessageSquare size={12} />
                 Your Note
@@ -335,7 +336,7 @@ export function ScreenshotViewer({
               {!showCommentInput ? (
                 <button
                   onClick={() => setShowCommentInput(true)}
-                  className="w-full px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-[20px] text-sm text-blue-400 hover:text-blue-300 font-medium transition-all border border-white/10"
+                  className={`w-full px-4 py-2 ${getGlassClasses('medium')} rounded-[20px] text-sm text-blue-400 hover:text-blue-300 font-medium ${TRANSITIONS.standard} border-2 border-white/20`}
                 >
                   + Add comment
                 </button>
@@ -353,13 +354,13 @@ export function ScreenshotViewer({
                       }
                     }}
                     placeholder="Add your comment..."
-                    className="w-full px-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg text-sm text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className={`w-full px-4 py-2 ${getGlassClasses('medium')} border-2 border-white/30 rounded-lg text-sm text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none`}
                     autoFocus
                   />
                   <div className="flex gap-2">
                     <button
                       onClick={handleAddComment}
-                      className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg font-medium transition-colors"
+                      className={`flex-1 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xs rounded-lg font-medium ${TRANSITIONS.fast}`}
                     >
                       Save
                     </button>
@@ -368,7 +369,7 @@ export function ScreenshotViewer({
                         setShowCommentInput(false);
                         setCommentInput('');
                       }}
-                      className="flex-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs rounded-lg transition-colors"
+                      className={`flex-1 px-3 py-1.5 ${getGlassClasses('medium')} text-white text-xs rounded-lg ${TRANSITIONS.fast}`}
                     >
                       Cancel
                     </button>
@@ -382,7 +383,7 @@ export function ScreenshotViewer({
           {onToggleFlag && (
             <button
               onClick={() => onToggleFlag(screenshot.id)}
-              className="w-full px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-[20px] text-sm text-gray-300 hover:text-red-400 flex items-center justify-center gap-2 transition-all border border-white/10"
+              className={`w-full px-4 py-2 ${getGlassClasses('medium')} rounded-[20px] text-sm text-gray-300 hover:text-red-400 flex items-center justify-center gap-2 ${TRANSITIONS.standard} border-2 border-white/20`}
             >
               <Flag size={14} className={screenshot.flagged ? 'fill-red-400 text-red-400' : ''} />
               {screenshot.flagged ? 'Unflag' : 'Flag as important'}
@@ -392,11 +393,11 @@ export function ScreenshotViewer({
       </div>
 
       {/* Zoom Controls */}
-      <div className="absolute bottom-6 left-6 z-10 flex gap-2 bg-black/60 backdrop-blur-md rounded-[20px] p-2">
+      <div className={`absolute bottom-6 left-6 z-10 flex gap-2 ${getGlassClasses('strong')} bg-black/60 rounded-[20px] p-2`}>
         <button
           onClick={handleZoomOut}
           disabled={zoom <= 0.5}
-          className="p-2 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg transition-all hover:scale-110 active:scale-95"
+          className={`p-2 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg ${TRANSITIONS.standard} ${SCALE.iconButtonHover} ${SCALE.iconButtonActive}`}
           title="Zoom out (-)"
         >
           <ZoomOut size={18} />
@@ -407,7 +408,7 @@ export function ScreenshotViewer({
         <button
           onClick={handleZoomIn}
           disabled={zoom >= 3}
-          className="p-2 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg transition-all hover:scale-110 active:scale-95"
+          className={`p-2 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg ${TRANSITIONS.standard} ${SCALE.iconButtonHover} ${SCALE.iconButtonActive}`}
           title="Zoom in (+)"
         >
           <ZoomIn size={18} />
@@ -415,7 +416,7 @@ export function ScreenshotViewer({
         <div className="w-px bg-white/20 mx-1" />
         <button
           onClick={handleResetZoom}
-          className="p-2 hover:bg-white/10 text-white rounded-lg transition-all hover:scale-110 active:scale-95"
+          className={`p-2 hover:bg-white/10 text-white rounded-lg ${TRANSITIONS.standard} ${SCALE.iconButtonHover} ${SCALE.iconButtonActive}`}
           title="Reset zoom (0)"
         >
           <Maximize2 size={18} />

@@ -5,6 +5,7 @@ import { useUI } from '../context/UIContext';
 import { X, FileText, Sparkles } from 'lucide-react';
 import type { Note } from '../types';
 import { generateId } from '../utils/helpers';
+import { getGlassClasses, getRadiusClass, MODAL_SECTIONS } from '../design-system/theme';
 
 interface QuickNoteFromSessionProps {
   isOpen: boolean;
@@ -24,7 +25,7 @@ export function QuickNoteFromSession({
   screenshotId,
 }: QuickNoteFromSessionProps) {
   const { addNote } = useNotes();
-  const { addExtractedNoteToSession } = useSessions();
+  const { addExtractedNote } = useSessions();
   const { addNotification } = useUI();
   const [content, setContent] = useState(suggestedContent);
   const [summary, setSummary] = useState('');
@@ -63,7 +64,7 @@ export function QuickNoteFromSession({
     addNote(newNote);
 
     // Add note ID to session's extractedNoteIds
-    addExtractedNoteToSession(sessionId, newNote.id);
+    addExtractedNote(sessionId, newNote.id);
 
     addNotification({
       type: 'success',
@@ -91,15 +92,15 @@ export function QuickNoteFromSession({
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      className={`fixed inset-0 z-[60] bg-black/50 ${getGlassClasses('subtle').split(' ').find(c => c.startsWith('backdrop-blur'))} flex items-center justify-center p-4`}
       onClick={handleClose}
     >
       <div
-        className="bg-white/40 backdrop-blur-2xl border-2 border-white/50 rounded-[32px] shadow-2xl max-w-2xl w-full"
+        className={`${getGlassClasses('strong')} ${getRadiusClass('modal')} max-w-2xl w-full`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-6 border-b-2 border-white/30 bg-gradient-to-r from-violet-500/10 to-purple-500/10 backdrop-blur-sm rounded-t-2xl">
+        <div className={`${MODAL_SECTIONS.header} bg-gradient-to-r from-violet-500/10 to-purple-500/10`}>
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
@@ -110,7 +111,7 @@ export function QuickNoteFromSession({
             </div>
             <button
               onClick={handleClose}
-              className="p-2 hover:bg-white/60 backdrop-blur-md rounded-xl transition-all duration-300 hover:scale-110 active:scale-95"
+              className={`p-2 hover:bg-white/60 ${getGlassClasses('medium').split(' ').find(c => c.startsWith('backdrop-blur'))} rounded-xl transition-all duration-300 hover:scale-110 active:scale-95`}
             >
               <X className="w-5 h-5" />
             </button>
@@ -130,7 +131,7 @@ export function QuickNoteFromSession({
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="Brief summary of this note..."
-              className="w-full px-4 py-2 bg-white/30 backdrop-blur-xl border border-white/60 rounded-[16px] focus:ring-2 focus:ring-violet-500 focus:border-violet-400 transition-all shadow-sm"
+              className={`w-full px-4 py-2 ${getGlassClasses('medium')} ${getRadiusClass('element')} focus:ring-2 focus:ring-violet-500 focus:border-violet-400 transition-all`}
             />
           </div>
 
@@ -144,13 +145,13 @@ export function QuickNoteFromSession({
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={10}
-              className="w-full px-4 py-3 bg-white/30 backdrop-blur-xl border border-white/60 rounded-[16px] focus:ring-2 focus:ring-violet-500 focus:border-violet-400 transition-all resize-none font-mono text-sm shadow-sm"
+              className={`w-full px-4 py-3 ${getGlassClasses('medium')} ${getRadiusClass('element')} focus:ring-2 focus:ring-violet-500 focus:border-violet-400 transition-all resize-none font-mono text-sm`}
               autoFocus
             />
           </div>
 
           {/* Info */}
-          <div className="bg-violet-50/50 backdrop-blur-sm border border-violet-200/50 rounded-[16px] p-3">
+          <div className={`bg-violet-50/50 ${getGlassClasses('subtle').split(' ').find(c => c.startsWith('backdrop-blur'))} border border-violet-200/50 ${getRadiusClass('element')} p-3`}>
             <p className="text-xs text-violet-700">
               <span className="font-semibold">💡 Context preserved:</span> This note will link back to the session and screenshot where it was captured.
             </p>
@@ -158,14 +159,14 @@ export function QuickNoteFromSession({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t-2 border-white/30 bg-white/40 backdrop-blur-xl rounded-b-2xl flex items-center justify-between">
+        <div className={`${MODAL_SECTIONS.footer} flex items-center justify-between`}>
           <p className="text-sm text-gray-600">
-            Press <kbd className="px-2 py-1 bg-white/60 backdrop-blur-md border border-white/60 rounded text-xs font-mono shadow-sm">⌘↵</kbd> to save
+            Press <kbd className={`px-2 py-1 ${getGlassClasses('medium')} rounded text-xs font-mono`}>⌘↵</kbd> to save
           </p>
           <div className="flex gap-3">
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-gray-700 bg-white/60 backdrop-blur-md border border-white/60 hover:bg-white/80 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm"
+              className={`px-4 py-2 text-gray-700 ${getGlassClasses('medium')} hover:bg-white/80 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95`}
             >
               Cancel
             </button>

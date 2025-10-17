@@ -701,7 +701,7 @@ export interface Session {
     progress: number;
 
     /** Current stage being processed */
-    currentStage: 'audio' | 'video' | 'summary' | 'complete';
+    currentStage: 'validating' | 'estimating' | 'locking' | 'checkpointing' | 'audio' | 'video' | 'summary' | 'complete' | 'error';
 
     /**
      * Audio Review Stage - GPT-4o audio analysis for emotional journey and key moments

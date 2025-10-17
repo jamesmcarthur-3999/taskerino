@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { ThemeProvider } from './context/ThemeContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { AnimationProvider } from '@/lib/animations'
 
 // Performance measurement: Track time to first render
 const startTime = performance.now();
@@ -11,11 +12,13 @@ const startTime = performance.now();
 // Render app immediately - don't block on video repair
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </ThemeProvider>
+    <AnimationProvider>
+      <ThemeProvider>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </ThemeProvider>
+    </AnimationProvider>
   </StrictMode>,
 )
 

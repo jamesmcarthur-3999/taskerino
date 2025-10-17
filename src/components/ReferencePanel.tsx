@@ -4,6 +4,7 @@ import { useNotes } from '../context/NotesContext';
 import { useEntities } from '../context/EntitiesContext';
 import { X, Copy, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import { truncateText, formatRelativeTime } from '../utils/helpers';
+import { getGlassClasses, getRadiusClass } from '../design-system/theme';
 
 export function ReferencePanel() {
   const { state: uiState, dispatch: uiDispatch } = useUI();
@@ -109,7 +110,7 @@ export function ReferencePanel() {
   return (
     <>
       <div
-        className="fixed top-16 bottom-0 right-0 bg-white/30 backdrop-blur-2xl border-l-2 border-white/50 shadow-2xl flex flex-col z-30 transition-transform"
+        className={`fixed top-16 bottom-0 right-0 ${getGlassClasses('medium')} border-l-2 border-white/50 shadow-2xl flex flex-col z-30 transition-transform`}
         style={{ width: `${width}%` }}
       >
         {/* Resize Handle */}
@@ -121,7 +122,7 @@ export function ReferencePanel() {
         </div>
 
         {/* Header */}
-        <div className="p-4 border-b border-white/50 bg-white/20 backdrop-blur-sm">
+        <div className={`p-4 border-b border-white/50 ${getGlassClasses('subtle')}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-gray-900">📌 References</h3>
@@ -131,7 +132,7 @@ export function ReferencePanel() {
             </div>
             <button
               onClick={() => uiDispatch({ type: 'TOGGLE_REFERENCE_PANEL' })}
-              className="p-1 hover:bg-white rounded-lg transition-colors"
+              className={`p-1 hover:bg-white ${getRadiusClass('element')} transition-colors`}
               title="Close reference panel (⌘⇧R)"
             >
               <X className="w-5 h-5 text-gray-600" />
@@ -151,7 +152,7 @@ export function ReferencePanel() {
             return (
               <div
                 key={noteId}
-                className="bg-white/20 backdrop-blur-sm rounded-[24px] border-2 border-white/50 overflow-hidden hover:border-cyan-300 transition-all"
+                className={`${getGlassClasses('subtle')} ${getRadiusClass('element')} border-2 border-white/50 overflow-hidden hover:border-cyan-300 transition-all`}
               >
                 {/* Note Header */}
                 <div className="p-3 border-b border-gray-200 bg-white/50">
@@ -220,14 +221,14 @@ export function ReferencePanel() {
                     <div className="flex gap-2 pt-2 border-t border-white/50">
                       <button
                         onClick={() => handleCopyContent(note.content)}
-                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/30 hover:bg-white/50 backdrop-blur-sm rounded-[16px] text-sm font-medium transition-colors"
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 ${getGlassClasses('subtle')} ${getRadiusClass('element')} text-sm font-medium transition-colors`}
                       >
                         <Copy className="w-4 h-4" />
                         Copy
                       </button>
                       <button
                         onClick={() => handleOpenInSidebar(noteId)}
-                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white/30 hover:bg-white/50 backdrop-blur-sm text-cyan-700 rounded-[16px] text-sm font-medium transition-colors"
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 ${getGlassClasses('subtle')} text-cyan-700 ${getRadiusClass('element')} text-sm font-medium transition-colors`}
                       >
                         <ExternalLink className="w-4 h-4" />
                         Open

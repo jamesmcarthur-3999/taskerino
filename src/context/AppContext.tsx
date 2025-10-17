@@ -1848,6 +1848,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (shouldMigrate) {
             console.log('🔄 Migration needed from localStorage');
             setShowMigrationDialog(true);
+            setHasLoaded(true); // FIX: Allow app to load even with migration dialog
             return;
           }
 
@@ -1862,8 +1863,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error('❌ Failed to initialize app:', error);
-        // Last resort: start fresh
-        setHasLoaded(true);
+      } finally {
+        setHasLoaded(true); // ALWAYS set loaded
       }
     }
 

@@ -1,4 +1,14 @@
 import { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
+import { useTheme } from '../context/ThemeContext';
+import {
+  RADIUS,
+  TRANSITIONS,
+  SCALE,
+  getGlassClasses,
+  EASING,
+  getGradientClasses,
+  getRadiusClass
+} from '../design-system/theme';
 
 type CardVariant = 'default' | 'elevated' | 'interactive' | 'flat';
 
@@ -23,44 +33,25 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     },
     ref
   ) => {
+    const { colorScheme } = useTheme();
+
     // Base styles
     const baseStyles = `
       relative
-      rounded-2xl
-      transition-all duration-300
+      ${getRadiusClass('card')}
+      ${TRANSITIONS.standard}
     `;
 
     // Variant styles
     const variantStyles = {
-      default: `
-        bg-white/50 backdrop-blur-xl
-        border border-white/60
-        shadow-sm
-      `,
-      elevated: `
-        bg-white/60 backdrop-blur-2xl
-        border-2 border-white/50
-        shadow-xl
-      `,
-      interactive: `
-        bg-white/50 backdrop-blur-xl
-        border border-white/60
-        shadow-sm
-        cursor-pointer
-      `,
-      flat: `
-        bg-white/40 backdrop-blur-lg
-        border border-white/50
-      `,
+      default: getGlassClasses('medium'),
+      elevated: getGlassClasses('strong'),
+      interactive: `${getGlassClasses('medium')} cursor-pointer`,
+      flat: getGlassClasses('subtle'),
     };
 
     // Hover effects
-    const hoverStyles = hover
-      ? `
-        hover:shadow-xl hover:shadow-cyan-100/30
-        hover:-translate-y-1 hover:scale-[1.02]
-      `
-      : '';
+    const hoverStyles = hover ? `hover:shadow-xl hover:shadow-cyan-100/30 hover:-translate-y-1 ${SCALE.cardHover}` : '';
 
     // Active state
     const activeStyles = active
@@ -84,13 +75,13 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
         ref={ref}
         className={combinedStyles}
         style={{
-          transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+          transitionTimingFunction: EASING.elastic,
         }}
         {...props}
       >
         {/* Gradient hover overlay */}
         {gradient && (
-          <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 bg-gradient-to-br from-cyan-500/5 via-transparent to-blue-500/5 transition-opacity duration-300" />
+          <div className={`absolute inset-0 ${getRadiusClass('card')} opacity-0 group-hover:opacity-100 bg-gradient-to-br ${getGradientClasses(colorScheme, 'primary').replace('bg-gradient-to-r', '')} opacity-[0.05] transition-opacity duration-300`} />
         )}
 
         {/* Content with relative positioning for z-index */}

@@ -11,7 +11,7 @@
 import React, { useState } from 'react';
 import { BookOpen, Clock, Sparkles } from 'lucide-react';
 import type { VideoChapter, Session } from '../types';
-import { ICON_SIZES } from '../design-system/theme';
+import { ICON_SIZES, getGlassClasses, RADIUS, TRANSITIONS, SCALE } from '../design-system/theme';
 import { videoChapteringService } from '../services/videoChapteringService';
 
 interface ChaptersPanelProps {
@@ -197,10 +197,10 @@ export function ChaptersPanel({
             <div
               key={chapter.id}
               onClick={() => onSeekToTime(chapter.startTime)}
-              className={`p-4 rounded-[16px] border-2 cursor-pointer transition-all ${
+              className={`p-4 rounded-[16px] border-2 cursor-pointer ${TRANSITIONS.standard} ${
                 isCurrentChapter
                   ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border-cyan-400 shadow-lg scale-[1.02]'
-                  : 'bg-white border-white/60 hover:bg-white/60 hover:border-white/80 hover:scale-[1.01]'
+                  : `${getGlassClasses('subtle')} hover:bg-white/60 hover:border-white/80 ${SCALE.subtleHover}`
               }`}
             >
               {/* Chapter Number & Time */}

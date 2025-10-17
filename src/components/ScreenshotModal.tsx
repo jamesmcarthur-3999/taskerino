@@ -8,6 +8,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle2, AlertCircle, Lightbulb, TrendingUp } from 'lucide-react';
+import { MODAL_OVERLAY, getGlassClasses, getRadiusClass } from '../design-system/theme';
 import type { SessionScreenshot } from '../types';
 
 interface ScreenshotModalProps {
@@ -27,13 +28,13 @@ export function ScreenshotModal({ screenshot, imageUrl, onClose }: ScreenshotMod
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-200"
+      className={`${MODAL_OVERLAY} z-[9999] flex items-center justify-center bg-black/90 animate-in fade-in duration-200`}
       onClick={onClose}
     >
       {/* Close button */}
       <button
         onClick={onClose}
-        className="absolute top-6 right-6 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-10"
+        className={`absolute top-6 right-6 w-12 h-12 ${getRadiusClass('pill')} ${getGlassClasses('subtle')} flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-10`}
       >
         <X size={24} className="text-white" />
       </button>
@@ -48,12 +49,12 @@ export function ScreenshotModal({ screenshot, imageUrl, onClose }: ScreenshotMod
           <img
             src={imageUrl}
             alt="Screenshot"
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+            className={`max-w-full max-h-full object-contain ${getRadiusClass('card')} shadow-2xl`}
           />
         </div>
 
         {/* Info panel - bottom section - scrollable */}
-        <div className="bg-white/10 backdrop-blur-xl rounded-lg border border-white/20 p-6 overflow-y-auto max-h-[40vh] flex-shrink-0">
+        <div className={`${getGlassClasses('subtle')} ${getRadiusClass('card')} p-6 overflow-y-auto max-h-[40vh] flex-shrink-0`}>
           <div className="flex flex-wrap gap-6">
             {/* Left section: Basic info */}
             <div className="flex-1 min-w-[300px]">

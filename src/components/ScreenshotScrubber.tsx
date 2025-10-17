@@ -12,6 +12,7 @@ import type { Session, SessionScreenshot } from '../types';
 import { attachmentStorage } from '../services/attachmentStorage';
 import { ScreenshotViewer } from './ScreenshotViewer';
 import { useLazyImage } from '../hooks/useLazyImage';
+import { getGlassClasses, RADIUS, TRANSITIONS } from '../design-system/theme';
 
 interface ScreenshotScrubberProps {
   session: Session;
@@ -175,7 +176,7 @@ export function ScreenshotScrubber({
   }
 
   return (
-    <div className="bg-white/60 backdrop-blur-sm rounded-[20px] border-2 border-white/60 overflow-hidden">
+    <div className={`${getGlassClasses('medium')} rounded-[20px] overflow-hidden`}>
       {/* Main Screenshot Display */}
       <div className="relative bg-gray-900 aspect-video flex items-center justify-center">
         {currentScreenshotImage ? (
@@ -192,7 +193,7 @@ export function ScreenshotScrubber({
         {currentScreenshotIndex > 0 && (
           <button
             onClick={handlePrevious}
-            className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-sm flex items-center justify-center text-white transition-all"
+            className={`absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full ${getGlassClasses('strong')} bg-black/60 hover:bg-black/80 flex items-center justify-center text-white ${TRANSITIONS.standard}`}
           >
             <ChevronLeft size={24} />
           </button>
@@ -201,14 +202,14 @@ export function ScreenshotScrubber({
         {currentScreenshotIndex < screenshots.length - 1 && (
           <button
             onClick={handleNext}
-            className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-sm flex items-center justify-center text-white transition-all"
+            className={`absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full ${getGlassClasses('strong')} bg-black/60 hover:bg-black/80 flex items-center justify-center text-white ${TRANSITIONS.standard}`}
           >
             <ChevronRight size={24} />
           </button>
         )}
 
         {/* Screenshot Info Overlay */}
-        <div className="absolute bottom-4 left-4 right-4 bg-black/60 backdrop-blur-sm rounded-lg p-3 text-white">
+        <div className={`absolute bottom-4 left-4 right-4 ${getGlassClasses('strong')} bg-black/60 rounded-lg p-3 text-white`}>
           <div className="flex items-center justify-between mb-1">
             <div className="text-sm font-semibold">
               {currentScreenshot?.aiAnalysis?.detectedActivity || 'Screenshot'}
@@ -243,7 +244,7 @@ export function ScreenshotScrubber({
       </div>
 
       {/* Thumbnail Strip with Lazy Loading */}
-      <div className="p-4 bg-white/40">
+      <div className={`p-4 ${getGlassClasses('subtle')}`}>
         <div className="flex gap-2 overflow-x-auto">
           {screenshots.map((screenshot, index) => {
             const isActive = index === currentScreenshotIndex;

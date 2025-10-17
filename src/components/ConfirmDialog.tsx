@@ -1,7 +1,7 @@
 import React, { useEffect, type ElementType } from 'react';
 import { X, AlertTriangle, Info, AlertCircle } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { RADIUS, TRANSITIONS, SCALE, getModalClasses } from '../design-system/theme';
+import { RADIUS, TRANSITIONS, SCALE, getModalClasses, getGlassClasses, getRadiusClass } from '../design-system/theme';
 import { Button } from './Button';
 
 interface ConfirmDialogProps {
@@ -105,7 +105,7 @@ export const ConfirmDialog = React.memo(function ConfirmDialog({
         {/* Close button */}
         <button
           onClick={onClose}
-          className={`absolute top-6 right-6 p-2 hover:bg-white/40 ${RADIUS.element} ${TRANSITIONS.fast} hover:scale-110 active:scale-95 text-gray-600 hover:text-gray-900`}
+          className={`absolute top-6 right-6 p-2 hover:bg-white/40 ${getRadiusClass('element')} ${TRANSITIONS.fast} hover:scale-110 active:scale-95 text-gray-600 hover:text-gray-900`}
           aria-label="Close dialog"
         >
           <X className="w-5 h-5" />
@@ -113,7 +113,7 @@ export const ConfirmDialog = React.memo(function ConfirmDialog({
 
         {/* Icon */}
         <div className="flex justify-center mb-6">
-          <div className={`p-4 ${RADIUS.element} bg-white/40 backdrop-blur-sm`}>
+          <div className={`p-4 ${getRadiusClass('element')} ${getGlassClasses('subtle')}`}>
             <IconComponent className={`w-12 h-12 ${getIconColor()}`} />
           </div>
         </div>

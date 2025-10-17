@@ -104,8 +104,8 @@ export const AudioSegmentCard = React.memo(function AudioSegmentCard({
     <div
       className={`
         bg-gradient-to-r ${AUDIO_GRADIENTS.background}
-        backdrop-blur-xl border-2 border-purple-300/40
-        rounded-[${RADIUS.card}px] p-4
+        backdrop-blur-xl border-2 ${AUDIO_GRADIENTS.border}
+        rounded-[24px] p-4
         ${AUDIO_GRADIENTS.shadow} hover:${AUDIO_GRADIENTS.shadowHover}
         ${TRANSITIONS.standard}
         group
@@ -117,9 +117,9 @@ export const AudioSegmentCard = React.memo(function AudioSegmentCard({
         <GradientIconBadge
           icon={Volume2}
           iconSize={16}
-          gradientFrom="from-purple-50"
-          gradientTo="to-pink-50"
-          iconColor="text-purple-600"
+          gradientFrom={`from-${AUDIO_GRADIENTS.iconBg.split(' ')[0].replace('from-', '')}`}
+          gradientTo={`to-${AUDIO_GRADIENTS.iconBg.split(' ')[1].replace('to-', '')}`}
+          iconColor={AUDIO_GRADIENTS.textPrimary}
           size={32}
         />
 

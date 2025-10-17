@@ -8,6 +8,9 @@ import {
   getGradientClasses,
   getGlassClasses,
   getColoredShadow,
+  getRadiusClass,
+  getDangerGradient,
+  getSuccessGradient,
 } from '../design-system/theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger' | 'success';
@@ -43,7 +46,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const baseStyles = `
       inline-flex items-center justify-center gap-2
       font-medium
-      ${RADIUS.field}
+      ${getRadiusClass('field')}
       ${TRANSITIONS.bouncy}
       disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
       ${fullWidth ? 'w-full' : ''}
@@ -69,25 +72,43 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             ${SCALE.buttonActive}
           `;
 
-        case 'tertiary':
+        case 'tertiary': {
+          const hoverTextColors = {
+            ocean: 'hover:text-cyan-600',
+            sunset: 'hover:text-orange-600',
+            forest: 'hover:text-emerald-600',
+            lavender: 'hover:text-purple-600',
+            monochrome: 'hover:text-gray-600',
+          };
           return `
             ${getGlassClasses('subtle')}
             text-gray-600
-            hover:${getGlassClasses('medium')} hover:text-${colorScheme === 'ocean' ? 'cyan' : colorScheme === 'sunset' ? 'orange' : colorScheme === 'forest' ? 'emerald' : colorScheme === 'lavender' ? 'purple' : 'gray'}-600 ${SCALE.buttonHover}
+            hover:${getGlassClasses('medium')} ${hoverTextColors[colorScheme]} ${SCALE.buttonHover}
             ${SCALE.buttonActive}
           `;
+        }
 
-        case 'ghost':
+        case 'ghost': {
+          const hoverTextColors = {
+            ocean: 'hover:text-cyan-600',
+            sunset: 'hover:text-orange-600',
+            forest: 'hover:text-emerald-600',
+            lavender: 'hover:text-purple-600',
+            monochrome: 'hover:text-gray-600',
+          };
           return `
             bg-transparent
             text-gray-600
-            hover:bg-white/40 hover:text-${colorScheme === 'ocean' ? 'cyan' : colorScheme === 'sunset' ? 'orange' : colorScheme === 'forest' ? 'emerald' : colorScheme === 'lavender' ? 'purple' : 'gray'}-600 ${SCALE.buttonHover}
+            hover:bg-white/40 ${hoverTextColors[colorScheme]} ${SCALE.buttonHover}
             ${SCALE.buttonActive}
           `;
+        }
 
         case 'danger':
+          const dangerGradient = getDangerGradient('strong');
           return `
-            bg-gradient-to-r from-red-600 to-rose-600
+            ${dangerGradient.container}
+            ${dangerGradient.textPrimary}
             text-white
             ${SHADOWS.button} shadow-red-200/50
             hover:shadow-xl hover:shadow-red-300/60 ${SCALE.buttonHover}
@@ -95,8 +116,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           `;
 
         case 'success':
+          const successGradient = getSuccessGradient('strong');
           return `
-            bg-gradient-to-r from-green-600 to-emerald-600
+            ${successGradient.container}
+            ${successGradient.textPrimary}
             text-white
             ${SHADOWS.button} shadow-green-200/50
             hover:shadow-xl hover:shadow-green-300/60 ${SCALE.buttonHover}

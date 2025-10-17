@@ -14,6 +14,8 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import { useEffect } from 'react';
+import { useTheme } from '../context/ThemeContext';
+import { EDITOR_STYLES, getGlassClasses } from '../design-system/theme';
 
 interface RichTextEditorProps {
   content: string;
@@ -36,17 +38,19 @@ export function RichTextEditor({
   minimal = false,
   maxHeight,
 }: RichTextEditorProps) {
+  const { colorScheme } = useTheme();
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         bulletList: {
           HTMLAttributes: {
-            class: 'list-disc pl-6 space-y-1',
+            class: EDITOR_STYLES.prose.bulletList,
           },
         },
         orderedList: {
           HTMLAttributes: {
-            class: 'list-decimal pl-6 space-y-1',
+            class: EDITOR_STYLES.prose.orderedList,
           },
         },
         paragraph: {
@@ -62,17 +66,17 @@ export function RichTextEditor({
         },
         code: {
           HTMLAttributes: {
-            class: 'bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono',
+            class: EDITOR_STYLES.prose.code,
           },
         },
         codeBlock: {
           HTMLAttributes: {
-            class: 'bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-sm my-4',
+            class: EDITOR_STYLES.prose.codeBlock,
           },
         },
         blockquote: {
           HTMLAttributes: {
-            class: 'border-l-4 border-violet-500 pl-4 italic text-gray-700 my-4',
+            class: EDITOR_STYLES.prose.blockquote(colorScheme),
           },
         },
       }),
@@ -176,14 +180,14 @@ export function RichTextEditor({
     <div className="w-full">
       {/* Toolbar */}
       {editable && (
-        <div className="flex items-center gap-1 p-2 border-b border-gray-200 bg-gray-50 rounded-t-xl">
+        <div className={EDITOR_STYLES.toolbar.container}>
           {!minimal && (
             <>
               <button
                 type="button"
                 onClick={() => editor.chain().focus().toggleBold().run()}
-                className={`p-2 rounded hover:bg-gray-200 transition-colors ${
-                  editor.isActive('bold') ? 'bg-gray-200 text-violet-600' : 'text-gray-600'
+                className={`${EDITOR_STYLES.toolbar.button} ${
+                  editor.isActive('bold') ? EDITOR_STYLES.toolbar.buttonActive(colorScheme) : 'text-gray-600'
                 }`}
                 title="Bold (Cmd+B)"
                 aria-label="Toggle bold formatting"
@@ -195,8 +199,8 @@ export function RichTextEditor({
               <button
                 type="button"
                 onClick={() => editor.chain().focus().toggleItalic().run()}
-                className={`p-2 rounded hover:bg-gray-200 transition-colors ${
-                  editor.isActive('italic') ? 'bg-gray-200 text-violet-600' : 'text-gray-600'
+                className={`${EDITOR_STYLES.toolbar.button} ${
+                  editor.isActive('italic') ? EDITOR_STYLES.toolbar.buttonActive(colorScheme) : 'text-gray-600'
                 }`}
                 title="Italic (Cmd+I)"
                 aria-label="Toggle italic formatting"
@@ -205,12 +209,12 @@ export function RichTextEditor({
                 <Italic className="w-4 h-4" />
               </button>
 
-              <div className="w-px h-6 bg-gray-300 mx-1" />
+              <div className={EDITOR_STYLES.toolbar.divider} />
 
               <button
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
-                className={`p-2 rounded hover:bg-gray-200 transition-colors ${
-                  editor.isActive('bulletList') ? 'bg-gray-200 text-violet-600' : 'text-gray-600'
+                className={`${EDITOR_STYLES.toolbar.button} ${
+                  editor.isActive('bulletList') ? EDITOR_STYLES.toolbar.buttonActive(colorScheme) : 'text-gray-600'
                 }`}
                 title="Bullet List"
               >
@@ -219,22 +223,20 @@ export function RichTextEditor({
 
               <button
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                className={`p-2 rounded hover:bg-gray-200 transition-colors ${
-                  editor.isActive('orderedList')
-                    ? 'bg-gray-200 text-violet-600'
-                    : 'text-gray-600'
+                className={`${EDITOR_STYLES.toolbar.button} ${
+                  editor.isActive('orderedList') ? EDITOR_STYLES.toolbar.buttonActive(colorScheme) : 'text-gray-600'
                 }`}
                 title="Numbered List"
               >
                 <ListOrdered className="w-4 h-4" />
               </button>
 
-              <div className="w-px h-6 bg-gray-300 mx-1" />
+              <div className={EDITOR_STYLES.toolbar.divider} />
 
               <button
                 onClick={() => editor.chain().focus().toggleCode().run()}
-                className={`p-2 rounded hover:bg-gray-200 transition-colors ${
-                  editor.isActive('code') ? 'bg-gray-200 text-violet-600' : 'text-gray-600'
+                className={`${EDITOR_STYLES.toolbar.button} ${
+                  editor.isActive('code') ? EDITOR_STYLES.toolbar.buttonActive(colorScheme) : 'text-gray-600'
                 }`}
                 title="Inline Code"
               >
@@ -243,8 +245,8 @@ export function RichTextEditor({
 
               <button
                 onClick={() => editor.chain().focus().toggleBlockquote().run()}
-                className={`p-2 rounded hover:bg-gray-200 transition-colors ${
-                  editor.isActive('blockquote') ? 'bg-gray-200 text-violet-600' : 'text-gray-600'
+                className={`${EDITOR_STYLES.toolbar.button} ${
+                  editor.isActive('blockquote') ? EDITOR_STYLES.toolbar.buttonActive(colorScheme) : 'text-gray-600'
                 }`}
                 title="Quote"
               >
@@ -253,8 +255,8 @@ export function RichTextEditor({
 
               <button
                 onClick={setLink}
-                className={`p-2 rounded hover:bg-gray-200 transition-colors ${
-                  editor.isActive('link') ? 'bg-gray-200 text-violet-600' : 'text-gray-600'
+                className={`${EDITOR_STYLES.toolbar.button} ${
+                  editor.isActive('link') ? EDITOR_STYLES.toolbar.buttonActive(colorScheme) : 'text-gray-600'
                 }`}
                 title="Add Link"
               >
@@ -268,7 +270,7 @@ export function RichTextEditor({
           <button
             onClick={() => editor.chain().focus().undo().run()}
             disabled={!editor.can().undo()}
-            className="p-2 rounded hover:bg-gray-200 transition-colors text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            className={`${EDITOR_STYLES.toolbar.button} text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed`}
             title="Undo (Cmd+Z)"
           >
             <Undo className="w-4 h-4" />
@@ -277,7 +279,7 @@ export function RichTextEditor({
           <button
             onClick={() => editor.chain().focus().redo().run()}
             disabled={!editor.can().redo()}
-            className="p-2 rounded hover:bg-gray-200 transition-colors text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            className={`${EDITOR_STYLES.toolbar.button} text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed`}
             title="Redo (Cmd+Shift+Z)"
           >
             <Redo className="w-4 h-4" />
@@ -294,7 +296,7 @@ export function RichTextEditor({
           editor={editor}
           className={`${
             editable
-              ? 'bg-white px-6 py-4 rounded-b-xl border-x border-b border-gray-200'
+              ? `${getGlassClasses('subtle')} px-6 py-4 rounded-b-xl border-x border-b border-gray-200`
               : 'bg-transparent'
           }`}
         />

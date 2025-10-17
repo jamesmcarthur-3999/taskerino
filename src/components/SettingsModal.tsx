@@ -7,7 +7,7 @@ import { X, Save, Key, Camera, Volume2, Palette } from 'lucide-react';
 import { audioCompressionService, type AudioQualityPreset } from '../services/audioCompressionService';
 import { openAIService } from '../services/openAIService';
 import { claudeService } from '../services/claudeService';
-import { COLOR_SCHEMES, GLASS_PATTERNS, type ColorScheme, type GlassStrength, getModalClasses } from '../design-system/theme';
+import { COLOR_SCHEMES, GLASS_PATTERNS, type ColorScheme, type GlassStrength, getModalClasses, getModalHeaderClasses, getInputContainerClasses, MODAL_SECTIONS, getGlassClasses, getRadiusClass } from '../design-system/theme';
 import { Input } from './Input';
 import { Button } from './Button';
 import { validateOpenAIKey, validateAnthropicKey } from '../utils/validation';
@@ -165,7 +165,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-6 border-b-2 border-white/30 bg-gradient-to-r from-purple-500/10 to-blue-500/10 backdrop-blur-sm rounded-t-2xl flex-shrink-0">
+        <div className={`${getModalHeaderClasses(colorScheme)} flex-shrink-0`}>
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
               Settings
@@ -174,7 +174,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               onClick={handleClose}
               variant="ghost"
               size="sm"
-              className="rounded-xl p-2"
+              className={`${getRadiusClass('element')} p-2`}
               aria-label="Close settings"
               title="Close settings (Esc)"
             >
@@ -193,7 +193,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
 
             {/* OpenAI API Key */}
-            <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 border border-white/60 shadow-sm">
+            <div className={getInputContainerClasses('default')}>
               <Input
                 variant="password"
                 label="OpenAI API Key"
@@ -209,7 +209,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
 
             {/* Anthropic API Key */}
-            <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 border border-white/60 shadow-sm">
+            <div className={getInputContainerClasses('default')}>
               <Input
                 variant="password"
                 label="Anthropic API Key"
@@ -232,14 +232,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <h3 className="text-lg font-semibold text-gray-900">Audio Settings</h3>
             </div>
 
-            <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 border border-white/60 shadow-sm">
+            <div className={getInputContainerClasses('default')}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Audio Quality Preset
               </label>
               <select
                 value={audioQuality}
                 onChange={(e) => setAudioQuality(e.target.value as AudioQualityPreset)}
-                className="w-full px-4 py-2 bg-white/70 backdrop-blur-xl border border-white/60 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm"
+                className={`w-full px-4 py-2 ${getGlassClasses('medium')} border border-white/60 ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm`}
               >
                 <option value="optimized">Optimized (16kHz, 64kbps) - Best for speech</option>
                 <option value="balanced">Balanced (22kHz, 96kbps) - Good quality</option>
@@ -258,7 +258,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <h3 className="text-lg font-semibold text-gray-900">Screenshot Settings</h3>
             </div>
 
-            <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 border border-white/60 shadow-sm space-y-4">
+            <div className={`${getInputContainerClasses('default')} space-y-4`}>
               {/* Adaptive Mode Toggle */}
               <div className="flex items-center justify-between">
                 <div className="flex-1">
@@ -325,14 +325,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
 
             {/* Color Scheme */}
-            <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 border border-white/60 shadow-sm">
+            <div className={getInputContainerClasses('default')}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Color Scheme
               </label>
               <select
                 value={localColorScheme}
                 onChange={(e) => setLocalColorScheme(e.target.value as ColorScheme)}
-                className="w-full px-4 py-2 bg-white/70 backdrop-blur-xl border border-white/60 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm"
+                className={`w-full px-4 py-2 ${getGlassClasses('medium')} border border-white/60 ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm`}
               >
                 <option value="ocean">Ocean (Cyan & Blue)</option>
                 <option value="sunset">Sunset (Orange & Pink)</option>
@@ -346,14 +346,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
 
             {/* Glass Strength */}
-            <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 border border-white/60 shadow-sm">
+            <div className={getInputContainerClasses('default')}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Glass Strength
               </label>
               <select
                 value={localGlassStrength}
                 onChange={(e) => setLocalGlassStrength(e.target.value as GlassStrength)}
-                className="w-full px-4 py-2 bg-white/70 backdrop-blur-xl border border-white/60 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm"
+                className={`w-full px-4 py-2 ${getGlassClasses('medium')} border border-white/60 ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm`}
               >
                 <option value="subtle">Subtle (Light blur & transparency)</option>
                 <option value="medium">Medium (Balanced appearance)</option>
@@ -366,14 +366,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
 
             {/* Light/Dark Mode */}
-            <div className="bg-white/20 backdrop-blur-sm rounded-[20px] p-4 border border-white/60 shadow-sm">
+            <div className={getInputContainerClasses('default')}>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Theme Mode
               </label>
               <select
                 value={theme}
                 onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'auto')}
-                className="w-full px-4 py-2 bg-white/70 backdrop-blur-xl border border-white/60 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm"
+                className={`w-full px-4 py-2 ${getGlassClasses('medium')} border border-white/60 ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm`}
               >
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
@@ -387,7 +387,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t-2 border-white/30 bg-white/40 backdrop-blur-xl rounded-b-2xl flex items-center justify-between flex-shrink-0">
+        <div className={`${MODAL_SECTIONS.footer} flex items-center justify-between flex-shrink-0`}>
           <p className="text-sm text-gray-600">
             {saveStatus === 'saved' && (
               <span className="text-green-600 font-medium">Settings saved successfully</span>
@@ -401,7 +401,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               onClick={handleClose}
               variant="secondary"
               size="md"
-              className="rounded-xl"
+              className={getRadiusClass('element')}
             >
               Cancel
             </Button>
@@ -411,7 +411,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               variant="primary"
               size="md"
               icon={<Save className="w-4 h-4" />}
-              className="rounded-xl"
+              className={getRadiusClass('element')}
             >
               Save Settings
             </Button>

@@ -8,6 +8,7 @@ import { NotesProvider } from './context/NotesContext';
 import { TasksProvider } from './context/TasksContext';
 import { EnrichmentProvider } from './context/EnrichmentContext';
 import { SessionsProvider } from './context/SessionsContext';
+import { ScrollAnimationProvider } from './contexts/ScrollAnimationContext';
 import { TopNavigation } from './components/TopNavigation';
 import { ReferencePanel } from './components/ReferencePanel';
 import { QuickTaskModal } from './components/QuickTaskModal';
@@ -256,32 +257,50 @@ function AppContent() {
 
   useEffect(() => {
     const initializeApp = async () => {
-      // Run migration from localStorage to Tauri secure storage
-      const migrationResult = await migrateApiKeysToTauri();
-      if (migrationResult.migrated) {
-        console.log('API keys migrated successfully:', migrationResult);
-      }
+      try {
+        // Add 10 second timeout
+        const timeoutId = setTimeout(() => {
+          console.warn('Initialization timeout - forcing ready state');
+          setIsReady(true);
+        }, 10000);
 
-      // Load API keys on mount from Tauri secure storage
-      const savedClaudeKey = await invoke<string | null>('get_claude_api_key');
-      if (savedClaudeKey) {
-        claudeService.setApiKey(savedClaudeKey);
-        sessionsAgentService.setApiKey(savedClaudeKey);
-        await nedService.setApiKey(savedClaudeKey);
-        contextAgent.setApiKey(savedClaudeKey);
-        await sessionsQueryAgent.setApiKey(savedClaudeKey);
-      }
+        // Run migration from localStorage to Tauri secure storage
+        const migrationResult = await migrateApiKeysToTauri();
+        if (migrationResult.migrated) {
+          console.log('API keys migrated successfully:', migrationResult);
+        }
 
-      // Load OpenAI API key
-      const savedOpenAIKey = await invoke<string | null>('get_openai_api_key');
-      if (savedOpenAIKey) {
-        const { openAIService } = await import('./services/openAIService');
-        openAIService.setApiKey(savedOpenAIKey);
-      }
+        // Load API keys with error handling
+        try {
+          const savedClaudeKey = await invoke<string | null>('get_claude_api_key');
+          if (savedClaudeKey) {
+            claudeService.setApiKey(savedClaudeKey);
+            sessionsAgentService.setApiKey(savedClaudeKey);
+            await nedService.setApiKey(savedClaudeKey);
+            contextAgent.setApiKey(savedClaudeKey);
+            await sessionsQueryAgent.setApiKey(savedClaudeKey);
+          }
 
-      // Set hasApiKeys flag based on whether we have both required keys
-      setHasApiKeys(!!savedClaudeKey && !!savedOpenAIKey);
-      setIsReady(true);
+          // Load OpenAI API key
+          const savedOpenAIKey = await invoke<string | null>('get_openai_api_key');
+          if (savedOpenAIKey) {
+            const { openAIService } = await import('./services/openAIService');
+            openAIService.setApiKey(savedOpenAIKey);
+          }
+
+          // Set hasApiKeys flag based on whether we have both required keys
+          setHasApiKeys(!!savedClaudeKey && !!savedOpenAIKey);
+        } catch (error) {
+          console.error('Failed to load API keys:', error);
+          // Continue anyway
+        }
+
+        clearTimeout(timeoutId);
+        setIsReady(true);
+      } catch (error) {
+        console.error('Initialization failed:', error);
+        setIsReady(true); // ALWAYS set ready
+      }
     };
     initializeApp();
   }, []);
@@ -369,20 +388,22 @@ export default function App() {
   return (
     <SettingsProvider>
       <UIProvider>
-        <EntitiesProvider>
-          <NotesProvider>
-            <TasksProvider>
-              <EnrichmentProvider>
-                <SessionsProvider>
-                  {/* OLD AppProvider - TODO: Remove once all components are migrated (13 remaining) */}
-                  <AppProvider>
-                    <AppContent />
-                  </AppProvider>
-                </SessionsProvider>
-              </EnrichmentProvider>
-            </TasksProvider>
-          </NotesProvider>
-        </EntitiesProvider>
+        <ScrollAnimationProvider>
+          <EntitiesProvider>
+            <NotesProvider>
+              <TasksProvider>
+                <EnrichmentProvider>
+                  <SessionsProvider>
+                    {/* OLD AppProvider - TODO: Remove once all components are migrated (13 remaining) */}
+                    <AppProvider>
+                      <AppContent />
+                    </AppProvider>
+                  </SessionsProvider>
+                </EnrichmentProvider>
+              </TasksProvider>
+            </NotesProvider>
+          </EntitiesProvider>
+        </ScrollAnimationProvider>
       </UIProvider>
     </SettingsProvider>
   );

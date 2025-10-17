@@ -28,6 +28,7 @@ import type { Session } from '../types';
 import { EnrichmentButton } from './EnrichmentButton';
 import { sessionEnrichmentService, type EnrichmentProgress } from '../services/sessionEnrichmentService';
 import { useUI } from '../context/UIContext';
+import { useEnrichmentContext } from '../context/EnrichmentContext';
 import { getStorage } from '../services/storage';
 import {
   RADIUS,
@@ -50,8 +51,12 @@ export function EnrichmentStatusBanner({
   onSessionUpdate,
 }: EnrichmentStatusBannerProps) {
   const { addNotification } = useUI();
+  const { getActiveEnrichment } = useEnrichmentContext();
   const [isEnriching, setIsEnriching] = useState(false);
   const [enrichmentProgress, setEnrichmentProgress] = useState<EnrichmentProgress | null>(null);
+
+  // Get active enrichment for real-time detection
+  const activeEnrichment = getActiveEnrichment(session.id);
 
   // Check if session has audio or video data
   const hasAudio = session.audioSegments && session.audioSegments.length > 0;
@@ -173,13 +178,13 @@ export function EnrichmentStatusBanner({
   // STATE 4: ENRICHING (IN PROGRESS)
   // ============================================================================
 
-  if (isEnriching || enrichmentStatus === 'in-progress') {
-    const progress = enrichmentProgress?.progress || session.enrichmentStatus?.progress || 0;
+  if (isEnriching || activeEnrichment || enrichmentStatus === 'in-progress') {
+    const progress = enrichmentProgress?.progress || activeEnrichment?.progress || session.enrichmentStatus?.progress || 0;
     const message = enrichmentProgress?.message || 'Enriching session...';
     const infoGradient = getInfoGradient('medium');
 
     return (
-      <div className={`${infoGradient.container} rounded-[${RADIUS.card}px] p-6`}>
+      <div className={`${infoGradient.container} rounded-[24px] p-6`}>
         <div className="flex items-center gap-4">
           <div className={`flex-shrink-0 w-12 h-12 ${infoGradient.iconBg} rounded-full flex items-center justify-center`}>
             <Loader2 size={ICON_SIZES.lg} className={`${infoGradient.iconColor} animate-spin`} />
@@ -223,7 +228,7 @@ export function EnrichmentStatusBanner({
     const dangerGradient = getDangerGradient('medium');
 
     return (
-      <div className={`${dangerGradient.container} rounded-[${RADIUS.card}px] p-6`}>
+      <div className={`${dangerGradient.container} rounded-[24px] p-6`}>
         <div className="flex items-center gap-4">
           <div className={`flex-shrink-0 w-12 h-12 ${dangerGradient.iconBg} rounded-full flex items-center justify-center`}>
             <AlertCircle size={ICON_SIZES.lg} className={dangerGradient.iconColor} />
@@ -239,7 +244,7 @@ export function EnrichmentStatusBanner({
           <div className="flex-shrink-0">
             <button
               onClick={handleEnrichment}
-              className={`px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white rounded-[${RADIUS.element}px] font-semibold transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-2`}
+              className={`px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white rounded-[16px] font-semibold transition-all hover:scale-105 active:scale-95 shadow-md flex items-center gap-2`}
             >
               <RefreshCw size={ICON_SIZES.sm} />
               Retry
@@ -277,7 +282,7 @@ export function EnrichmentStatusBanner({
       : 'Session enriched';
 
     return (
-      <div className={`${successGradient.container} rounded-[${RADIUS.field}px] px-4 py-3`}>
+      <div className={`${successGradient.container} rounded-[20px] px-4 py-3`}>
         <div className="flex items-center gap-3">
           <div className={`flex-shrink-0 w-8 h-8 ${successGradient.iconBg} rounded-full flex items-center justify-center`}>
             <CheckCircle2 size={ICON_SIZES.sm} className={successGradient.iconColor} />
@@ -308,7 +313,7 @@ export function EnrichmentStatusBanner({
   const warningGradient = getWarningGradient('medium');
 
   return (
-    <div className={`${warningGradient.container} rounded-[${RADIUS.card}px] p-6`}>
+    <div className={`${warningGradient.container} rounded-[24px] p-6`}>
       <div className="flex items-center gap-4">
         <div className={`flex-shrink-0 w-12 h-12 ${warningGradient.iconBg} rounded-full flex items-center justify-center`}>
           <Sparkles size={ICON_SIZES.lg} className={warningGradient.iconColor} />

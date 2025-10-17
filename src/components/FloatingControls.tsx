@@ -3,6 +3,7 @@ import { Settings, EyeOff } from 'lucide-react';
 import { useUI } from '../context/UIContext';
 import { useSessions } from '../context/SessionsContext';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getGlassClasses, SHADOWS, Z_INDEX } from '../design-system/theme';
 
 export function FloatingControls() {
   const { dispatch: uiDispatch } = useUI();
@@ -28,12 +29,12 @@ export function FloatingControls() {
 
   return (
     <div
-      className="fixed bottom-6 right-6 z-50"
+      className={`fixed bottom-6 right-6 ${Z_INDEX.dropdown}`}
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
       <div className={`
-        backdrop-blur-2xl bg-white/40 rounded-full border-2 border-white/50 shadow-2xl
+        ${getGlassClasses('strong')} rounded-full ${SHADOWS.elevated}
         transition-all duration-300 ease-out
         ${isExpanded ? 'px-4 py-3' : 'p-3'}
       `}>

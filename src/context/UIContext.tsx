@@ -66,6 +66,9 @@ interface UIState {
 
   // Search History
   searchHistory: SearchHistoryItem[];
+
+  // Sub-menu Overlay
+  showSubMenuOverlay: boolean;
 }
 
 type UIAction =
@@ -140,6 +143,10 @@ type UIAction =
   | { type: 'ADD_NED_MESSAGE'; payload: NedMessage }
   | { type: 'UPDATE_NED_MESSAGE'; payload: { id: string; contents: NedMessageContent[] } }
   | { type: 'CLEAR_NED_CONVERSATION' }
+
+  // Sub-menu Overlay
+  | { type: 'TOGGLE_SUBMENU_OVERLAY' }
+  | { type: 'SET_SUBMENU_OVERLAY'; payload: boolean }
 
   // Data management
   | { type: 'LOAD_UI_STATE'; payload: Partial<UIState> };
@@ -231,6 +238,7 @@ const defaultState: UIState = {
     history: [],
   },
   searchHistory: [],
+  showSubMenuOverlay: false,
 };
 
 // Reducer (logic copied from AppContext)
@@ -677,6 +685,13 @@ function uiReducer(state: UIState, action: UIAction): UIState {
           messages: [],
         },
       };
+
+    // Sub-menu Overlay
+    case 'TOGGLE_SUBMENU_OVERLAY':
+      return { ...state, showSubMenuOverlay: !state.showSubMenuOverlay };
+
+    case 'SET_SUBMENU_OVERLAY':
+      return { ...state, showSubMenuOverlay: action.payload };
 
     // Data management
     case 'LOAD_UI_STATE':

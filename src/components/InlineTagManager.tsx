@@ -102,17 +102,23 @@ export const InlineTagManager = React.memo(function InlineTagManager({
     : 0;
 
   return (
-    <div className={`relative flex items-center ${className}`}>
+    <div className={`relative flex items-center w-full ${className}`}>
       {/* Horizontal scrollable container for tags with fade-out effect */}
-      <div className="relative max-w-full overflow-hidden">
+      <div className="relative flex-1 min-w-0">
         <div
-          className="flex items-center gap-2 overflow-x-auto max-w-full"
+          className="flex items-center gap-2 overflow-x-auto pb-1"
           style={{
             scrollbarWidth: 'none',
             msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
           }}
         >
-          <div className="flex items-center gap-2 flex-nowrap" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <style>{`
+            .flex.items-center.gap-2.overflow-x-auto::-webkit-scrollbar {
+              display: none;
+            }
+          `}</style>
+          <div className="flex items-center gap-2 flex-nowrap">
             {/* Display tags */}
             {displayedTags.map((tag) => (
               <button
@@ -226,7 +232,7 @@ export const InlineTagManager = React.memo(function InlineTagManager({
         {/* Subtle fade-out gradient at the right edge */}
         {displayedTags.length > 2 && (
           <div
-            className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none"
+            className="absolute right-0 top-0 bottom-0 w-16 pointer-events-none"
             style={{
               background: 'linear-gradient(to left, rgba(255, 255, 255, 0.95), transparent)',
             }}

@@ -4,12 +4,13 @@ import { useNotes } from '../context/NotesContext';
 import { useEntities } from '../context/EntitiesContext';
 import { useTasks } from '../context/TasksContext';
 import { useUI } from '../context/UIContext';
+import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
 import { Calendar, Tag as TagIcon, FileText, Trash2, Clock, CheckSquare, Link2, X, Sparkles, Plus, Columns, Focus } from 'lucide-react';
 import { formatRelativeTime } from '../utils/helpers';
 import { getTasksByNoteId } from '../utils/navigation';
 import { RichTextEditor } from './RichTextEditor';
 import { InlineTagManager } from './InlineTagManager';
-import { ICON_SIZES } from '../design-system/theme';
+import { ICON_SIZES, getGlassClasses, getRadiusClass, getStatusBadgeClasses } from '../design-system/theme';
 
 interface NoteDetailInlineProps {
   noteId: string;
@@ -24,6 +25,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
   const { state: entitiesState } = useEntities();
   const { state: tasksState } = useTasks();
   const { dispatch: uiDispatch } = useUI();
+  const { registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
   const [editedContent, setEditedContent] = useState('');
   const [editedSummary, setEditedSummary] = useState('');
   const [isEditingSummary, setIsEditingSummary] = useState(false);
@@ -33,6 +35,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
   const summaryInputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
+  const rafIdRef = useRef<number | null>(null);
 
   // Find the note from state
   const note = notesState.notes.find(n => n.id === noteId);
@@ -120,22 +123,44 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
     }
   }, [isEditingSummary]);
 
-  // Track scroll progress for smooth animations
+  // Register content container with ScrollAnimationContext and track scroll progress
   useEffect(() => {
     const contentElement = contentRef.current;
     if (!contentElement) return;
 
+    // Register with context for global scroll coordination
+    registerScrollContainer(contentElement);
+
+    // RAF-based scroll handler for local animations
     const handleScroll = () => {
-      const scrollTop = contentElement.scrollTop;
-      // Calculate progress from 0 to 1 over 200px of scrolling
-      const progress = Math.min(scrollTop / 200, 1);
-      setScrollProgress(progress);
-      setIsScrolled(scrollTop > 100);
+      // Cancel any pending RAF
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+
+      // Schedule update for next frame
+      rafIdRef.current = requestAnimationFrame(() => {
+        const scrollTop = contentElement.scrollTop;
+        // Calculate progress from 0 to 1 over 200px of scrolling
+        const progress = Math.min(scrollTop / 200, 1);
+        setScrollProgress(progress);
+        setIsScrolled(scrollTop > 100);
+        rafIdRef.current = null;
+      });
     };
 
-    contentElement.addEventListener('scroll', handleScroll);
-    return () => contentElement.removeEventListener('scroll', handleScroll);
-  }, []);
+    // Use passive listener for better scroll performance
+    contentElement.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      // Cleanup: remove listener, cancel RAF, unregister from context
+      contentElement.removeEventListener('scroll', handleScroll);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+      unregisterScrollContainer(contentElement);
+    };
+  }, [registerScrollContainer, unregisterScrollContainer]);
 
   const handleDelete = () => {
     if (!note) return;
@@ -226,20 +251,6 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
     }
   };
 
-  const getStatusBadge = (status: Task['status']) => {
-    const badges = {
-      todo: { label: 'To Do', className: 'bg-gray-100 text-gray-700' },
-      'in-progress': { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
-      done: { label: 'Done', className: 'bg-green-100 text-green-700' },
-      blocked: { label: 'Blocked', className: 'bg-red-100 text-red-700' },
-    };
-    const badge = badges[status];
-    return (
-      <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${badge.className}`}>
-        {badge.label}
-      </span>
-    );
-  };
 
   // Show loading or empty state if no note
   if (!note) {
@@ -268,7 +279,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
       {/* Compact Header - Glass Morphism */}
-      <div className="flex-shrink-0 bg-white/50 backdrop-blur-2xl border-b-2 border-white/60 shadow-lg px-8 py-6">
+      <div className={`flex-shrink-0 ${getGlassClasses('medium')} border-b-2 px-8 py-6`}>
         <div className="max-w-5xl mx-auto flex items-start justify-between gap-8">
           <div className="flex-1 min-w-0 space-y-3">
           {/* Title - Click to edit */}
@@ -337,7 +348,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
             {/* Quick Stats Row */}
             <div className="flex items-center gap-4 text-xs text-gray-600 mt-3">
               <div className="flex items-center gap-1.5">
-                <span className="px-2 py-0.5 rounded-full bg-white/60 text-gray-600 capitalize font-medium">
+                <span className={`px-2 py-0.5 ${getRadiusClass('pill')} ${getGlassClasses('subtle')} text-gray-600 capitalize font-medium`}>
                   {note.source}
                 </span>
               </div>
@@ -372,9 +383,9 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
               <button
                 onClick={() => onToggleSidebar(!isSidebarExpanded)}
                 className={`
-                  w-11 h-11 rounded-full transition-all hover:scale-105 active:scale-95 shadow-md flex items-center justify-center
+                  w-11 h-11 ${getRadiusClass('pill')} transition-all hover:scale-105 active:scale-95 shadow-md flex items-center justify-center
                   ${isSidebarExpanded
-                    ? 'bg-white/60 hover:bg-white/80 border-2 border-white/60 text-gray-700'
+                    ? `${getGlassClasses('subtle')} hover:bg-white/80 border-2 text-gray-700`
                     : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 border-2 border-cyan-400 text-white shadow-cyan-200/50'
                   }
                 `}
@@ -389,7 +400,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
             )}
             <button
               onClick={handleDelete}
-              className="w-11 h-11 bg-red-100 hover:bg-red-200 rounded-full transition-all hover:scale-105 active:scale-95 border-2 border-red-200 shadow-md flex items-center justify-center"
+              className={`w-11 h-11 bg-red-100 hover:bg-red-200 ${getRadiusClass('pill')} transition-all hover:scale-105 active:scale-95 border-2 border-red-200 shadow-md flex items-center justify-center`}
               title="Delete note"
             >
               <Trash2 size={20} className="text-red-700" />
@@ -404,7 +415,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
 
         {/* Key Takeaways - Compact Card */}
         {note.metadata?.keyPoints && note.metadata.keyPoints.length > 0 && (
-          <div className="bg-cyan-100/20 backdrop-blur-sm rounded-[24px] p-4 border border-cyan-200/50">
+          <div className={`bg-cyan-100/20 ${getGlassClasses('subtle')} ${getRadiusClass('card')} p-4`}>
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="w-4 h-4 text-cyan-600" />
               <h3 className="text-sm font-bold text-cyan-900 uppercase tracking-wide">Key Takeaways</h3>
@@ -434,7 +445,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
 
         {/* Linked Tasks */}
         {linkedTasks.length > 0 && (
-          <div className="bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-xl overflow-hidden">
+          <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} overflow-hidden`}>
             <div className="px-4 py-3 bg-gray-50">
               <div className="flex items-center gap-2">
                 <CheckSquare className="w-4 h-4 text-gray-600" />
@@ -449,13 +460,15 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
                 <div
                   key={task.id}
                   onClick={() => uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'task', itemId: task.id, label: task.title } })}
-                  className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-cyan-300 cursor-pointer transition-all"
+                  className={`p-3 bg-gray-50 ${getRadiusClass('element')} border border-gray-200 hover:border-cyan-300 cursor-pointer transition-all`}
                 >
                   <div className="flex items-start gap-2">
                     <span className="text-base mt-0.5">{getPriorityFlag(task.priority)}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        {getStatusBadge(task.status)}
+                        <span className={`px-2 py-0.5 ${getRadiusClass('element')} text-xs font-bold ${getStatusBadgeClasses(task.status)}`}>
+                          {task.status === 'todo' ? 'To Do' : task.status === 'in-progress' ? 'In Progress' : task.status === 'done' ? 'Done' : 'Blocked'}
+                        </span>
                       </div>
                       <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
                       {task.dueDate && (
@@ -479,7 +492,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
             {note.metadata.relatedTopics.map((relatedTopic, idx) => (
               <span
                 key={idx}
-                className="px-2.5 py-1 bg-white/30 backdrop-blur-sm text-gray-700 rounded-[16px] text-xs font-medium border border-white/60"
+                className={`px-2.5 py-1 ${getGlassClasses('subtle')} text-gray-700 ${getRadiusClass('element')} text-xs font-medium`}
               >
                 {relatedTopic}
               </span>
@@ -494,7 +507,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
               <FileText className="w-4 h-4" />
               View original input
             </summary>
-            <div className="mt-3 bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-gray-200/50">
+            <div className={`mt-3 ${getGlassClasses('medium')} ${getRadiusClass('field')} p-4`}>
               <p className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
                 {note.sourceText}
               </p>
@@ -570,7 +583,7 @@ function InlineRelationshipManager({
             setSelectedCompanyId(e.target.value);
             handleAddCompany(e.target.value);
           }}
-          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-blue-400 rounded-full text-xs font-semibold text-gray-800 outline-none"
+          className={`px-3 py-1.5 bg-white/80 ${getGlassClasses('subtle')} border-2 border-blue-400 ${getRadiusClass('pill')} text-xs font-semibold text-gray-800 outline-none`}
         >
           <option value="">+ Company...</option>
           {entitiesState.companies.filter(c => !relatedCompanies.some(rc => rc.id === c.id)).map(company => (
@@ -585,7 +598,7 @@ function InlineRelationshipManager({
             setSelectedContactId(e.target.value);
             handleAddContact(e.target.value);
           }}
-          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-emerald-400 rounded-full text-xs font-semibold text-gray-800 outline-none"
+          className={`px-3 py-1.5 bg-white/80 ${getGlassClasses('subtle')} border-2 border-emerald-400 ${getRadiusClass('pill')} text-xs font-semibold text-gray-800 outline-none`}
         >
           <option value="">+ Contact...</option>
           {entitiesState.contacts.filter(c => !relatedContacts.some(rc => rc.id === c.id)).map(contact => (
@@ -600,7 +613,7 @@ function InlineRelationshipManager({
             setSelectedTopicId(e.target.value);
             handleAddTopic(e.target.value);
           }}
-          className="px-3 py-1.5 bg-white/80 backdrop-blur-sm border-2 border-amber-400 rounded-full text-xs font-semibold text-gray-800 outline-none"
+          className={`px-3 py-1.5 bg-white/80 ${getGlassClasses('subtle')} border-2 border-amber-400 ${getRadiusClass('pill')} text-xs font-semibold text-gray-800 outline-none`}
         >
           <option value="">+ Topic...</option>
           {entitiesState.topics.filter(t => !relatedTopics.some(rt => rt.id === t.id)).map(topic => (
@@ -610,7 +623,7 @@ function InlineRelationshipManager({
 
         <button
           onClick={() => setIsEditing(false)}
-          className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full text-xs font-semibold transition-all"
+          className={`px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white ${getRadiusClass('pill')} text-xs font-semibold transition-all`}
         >
           Done
         </button>
@@ -625,7 +638,7 @@ function InlineRelationshipManager({
         <button
           key={company.id}
           onClick={() => setIsEditing(true)}
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-100/80 to-cyan-100/80 hover:from-blue-200/90 hover:to-cyan-200/90 border border-blue-300/60 rounded-full text-xs font-semibold text-blue-800 transition-all"
+          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-100/80 to-cyan-100/80 hover:from-blue-200/90 hover:to-cyan-200/90 border border-blue-300/60 ${getRadiusClass('pill')} text-xs font-semibold text-blue-800 transition-all`}
         >
           <span>🏢</span>
           <span>{company.name}</span>
@@ -644,7 +657,7 @@ function InlineRelationshipManager({
         <button
           key={contact.id}
           onClick={() => setIsEditing(true)}
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-100/80 to-green-100/80 hover:from-emerald-200/90 hover:to-green-200/90 border border-emerald-300/60 rounded-full text-xs font-semibold text-emerald-800 transition-all"
+          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-100/80 to-green-100/80 hover:from-emerald-200/90 hover:to-green-200/90 border border-emerald-300/60 ${getRadiusClass('pill')} text-xs font-semibold text-emerald-800 transition-all`}
         >
           <span>👤</span>
           <span>{contact.name}</span>
@@ -663,7 +676,7 @@ function InlineRelationshipManager({
         <button
           key={topic.id}
           onClick={() => setIsEditing(true)}
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-100/80 to-yellow-100/80 hover:from-amber-200/90 hover:to-yellow-200/90 border border-amber-300/60 rounded-full text-xs font-semibold text-amber-800 transition-all"
+          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-100/80 to-yellow-100/80 hover:from-amber-200/90 hover:to-yellow-200/90 border border-amber-300/60 ${getRadiusClass('pill')} text-xs font-semibold text-amber-800 transition-all`}
         >
           <span>📌</span>
           <span>{topic.name}</span>
@@ -681,7 +694,7 @@ function InlineRelationshipManager({
       {!hasRelationships && (
         <button
           onClick={() => setIsEditing(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/40 hover:bg-white/60 border border-dashed border-gray-400 hover:border-cyan-400 rounded-full text-xs text-gray-500 hover:text-cyan-700 font-medium transition-all"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/40 hover:bg-white/60 border border-dashed border-gray-400 hover:border-cyan-400 ${getRadiusClass('pill')} text-xs text-gray-500 hover:text-cyan-700 font-medium transition-all`}
         >
           <Plus size={12} />
           <span>Add Relationships</span>
