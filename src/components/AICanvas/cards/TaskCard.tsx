@@ -21,6 +21,8 @@ export interface TaskCardProps {
 
 interface ThemeConfig {
   colorScheme?: 'ocean' | 'sunset' | 'forest' | 'lavender' | 'monochrome';
+  mode?: 'light' | 'dark';
+  primaryColor?: string;
 }
 
 export function TaskCard({

@@ -616,6 +616,90 @@ export interface SessionSummary {
   extractedNotes?: Array<{content: string; tags: string[]}>;
   timeBreakdown?: Array<{activity: string; duration: number; percentage: number}>;
   keyActivities?: string[];
+
+  // ========================================================================
+  // NEW OPTIONAL FIELDS (Phase 1 - Temporal Context Enhancement)
+  // ========================================================================
+
+  /**
+   * Enhanced achievements with temporal context
+   * If present, these override the flat `achievements` array for richer visualization
+   * OPTIONAL - system falls back to achievements[] if missing
+   */
+  achievementsEnhanced?: Array<{
+    id: string;
+    text: string;
+    timestamp: string; // ISO 8601
+    screenshotIds?: string[];
+    importance?: 'minor' | 'moderate' | 'major' | 'critical';
+    category?: string; // e.g., "feature", "bugfix", "optimization"
+  }>;
+
+  /**
+   * Enhanced blockers with temporal context and resolution tracking
+   * If present, these override the flat `blockers` array
+   * OPTIONAL - system falls back to blockers[] if missing
+   */
+  blockersEnhanced?: Array<{
+    id: string;
+    text: string;
+    timestamp: string; // ISO 8601
+    screenshotIds?: string[];
+    severity?: 'low' | 'medium' | 'high' | 'critical';
+    status?: 'unresolved' | 'resolved' | 'workaround';
+    resolvedAt?: string; // ISO 8601
+    resolution?: string; // How it was resolved
+  }>;
+
+  /**
+   * Key moments during the session (transitions, breakthroughs, context switches)
+   * These enable rich timeline visualization
+   * OPTIONAL - canvas shows basic timeline if missing
+   */
+  keyMoments?: Array<{
+    id: string;
+    type: 'transition' | 'breakthrough' | 'context_switch' | 'milestone' | 'decision';
+    timestamp: string; // ISO 8601
+    title: string;
+    description: string;
+    screenshotIds?: string[];
+    impact?: 'low' | 'medium' | 'high';
+  }>;
+
+  /**
+   * Dynamic insights that don't fit standard categories
+   * Allows AI to report session-specific discoveries
+   * OPTIONAL - ignored if missing
+   */
+  dynamicInsights?: Array<{
+    type: string; // AI-generated category (e.g., "flow-state", "error-pattern")
+    title: string;
+    description: string;
+    timestamp?: string; // ISO 8601
+    confidence: number; // 0-1
+    metadata?: Record<string, any>; // Flexible additional data
+  }>;
+
+  /**
+   * AI generation metadata (reasoning, confidence, detected patterns)
+   * Provides transparency about how summary was generated
+   * OPTIONAL - UI can show/hide this
+   */
+  generationMetadata?: {
+    reasoning?: string; // Why AI chose this structure
+    confidence?: number; // 0-1 overall confidence
+    detectedSessionType?:
+      | 'deep-work'
+      | 'exploratory'
+      | 'collaborative'
+      | 'learning'
+      | 'troubleshooting'
+      | 'creative'
+      | 'routine'
+      | 'mixed';
+    primaryTheme?: string;
+    warnings?: string[]; // Any caveats about summary quality
+  };
 }
 
 export interface Session {

@@ -12,14 +12,18 @@ import type { SessionScreenshot } from '../../../types';
 
 export interface BlockerCardProps {
   blocker: string;
-  severity?: 'low' | 'medium' | 'high';
+  severity?: 'low' | 'medium' | 'high' | 'critical';
   timestamp?: string;
   relatedScreenshots?: SessionScreenshot[];
+  status?: string;
+  resolution?: string;
   theme?: ThemeConfig;
 }
 
 interface ThemeConfig {
   colorScheme?: 'ocean' | 'sunset' | 'forest' | 'lavender' | 'monochrome';
+  mode?: 'light' | 'dark';
+  primaryColor?: string;
 }
 
 export function BlockerCard({
@@ -45,6 +49,11 @@ export function BlockerCard({
       border: 'border-red-600',
       iconBg: 'bg-red-200',
       iconColor: 'text-red-700',
+    },
+    critical: {
+      border: 'border-red-700',
+      iconBg: 'bg-red-300',
+      iconColor: 'text-red-800',
     },
   };
 

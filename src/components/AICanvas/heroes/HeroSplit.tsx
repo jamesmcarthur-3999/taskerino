@@ -16,15 +16,23 @@ import { fadeInVariants, slideInLeftVariants, slideInRightVariants } from '../..
 export interface ThemeConfig {
   primary: string;
   secondary: string;
+  mode?: 'light' | 'dark';
+  primaryColor?: string;
 }
 
 export interface HeroSplitProps {
-  left: React.ReactNode;
-  right: React.ReactNode;
+  title: string;
+  narrative: string;
+  stats: {
+    duration: string;
+    screenshots: number;
+    date?: string;
+  };
   theme: ThemeConfig;
+  featuredImage?: string;
 }
 
-export function HeroSplit({ left, right, theme }: HeroSplitProps) {
+export function HeroSplit({ title, narrative, stats, theme, featuredImage }: HeroSplitProps) {
   return (
     <motion.div
       variants={fadeInVariants}
@@ -47,20 +55,41 @@ export function HeroSplit({ left, right, theme }: HeroSplitProps) {
 
       {/* Two column layout */}
       <div className="relative z-10 grid md:grid-cols-2 gap-6 p-8 h-full min-h-[280px]">
-        {/* Left column */}
+        {/* Left column - Text content */}
         <motion.div
           variants={slideInLeftVariants}
-          className={`${getGlassClasses('strong')} ${getRadiusClass('field')} p-6 shadow-xl`}
+          className={`${getGlassClasses('strong')} ${getRadiusClass('field')} p-6 shadow-xl flex flex-col justify-center`}
         >
-          {left}
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">{title}</h1>
+          <p className="text-base text-gray-700 leading-relaxed">{narrative}</p>
+          {stats.date && (
+            <p className="text-sm text-gray-500 mt-4">{stats.date}</p>
+          )}
         </motion.div>
 
-        {/* Right column */}
+        {/* Right column - Stats or featured image */}
         <motion.div
           variants={slideInRightVariants}
-          className={`${getGlassClasses('strong')} ${getRadiusClass('field')} p-6 shadow-xl`}
+          className={`${getGlassClasses('strong')} ${getRadiusClass('field')} p-6 shadow-xl flex flex-col justify-center`}
         >
-          {right}
+          {featuredImage ? (
+            <img
+              src={`/api/attachments/${featuredImage}`}
+              alt="Featured"
+              className="w-full h-full object-cover rounded-lg"
+            />
+          ) : (
+            <div className="space-y-4">
+              <div className="text-center">
+                <div className="text-4xl font-bold text-gray-900">{stats.duration}</div>
+                <div className="text-sm text-gray-600">Session Duration</div>
+              </div>
+              <div className="text-center">
+                <div className="text-4xl font-bold text-gray-900">{stats.screenshots}</div>
+                <div className="text-sm text-gray-600">Screenshots Captured</div>
+              </div>
+            </div>
+          )}
         </motion.div>
       </div>
 

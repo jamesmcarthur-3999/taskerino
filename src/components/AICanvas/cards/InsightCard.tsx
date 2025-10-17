@@ -19,6 +19,8 @@ export interface InsightCardProps {
 
 interface ThemeConfig {
   colorScheme?: 'ocean' | 'sunset' | 'forest' | 'lavender' | 'monochrome';
+  mode?: 'light' | 'dark';
+  primaryColor?: string;
 }
 
 export function InsightCard({

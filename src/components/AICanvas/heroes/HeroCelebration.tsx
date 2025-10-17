@@ -18,6 +18,8 @@ import { bounceInVariants, scaleUpVariants } from '../../morphing-canvas/animati
 export interface ThemeConfig {
   primary: string;
   secondary: string;
+  mode?: 'light' | 'dark';
+  primaryColor?: string;
 }
 
 export interface HeroCelebrationProps {

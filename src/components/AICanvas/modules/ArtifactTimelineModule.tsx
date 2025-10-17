@@ -38,6 +38,8 @@ interface ThemeConfig {
   primary?: string;
   background?: string;
   text?: string;
+  mode?: 'light' | 'dark';
+  primaryColor?: string;
 }
 
 // Icon component mapping

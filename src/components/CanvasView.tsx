@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { DemoCanvas } from './AICanvas/DemoCanvas';
 import { AICanvasRenderer } from './AICanvas/AICanvasRenderer';
-import { AICanvasGenerator } from '../services/aiCanvasGenerator';
+import { aiCanvasGenerator } from '../services/aiCanvasGenerator';
 import type { CanvasSpec } from '../services/aiCanvasGenerator';
 import type { Session } from '../types';
 import { AlertCircle, Sparkles } from 'lucide-react';
@@ -37,8 +37,7 @@ export function CanvasView({ session }: CanvasViewProps) {
       setGenerationError(null);
 
       try {
-        const generator = AICanvasGenerator.getInstance();
-        const spec = await generator.generate(session);
+        const spec = await aiCanvasGenerator.generate(session);
         setCanvasSpec(spec);
       } catch (error) {
         console.error('[CanvasView] Failed to generate canvas:', error);

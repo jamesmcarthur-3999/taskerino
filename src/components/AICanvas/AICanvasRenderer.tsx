@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import type { Session } from '../../types';
+import type { Session, SessionSummary } from '../../types';
 import type { CanvasSpec } from '../../services/aiCanvasGenerator';
 import { ArtifactTimelineModule } from './modules/ArtifactTimelineModule';
 import { ArtifactGalleryModule } from './modules/ArtifactGalleryModule';
@@ -22,6 +22,66 @@ import { HeroCelebration } from './heroes/HeroCelebration';
 import { getRadiusClass, getGlassClasses } from '../../design-system/theme';
 import { Calendar, Clock, Camera, TrendingUp } from 'lucide-react';
 import { fadeInVariants, createStaggerVariants } from '../../lib/animations';
+
+/**
+ * Helper functions for backward-compatible data access
+ */
+
+// Get achievements (enhanced or fallback to flat array)
+function getAchievements(summary: SessionSummary): Array<{
+  text: string;
+  timestamp?: string;
+  screenshotIds?: string[];
+  importance?: string;
+}> {
+  // Use enhanced version if available
+  if (summary.achievementsEnhanced && summary.achievementsEnhanced.length > 0) {
+    return summary.achievementsEnhanced;
+  }
+
+  // Fallback to flat array
+  return (summary.achievements || []).map(text => ({ text }));
+}
+
+// Get blockers (enhanced or fallback to flat array)
+function getBlockers(summary: SessionSummary): Array<{
+  text: string;
+  timestamp?: string;
+  screenshotIds?: string[];
+  severity?: string;
+  status?: string;
+  resolution?: string;
+}> {
+  // Use enhanced version if available
+  if (summary.blockersEnhanced && summary.blockersEnhanced.length > 0) {
+    return summary.blockersEnhanced;
+  }
+
+  // Fallback to flat array
+  return (summary.blockers || []).map(text => ({
+    text,
+    status: 'unresolved' as const
+  }));
+}
+
+// Get key moments (or empty if not available)
+function getKeyMoments(summary: SessionSummary) {
+  return summary.keyMoments || [];
+}
+
+// Get dynamic insights (or empty if not available)
+function getDynamicInsights(summary: SessionSummary) {
+  return summary.dynamicInsights || [];
+}
+
+// Check if session has temporal data
+function hasTemporalData(summary: SessionSummary): boolean {
+  return !!(
+    summary.achievementsEnhanced?.length ||
+    summary.blockersEnhanced?.length ||
+    summary.keyMoments?.length
+  );
+}
 
 interface AICanvasRendererProps {
   session: Session;
@@ -87,18 +147,23 @@ function HeroSection({
   const summary = session.summary;
 
   // Select hero variant based on layout emphasis
-  if (layout.emphasis === 'achievement-focused' && summary?.achievements && summary.achievements.length > 0) {
-    return (
-      <HeroCelebration
-        title={session.name}
-        achievement={summary.achievements[0]}
-        confetti={spec.theme.mood === 'celebratory'}
-        theme={{
-          mode: 'light',
-          primaryColor: theme.primary,
-        }}
-      />
-    );
+  if (layout.emphasis === 'achievement-focused' && summary) {
+    const achievements = getAchievements(summary);
+    if (achievements.length > 0) {
+      return (
+        <HeroCelebration
+          title={session.name}
+          achievement={achievements[0].text}
+          confetti={spec.theme.mood === 'celebratory'}
+          theme={{
+            primary: theme.primary,
+            secondary: theme.secondary,
+            mode: 'light',
+            primaryColor: theme.primary,
+          }}
+        />
+      );
+    }
   }
 
   if (layout.type === 'story' || layout.type === 'flow') {
@@ -222,6 +287,9 @@ function SectionRenderer({
 }) {
   // Timeline section
   if (section.type === 'timeline') {
+    // Check if we have enhanced temporal data
+    const hasEnhancedData = session.summary ? hasTemporalData(session.summary) : false;
+
     return (
       <motion.div variants={fadeInVariants}>
         <ArtifactTimelineModule
@@ -232,6 +300,11 @@ function SectionRenderer({
             primaryColor: spec.theme.primary,
           }}
         />
+        {!hasEnhancedData && (
+          <p className="text-xs text-gray-500 mt-2 text-center">
+            💡 Tip: Re-enrich this session to see temporal timeline
+          </p>
+        )}
       </motion.div>
     );
   }
@@ -255,7 +328,8 @@ function SectionRenderer({
 
   // Achievements section
   if (section.type === 'achievements') {
-    const achievements = session.summary?.achievements || [];
+    if (!session.summary) return null;
+    const achievements = getAchievements(session.summary);
     if (achievements.length === 0) return null;
 
     return (
@@ -267,8 +341,13 @@ function SectionRenderer({
         {achievements.map((achievement, idx) => (
           <AchievementCard
             key={idx}
-            achievement={achievement}
-            timestamp={session.summary?.lastUpdated}
+            achievement={achievement.text}
+            timestamp={achievement.timestamp}
+            relatedScreenshots={
+              achievement.screenshotIds
+                ? session.screenshots?.filter(s => achievement.screenshotIds!.includes(s.id))
+                : undefined
+            }
             theme={{
               mode: 'light',
               primaryColor: spec.theme.primary,
@@ -281,7 +360,8 @@ function SectionRenderer({
 
   // Blockers section
   if (section.type === 'blockers') {
-    const blockers = session.summary?.blockers || [];
+    if (!session.summary) return null;
+    const blockers = getBlockers(session.summary);
     if (blockers.length === 0) return null;
 
     return (
@@ -293,9 +373,11 @@ function SectionRenderer({
         {blockers.map((blocker, idx) => (
           <BlockerCard
             key={idx}
-            blocker={blocker}
-            severity="medium"
-            timestamp={session.summary?.lastUpdated}
+            blocker={blocker.text}
+            severity={(blocker.severity || 'medium') as 'low' | 'medium' | 'high' | 'critical'}
+            timestamp={blocker.timestamp}
+            status={blocker.status}
+            resolution={blocker.resolution}
             theme={{
               mode: 'light',
               primaryColor: spec.theme.primary,
@@ -328,6 +410,97 @@ function SectionRenderer({
               primaryColor: spec.theme.primary,
             }}
           />
+        ))}
+      </CardSection>
+    );
+  }
+
+  // Key Moments section (NEW - only if data available)
+  if (section.type === 'key-moments') {
+    if (!session.summary) return null;
+    const moments = getKeyMoments(session.summary);
+    if (moments.length === 0) return null;
+
+    return (
+      <CardSection
+        title="Key Moments"
+        icon="⚡"
+        gradient="from-purple-500 to-indigo-500"
+      >
+        {moments.map((moment, idx) => (
+          <motion.div
+            key={idx}
+            className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 border-l-4 border-purple-500`}
+            variants={fadeInVariants}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-indigo-600 flex items-center justify-center text-white text-xs">
+                {moment.type === 'breakthrough' && '💡'}
+                {moment.type === 'transition' && '🔄'}
+                {moment.type === 'context_switch' && '↔️'}
+                {moment.type === 'milestone' && '🎯'}
+                {moment.type === 'decision' && '⚖️'}
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-gray-900 mb-1">{moment.title}</div>
+                <p className="text-sm text-gray-700">{moment.description}</p>
+                {moment.timestamp && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    {new Date(moment.timestamp).toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
+              {moment.impact && (
+                <div className={`flex-shrink-0 px-2 py-1 rounded text-xs font-semibold ${
+                  moment.impact === 'high' ? 'bg-purple-100 text-purple-700' :
+                  moment.impact === 'medium' ? 'bg-blue-100 text-blue-700' :
+                  'bg-gray-100 text-gray-700'
+                }`}>
+                  {moment.impact}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        ))}
+      </CardSection>
+    );
+  }
+
+  // Dynamic Insights section (NEW - only if data available)
+  if (section.type === 'dynamic-insights') {
+    if (!session.summary) return null;
+    const insights = getDynamicInsights(session.summary);
+    if (insights.length === 0) return null;
+
+    return (
+      <CardSection
+        title="Discoveries"
+        icon="✨"
+        gradient="from-cyan-500 to-teal-500"
+      >
+        {insights.map((insight, idx) => (
+          <motion.div
+            key={idx}
+            className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4`}
+            variants={fadeInVariants}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-semibold text-cyan-600 uppercase tracking-wide">
+                    {insight.type}
+                  </span>
+                  {insight.confidence && (
+                    <span className="text-xs text-gray-500">
+                      {Math.round(insight.confidence * 100)}% confident
+                    </span>
+                  )}
+                </div>
+                <div className="font-semibold text-gray-900 mb-1">{insight.title}</div>
+                <p className="text-sm text-gray-700">{insight.description}</p>
+              </div>
+            </div>
+          </motion.div>
         ))}
       </CardSection>
     );

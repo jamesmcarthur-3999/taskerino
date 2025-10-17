@@ -124,11 +124,85 @@ Synthesize the timeline data into a cohesive session summary. ${isLiveSession ? 
 **Guidelines:**
 - Write a narrative that flows chronologically
 - User notes are direct input from the user - treat them as important context
-- Consolidate similar achievements/blockers mentioned across different sources
+- PRESERVE temporal context: Include timestamps for achievements and blockers
+- Extract achievements/blockers per screenshot if they represent distinct progress
+- Identify KEY MOMENTS: transitions, breakthroughs, context switches
+- Create enriched versions (achievementsEnhanced, blockersEnhanced) alongside flat arrays
 - Extract only unique, high-value tasks (not every suggestion)
 - Prioritize tasks based on context and urgency
 - Identify patterns in how time was spent
 - Be concise but informative
+
+Return a comprehensive session summary as JSON with these fields:
+
+**CORE FIELDS (required - unchanged for backward compatibility):**
+- **narrative**: 1-2 paragraph story of what was accomplished
+- **achievements**: Array of strings (simple format for backward compatibility)
+- **blockers**: Array of strings (simple format for backward compatibility)
+- **recommendedTasks**: Array of task objects
+- **keyInsights**: Array of insight objects
+- **focusAreas**: Array of focus area objects
+- **category**, **subCategory**, **tags**: Classification fields
+- **lastUpdated**: Current timestamp
+- **screenshotCount**: ${screenshotCount}
+- **audioSegmentCount**: ${audioCount}
+
+**NEW OPTIONAL FIELDS (add these for richer visualization):**
+- **achievementsEnhanced**: Array of objects with:
+  - id: unique identifier
+  - text: achievement description
+  - timestamp: ISO 8601 timestamp when it occurred
+  - screenshotIds: array of related screenshot IDs
+  - importance: "minor" | "moderate" | "major" | "critical"
+  - category: "feature" | "bugfix" | "optimization" | "deployment" | "other"
+
+- **blockersEnhanced**: Array of objects with:
+  - id: unique identifier
+  - text: blocker description
+  - timestamp: ISO 8601 timestamp when encountered
+  - screenshotIds: array of related screenshot IDs
+  - severity: "low" | "medium" | "high" | "critical"
+  - status: "unresolved" | "resolved" | "workaround"
+  - resolvedAt: (optional) timestamp if resolved
+  - resolution: (optional) how it was resolved
+
+- **keyMoments**: Array of significant moments:
+  - id: unique identifier
+  - type: "transition" | "breakthrough" | "context_switch" | "milestone" | "decision"
+  - timestamp: ISO 8601 timestamp
+  - title: brief title
+  - description: 1-2 sentence description
+  - screenshotIds: (optional) related screenshots
+  - impact: "low" | "medium" | "high"
+
+- **dynamicInsights**: Array of session-specific insights:
+  - type: descriptive category (e.g., "flow-state", "error-pattern", "learning-trajectory")
+  - title: brief title
+  - description: detailed description
+  - timestamp: (optional) when this was observed
+  - confidence: 0-1 confidence score
+  - metadata: (optional) any additional structured data
+
+- **generationMetadata**: AI reasoning:
+  - reasoning: Why you structured the summary this way
+  - confidence: 0-1 overall confidence in summary
+  - detectedSessionType: "deep-work" | "exploratory" | "collaborative" | "learning" | "troubleshooting" | "creative" | "routine" | "mixed"
+  - primaryTheme: Brief theme description
+  - warnings: (optional) array of caveats
+
+**EXTRACTION GUIDELINES:**
+- When extracting achievements/blockers, note WHEN they happened (use screenshot timestamps)
+- Create a keyMoment for:
+  - Transitions: "Switched from research to implementation"
+  - Breakthroughs: "Identified root cause of bug"
+  - Context switches: "Moved from feature A to feature B"
+  - Milestones: "Completed major component"
+- Use dynamicInsights for:
+  - Detected patterns (e.g., "User entered flow state for 90 minutes")
+  - Unusual observations (e.g., "High screenshot frequency during debugging")
+  - Session-specific insights that don't fit elsewhere
+- Assign importance/severity based on impact and urgency signals
+- Generate BOTH flat arrays (achievements, blockers) AND enhanced versions
 
 Return ONLY valid JSON (no markdown):
 {
@@ -151,6 +225,91 @@ Return ONLY valid JSON (no markdown):
     "Missing production API credentials - blocked deployment",
     "CORS errors in production environment"
   ],
+  "achievementsEnhanced": [
+    {
+      "id": "ach-1",
+      "text": "Implemented OAuth login flow",
+      "timestamp": "2024-01-15T14:20:00Z",
+      "screenshotIds": ["screenshot-id-3", "screenshot-id-4"],
+      "importance": "major",
+      "category": "feature"
+    },
+    {
+      "id": "ach-2",
+      "text": "Fixed CORS configuration",
+      "timestamp": "2024-01-15T15:10:00Z",
+      "screenshotIds": ["screenshot-id-7"],
+      "importance": "critical",
+      "category": "bugfix"
+    }
+  ],
+  "blockersEnhanced": [
+    {
+      "id": "block-1",
+      "text": "Missing production API credentials - blocked deployment",
+      "timestamp": "2024-01-15T14:45:00Z",
+      "screenshotIds": ["screenshot-id-5"],
+      "severity": "high",
+      "status": "unresolved"
+    },
+    {
+      "id": "block-2",
+      "text": "CORS errors in production environment",
+      "timestamp": "2024-01-15T15:00:00Z",
+      "screenshotIds": ["screenshot-id-6", "screenshot-id-7"],
+      "severity": "critical",
+      "status": "resolved",
+      "resolvedAt": "2024-01-15T15:10:00Z",
+      "resolution": "Updated proxy configuration to allow cross-origin requests"
+    }
+  ],
+  "keyMoments": [
+    {
+      "id": "moment-1",
+      "type": "transition",
+      "timestamp": "2024-01-15T14:15:00Z",
+      "title": "Switched from research to implementation",
+      "description": "After evaluating authentication libraries for 20 minutes, made decision to use Library X and began implementing OAuth flow.",
+      "screenshotIds": ["screenshot-id-2", "screenshot-id-3"],
+      "impact": "medium"
+    },
+    {
+      "id": "moment-2",
+      "type": "breakthrough",
+      "timestamp": "2024-01-15T15:05:00Z",
+      "title": "Identified root cause of CORS errors",
+      "description": "Discovered that production proxy configuration was missing CORS headers, leading to immediate fix.",
+      "screenshotIds": ["screenshot-id-6"],
+      "impact": "high"
+    }
+  ],
+  "dynamicInsights": [
+    {
+      "type": "flow-state",
+      "title": "Deep focus period during implementation",
+      "description": "User maintained consistent focus for 45 minutes during OAuth implementation with minimal context switching, indicating strong flow state.",
+      "timestamp": "2024-01-15T14:15:00Z",
+      "confidence": 0.85,
+      "metadata": {
+        "duration": 45,
+        "screenshotFrequency": "regular",
+        "contextSwitches": 0
+      }
+    },
+    {
+      "type": "error-pattern",
+      "title": "Recurring CORS issues across environments",
+      "description": "Multiple screenshots show CORS-related errors, suggesting this is a systemic configuration issue rather than isolated problem.",
+      "confidence": 0.9
+    }
+  ],
+  "generationMetadata": {
+    "reasoning": "This session shows a clear progression from research to implementation to debugging. The high screenshot frequency during debugging indicated this was a critical blocker. The successful resolution of CORS issues was identified as a breakthrough moment.",
+    "confidence": 0.88,
+    "detectedSessionType": "troubleshooting",
+    "primaryTheme": "Authentication implementation with focus on resolving production deployment blockers",
+    "warnings": ["Limited audio context available - summary primarily based on screenshot analyses"]
+  },
   "recommendedTasks": [
     {
       "title": "Request production API credentials from DevOps",
@@ -203,11 +362,16 @@ Return ONLY valid JSON (no markdown):
 - ${isLiveSession ? 'Use PRESENT TENSE and "so far" language throughout' : 'Use PAST TENSE throughout'}
 - ${isLiveSession ? 'MUST include liveSnapshot field' : 'DO NOT include liveSnapshot field'}
 - Ensure the narrative tells a coherent story
-- Consolidate duplicate items (if 3 screenshots mention "fix CORS", that's ONE achievement)
+- PRESERVE timestamps: Include temporal context in enhanced fields (achievementsEnhanced, blockersEnhanced, keyMoments)
+- Generate BOTH flat arrays (achievements, blockers) AND enhanced versions with timestamps
+- For flat arrays: Consolidate duplicate items (if 3 screenshots mention "fix CORS", that's ONE achievement)
+- For enhanced arrays: Preserve separate entries with timestamps if they represent distinct progress moments
 - Only extract tasks that are truly actionable and valuable
 - Use actual screenshot IDs from the analyses
 - Focus areas should sum to 100% and reflect actual time distribution
-- Be specific and actionable`;
+- Be specific and actionable
+- Be creative with dynamicInsights - include any interesting patterns or observations
+- Include keyMoments for transitions, breakthroughs, and context switches`;
 
   try {
     console.log('📊 SessionSynthesis: Synthesizing session summary...');
