@@ -3,32 +3,65 @@
  *
  * Renders navigation tabs with badges and quick actions
  * Handles special session controls logic
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - React.memo to prevent re-renders when props haven't changed
+ * - useCallback for inline handlers to maintain referential equality
  */
 
-import { motion, LayoutGroup } from 'framer-motion';
+import { memo, useCallback } from 'react';
+import { motion, LayoutGroup, type Variants } from 'framer-motion';
 import { Search } from 'lucide-react';
 import { tabs } from '../constants';
 import { NavButton } from './NavButton';
 import type { BadgeConfig, QuickActionConfig } from './NavButton';
 import type { TabType } from '../../../types';
-import { contentSpring } from '../utils/islandAnimations';
-import type { Variants } from 'framer-motion';
 
 /**
  * Tabs-specific variants with opacity-only animation
  * Prevents jarring movements during island transitions
+ *
+ * Entry: Immediate start (no delay) to ensure tabs appear while mode exits
+ * Exit: Fast fade to allow mode content to appear quickly
+ *
+ * The fast entry (0.18s) combined with removing mode="wait" from the mode
+ * AnimatePresence ensures the tabs are fully visible before the mode finishes exiting,
+ * creating a smooth content swap with no gap where the island is empty.
  */
 const tabsVariants: Variants = {
   initial: {
     opacity: 0,
+    scale: 0.98,
   },
   animate: {
     opacity: 1,
+    scale: 1,
   },
   exit: {
     opacity: 0,
+    scale: 0.98,
   },
 };
+
+interface ProcessingJob {
+  id: string;
+  input: string;
+  progress: number;
+}
+
+interface CompletedJob {
+  id: string;
+  input: string;
+}
+
+interface ActiveSession {
+  id: string;
+  name: string;
+  description: string;
+  startTime: string;
+  screenshots: string[];
+  lastScreenshotTime: string | null;
+}
 
 interface NavTabsProps {
   activeTab: TabType;
@@ -39,11 +72,11 @@ interface NavTabsProps {
   onSearchClick: () => void;
   navData: {
     activeTasks: number;
-    processingJobs: any[];
-    completedJobs: any[];
+    processingJobs: ProcessingJob[];
+    completedJobs: CompletedJob[];
     hasActiveProcessing: boolean;
     hasCompletedItems: boolean;
-    activeSession: any | null;
+    activeSession: ActiveSession | null;
     isSessionActive: boolean;
     isSessionPaused: boolean;
   };
@@ -157,7 +190,7 @@ function getQuickActionConfig(
   return undefined;
 }
 
-export function NavTabs({
+function NavTabsComponent({
   activeTab,
   hoveredTab,
   setHoveredTab,
@@ -171,13 +204,30 @@ export function NavTabs({
   onResumeSession,
   onEndSession,
 }: NavTabsProps) {
+  /**
+   * PERFORMANCE OPTIMIZATION:
+   * Memoize the badge and quick action config functions to prevent
+   * creating new objects on every render, which would break memoization
+   * of child NavButton components.
+   */
+  const getBadgeConfigMemo = useCallback((tabId: TabType) => {
+    return getBadgeConfig(tabId, navData, onProcessingBadgeClick, onSessionBadgeClick);
+  }, [navData, onProcessingBadgeClick, onSessionBadgeClick]);
+
+  const getQuickActionConfigMemo = useCallback((tabId: TabType) => {
+    return getQuickActionConfig(tabId, navData, onQuickAction, onPauseSession, onResumeSession, onEndSession);
+  }, [navData, onQuickAction, onPauseSession, onResumeSession, onEndSession]);
+
   return (
     <motion.div
       variants={tabsVariants}
       initial="initial"
       animate="animate"
       exit="exit"
-      transition={contentSpring}
+      transition={{
+        opacity: { duration: 0.18 },
+        scale: { duration: 0.18 },
+      }}
       className="flex items-center justify-center gap-2 px-4 py-2"
     >
       <LayoutGroup>
@@ -185,18 +235,9 @@ export function NavTabs({
           const isActive = activeTab === tab.id;
           const isHovered = hoveredTab === tab.id;
 
-          // Get badge configuration
-          const badge = getBadgeConfig(tab.id, navData, onProcessingBadgeClick, onSessionBadgeClick);
-
-          // Get quick action configuration
-          const quickAction = getQuickActionConfig(
-            tab.id,
-            navData,
-            onQuickAction,
-            onPauseSession,
-            onResumeSession,
-            onEndSession
-          );
+          // Get badge and quick action configuration using memoized functions
+          const badge = getBadgeConfigMemo(tab.id);
+          const quickAction = getQuickActionConfigMemo(tab.id);
 
           return (
             <NavButton
@@ -229,3 +270,11 @@ export function NavTabs({
     </motion.div>
   );
 }
+
+/**
+ * PERFORMANCE OPTIMIZATION:
+ * Memoize the entire component to prevent re-renders when props haven't changed.
+ * This is critical because NavTabs is rendered inside AnimatePresence and can
+ * re-render frequently during navigation island transitions.
+ */
+export const NavTabs = memo(NavTabsComponent);

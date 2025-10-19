@@ -23,7 +23,7 @@ export const tabs: TabConfig[] = [
 export const NAV_CONSTANTS = {
   // Scroll ranges for morphing animations
   SCROLL_MORPH_RANGE: 300,
-  LOGO_FADE_START: 50,
+  LOGO_FADE_START: 100,
   MENU_REVEAL_START: 150,
 
   // Layout constants

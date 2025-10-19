@@ -48,6 +48,9 @@ interface SessionsTopBarProps {
   selectedSessionIds: Set<string>;
   onBulkSelectModeChange: (enabled: boolean) => void;
   onSelectedSessionIdsChange: (ids: Set<string>) => void;
+
+  // Responsive compact mode
+  compactMode?: boolean;
 }
 
 export function SessionsTopBar({
@@ -78,6 +81,7 @@ export function SessionsTopBar({
   selectedSessionIds,
   onBulkSelectModeChange,
   onSelectedSessionIdsChange,
+  compactMode = false,
 }: SessionsTopBarProps) {
   // Local state for interval dropdown
   const [showIntervalDropdown, setShowIntervalDropdown] = useState(false);
@@ -191,96 +195,355 @@ export function SessionsTopBar({
     <>
       {activeSession ? (
         <>
-          {/* Active Session Controls */}
-          <div className="flex items-center gap-2 px-3 py-2">
-            <div className={`w-3 h-3 rounded-full ${activeSession.status === 'paused' ? `${warningGradient.iconBg} shadow-lg shadow-yellow-400/50` : `${successGradient.iconBg} animate-pulse shadow-lg shadow-green-500/50`}`} />
-            <span className="text-sm font-bold text-gray-900">{activeSession.name}</span>
-          </div>
+          {/* Active Session Indicator - Dot always visible, name hides in compact mode */}
+          <motion.div
+            layout
+            className="flex items-center px-3 py-2"
+            style={{
+              maxWidth: compactMode ? '48px' : '220px',
+            }}
+            transition={{
+              layout: {
+                type: "spring",
+                stiffness: 400,
+                damping: 30,
+              }
+            }}
+          >
+            <motion.div
+              layout="position"
+              className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                activeSession.status === 'paused'
+                  ? `${warningGradient.iconBg} shadow-lg shadow-yellow-400/50`
+                  : `${successGradient.iconBg} animate-pulse shadow-lg shadow-green-500/50`
+              }`}
+            />
+            <AnimatePresence mode="wait" initial={false}>
+              {!compactMode && (
+                <motion.span
+                  key="session-name"
+                  className="text-sm font-bold text-gray-900 truncate"
+                  title={activeSession.name}
+                  initial={{ opacity: 0, width: 0, marginLeft: 0 }}
+                  animate={{
+                    opacity: 1,
+                    width: 'auto',
+                    marginLeft: '8px',
+                    transition: {
+                      type: "spring",
+                      stiffness: 400,
+                      damping: 30,
+                    }
+                  }}
+                  exit={{
+                    opacity: 0,
+                    width: 0,
+                    marginLeft: 0,
+                    transition: {
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 35,
+                    }
+                  }}
+                >
+                  {activeSession.name}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           <div className="h-8 w-px bg-white/30"></div>
 
           {/* Pause/Resume Button */}
           {activeSession.status === 'paused' ? (
-            <button
+            <motion.button
+              layout
               onClick={() => resumeSession(activeSession.id)}
-              className={`flex items-center gap-2 px-4 py-2 ${getRadiusClass('pill')} ${resumeGradient.container} text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent`}
+              className={`flex items-center ${getRadiusClass('pill')} ${resumeGradient.container} text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent`}
+              style={{
+                paddingLeft: '16px',
+                paddingRight: '16px',
+                paddingTop: '8px',
+                paddingBottom: '8px',
+              }}
+              transition={{
+                layout: {
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 30,
+                }
+              }}
             >
-              <Play size={16} />
-              <span>Resume</span>
-            </button>
+              <motion.div layout="position">
+                <Play size={16} />
+              </motion.div>
+              <AnimatePresence mode="wait" initial={false}>
+                {!compactMode && (
+                  <motion.span
+                    key="resume-label"
+                    initial={{ opacity: 0, width: 0, marginLeft: 0 }}
+                    animate={{
+                      opacity: 1,
+                      width: 'auto',
+                      marginLeft: '8px',
+                      transition: {
+                        type: "spring",
+                        stiffness: 400,
+                        damping: 30,
+                      }
+                    }}
+                    exit={{
+                      opacity: 0,
+                      width: 0,
+                      marginLeft: 0,
+                      transition: {
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 35,
+                      }
+                    }}
+                  >
+                    Resume
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
           ) : (
-            <button
+            <motion.button
+              layout
               onClick={() => pauseSession(activeSession.id)}
-              className={`flex items-center gap-2 px-4 py-2 ${getRadiusClass('pill')} ${pauseGradient.container} text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent`}
+              className={`flex items-center ${getRadiusClass('pill')} ${pauseGradient.container} text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent`}
+              style={{
+                paddingLeft: '16px',
+                paddingRight: '16px',
+                paddingTop: '8px',
+                paddingBottom: '8px',
+              }}
+              transition={{
+                layout: {
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 30,
+                }
+              }}
             >
-              <Pause size={16} />
-              <span>Pause</span>
-            </button>
+              <motion.div layout="position">
+                <Pause size={16} />
+              </motion.div>
+              <AnimatePresence mode="wait" initial={false}>
+                {!compactMode && (
+                  <motion.span
+                    key="pause-label"
+                    initial={{ opacity: 0, width: 0, marginLeft: 0 }}
+                    animate={{
+                      opacity: 1,
+                      width: 'auto',
+                      marginLeft: '8px',
+                      transition: {
+                        type: "spring",
+                        stiffness: 400,
+                        damping: 30,
+                      }
+                    }}
+                    exit={{
+                      opacity: 0,
+                      width: 0,
+                      marginLeft: 0,
+                      transition: {
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 35,
+                      }
+                    }}
+                  >
+                    Pause
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
           )}
 
           {/* Stop Button - with delightful UX */}
-          <button
+          <motion.button
+            layout
             onClick={() => handleEndSession(activeSession.id)}
             disabled={isEnding}
-            className={`flex items-center gap-2 px-4 py-2 ${getRadiusClass('pill')} ${dangerGradient.container} text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100`}
+            className={`flex items-center ${getRadiusClass('pill')} ${dangerGradient.container} text-white shadow-md font-semibold text-sm transition-all hover:shadow-lg hover:scale-[1.02] active:scale-95 border-2 border-transparent disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100`}
+            style={{
+              paddingLeft: '16px',
+              paddingRight: '16px',
+              paddingTop: '8px',
+              paddingBottom: '8px',
+            }}
+            transition={{
+              layout: {
+                type: "spring",
+                stiffness: 400,
+                damping: 30,
+              }
+            }}
           >
             {isEnding ? (
               <>
-                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Saving...</span>
-              </>
-            ) : (
-              <>
-                <Square size={16} />
-                <span>Stop</span>
-              </>
-            )}
-          </button>
-        </>
-      ) : (
-        <>
-          {/* Start Session Button */}
-          <button
-            onClick={handleQuickStart}
-            disabled={isStarting}
-            className={`flex items-center gap-2 px-4 py-2 ${getRadiusClass('pill')} ${getGradientClasses(colorScheme, 'primary')} text-white shadow-md font-semibold text-sm transition-all border-2 border-transparent disabled:cursor-not-allowed ${
-              isStarting
-                ? 'animate-pulse shadow-lg shadow-cyan-500/50'
-                : 'hover:shadow-lg hover:scale-[1.02] active:scale-95'
-            }`}
-          >
-            {isStarting ? (
-              countdown !== null && countdown > 0 ? (
-                <>
-                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center border border-white/40">
-                    <span className="text-sm font-bold">{countdown}</span>
-                  </div>
-                  <span>Starting in {countdown}...</span>
-                </>
-              ) : countdown === 0 ? (
-                <>
-                  <CheckCircle2 size={16} className="animate-pulse" />
-                  <span>Recording!</span>
-                </>
-              ) : (
-                <>
+                <motion.div layout="position">
                   <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  <span>Starting...</span>
+                </motion.div>
+                <motion.span
+                  layout="position"
+                  style={{ marginLeft: '8px' }}
+                >
+                  Saving...
+                </motion.span>
+              </>
+            ) : (
+              <>
+                <motion.div layout="position">
+                  <Square size={16} />
+                </motion.div>
+                <AnimatePresence mode="wait" initial={false}>
+                  {!compactMode && (
+                    <motion.span
+                      key="stop-label"
+                      initial={{ opacity: 0, width: 0, marginLeft: 0 }}
+                      animate={{
+                        opacity: 1,
+                        width: 'auto',
+                        marginLeft: '8px',
+                        transition: {
+                          type: "spring",
+                          stiffness: 400,
+                          damping: 30,
+                        }
+                      }}
+                      exit={{
+                        opacity: 0,
+                        width: 0,
+                        marginLeft: 0,
+                        transition: {
+                          type: "spring",
+                          stiffness: 500,
+                          damping: 35,
+                        }
+                      }}
+                    >
+                      Stop
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </>
+            )}
+          </motion.button>
+        </>
+      ) : (
+        <>
+          {/* Start Session Button */}
+          <motion.button
+            layout
+            onClick={handleQuickStart}
+            disabled={isStarting}
+            className={`flex items-center ${getRadiusClass('pill')} ${getGradientClasses(colorScheme, 'primary')} text-white shadow-md font-semibold text-sm transition-all border-2 border-transparent disabled:cursor-not-allowed ${
+              isStarting
+                ? 'animate-pulse shadow-lg shadow-cyan-500/50'
+                : 'hover:shadow-lg hover:scale-[1.02] active:scale-95'
+            }`}
+            style={{
+              paddingLeft: '16px',
+              paddingRight: '16px',
+              paddingTop: '8px',
+              paddingBottom: '8px',
+            }}
+            transition={{
+              layout: {
+                type: "spring",
+                stiffness: 400,
+                damping: 30,
+              }
+            }}
+          >
+            {isStarting ? (
+              countdown !== null && countdown > 0 ? (
+                <>
+                  <motion.div layout="position">
+                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center border border-white/40">
+                      <span className="text-sm font-bold">{countdown}</span>
+                    </div>
+                  </motion.div>
+                  <motion.span
+                    layout="position"
+                    style={{ marginLeft: '8px' }}
+                  >
+                    Starting in {countdown}...
+                  </motion.span>
+                </>
+              ) : countdown === 0 ? (
+                <>
+                  <motion.div layout="position">
+                    <CheckCircle2 size={16} className="animate-pulse" />
+                  </motion.div>
+                  <motion.span
+                    layout="position"
+                    style={{ marginLeft: '8px' }}
+                  >
+                    Recording!
+                  </motion.span>
+                </>
+              ) : (
+                <>
+                  <motion.div layout="position">
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </motion.div>
+                  <motion.span
+                    layout="position"
+                    style={{ marginLeft: '8px' }}
+                  >
+                    Starting...
+                  </motion.span>
                 </>
               )
             ) : (
               <>
-                <Play size={16} />
-                <span>Start Session</span>
+                <motion.div layout="position">
+                  <Play size={16} />
+                </motion.div>
+                <AnimatePresence mode="wait" initial={false}>
+                  {!compactMode && (
+                    <motion.span
+                      key="start-label"
+                      initial={{ opacity: 0, width: 0, marginLeft: 0 }}
+                      animate={{
+                        opacity: 1,
+                        width: 'auto',
+                        marginLeft: '8px',
+                        transition: {
+                          type: "spring",
+                          stiffness: 400,
+                          damping: 30,
+                        }
+                      }}
+                      exit={{
+                        opacity: 0,
+                        width: 0,
+                        marginLeft: 0,
+                        transition: {
+                          type: "spring",
+                          stiffness: 500,
+                          damping: 35,
+                        }
+                      }}
+                    >
+                      Start Session
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </>
             )}
-          </button>
+          </motion.button>
         </>
       )}
 
@@ -293,6 +556,7 @@ export function SessionsTopBar({
         active={currentSettings.enableScreenshots}
         onChange={updateScreenshots}
         size="sm"
+        showLabel={!compactMode}
       />
 
       <ToggleButton
@@ -301,6 +565,7 @@ export function SessionsTopBar({
         active={currentSettings.audioRecording}
         onChange={updateAudio}
         size="sm"
+        showLabel={!compactMode}
       />
 
       <ToggleButton
@@ -309,6 +574,7 @@ export function SessionsTopBar({
         active={currentSettings.videoRecording || false}
         onChange={updateVideo}
         size="sm"
+        showLabel={!compactMode}
       />
 
       {/* Interval Selector - Show when screenshots enabled */}
@@ -327,6 +593,7 @@ export function SessionsTopBar({
             }
             active={showIntervalDropdown}
             onClick={() => setShowIntervalDropdown(!showIntervalDropdown)}
+            showLabel={!compactMode}
           />
 
           {/* Interval Dropdown Panel */}
@@ -433,28 +700,76 @@ export function SessionsTopBar({
           />
 
           {/* Select Button */}
-          <button
+          <motion.button
+            layout
             onClick={() => {
               onBulkSelectModeChange(!bulkSelectMode);
               if (bulkSelectMode) {
                 onSelectedSessionIdsChange(new Set());
               }
             }}
-            className={`px-4 py-2 backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${
+            className={`backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center ${
               bulkSelectMode
                 ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md border-transparent'
                 : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-cyan-300'
             } focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none`}
+            style={{
+              paddingLeft: '16px',
+              paddingRight: '16px',
+              paddingTop: '8px',
+              paddingBottom: '8px',
+            }}
+            transition={{
+              layout: {
+                type: "spring",
+                stiffness: 400,
+                damping: 30,
+              }
+            }}
             title="Select multiple sessions"
           >
-            <CheckCheck size={16} />
-            <span>{bulkSelectMode ? 'Cancel' : 'Select'}</span>
+            <motion.div layout="position">
+              <CheckCheck size={16} />
+            </motion.div>
+            <AnimatePresence mode="wait" initial={false}>
+              {!compactMode && (
+                <motion.span
+                  key="select-label"
+                  initial={{ opacity: 0, width: 0, marginLeft: 0 }}
+                  animate={{
+                    opacity: 1,
+                    width: 'auto',
+                    marginLeft: '8px',
+                    transition: {
+                      type: "spring",
+                      stiffness: 400,
+                      damping: 30,
+                    }
+                  }}
+                  exit={{
+                    opacity: 0,
+                    width: 0,
+                    marginLeft: 0,
+                    transition: {
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 35,
+                    }
+                  }}
+                >
+                  {bulkSelectMode ? 'Cancel' : 'Select'}
+                </motion.span>
+              )}
+            </AnimatePresence>
             {selectedSessionIds.size > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 bg-white/30 text-white text-[10px] font-bold rounded-full">
+              <motion.span
+                layout="position"
+                className="ml-1 px-1.5 py-0.5 bg-white/30 text-white text-[10px] font-bold rounded-full"
+              >
                 {selectedSessionIds.size}
-              </span>
+              </motion.span>
             )}
-          </button>
+          </motion.button>
         </>
       )}
     </>

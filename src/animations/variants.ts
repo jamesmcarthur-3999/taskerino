@@ -571,6 +571,377 @@ export const slideBlurVariants: Variants = {
 };
 
 // ============================================================================
+// MODAL VARIANTS
+// ============================================================================
+
+/**
+ * Modal backdrop fade variants
+ * Used for all modal overlays with different speeds based on modal type
+ */
+export const modalBackdropVariants = {
+  // Fast backdrop for critical confirmations (200ms)
+  critical: {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { duration: 0.2, ease: easings.easeOut as any },
+    },
+    exit: {
+      opacity: 0,
+      transition: { duration: 0.15, ease: easings.easeIn as any },
+    },
+  },
+  // Standard backdrop for most modals (250ms)
+  standard: {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { duration: 0.25, ease: easings.easeOut as any },
+    },
+    exit: {
+      opacity: 0,
+      transition: { duration: 0.2, ease: easings.easeIn as any },
+    },
+  },
+  // Smooth backdrop for content viewers (300ms)
+  smooth: {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { duration: 0.3, ease: easings.smooth as any },
+    },
+    exit: {
+      opacity: 0,
+      transition: { duration: 0.25, ease: easings.easeIn as any },
+    },
+  },
+  // Gentle backdrop for info/help modals (300ms soft)
+  gentle: {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { duration: 0.3, ease: easings.gentle as any },
+    },
+    exit: {
+      opacity: 0,
+      transition: { duration: 0.25, ease: easings.easeOut as any },
+    },
+  },
+  // Slow backdrop for immersive experiences (400ms)
+  immersive: {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { duration: 0.4, ease: easings.gentle as any },
+    },
+    exit: {
+      opacity: 0,
+      transition: { duration: 0.3, ease: easings.easeOut as any },
+    },
+  },
+} as const;
+
+/**
+ * Modal confirmation variants
+ * Sharp, attention-grabbing animations for critical confirmations
+ * Includes slight bounce for urgency
+ */
+export const modalConfirmationVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    scale: 0.9,
+    y: 10,
+  },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: springs.bouncy, // Slight overshoot for attention
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.95,
+    y: -5,
+    transition: springs.snappy, // Quick dismissal
+  },
+};
+
+/**
+ * Modal content viewer variants
+ * Smooth, elegant animations for viewing content (screenshots, images, etc.)
+ */
+export const modalContentViewerVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    scale: 0.95,
+    y: 20,
+  },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: springs.smooth,
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.98,
+    y: -10,
+    transition: springs.gentle,
+  },
+};
+
+/**
+ * Modal form variants
+ * Professional, focused animations for forms (QuickTask, QuickNote, etc.)
+ * Includes subtle slide-up for context
+ */
+export const modalFormVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 40,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: springs.gentle,
+  },
+  exit: {
+    opacity: 0,
+    y: 20,
+    transition: springs.snappy,
+  },
+};
+
+/**
+ * Modal info/help variants
+ * Friendly, inviting animations for onboarding and help content
+ */
+export const modalInfoVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 30,
+    scale: 0.98,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: springs.smooth,
+  },
+  exit: {
+    opacity: 0,
+    y: -20,
+    scale: 0.99,
+    transition: springs.smooth,
+  },
+};
+
+/**
+ * Modal experience variants
+ * Immersive, staged animations for full experiences (enrichment, progress, etc.)
+ * Uses fade-only to avoid distraction from content
+ */
+export const modalExperienceVariants: Variants = {
+  hidden: {
+    opacity: 0,
+  },
+  visible: {
+    opacity: 1,
+    transition: {
+      duration: 0.4,
+      ease: easings.gentle as any,
+    },
+  },
+  exit: {
+    opacity: 0,
+    transition: springs.gentle,
+  },
+};
+
+/**
+ * Modal settings variants
+ * Professional, utility-focused animations for settings and configuration
+ */
+export const modalSettingsVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    scale: 0.96,
+    y: 30,
+  },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: springs.gentle,
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.98,
+    y: 15,
+    transition: springs.snappy,
+  },
+};
+
+/**
+ * Modal stagger variants for multi-section modals
+ * Used with stagger containers to animate header → body → footer
+ */
+export const modalStaggerContainerVariants: Variants = {
+  hidden: {
+    opacity: 0,
+  },
+  visible: {
+    opacity: 1,
+    transition: {
+      when: 'beforeChildren',
+      staggerChildren: 0.05, // 50ms stagger
+      delayChildren: 0,
+    },
+  },
+  exit: {
+    opacity: 0,
+    transition: {
+      when: 'afterChildren',
+      staggerChildren: 0.03,
+      staggerDirection: -1,
+    },
+  },
+};
+
+/**
+ * Modal section variants (header, body, footer)
+ * Used as children of stagger container
+ */
+export const modalSectionVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 10,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: springs.gentle,
+  },
+  exit: {
+    opacity: 0,
+    y: -5,
+    transition: springs.snappy,
+  },
+};
+
+/**
+ * Helper: Create coordinated backdrop + content animation
+ * Returns both backdrop and content variants for a specific modal type
+ */
+export function createModalAnimationVariants(type: 'confirmation' | 'content' | 'form' | 'info' | 'experience' | 'settings') {
+  const backdropVariants = {
+    confirmation: modalBackdropVariants.critical,
+    content: modalBackdropVariants.smooth,
+    form: modalBackdropVariants.standard,
+    info: modalBackdropVariants.gentle,
+    experience: modalBackdropVariants.immersive,
+    settings: modalBackdropVariants.standard,
+  };
+
+  const contentVariants = {
+    confirmation: modalConfirmationVariants,
+    content: modalContentViewerVariants,
+    form: modalFormVariants,
+    info: modalInfoVariants,
+    experience: modalExperienceVariants,
+    settings: modalSettingsVariants,
+  };
+
+  return {
+    backdrop: backdropVariants[type],
+    content: contentVariants[type],
+  };
+}
+
+// ============================================================================
+// CARD VARIANTS
+// ============================================================================
+
+/**
+ * Card entrance with slide + fade
+ */
+export const cardEntranceVariants: Variants = {
+  hidden: {
+    opacity: opacities.hidden,
+    y: distances.small,
+    scale: 0.95,
+  },
+  visible: {
+    opacity: opacities.visible,
+    y: 0,
+    scale: scales.default,
+    transition: springs.smooth,
+  },
+  exit: {
+    opacity: opacities.hidden,
+    y: -distances.small,
+    scale: 0.95,
+    transition: {
+      duration: durations.s.fast,
+    },
+  },
+};
+
+/**
+ * Card hover lift animation
+ */
+export const cardHoverVariants = {
+  hover: {
+    y: -4,
+    scale: 1.02,
+    transition: springs.snappy,
+  },
+  tap: {
+    scale: 0.98,
+    transition: springs.snappy,
+  },
+};
+
+/**
+ * Card press feedback
+ */
+export const cardPressVariants = {
+  tap: {
+    scale: 0.98,
+    transition: springs.bouncy,
+  },
+};
+
+/**
+ * Card selection state
+ */
+export const cardSelectionVariants: Variants = {
+  unselected: {
+    scale: scales.default,
+    opacity: opacities.visible,
+  },
+  selected: {
+    scale: 1.01,
+    opacity: opacities.visible,
+    transition: springs.gentle,
+  },
+};
+
+/**
+ * Card exit animation
+ */
+export const cardExitVariants: Variants = {
+  exit: {
+    opacity: opacities.hidden,
+    scale: 0.9,
+    y: -distances.small,
+    transition: {
+      duration: durations.s.fast,
+    },
+  },
+};
+
+// ============================================================================
 // EXPORT ALL VARIANTS
 // ============================================================================
 
@@ -605,6 +976,24 @@ export const variants = {
   // Combined
   slideScale: slideScaleVariants,
   slideBlur: slideBlurVariants,
+
+  // Modal
+  modalBackdrop: modalBackdropVariants,
+  modalConfirmation: modalConfirmationVariants,
+  modalContentViewer: modalContentViewerVariants,
+  modalForm: modalFormVariants,
+  modalInfo: modalInfoVariants,
+  modalExperience: modalExperienceVariants,
+  modalSettings: modalSettingsVariants,
+  modalStaggerContainer: modalStaggerContainerVariants,
+  modalSection: modalSectionVariants,
+
+  // Card-specific
+  cardEntrance: cardEntranceVariants,
+  cardHover: cardHoverVariants,
+  cardPress: cardPressVariants,
+  cardSelection: cardSelectionVariants,
+  cardExit: cardExitVariants,
 } as const;
 
 export default variants;

@@ -278,6 +278,7 @@ export function SessionsListPanel({
                     onSessionClick={onSessionClick}
                     onSessionSelect={onSessionSelect}
                     isSessionNewlyCompleted={isSessionNewlyCompleted}
+                    scrollElementRef={sessionListScrollRef}
                   />
                 </div>
               )}

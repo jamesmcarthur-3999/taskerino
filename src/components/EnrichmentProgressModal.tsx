@@ -17,6 +17,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle,
   Circle,
@@ -31,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { getModalClasses, getModalHeaderClasses, getGlassClasses, getRadiusClass, getSuccessGradient, getInfoGradient, getDangerGradient } from '../design-system/theme';
+import { modalBackdropVariants, modalExperienceVariants, modalSectionVariants } from '../animations/variants';
 import { Button } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
 import {
@@ -354,8 +356,6 @@ export function EnrichmentProgressModal({
   // Render
   // ============================================================================
 
-  if (!isOpen) return null;
-
   const modalClasses = getModalClasses(colorScheme, glassStrength);
   const infoGradient = getInfoGradient('light');
   const successGradient = getSuccessGradient('light');
@@ -363,11 +363,30 @@ export function EnrichmentProgressModal({
 
   return (
     <>
-      <div className={modalClasses.overlay}>
-        <div
-          className={`${modalClasses.content} max-w-2xl w-full`}
-          onClick={(e) => e.stopPropagation()}
-        >
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            {/* Backdrop - Immersive (slow, patient) */}
+            <motion.div
+              variants={modalBackdropVariants.immersive}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className={modalClasses.overlay}
+            />
+
+            {/* Content - Experience type (fade only, significant stagger) */}
+            <motion.div
+              variants={modalExperienceVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none"
+            >
+              <div
+                className={`${modalClasses.content} max-w-2xl w-full pointer-events-auto`}
+                onClick={(e) => e.stopPropagation()}
+              >
           {/* Header */}
           <div className={getModalHeaderClasses(colorScheme)}>
             <div className="flex items-center justify-between">
@@ -676,8 +695,11 @@ export function EnrichmentProgressModal({
               </div>
             )}
           </div>
-        </div>
-      </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Cancel Confirmation Dialog */}
       <ConfirmDialog

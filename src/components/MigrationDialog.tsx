@@ -6,10 +6,12 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { migrateFromLocalStorage, rollbackMigration } from '../services/storage/migration';
 import { getStorageType } from '../services/storage';
 import { useTheme } from '../context/ThemeContext';
 import { getModalClasses } from '../design-system/theme';
+import { modalBackdropVariants, modalInfoVariants } from '../animations/variants';
 
 interface MigrationDialogProps {
   onComplete: () => void;
@@ -79,8 +81,27 @@ export function MigrationDialog({ onComplete, onError }: MigrationDialogProps) {
   const modalClasses = getModalClasses(colorScheme, glassStrength);
 
   return (
-    <div className={modalClasses.overlay}>
-      <div className={`${modalClasses.content} p-6 max-w-md w-full mx-4`}>
+    <AnimatePresence>
+      {true && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            variants={modalBackdropVariants.smooth}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className={modalClasses.overlay}
+          />
+
+          {/* Content */}
+          <motion.div
+            variants={modalInfoVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none"
+          >
+            <div className={`${modalClasses.content} p-6 max-w-md w-full mx-4 pointer-events-auto`}>
         <h2 className="text-xl font-semibold mb-4">
           {error ? '⚠️ Migration Error' : '🔄 Upgrading Storage System'}
         </h2>
@@ -162,6 +183,9 @@ export function MigrationDialog({ onComplete, onError }: MigrationDialogProps) {
           </div>
         )}
       </div>
-    </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

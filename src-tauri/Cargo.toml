@@ -40,6 +40,7 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-store = "2"  # Secure key-value storage for API keys
+tauri-plugin-window-state = "2"
 screenshots = "0.8"
 base64 = "0.22"
 image = "0.25"

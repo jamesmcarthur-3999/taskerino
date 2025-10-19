@@ -7,9 +7,14 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle2, AlertCircle, Lightbulb, TrendingUp } from 'lucide-react';
 import { MODAL_OVERLAY, getGlassClasses, getRadiusClass } from '../design-system/theme';
 import type { SessionScreenshot } from '../types';
+import {
+  modalBackdropVariants,
+  modalContentViewerVariants
+} from '../animations/variants';
 
 interface ScreenshotModalProps {
   screenshot: SessionScreenshot;
@@ -27,34 +32,58 @@ export function ScreenshotModal({ screenshot, imageUrl, onClose }: ScreenshotMod
   const hasContextDelta = !!aiAnalysis?.contextDelta;
 
   const modalContent = (
-    <div
-      className={`${MODAL_OVERLAY} z-[9999] flex items-center justify-center bg-black/90 animate-in fade-in duration-200`}
-      onClick={onClose}
-    >
-      {/* Close button */}
-      <button
+    <AnimatePresence>
+      {/* Animated Backdrop */}
+      <motion.div
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        variants={modalBackdropVariants.smooth}
+        className={`${MODAL_OVERLAY} z-[9999] flex items-center justify-center bg-black/90`}
         onClick={onClose}
-        className={`absolute top-6 right-6 w-12 h-12 ${getRadiusClass('pill')} ${getGlassClasses('subtle')} flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-10`}
       >
-        <X size={24} className="text-white" />
-      </button>
+        {/* Close button */}
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8, rotate: -90 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 25 }}
+          onClick={onClose}
+          className={`absolute top-6 right-6 w-12 h-12 ${getRadiusClass('pill')} ${getGlassClasses('subtle')} flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-10`}
+        >
+          <X size={24} className="text-white" />
+        </motion.button>
 
-      {/* Main content container */}
-      <div
-        className="w-full h-full flex flex-col p-8 overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Screenshot - takes most of the space */}
-        <div className="flex-1 flex items-center justify-center mb-6 min-h-0">
+        {/* Main content container - Animated */}
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          variants={modalContentViewerVariants}
+          className="w-full h-full flex flex-col p-8 overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+        {/* Screenshot - takes most of the space with reveal animation */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.05, type: 'spring', stiffness: 200, damping: 25 }}
+          className="flex-1 flex items-center justify-center mb-6 min-h-0"
+        >
           <img
             src={imageUrl}
             alt="Screenshot"
             className={`max-w-full max-h-full object-contain ${getRadiusClass('card')} shadow-2xl`}
           />
-        </div>
+        </motion.div>
 
-        {/* Info panel - bottom section - scrollable */}
-        <div className={`${getGlassClasses('subtle')} ${getRadiusClass('card')} p-6 overflow-y-auto max-h-[40vh] flex-shrink-0`}>
+        {/* Info panel - bottom section - scrollable with slide up animation */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, type: 'spring', stiffness: 200, damping: 25 }}
+          className={`${getGlassClasses('subtle')} ${getRadiusClass('card')} p-6 overflow-y-auto max-h-[40vh] flex-shrink-0`}
+        >
           <div className="flex flex-wrap gap-6">
             {/* Left section: Basic info */}
             <div className="flex-1 min-w-[300px]">
@@ -146,9 +175,10 @@ export function ScreenshotModal({ screenshot, imageUrl, onClose }: ScreenshotMod
               </div>
             )}
           </div>
-        </div>
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 
   // Render as portal at document root for true full-screen display

@@ -165,6 +165,25 @@ export {
   slideScaleVariants,
   slideBlurVariants,
 
+  // Card variants
+  cardEntranceVariants,
+  cardHoverVariants,
+  cardPressVariants,
+  cardSelectionVariants,
+  cardExitVariants,
+
+  // Modal variants
+  modalBackdropVariants,
+  modalConfirmationVariants,
+  modalContentViewerVariants,
+  modalFormVariants,
+  modalInfoVariants,
+  modalExperienceVariants,
+  modalSettingsVariants,
+  modalStaggerContainerVariants,
+  modalSectionVariants,
+  createModalAnimationVariants,
+
   // Consolidated export
   variants,
 } from './variants';
@@ -271,6 +290,102 @@ export {
   // Consolidated export
   utils,
 } from './utils';
+
+// ============================================================================
+// CARD ANIMATION EXPORTS
+// ============================================================================
+
+export {
+  // Card animation configs
+  getCardAnimationConfig,
+  getCardInteractionType,
+
+  // Card list animations
+  createCardListStagger,
+  cardListItemVariants,
+
+  // Card entrance animations
+  cardEntranceVariants as cardEntranceFadeSlide,
+  cardEntranceFadeVariants,
+  cardEntranceBounceVariants,
+
+  // Card hover animations
+  cardHoverLiftVariants,
+  cardHoverSubtleVariants,
+  cardHoverMediaVariants,
+  cardHoverNoneVariants,
+
+  // Card press animations
+  cardPressVariants as cardPressFeedback,
+  cardPressStrongVariants,
+
+  // Card selection
+  cardSelectionVariants as cardSelectionState,
+
+  // Card exit
+  cardExitVariants as cardExitFade,
+  cardExitSlideVariants,
+
+  // Card layout
+  cardLayoutTransition,
+
+  // Consolidated card export
+  cardAnimations,
+} from './card-animations';
+
+// ============================================================================
+// MENU MORPH ANIMATION EXPORTS
+// ============================================================================
+
+export {
+  // Constants
+  SCROLL_RANGES,
+  MORPH_TIMINGS,
+  BORDER_RADIUS,
+  SIZE_CONSTRAINTS,
+  PADDING,
+
+  // Spring configurations
+  morphSprings,
+
+  // Variants
+  menuMorphVariants,
+  menuContentVariants,
+  buttonContentVariants,
+  overlayBackdropVariants,
+  overlayContainerVariants,
+  menuItemStaggerVariants,
+
+  // Interpolation maps
+  borderRadiusMap,
+  widthMap,
+  heightMap,
+  paddingXMap,
+  paddingYMap,
+  menuContentOpacityMap,
+  buttonContentOpacityMap,
+
+  // Utility functions
+  getMorphState,
+  getLayoutId,
+  getMorphTransition,
+  getScrollProgress,
+
+  // Consolidated export
+  menuMorph,
+} from './menu-morph';
+
+// Card animation types
+export type {
+  CardCategory,
+  CardInteractionType,
+} from './card-animations';
+
+// Menu morph animation types
+export type {
+  MorphState,
+  ScrollRange,
+} from './menu-morph';
 
 // ============================================================================
 // COMPONENT EXPORTS

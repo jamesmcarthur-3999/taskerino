@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { useMotionValue, type MotionValue } from 'framer-motion';
 import { scrollProgressEasing, clamp } from '../utils/easing';
 
 interface ScrollState {
@@ -12,22 +13,14 @@ interface ScrollState {
 }
 
 interface ScrollAnimationContextType extends ScrollState {
+  scrollYMotionValue: MotionValue<number>;
+  scrollProgressMotionValue: MotionValue<number>;
   registerScrollContainer: (ref: HTMLElement | null) => void;
   unregisterScrollContainer: (ref: HTMLElement | null) => void;
   resetScroll: () => void;
 }
 
-const ScrollAnimationContext = createContext<ScrollAnimationContextType>({
-  scrollY: 0,
-  scrollProgress: 0,
-  isScrolled: false,
-  direction: null,
-  velocity: 0,
-  smoothVelocity: 0,
-  registerScrollContainer: () => {},
-  unregisterScrollContainer: () => {},
-  resetScroll: () => {},
-});
+const ScrollAnimationContext = createContext<ScrollAnimationContextType | undefined>(undefined);
 
 const SCROLL_THRESHOLD = 150; // Pixels to consider "scrolled"
 const SCROLL_RANGE = 300; // Total range for 0-1 progress
@@ -42,6 +35,10 @@ export function ScrollAnimationProvider({ children }: { children: ReactNode }) {
     velocity: 0,
     smoothVelocity: 0,
   });
+
+  // Create MotionValues for Framer Motion integration
+  const scrollYMotionValue = useMotionValue(0);
+  const scrollProgressMotionValue = useMotionValue(0);
 
   const scrollContainersRef = useRef<Set<HTMLElement>>(new Set());
   const lastScrollYRef = useRef(0);
@@ -75,11 +72,15 @@ export function ScrollAnimationProvider({ children }: { children: ReactNode }) {
       smoothVelocity: 0,
     });
 
+    // Reset MotionValues
+    scrollYMotionValue.set(0);
+    scrollProgressMotionValue.set(0);
+
     // Reset refs
     lastScrollYRef.current = 0;
     lastScrollTimeRef.current = Date.now();
     smoothVelocityRef.current = 0;
-  }, []);
+  }, [scrollYMotionValue, scrollProgressMotionValue]);
 
   useEffect(() => {
     const handleScroll = (e: Event) => {
@@ -114,6 +115,7 @@ export function ScrollAnimationProvider({ children }: { children: ReactNode }) {
           // Determine direction
           const direction = scrollDelta > 0 ? 'down' : scrollDelta < 0 ? 'up' : scrollState.direction;
 
+          // Update state
           setScrollState({
             scrollY: currentScrollY,
             scrollProgress: easedProgress,
@@ -122,6 +124,10 @@ export function ScrollAnimationProvider({ children }: { children: ReactNode }) {
             velocity: rawVelocity,
             smoothVelocity,
           });
+
+          // Update MotionValues in the same RAF callback for performance
+          scrollYMotionValue.set(currentScrollY);
+          scrollProgressMotionValue.set(easedProgress);
 
           lastScrollYRef.current = currentScrollY;
           lastScrollTimeRef.current = currentTime;
@@ -144,6 +150,8 @@ export function ScrollAnimationProvider({ children }: { children: ReactNode }) {
     <ScrollAnimationContext.Provider
       value={{
         ...scrollState,
+        scrollYMotionValue,
+        scrollProgressMotionValue,
         registerScrollContainer,
         unregisterScrollContainer,
         resetScroll,
@@ -154,4 +162,10 @@ export function ScrollAnimationProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export const useScrollAnimation = () => useContext(ScrollAnimationContext);
+export const useScrollAnimation = () => {
+  const context = useContext(ScrollAnimationContext);
+  if (!context) {
+    throw new Error('useScrollAnimation must be used within a ScrollAnimationProvider');
+  }
+  return context;
+};

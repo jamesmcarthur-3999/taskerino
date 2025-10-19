@@ -3,9 +3,14 @@
  *
  * Search/command palette mode for the navigation island
  * Spotlight-style integrated search with quick actions
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - React.memo to prevent re-renders when props haven't changed
+ * - useMemo for expensive filter operations
+ * - useCallback for handler functions to maintain referential equality
  */
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Edit3, CheckSquare, BookOpen, Activity, Sparkles, Settings, Plus, Command } from 'lucide-react';
 import type { SearchModeProps } from '../../types';
@@ -35,7 +40,7 @@ const staggerItem = {
   show: { opacity: 1, y: 0 },
 };
 
-export function SearchMode(props: SearchModeProps) {
+function SearchModeComponent(props: SearchModeProps) {
   const {
     searchQuery,
     searchInputRef,
@@ -51,35 +56,55 @@ export function SearchMode(props: SearchModeProps) {
   const { state: entitiesState } = useEntities();
   const prefersReducedMotion = useReducedMotion();
 
-  // Search logic
-  const query = searchQuery.toLowerCase();
-  const taskResults = tasksState.tasks.filter(task =>
-    task.title.toLowerCase().includes(query)
-  ).slice(0, 5);
-  const noteResults = notesState.notes.filter(note =>
-    note.content.toLowerCase().includes(query) ||
-    note.summary.toLowerCase().includes(query) ||
-    note.tags.some(tag => tag.toLowerCase().includes(query))
-  ).slice(0, 5);
-  const topicResults = entitiesState.topics.filter(topic =>
-    topic.name.toLowerCase().includes(query)
-  ).slice(0, 3);
+  /**
+   * PERFORMANCE OPTIMIZATION:
+   * Memoize expensive filter operations to prevent re-computation on every render.
+   * These filters run through potentially large arrays and perform string operations.
+   */
+  const query = useMemo(() => searchQuery.toLowerCase(), [searchQuery]);
+
+  const taskResults = useMemo(() => {
+    if (!query) return [];
+    return tasksState.tasks
+      .filter(task => task.title.toLowerCase().includes(query))
+      .slice(0, 5);
+  }, [query, tasksState.tasks]);
+
+  const noteResults = useMemo(() => {
+    if (!query) return [];
+    return notesState.notes
+      .filter(note =>
+        note.content.toLowerCase().includes(query) ||
+        note.summary.toLowerCase().includes(query) ||
+        note.tags.some(tag => tag.toLowerCase().includes(query))
+      )
+      .slice(0, 5);
+  }, [query, notesState.notes]);
+
+  const topicResults = useMemo(() => {
+    if (!query) return [];
+    return entitiesState.topics
+      .filter(topic => topic.name.toLowerCase().includes(query))
+      .slice(0, 3);
+  }, [query, entitiesState.topics]);
 
   const hasResults = taskResults.length > 0 || noteResults.length > 0 || topicResults.length > 0;
   const showActions = !searchQuery || !hasResults;
 
-  const handleNavigateToTab = (tabId: TabType) => {
+  /**
+   * PERFORMANCE OPTIMIZATION:
+   * Memoize handler functions to maintain referential equality
+   * and prevent unnecessary re-renders of child components.
+   */
+  const handleNavigateToTab = useCallback((tabId: TabType) => {
     onNavigate(tabId);
     onClose();
-  };
+  }, [onNavigate, onClose]);
 
-  const handleCreateAction = () => {
-    // Note: This closes the search mode. The parent component (TopNavigation)
-    // will need to handle switching to task/note creation modes.
-    // This is intentional - the SearchMode should not control the island state.
+  const handleCreateAction = useCallback(() => {
     onSearchQueryChange('');
     onClose();
-  };
+  }, [onSearchQueryChange, onClose]);
 
   return (
     <motion.div
@@ -87,7 +112,6 @@ export function SearchMode(props: SearchModeProps) {
       initial="initial"
       animate="animate"
       exit="exit"
-      transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
     >
       {/* Search Input */}
       <div className="relative flex items-center gap-3 px-4 py-3 border-b-2 border-white/30 bg-white/20">
@@ -265,10 +289,7 @@ export function SearchMode(props: SearchModeProps) {
                 <div className="h-px bg-white/30 my-2" />
 
                 <motion.button
-                  onClick={() => {
-                    handleCreateAction();
-                    // TODO: Parent component should open task-expanded mode
-                  }}
+                  onClick={handleCreateAction}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -276,7 +297,6 @@ export function SearchMode(props: SearchModeProps) {
                     }
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/80 ${getRadiusClass('element')} transition-all text-left group`}
-                 
                   whileTap={!prefersReducedMotion ? { scale: 0.98 } : undefined}
                   transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
                 >
@@ -285,10 +305,7 @@ export function SearchMode(props: SearchModeProps) {
                 </motion.button>
 
                 <motion.button
-                  onClick={() => {
-                    handleCreateAction();
-                    // TODO: Parent component should open note-expanded mode
-                  }}
+                  onClick={handleCreateAction}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -473,3 +490,11 @@ export function SearchMode(props: SearchModeProps) {
     </motion.div>
   );
 }
+
+/**
+ * PERFORMANCE OPTIMIZATION:
+ * Memoize the component to prevent re-renders when props haven't changed.
+ * This is especially important because SearchMode performs expensive
+ * filter operations on context data.
+ */
+export const SearchMode = memo(SearchModeComponent);

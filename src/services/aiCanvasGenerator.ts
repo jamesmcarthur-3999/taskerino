@@ -65,18 +65,37 @@ export class AICanvasGenerator {
   /**
    * Main entry point: Generate canvas spec for session
    */
-  async generate(session: Session): Promise<CanvasSpec> {
+  async generate(
+    session: Session,
+    onProgress?: (progress: number, stage: string) => void
+  ): Promise<CanvasSpec> {
     console.log('[AICanvasGenerator] Generating canvas for session:', session.id);
+
+    // Stage 1: Starting analysis (0%)
+    onProgress?.(0.0, 'Starting analysis');
 
     const characteristics = this.analyzeSession(session);
     const summary = session.summary;
 
+    // Stage 2: Session analyzed (20%)
+    onProgress?.(0.2, 'Session analyzed');
+
+    // Stage 3: Building prompt (40%)
+    onProgress?.(0.4, 'Building design prompt');
+
     try {
-      const spec = await this.designCanvas(characteristics, session, summary);
+      const spec = await this.designCanvas(characteristics, session, summary, onProgress);
+
+      // Stage 6: Complete (100%)
+      onProgress?.(1.0, 'Canvas ready');
+
       return spec;
     } catch (error) {
       console.error('[AICanvasGenerator] AI design failed, using fallback:', error);
-      return this.createFallbackSpec(characteristics, session);
+      onProgress?.(0.9, 'Using fallback design');
+      const fallback = this.createFallbackSpec(characteristics, session);
+      onProgress?.(1.0, 'Canvas ready');
+      return fallback;
     }
   }
 
@@ -126,13 +145,17 @@ export class AICanvasGenerator {
   private async designCanvas(
     characteristics: AICanvasSessionCharacteristics,
     session: Session,
-    summary?: SessionSummary
+    summary?: SessionSummary,
+    onProgress?: (progress: number, stage: string) => void
   ): Promise<CanvasSpec> {
     const prompt = this.buildDesignPrompt(characteristics, session, summary);
 
     const messages: ClaudeMessage[] = [
       { role: 'user', content: prompt }
     ];
+
+    // Stage 4: Requesting AI design (60%)
+    onProgress?.(0.6, 'Requesting AI design');
 
     const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
       request: {
@@ -143,6 +166,9 @@ export class AICanvasGenerator {
         temperature: undefined,
       }
     });
+
+    // Stage 5: Parsing response (80%)
+    onProgress?.(0.8, 'Parsing AI response');
 
     return this.parseCanvasSpec(response);
   }

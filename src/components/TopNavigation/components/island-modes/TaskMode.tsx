@@ -2,9 +2,12 @@
  * TaskMode Component
  *
  * Quick task creation mode for the navigation island
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - React.memo to prevent re-renders when props haven't changed
  */
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar } from 'lucide-react';
 import type { TaskModeProps } from '../../types';
@@ -12,7 +15,7 @@ import { getRadiusClass } from '../../../../design-system/theme';
 import { modeContentVariants, contentSpring } from '../../utils/islandAnimations';
 import { useReducedMotion } from '../../../../lib/animations';
 
-export function TaskMode({
+function TaskModeComponent({
   taskTitle,
   taskDueDate,
   showSuccess,
@@ -32,7 +35,6 @@ export function TaskMode({
       initial="initial"
       animate="animate"
       exit="exit"
-      transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
       className="px-6 pb-5 pt-4"
     >
       <AnimatePresence mode="wait">
@@ -192,3 +194,9 @@ export function TaskMode({
     </motion.div>
   );
 }
+
+/**
+ * PERFORMANCE OPTIMIZATION:
+ * Memoize the component to prevent unnecessary re-renders.
+ */
+export const TaskMode = memo(TaskModeComponent);

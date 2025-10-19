@@ -12,7 +12,7 @@
  * - willChange optimization during transitions
  */
 
-import { useRef } from 'react';
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NavTabs } from './NavTabs';
 import { SearchMode } from './island-modes/SearchMode';
@@ -25,12 +25,49 @@ import type { TabType } from '../../../types';
 import { islandVariants, springConfig } from '../utils/islandAnimations';
 import { NAVIGATION } from '../../../design-system/theme';
 
+interface ProcessingData {
+  processingJobs: Array<{ id: string; input: string; progress: number }>;
+  completedJobs: Array<{ id: string; input: string }>;
+  hasActiveProcessing: boolean;
+  hasCompletedItems: boolean;
+}
+
+interface SessionData {
+  activeSession: {
+    id: string;
+    name: string;
+    description: string;
+    startTime: string;
+    screenshots: string[];
+    lastScreenshotTime: string | null;
+  } | null;
+  isSessionActive: boolean;
+  isSessionPaused: boolean;
+}
+
+interface NavData {
+  activeTasks: number;
+  processingData: ProcessingData;
+  sessionData: SessionData;
+}
+
+interface NavActions {
+  handleTabClick: (tabId: TabType) => void;
+  handleQuickAction: (tabId: TabType, e: React.MouseEvent) => void;
+  handleSearchClick: () => void;
+  handleProcessingBadgeClick: (e: React.MouseEvent) => void;
+  handleSessionBadgeClick: (e: React.MouseEvent) => void;
+  onPauseSession: () => void;
+  onResumeSession: () => void;
+  onEndSession: () => void;
+}
+
 interface NavigationIslandProps {
   islandState: IslandState;
   onClose: () => void;
-  islandStateHook: ReturnType<any>; // Will be properly typed when hooks are implemented
-  navData: ReturnType<any>; // Will be properly typed when hooks are implemented
-  navActions: ReturnType<any>; // Will be properly typed when hooks are implemented
+  islandStateHook: unknown; // Intentionally opaque - not used in this component
+  navData: NavData;
+  navActions: NavActions;
   activeTab: TabType;
   hoveredTab: TabType | null;
   setHoveredTab: (tab: TabType | null) => void;
@@ -62,7 +99,19 @@ interface NavigationIslandProps {
   onPauseSession: () => void;
   onResumeSession: () => void;
   onEndSession: () => void;
-  onStartSession: (config: any) => Promise<void>;
+  onStartSession: (config: {
+    name: string;
+    description: string;
+    status: 'active';
+    screenshotInterval: number;
+    autoAnalysis: boolean;
+    tags: string[];
+    audioRecording: boolean;
+    enableScreenshots: boolean;
+    videoRecording: boolean;
+    audioMode: 'transcription' | 'off';
+    audioReviewCompleted: boolean;
+  }) => Promise<void>;
   onNavigateToSessions: () => void;
   // Processing mode props
   onJobClick: (jobId: string) => void;
@@ -110,28 +159,56 @@ export function NavigationIsland({
   // Processing mode props
   onJobClick,
 }: NavigationIslandProps) {
-  const islandRef = useRef<HTMLDivElement>(null);
   const isExpanded = islandState !== 'collapsed';
+
+  /**
+   * PERFORMANCE OPTIMIZATION:
+   * Memoize the navData object to prevent unnecessary re-renders of NavTabs.
+   * Without this, a new object is created on every render, breaking referential equality
+   * and causing NavTabs to re-render even when the actual data hasn't changed.
+   */
+  const navDataMemo = useMemo(() => ({
+    activeTasks: navData.activeTasks,
+    processingJobs: navData.processingData.processingJobs,
+    completedJobs: navData.processingData.completedJobs,
+    hasActiveProcessing: navData.processingData.hasActiveProcessing,
+    hasCompletedItems: navData.processingData.hasCompletedItems,
+    activeSession: navData.sessionData.activeSession,
+    isSessionActive: navData.sessionData.isSessionActive,
+    isSessionPaused: navData.sessionData.isSessionPaused,
+  }), [
+    navData.activeTasks,
+    navData.processingData.processingJobs,
+    navData.processingData.completedJobs,
+    navData.processingData.hasActiveProcessing,
+    navData.processingData.hasCompletedItems,
+    navData.sessionData.activeSession,
+    navData.sessionData.isSessionActive,
+    navData.sessionData.isSessionPaused,
+  ]);
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 px-6 pointer-events-none">
       <motion.div
-        ref={islandRef}
+        layoutId="navigation-island"
         layout
         initial={false}
         animate={isExpanded ? 'expanded' : 'collapsed'}
         variants={islandVariants}
         transition={springConfig}
+        style={{ willChange: isExpanded ? 'width, height, transform' : 'auto' }}
         className={`
           ${NAVIGATION.island.container}
           pointer-events-auto overflow-hidden
-          ${isExpanded ? 'max-w-2xl' : ''}
+          max-w-2xl
+          relative
         `}
       >
         {/* Navigation Tabs - Visible when collapsed */}
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {islandState === 'collapsed' && (
-            <NavTabs
+            <div className="w-full">
+              <NavTabs
               key="nav-tabs"
               activeTab={activeTab}
               hoveredTab={hoveredTab}
@@ -139,28 +216,21 @@ export function NavigationIsland({
               onTabClick={navActions.handleTabClick}
               onQuickAction={navActions.handleQuickAction}
               onSearchClick={navActions.handleSearchClick}
-              navData={{
-                activeTasks: navData.activeTasks,
-                processingJobs: navData.processingData.processingJobs,
-                completedJobs: navData.processingData.completedJobs,
-                hasActiveProcessing: navData.processingData.hasActiveProcessing,
-                hasCompletedItems: navData.processingData.hasCompletedItems,
-                activeSession: navData.sessionData.activeSession,
-                isSessionActive: navData.sessionData.isSessionActive,
-                isSessionPaused: navData.sessionData.isSessionPaused,
-              }}
+              navData={navDataMemo}
               onProcessingBadgeClick={navActions.handleProcessingBadgeClick}
               onSessionBadgeClick={navActions.handleSessionBadgeClick}
               onPauseSession={navActions.onPauseSession}
               onResumeSession={navActions.onResumeSession}
               onEndSession={navActions.onEndSession}
             />
+            </div>
           )}
         </AnimatePresence>
 
         {/* Mode Components - Visible when expanded */}
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {islandState === 'search-expanded' && (
+            <div className="w-full">
             <SearchMode
               key="search-mode"
               searchQuery={searchQuery}
@@ -170,8 +240,10 @@ export function NavigationIsland({
               onOpenSidebar={onOpenSidebar}
               onClose={onClose}
             />
+            </div>
           )}
           {islandState === 'task-expanded' && (
+            <div className="w-full">
             <TaskMode
               key="task-mode"
               taskTitle={taskTitle}
@@ -184,8 +256,10 @@ export function NavigationIsland({
               onViewTask={onViewTask}
               onClose={onClose}
             />
+            </div>
           )}
           {islandState === 'note-expanded' && (
+            <div className="w-full">
             <NoteMode
               key="note-mode"
               noteInput={noteInput}
@@ -194,8 +268,10 @@ export function NavigationIsland({
               onSendToAI={onSendToAI}
               onClose={onClose}
             />
+            </div>
           )}
           {islandState === 'processing-expanded' && (
+            <div className="w-full">
             <ProcessingMode
               key="processing-mode"
               processingJobs={navData.processingData.processingJobs}
@@ -203,8 +279,10 @@ export function NavigationIsland({
               onJobClick={onJobClick}
               onClose={onClose}
             />
+            </div>
           )}
           {islandState === 'session-expanded' && (
+            <div className="w-full">
             <SessionMode
               key="session-mode"
               activeSession={navData.sessionData.activeSession}
@@ -221,6 +299,7 @@ export function NavigationIsland({
               onNavigateToSessions={onNavigateToSessions}
               onClose={onClose}
             />
+            </div>
           )}
         </AnimatePresence>
       </motion.div>

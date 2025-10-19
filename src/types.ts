@@ -1,5 +1,7 @@
 // Core Data Types
 
+import type { CanvasSpec } from './services/aiCanvasGenerator';
+
 // Attachment Types
 export type AttachmentType = 'image' | 'video' | 'file' | 'link' | 'screenshot' | 'audio';
 
@@ -702,6 +704,315 @@ export interface SessionSummary {
   };
 }
 
+// ============================================================================
+// FLEXIBLE SESSION SUMMARY (Phase 2 - Section-Based Architecture)
+// ============================================================================
+
+/**
+ * Flexible session summary where AI chooses relevant sections
+ *
+ * Instead of forcing every session into the same template (achievements, blockers, etc.),
+ * this allows the AI to compose summaries from a variety of section types based on
+ * what's actually meaningful for THIS specific session.
+ *
+ * A debugging session might have: problem-solving-journey + technical-discoveries
+ * A learning session might have: breakthrough-moments + learning-highlights
+ * A meeting might have: collaboration-wins + emotional-journey
+ *
+ * The AI explains its choices via generationMetadata.
+ */
+export interface FlexibleSessionSummary {
+  /** Schema version for migration */
+  schemaVersion: '2.0';
+
+  /** Unique identifier */
+  id: string;
+
+  /** When this summary was generated */
+  generatedAt: string;
+
+  /** Session metadata */
+  sessionContext: {
+    sessionId: string;
+    sessionName: string;
+    startTime: string;
+    endTime?: string;
+    duration: number; // minutes
+    screenshotCount: number;
+    audioSegmentCount?: number;
+    videoChapterCount?: number;
+  };
+
+  /** Core narrative (required) */
+  narrative: string;
+
+  /** Dynamic sections chosen by AI */
+  sections: SummarySection[];
+
+  /** AI generation metadata */
+  generationMetadata: {
+    reasoning: string;
+    confidence: number;
+    detectedSessionType:
+      | 'deep-work'
+      | 'exploratory'
+      | 'collaborative'
+      | 'learning'
+      | 'troubleshooting'
+      | 'creative'
+      | 'routine'
+      | 'mixed';
+    primaryTheme: string;
+    emphasis:
+      | 'achievement-focused'
+      | 'journey-focused'
+      | 'learning-focused'
+      | 'problem-focused'
+      | 'exploratory';
+    dataSources: {
+      screenshots: boolean;
+      audio: boolean;
+      video: boolean;
+      audioInsights: boolean;
+      videoChapters: boolean;
+    };
+    warnings?: string[];
+  };
+
+  /** Quick access to common fields (computed from sections for backward compatibility) */
+  quickAccess?: {
+    achievements?: string[];
+    blockers?: string[];
+    tasks?: Array<{ title: string; priority: string; context: string }>;
+    insights?: Array<{ insight: string; timestamp: string }>;
+  };
+}
+
+/**
+ * Section types available for flexible summaries
+ */
+export type SummarySection =
+  | AchievementsSection
+  | BreakthroughMomentsSection
+  | BlockersSection
+  | LearningHighlightsSection
+  | CreativeSolutionsSection
+  | CollaborationSection
+  | TechnicalDiscoveriesSection
+  | TimelineSection
+  | FlowStateSection
+  | EmotionalJourneySection
+  | ProblemSolvingSection
+  | FocusAreasSection
+  | RecommendedTasksSection
+  | KeyInsightsSection
+  | CustomSection;
+
+/** Base section interface */
+interface BaseSummarySection {
+  type: string;
+  title: string;
+  emphasis: 'low' | 'medium' | 'high';
+  position: number;
+  icon?: string;
+  colorTheme?: 'success' | 'warning' | 'info' | 'error' | 'neutral' | 'creative';
+}
+
+export interface AchievementsSection extends BaseSummarySection {
+  type: 'achievements';
+  data: {
+    achievements: Array<{
+      title: string;
+      timestamp?: string;
+      screenshotIds?: string[];
+      impact?: 'minor' | 'moderate' | 'major';
+    }>;
+    summary?: string;
+  };
+}
+
+export interface BreakthroughMomentsSection extends BaseSummarySection {
+  type: 'breakthrough-moments';
+  data: {
+    moments: Array<{
+      title: string;
+      description: string;
+      timestamp: string;
+      context: string;
+      screenshotIds?: string[];
+    }>;
+  };
+}
+
+export interface BlockersSection extends BaseSummarySection {
+  type: 'blockers';
+  data: {
+    blockers: Array<{
+      title: string;
+      description: string;
+      status: 'unresolved' | 'resolved' | 'workaround';
+      timestamp?: string;
+      screenshotIds?: string[];
+      resolution?: string;
+    }>;
+  };
+}
+
+export interface LearningHighlightsSection extends BaseSummarySection {
+  type: 'learning-highlights';
+  data: {
+    learnings: Array<{
+      topic: string;
+      insight: string;
+      timestamp?: string;
+      screenshotIds?: string[];
+      category?: 'technical' | 'process' | 'tool' | 'domain' | 'other';
+    }>;
+  };
+}
+
+export interface CreativeSolutionsSection extends BaseSummarySection {
+  type: 'creative-solutions';
+  data: {
+    solutions: Array<{
+      problem: string;
+      solution: string;
+      approach: string;
+      timestamp?: string;
+      screenshotIds?: string[];
+    }>;
+  };
+}
+
+export interface CollaborationSection extends BaseSummarySection {
+  type: 'collaboration-wins';
+  data: {
+    collaborations: Array<{
+      title: string;
+      description: string;
+      participants?: string[];
+      timestamp?: string;
+      outcome?: string;
+    }>;
+  };
+}
+
+export interface TechnicalDiscoveriesSection extends BaseSummarySection {
+  type: 'technical-discoveries';
+  data: {
+    discoveries: Array<{
+      title: string;
+      technology: string;
+      finding: string;
+      timestamp?: string;
+      screenshotIds?: string[];
+    }>;
+  };
+}
+
+export interface TimelineSection extends BaseSummarySection {
+  type: 'timeline';
+  data: {
+    events: Array<{
+      time: string;
+      title: string;
+      description: string;
+      type: 'start' | 'milestone' | 'blocker' | 'breakthrough' | 'end';
+      screenshotIds?: string[];
+    }>;
+    narrative?: string;
+  };
+}
+
+export interface FlowStateSection extends BaseSummarySection {
+  type: 'flow-states';
+  data: {
+    flowPeriods: Array<{
+      startTime: string;
+      endTime: string;
+      duration: number;
+      activity: string;
+      quality: 'deep' | 'moderate' | 'shallow';
+    }>;
+    totalFlowTime: number;
+    flowPercentage: number;
+  };
+}
+
+export interface EmotionalJourneySection extends BaseSummarySection {
+  type: 'emotional-journey';
+  data: {
+    journey: Array<{
+      timestamp: string;
+      emotion: string;
+      description: string;
+      context: string;
+    }>;
+    overallSentiment: 'positive' | 'neutral' | 'negative' | 'mixed';
+    narrative?: string;
+  };
+}
+
+export interface ProblemSolvingSection extends BaseSummarySection {
+  type: 'problem-solving-journey';
+  data: {
+    problem: string;
+    approach: Array<{
+      step: number;
+      action: string;
+      outcome: string;
+      timestamp?: string;
+    }>;
+    resolution?: string;
+    lessonsLearned?: string[];
+  };
+}
+
+export interface FocusAreasSection extends BaseSummarySection {
+  type: 'focus-areas';
+  data: {
+    areas: Array<{
+      area: string;
+      duration: number;
+      percentage: number;
+      activities?: string[];
+    }>;
+  };
+}
+
+export interface RecommendedTasksSection extends BaseSummarySection {
+  type: 'recommended-tasks';
+  data: {
+    tasks: Array<{
+      title: string;
+      priority: 'low' | 'medium' | 'high' | 'urgent';
+      context: string;
+      relatedScreenshotIds?: string[];
+      estimatedDuration?: number;
+      category?: string;
+    }>;
+  };
+}
+
+export interface KeyInsightsSection extends BaseSummarySection {
+  type: 'key-insights';
+  data: {
+    insights: Array<{
+      insight: string;
+      timestamp: string;
+      screenshotIds?: string[];
+      importance: 'minor' | 'moderate' | 'major';
+      category?: string;
+    }>;
+  };
+}
+
+export interface CustomSection extends BaseSummarySection {
+  type: 'custom';
+  customType: string;
+  data: Record<string, any>;
+}
+
 export interface Session {
   id: string;
   name: string; // User-provided or AI-generated
@@ -741,6 +1052,9 @@ export interface Session {
 
   // AI-Generated Summary (synthesized every 5 min + on session end)
   summary?: SessionSummary;
+
+  // AI-Generated Canvas Specification (cached for fast rendering, avoids regeneration costs)
+  canvasSpec?: CanvasSpec;
 
   // DEPRECATED: Legacy audio fields
   audioKeyMoments?: AudioKeyMoment[]; // Replaced by audioInsights.keyMoments
@@ -1119,3 +1433,45 @@ export interface ActivityMetrics {
 // Legacy types (for backward compatibility during refactor)
 export type TaskStatus = 'todo' | 'in-progress' | 'done' | 'archived';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+// ============================================================================
+// TYPE GUARDS & UTILITIES
+// ============================================================================
+
+/**
+ * Type guard to check if summary is flexible (Phase 2)
+ */
+export function isFlexibleSummary(
+  summary: SessionSummary | FlexibleSessionSummary | null | undefined
+): summary is FlexibleSessionSummary {
+  return !!summary && 'schemaVersion' in summary && summary.schemaVersion === '2.0';
+}
+
+/**
+ * Type guard to check if summary is legacy (Phase 1)
+ */
+export function isLegacySummary(
+  summary: SessionSummary | FlexibleSessionSummary | null | undefined
+): summary is SessionSummary {
+  return !!summary && !('schemaVersion' in summary);
+}
+
+/**
+ * Extract section by type from flexible summary
+ */
+export function getSectionByType<T extends SummarySection['type']>(
+  summary: FlexibleSessionSummary,
+  type: T
+): Extract<SummarySection, { type: T }> | undefined {
+  return summary.sections.find(s => s.type === type) as Extract<SummarySection, { type: T }> | undefined;
+}
+
+/**
+ * Get all sections of a specific type (some sessions might have multiple)
+ */
+export function getSectionsByType<T extends SummarySection['type']>(
+  summary: FlexibleSessionSummary,
+  type: T
+): Array<Extract<SummarySection, { type: T }>> {
+  return summary.sections.filter(s => s.type === type) as Array<Extract<SummarySection, { type: T }>>;
+}

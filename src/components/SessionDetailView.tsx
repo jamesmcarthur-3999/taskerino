@@ -62,7 +62,15 @@ export function SessionDetailView({
   const { addNote } = useNotes();
   const { sessions: allSessions, updateSession: updateSessionInContext } = useSessions();
   const { getActiveEnrichment } = useEnrichmentContext();
-  const { scrollProgress, isScrolled, registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
+  const { scrollProgress, scrollY, isScrolled, registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
+
+  // Delayed progress for SessionDetailView animations (only active after header collapse at 150px)
+  // Maps scrollY 150-300 to progress 0-1
+  const delayedProgress = useMemo(() => {
+    if (scrollY < 150) return 0;
+    if (scrollY >= 300) return 1;
+    return (scrollY - 150) / 150; // 0-1 over 150px range
+  }, [scrollY]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [activeView, setActiveView] = useState<'overview' | 'review' | 'canvas'>('overview');
@@ -78,10 +86,13 @@ export function SessionDetailView({
   // Get active enrichment for real-time tracking
   const activeEnrichment = getActiveEnrichment(currentSession.id);
 
-  // Sync currentSession with session prop when it changes
+  // Sync currentSession only when session ID changes (not on every prop update)
   useEffect(() => {
-    setCurrentSession(session);
-  }, [session]);
+    if (session.id !== currentSession.id) {
+      console.log('[SessionDetailView] Session changed, syncing from prop');
+      setCurrentSession(session);
+    }
+  }, [session.id, session, currentSession.id]);
 
   const duration = useMemo(() => {
     if (!session.startTime) return 0;
@@ -495,8 +506,9 @@ export function SessionDetailView({
           style={{
             paddingLeft: '1.5rem',
             paddingRight: '1.5rem',
-            paddingTop: isScrolled ? '1rem' : '1.5rem',
-            paddingBottom: isScrolled ? '1rem' : '1.5rem',
+            // Padding animations delayed until after header collapse (150px)
+            paddingTop: scrollY >= 150 ? `${1.5 - (delayedProgress * 0.5)}rem` : '1.5rem',
+            paddingBottom: scrollY >= 150 ? `${1.5 - (delayedProgress * 0.5)}rem` : '1.5rem',
           }}
         >
         <div className="max-w-7xl mx-auto flex items-start justify-between gap-8">
@@ -569,12 +581,12 @@ export function SessionDetailView({
               </div>
             </div>
 
-            {/* Description - Collapsible on scroll */}
+            {/* Description - Collapsible on scroll (delayed until after header collapse) */}
             <div
               className="overflow-hidden transition-all duration-150"
               style={{
-                maxHeight: `${Math.max(0, (1 - scrollProgress) * 120)}px`,
-                opacity: Math.max(0, 1 - scrollProgress * 1.2),
+                maxHeight: `${Math.max(0, (1 - delayedProgress) * 120)}px`,
+                opacity: Math.max(0, 1 - delayedProgress * 1.2),
               }}
             >
               <p className="text-gray-700 text-sm leading-relaxed">{session.description}</p>
@@ -647,8 +659,8 @@ export function SessionDetailView({
                     >
                       <RefreshCw size={16} />
                       <div>
-                        <div className="font-semibold text-sm">Summary Only</div>
-                        <div className="text-xs text-gray-600">Regenerate session summary</div>
+                        <div className="font-semibold text-sm">Force Re-Enrich Summary</div>
+                        <div className="text-xs text-gray-600">Generate new flexible summary with AI-chosen sections</div>
                       </div>
                     </button>
                   </div>
@@ -873,8 +885,9 @@ export function SessionDetailView({
           ref={contentRef}
           className="relative z-0 flex-1 overflow-y-auto px-6 transition-all duration-300"
           style={{
-            paddingTop: isScrolled ? '1rem' : '1.5rem',
-            paddingBottom: isScrolled ? '1rem' : '2rem',
+            // Content padding animations delayed until after header collapse (150px)
+            paddingTop: scrollY >= 150 ? `${1.5 - (delayedProgress * 0.5)}rem` : '1.5rem',
+            paddingBottom: scrollY >= 150 ? `${2 - (delayedProgress * 1)}rem` : '2rem',
           }}
         >
           {/* View Tabs */}

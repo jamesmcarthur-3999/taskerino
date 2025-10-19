@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNotes } from '../context/NotesContext';
 import { useSessions } from '../context/SessionsContext';
 import { useUI } from '../context/UIContext';
@@ -6,6 +7,11 @@ import { X, FileText, Sparkles } from 'lucide-react';
 import type { Note } from '../types';
 import { generateId } from '../utils/helpers';
 import { getGlassClasses, getRadiusClass, MODAL_SECTIONS } from '../design-system/theme';
+import {
+  modalBackdropVariants,
+  modalFormVariants,
+  modalSectionVariants
+} from '../animations/variants';
 
 interface QuickNoteFromSessionProps {
   isOpen: boolean;
@@ -37,8 +43,6 @@ export function QuickNoteFromSession({
       setSummary('');
     }
   }, [isOpen, suggestedContent]);
-
-  if (!isOpen) return null;
 
   const handleCreate = () => {
     if (!content.trim()) return;
@@ -91,16 +95,36 @@ export function QuickNoteFromSession({
   };
 
   return (
-    <div
-      className={`fixed inset-0 z-[60] bg-black/50 ${getGlassClasses('subtle').split(' ').find(c => c.startsWith('backdrop-blur'))} flex items-center justify-center p-4`}
-      onClick={handleClose}
-    >
-      <div
-        className={`${getGlassClasses('strong')} ${getRadiusClass('modal')} max-w-2xl w-full`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className={`${MODAL_SECTIONS.header} bg-gradient-to-r from-violet-500/10 to-purple-500/10`}>
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Animated Backdrop */}
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={modalBackdropVariants.standard}
+            className={`fixed inset-0 z-[60] bg-black/50 ${getGlassClasses('subtle').split(' ').find(c => c.startsWith('backdrop-blur'))}`}
+            onClick={handleClose}
+          />
+
+          {/* Animated Modal Content */}
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={modalFormVariants}
+            className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-[60]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`${getGlassClasses('strong')} ${getRadiusClass('modal')} max-w-2xl w-full`}>
+        {/* Header - Animated */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05, duration: 0.2 }}
+          className={`${MODAL_SECTIONS.header} bg-gradient-to-r from-violet-500/10 to-purple-500/10`}
+        >
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
@@ -116,12 +140,21 @@ export function QuickNoteFromSession({
               <X className="w-5 h-5" />
             </button>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Content */}
-        <div className="p-6 space-y-4">
+        {/* Content - Staggered */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1, duration: 0.25 }}
+          className="p-6 space-y-4"
+        >
           {/* Summary (optional) */}
-          <div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12, duration: 0.2 }}
+          >
             <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
               <FileText className="w-4 h-4" />
               Summary (optional)
@@ -133,10 +166,14 @@ export function QuickNoteFromSession({
               placeholder="Brief summary of this note..."
               className={`w-full px-4 py-2 ${getGlassClasses('medium')} ${getRadiusClass('element')} focus:ring-2 focus:ring-violet-500 focus:border-violet-400 transition-all`}
             />
-          </div>
+          </motion.div>
 
           {/* Content */}
-          <div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.17, duration: 0.2 }}
+          >
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Note Content
             </label>
@@ -148,18 +185,28 @@ export function QuickNoteFromSession({
               className={`w-full px-4 py-3 ${getGlassClasses('medium')} ${getRadiusClass('element')} focus:ring-2 focus:ring-violet-500 focus:border-violet-400 transition-all resize-none font-mono text-sm`}
               autoFocus
             />
-          </div>
+          </motion.div>
 
           {/* Info */}
-          <div className={`bg-violet-50/50 ${getGlassClasses('subtle').split(' ').find(c => c.startsWith('backdrop-blur'))} border border-violet-200/50 ${getRadiusClass('element')} p-3`}>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.22, duration: 0.2 }}
+            className={`bg-violet-50/50 ${getGlassClasses('subtle').split(' ').find(c => c.startsWith('backdrop-blur'))} border border-violet-200/50 ${getRadiusClass('element')} p-3`}
+          >
             <p className="text-xs text-violet-700">
               <span className="font-semibold">💡 Context preserved:</span> This note will link back to the session and screenshot where it was captured.
             </p>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
-        {/* Footer */}
-        <div className={`${MODAL_SECTIONS.footer} flex items-center justify-between`}>
+        {/* Footer - Animated */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.2 }}
+          className={`${MODAL_SECTIONS.footer} flex items-center justify-between`}
+        >
           <p className="text-sm text-gray-600">
             Press <kbd className={`px-2 py-1 ${getGlassClasses('medium')} rounded text-xs font-mono`}>⌘↵</kbd> to save
           </p>
@@ -178,8 +225,11 @@ export function QuickNoteFromSession({
               Save Note
             </button>
           </div>
-        </div>
-      </div>
-    </div>
+        </motion.div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

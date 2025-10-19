@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Mic, CheckSquare, CheckCircle2, Clock } from 'lucide-react';
 import type { Session, SessionContextItem } from '../types';
 import { SessionTimeline } from './SessionTimeline';
@@ -7,6 +7,7 @@ import { AdaptiveSchedulerDebug } from './sessions/AdaptiveSchedulerDebug';
 import { Sparkles } from 'lucide-react';
 import { useSessions } from '../context/SessionsContext';
 import { getGlassClasses, getRadiusClass, getStatusBadgeClasses, getActivityGradient } from '../design-system/theme';
+import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
 
 interface ActiveSessionViewProps {
   session: Session;
@@ -14,10 +15,21 @@ interface ActiveSessionViewProps {
 
 export function ActiveSessionView({ session }: ActiveSessionViewProps) {
   const { addScreenshotComment, toggleScreenshotFlag, addContextItem } = useSessions();
+  const { registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
   const [liveElapsed, setLiveElapsed] = useState(0);
   const [countdown, setCountdown] = useState(0);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
 
   const isPaused = session.status === 'paused';
+
+  // Register timeline as scroll container for menu morphing
+  useEffect(() => {
+    const container = timelineScrollRef.current;
+    if (!container) return;
+
+    registerScrollContainer(container);
+    return () => unregisterScrollContainer(container);
+  }, [registerScrollContainer, unregisterScrollContainer]);
 
   // Live timer
   useEffect(() => {
@@ -237,7 +249,7 @@ export function ActiveSessionView({ session }: ActiveSessionViewProps) {
       </div>
 
       {/* Timeline - Scrollable */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div ref={timelineScrollRef} className="flex-1 overflow-y-auto p-6">
         <SessionTimeline
           session={session}
           onAddComment={(screenshotId, comment) => {

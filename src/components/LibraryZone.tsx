@@ -10,6 +10,7 @@ import { Clock, FileText, Search, X, SlidersHorizontal, CheckSquare, Plus } from
 import { NoteDetailInline } from './NoteDetailInline';
 import { Input } from './Input';
 import { SpaceMenuBar } from './SpaceMenuBar';
+import { MenuMorphPill } from './MenuMorphPill';
 import { StandardFilterPanel } from './StandardFilterPanel';
 import { InlineTagManager } from './InlineTagManager';
 import { CollapsibleSidebar } from './CollapsibleSidebar';
@@ -42,6 +43,9 @@ export default function LibraryZone() {
 
   // Ref for main container to apply dynamic top padding
   const mainContainerRef = useRef<HTMLDivElement>(null);
+
+  // Ref for stats pill scroll animations
+  const statsPillRef = useRef<HTMLDivElement>(null);
 
   // Sidebar collapse state
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
@@ -114,26 +118,68 @@ export default function LibraryZone() {
 
   /**
    * Scroll-driven content expansion
-   * Reduces top padding as the menu bar scrolls away to fill the space naturally
+   * DELAYED until after header collapse (150px) to prevent premature upward expansion
    */
   useEffect(() => {
     if (!mainContainerRef.current) return;
 
     const container = mainContainerRef.current;
 
-    // Initial padding is pt-24 (96px)
-    const initialPadding = 96;
-    // Menu bar scrolls away over 200px (same as SpaceMenuBar transform)
-    const scrollRange = 200;
-
-    // Calculate reduced padding based on scroll
-    // As scrollY goes from 0 to 200, padding goes from 96 to ~20px (keeping some minimum)
+    // Initial padding is 110px (enough to clear navigation island)
+    const initialPadding = 110;
     const minPadding = 20;
-    const paddingReduction = Math.min(scrollY, scrollRange) / scrollRange * (initialPadding - minPadding);
-    const newPadding = initialPadding - paddingReduction;
 
-    container.style.paddingTop = `${newPadding}px`;
+    // DELAY: Only start reducing padding AFTER header collapse completes (at 150px)
+    const delayThreshold = 150;
+    const scrollRange = 150; // Padding reduction happens over 150-300px range
+
+    if (scrollY < delayThreshold) {
+      // Header hasn't collapsed yet - keep initial padding
+      container.style.paddingTop = `${initialPadding}px`;
+    } else {
+      // Header has collapsed - now reduce padding from 120 to 20px over next 150px
+      const delayedScrollY = scrollY - delayThreshold;
+      const paddingReduction = Math.min(delayedScrollY, scrollRange) / scrollRange * (initialPadding - minPadding);
+      const newPadding = initialPadding - paddingReduction;
+      container.style.paddingTop = `${newPadding}px`;
+    }
   }, [scrollY]);
+
+  /**
+   * Stats pill scroll animation (independent fade)
+   * Fades out the stats pill as user scrolls
+   */
+  useEffect(() => {
+    const applyStatsTransform = () => {
+      if (statsPillRef.current && scrollY > 0) {
+        const progress = Math.min((scrollY - 50) / 250, 1);
+        const opacity = 1 - progress;
+        const scale = 1 - (progress * 0.03);
+        const blur = progress * 3;
+
+        statsPillRef.current.style.opacity = String(opacity);
+        statsPillRef.current.style.transform = `scale(${scale})`;
+        statsPillRef.current.style.filter = `blur(${blur}px)`;
+      } else if (statsPillRef.current && scrollY === 0) {
+        // Reset when scrolled to top
+        statsPillRef.current.style.opacity = '1';
+        statsPillRef.current.style.transform = 'scale(1)';
+        statsPillRef.current.style.filter = 'blur(0px)';
+      }
+    };
+
+    applyStatsTransform();
+  }, [scrollY]);
+
+  /**
+   * Auto-close filter panel when menu morphs to compact state
+   * Prevents filter panel positioning issues during scroll
+   */
+  useEffect(() => {
+    if (scrollY >= 100 && showFilters) {
+      setShowFilters(false);
+    }
+  }, [scrollY, showFilters]);
 
   const sortedCompanies = useMemo(() => {
     return [...entitiesState.companies].sort((a, b) => {
@@ -292,86 +338,102 @@ export default function LibraryZone() {
       {/* Secondary animated gradient overlay */}
       <div className={`absolute inset-0 ${BACKGROUND_GRADIENT.secondary} pointer-events-none will-change-transform`} />
 
-      <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
-        {/* Header - Menu Bar - In Normal Flow */}
-        <SpaceMenuBar
-          primaryAction={{
-            label: 'New Note',
-            icon: <Plus size={16} />,
-            onClick: handleCreateNewNote,
-            gradient: 'purple',
-          }}
-          dropdowns={[
-            {
-              label: 'Sort',
-              value: noteSortBy,
-              options: [
-                { value: 'recent', label: 'Recent' },
-                { value: 'oldest', label: 'Oldest' },
-                { value: 'alphabetical', label: 'A-Z' },
-              ],
-              onChange: (value) => setNoteSortBy(value as typeof noteSortBy),
-            },
-          ]}
-          filters={{
-            active: showFilters,
-            count: [
-              selectedCompanyId ? 1 : 0,
-              selectedContactId ? 1 : 0,
-              selectedTopicId ? 1 : 0,
-              selectedTags.length,
-            ].reduce((a, b) => a + b, 0),
-            onToggle: () => setShowFilters(!showFilters),
-            panel: showFilters ? (
-              <StandardFilterPanel
-                title="Filter Notes"
-                sections={[
-                  {
-                    title: 'COMPANIES',
-                    items: sortedCompanies.map(c => ({ id: c.id, label: c.name })),
-                    selectedIds: selectedCompanyId ? [selectedCompanyId] : [],
-                    onToggle: (id) => setSelectedCompanyId(id === selectedCompanyId ? undefined : id),
-                    multiSelect: false,
-                  },
-                  {
-                    title: 'CONTACTS',
-                    items: sortedContacts.map(c => ({ id: c.id, label: c.name })),
-                    selectedIds: selectedContactId ? [selectedContactId] : [],
-                    onToggle: (id) => setSelectedContactId(id === selectedContactId ? undefined : id),
-                    multiSelect: false,
-                  },
-                  {
-                    title: 'TOPICS',
-                    items: sortedTopics.map(t => ({ id: t.id, label: t.name })),
-                    selectedIds: selectedTopicId ? [selectedTopicId] : [],
-                    onToggle: (id) => setSelectedTopicId(id === selectedTopicId ? undefined : id),
-                    multiSelect: false,
-                  },
-                  {
-                    title: 'TAGS',
-                    items: allTags.slice(0, 8).map(({ tag }) => ({ id: tag, label: `#${tag}` })),
-                    selectedIds: selectedTags,
-                    onToggle: toggleTag,
-                    multiSelect: true,
-                  },
-                ]}
-                onClearAll={() => {
-                  setSelectedCompanyId(undefined);
-                  setSelectedContactId(undefined);
-                  setSelectedTopicId(undefined);
-                  setSelectedTags([]);
-                  setSelectedSources([]);
-                  setSelectedSentiments([]);
-                }}
-              />
-            ) : undefined,
-          }}
-          stats={{
-            total: notesState.notes.length,
-            filtered: displayedNotes.length,
-          }}
-          className="mb-4"
-        />
+      <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '110px' }}>
+        {/* Header - Two-pill layout: Menu controls (left) + Stats (right) */}
+        <div className="flex items-center justify-between mb-4">
+          {/* LEFT: Menu controls pill */}
+          <MenuMorphPill resetKey={`${selectedNoteIdForInline}-${isSidebarExpanded}`}>
+            <SpaceMenuBar
+              primaryAction={{
+                label: 'New Note',
+                icon: <Plus size={16} />,
+                onClick: handleCreateNewNote,
+                gradient: 'purple',
+              }}
+              dropdowns={[
+                {
+                  label: 'Sort',
+                  value: noteSortBy,
+                  options: [
+                    { value: 'recent', label: 'Recent' },
+                    { value: 'oldest', label: 'Oldest' },
+                    { value: 'alphabetical', label: 'A-Z' },
+                  ],
+                  onChange: (value) => setNoteSortBy(value as typeof noteSortBy),
+                },
+              ]}
+              filters={{
+                active: showFilters,
+                count: [
+                  selectedCompanyId ? 1 : 0,
+                  selectedContactId ? 1 : 0,
+                  selectedTopicId ? 1 : 0,
+                  selectedTags.length,
+                ].reduce((a, b) => a + b, 0),
+                onToggle: () => setShowFilters(!showFilters),
+                panel: showFilters ? (
+                  <StandardFilterPanel
+                    title="Filter Notes"
+                    sections={[
+                      {
+                        title: 'COMPANIES',
+                        items: sortedCompanies.map(c => ({ id: c.id, label: c.name })),
+                        selectedIds: selectedCompanyId ? [selectedCompanyId] : [],
+                        onToggle: (id) => setSelectedCompanyId(id === selectedCompanyId ? undefined : id),
+                        multiSelect: false,
+                      },
+                      {
+                        title: 'CONTACTS',
+                        items: sortedContacts.map(c => ({ id: c.id, label: c.name })),
+                        selectedIds: selectedContactId ? [selectedContactId] : [],
+                        onToggle: (id) => setSelectedContactId(id === selectedContactId ? undefined : id),
+                        multiSelect: false,
+                      },
+                      {
+                        title: 'TOPICS',
+                        items: sortedTopics.map(t => ({ id: t.id, label: t.name })),
+                        selectedIds: selectedTopicId ? [selectedTopicId] : [],
+                        onToggle: (id) => setSelectedTopicId(id === selectedTopicId ? undefined : id),
+                        multiSelect: false,
+                      },
+                      {
+                        title: 'TAGS',
+                        items: allTags.slice(0, 8).map(({ tag }) => ({ id: tag, label: `#${tag}` })),
+                        selectedIds: selectedTags,
+                        onToggle: toggleTag,
+                        multiSelect: true,
+                      },
+                    ]}
+                    onClearAll={() => {
+                      setSelectedCompanyId(undefined);
+                      setSelectedContactId(undefined);
+                      setSelectedTopicId(undefined);
+                      setSelectedTags([]);
+                      setSelectedSources([]);
+                      setSelectedSentiments([]);
+                    }}
+                  />
+                ) : undefined,
+              }}
+              stats={undefined}
+              className=""
+            />
+          </MenuMorphPill>
+
+          {/* RIGHT: Stats pill - separate, independent fade animation */}
+          <div
+            ref={statsPillRef}
+            className="flex items-center gap-2 text-sm text-gray-700 bg-white/30 backdrop-blur-sm px-4 py-2 rounded-[24px] border border-white/60"
+          >
+            <span>{notesState.notes.length} total</span>
+            {displayedNotes.length !== notesState.notes.length && (
+              <>
+                <span className="text-gray-300">•</span>
+                <span>{displayedNotes.length} shown</span>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* Split-screen Layout */}
         <div ref={contentRef} className="flex-1 min-h-0 flex gap-4 relative items-stretch">

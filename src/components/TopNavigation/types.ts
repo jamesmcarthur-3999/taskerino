@@ -105,19 +105,65 @@ export interface SearchModeProps extends IslandModeProps {
 }
 
 /**
+ * Processing job structure
+ */
+export interface ProcessingJob {
+  id: string;
+  input: string;
+  progress: number;
+}
+
+/**
+ * Completed job structure
+ */
+export interface CompletedJob {
+  id: string;
+  input: string;
+}
+
+/**
  * Processing mode specific props
  */
 export interface ProcessingModeProps extends IslandModeProps {
-  processingJobs: any[];
-  completedJobs: any[];
+  processingJobs: ProcessingJob[];
+  completedJobs: CompletedJob[];
   onJobClick: (jobId: string) => void;
+}
+
+/**
+ * Active session structure
+ */
+export interface ActiveSession {
+  id: string;
+  name: string;
+  description: string;
+  startTime: string;
+  screenshots: string[];
+  lastScreenshotTime: string | null;
+}
+
+/**
+ * Session configuration for starting a new session
+ */
+export interface SessionConfig {
+  name: string;
+  description: string;
+  status: 'active';
+  screenshotInterval: number;
+  autoAnalysis: boolean;
+  tags: string[];
+  audioRecording: boolean;
+  enableScreenshots: boolean;
+  videoRecording: boolean;
+  audioMode: 'transcription' | 'off';
+  audioReviewCompleted: boolean;
 }
 
 /**
  * Session mode specific props
  */
 export interface SessionModeProps extends IslandModeProps {
-  activeSession: any | null;
+  activeSession: ActiveSession | null;
   isSessionActive: boolean;
   isSessionPaused: boolean;
   isStarting: boolean;
@@ -127,6 +173,6 @@ export interface SessionModeProps extends IslandModeProps {
   onPauseSession: () => void;
   onResumeSession: () => void;
   onEndSession: () => void;
-  onStartSession: (config: any) => Promise<void>;
+  onStartSession: (config: SessionConfig) => Promise<void>;
   onNavigateToSessions: () => void;
 }

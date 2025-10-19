@@ -15,6 +15,7 @@ interface SessionListGroupProps {
   onSessionClick: (sessionId: string) => void;
   onSessionSelect: (sessionId: string) => void;
   isSessionNewlyCompleted: (sessionId: string) => boolean;
+  scrollElementRef?: React.RefObject<HTMLDivElement>; // Parent scroll container
 }
 
 // Threshold for enabling virtualization - only virtualize if group has more than this many items
@@ -28,6 +29,7 @@ export function SessionListGroup({
   onSessionClick,
   onSessionSelect,
   isSessionNewlyCompleted,
+  scrollElementRef,
 }: SessionListGroupProps) {
   // Helper function to render a session group with or without virtualization
   const renderSessionGroup = (
@@ -51,6 +53,7 @@ export function SessionListGroup({
             onSessionClick={onSessionClick}
             onSessionSelect={onSessionSelect}
             isSessionNewlyCompleted={isSessionNewlyCompleted}
+            scrollElementRef={scrollElementRef}
           />
         ) : (
           <div className="space-y-3">

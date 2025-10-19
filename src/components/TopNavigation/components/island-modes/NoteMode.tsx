@@ -3,9 +3,12 @@
  *
  * Extracted from TopNavigation.tsx (lines 1176-1215)
  * Provides a quick note capture interface with save and AI processing options
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - React.memo to prevent re-renders when props haven't changed
  */
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Save } from 'lucide-react';
 import type { NoteModeProps } from '../../types';
@@ -13,7 +16,7 @@ import { getRadiusClass } from '../../../../design-system/theme';
 import { modeContentVariants, contentSpring } from '../../utils/islandAnimations';
 import { useReducedMotion } from '../../../../lib/animations';
 
-export function NoteMode({
+function NoteModeComponent({
   noteInput,
   onNoteInputChange,
   onSaveNote,
@@ -29,7 +32,6 @@ export function NoteMode({
       initial="initial"
       animate="animate"
       exit="exit"
-      transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
     >
       {/* Textarea with Focus Scale Effect */}
       <div className="relative px-2 pt-2">
@@ -102,3 +104,9 @@ export function NoteMode({
     </motion.div>
   );
 }
+
+/**
+ * PERFORMANCE OPTIMIZATION:
+ * Memoize the component to prevent unnecessary re-renders.
+ */
+export const NoteMode = memo(NoteModeComponent);

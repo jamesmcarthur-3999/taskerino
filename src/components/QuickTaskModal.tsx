@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useUI } from '../context/UIContext';
 import { useEntities } from '../context/EntitiesContext';
 import { useTasks } from '../context/TasksContext';
@@ -8,6 +9,12 @@ import { useTheme } from '../context/ThemeContext';
 import { getModalClasses, getModalHeaderClasses, getInputContainerClasses, MODAL_SECTIONS } from '../design-system/theme';
 import { Button } from './Button';
 import { generateId } from '../utils/helpers';
+import {
+  modalBackdropVariants,
+  modalFormVariants,
+  modalStaggerContainerVariants,
+  modalSectionVariants
+} from '../animations/variants';
 
 export function QuickTaskModal() {
   const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
@@ -20,8 +27,6 @@ export function QuickTaskModal() {
     priority: 'medium',
     tags: [],
   });
-
-  if (!uiState.quickCaptureOpen) return null;
 
   const handleClose = () => {
     uiDispatch({ type: 'TOGGLE_QUICK_CAPTURE' });
@@ -121,16 +126,36 @@ export function QuickTaskModal() {
   const modalClasses = getModalClasses(colorScheme, glassStrength);
 
   return (
-    <div
-      className={modalClasses.overlay}
-      onClick={handleClose}
-    >
-      <div
-        className={`${modalClasses.content} max-w-2xl w-full`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className={getModalHeaderClasses(colorScheme)}>
+    <AnimatePresence>
+      {uiState.quickCaptureOpen && (
+        <>
+          {/* Animated Backdrop */}
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={modalBackdropVariants.standard}
+            className={modalClasses.overlay}
+            onClick={handleClose}
+          />
+
+          {/* Animated Modal Content */}
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={modalFormVariants}
+            className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-[100]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`${modalClasses.content} max-w-2xl w-full`}>
+        {/* Header - Animated */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05, duration: 0.2 }}
+          className={getModalHeaderClasses(colorScheme)}
+        >
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
               ⚡ Quick Add Task
@@ -146,12 +171,18 @@ export function QuickTaskModal() {
               <X className="w-5 h-5" />
             </Button>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
+        {/* Content - Staggered Animation */}
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          variants={modalStaggerContainerVariants}
+          className="p-6 space-y-6"
+        >
           {/* Natural Language Input */}
-          <div>
+          <motion.div variants={modalSectionVariants}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Type naturally - we'll parse it for you
             </label>
@@ -167,10 +198,13 @@ export function QuickTaskModal() {
             <p className="text-xs text-gray-500 mt-2">
               Tips: Use @urgent/@high/@medium/@low for priority, #tags for categories, "tomorrow"/"today"/"in X days" for dates
             </p>
-          </div>
+          </motion.div>
 
-          {/* Parsed Fields (editable) */}
-          <div className={`${getInputContainerClasses('highlighted')} space-y-4`}>
+          {/* Parsed Fields (editable) - Staggered */}
+          <motion.div
+            variants={modalSectionVariants}
+            className={`${getInputContainerClasses('highlighted')} space-y-4`}
+          >
             <h3 className="font-semibold text-gray-900 flex items-center gap-2">
               <span>📋 Parsed Task</span>
             </h3>
@@ -269,11 +303,16 @@ export function QuickTaskModal() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
-        {/* Footer */}
-        <div className={`${MODAL_SECTIONS.footer} flex items-center justify-between`}>
+        {/* Footer - Animated */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.2 }}
+          className={`${MODAL_SECTIONS.footer} flex items-center justify-between`}
+        >
           <p className="text-sm text-gray-600">
             Press <kbd className="px-2 py-1 bg-white/60 backdrop-blur-md border border-white/60 rounded text-xs font-mono shadow-sm">⌘↵</kbd> to create
           </p>
@@ -297,8 +336,11 @@ export function QuickTaskModal() {
               Create Task
             </Button>
           </div>
-        </div>
-      </div>
-    </div>
+        </motion.div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

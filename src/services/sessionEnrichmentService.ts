@@ -54,6 +54,8 @@ import { getEnrichmentLockService } from './enrichmentLockService';
 import { retryWithBackoff } from '../utils/retryWithBackoff';
 import { getStorage } from './storage';
 import { generateId } from '../utils/helpers';
+import { generateFlexibleSummary } from '../utils/sessionSynthesis';
+import { invoke } from '@tauri-apps/api/core';
 
 // ============================================================================
 // Types & Interfaces
@@ -1090,6 +1092,9 @@ export class SessionEnrichmentService {
 
   /**
    * Regenerate session summary with enriched data
+   *
+   * Now supports both legacy and flexible (Phase 2) summary generation.
+   * For completed sessions with enriched data, uses flexible summaries where AI chooses relevant sections.
    */
   private async enrichSummary(
     session: Session,
@@ -1143,40 +1148,163 @@ export class SessionEnrichmentService {
         hasAudioInsights: !!audioInsights,
       });
 
-      // Regenerate summary with enriched data and context for consistent categorization
-      const summary = await sessionsAgentService.generateSessionSummary(
-        latestSession,
-        latestSession.screenshots || [],
-        latestSession.audioSegments || [],
-        {
-          existingCategories: Array.from(existingCategories),
-          existingSubCategories: Array.from(existingSubCategories),
-          existingTags: Array.from(existingTags),
-          videoChapters,
-          audioInsights,
+      // Decide whether to use flexible (Phase 2) or legacy summary generation
+      // Use flexible summaries for completed sessions with enriched audio/video data
+      const useFlexibleSummary =
+        latestSession.status === 'completed' &&
+        (!!audioInsights || (!!videoChapters && videoChapters.length > 0));
+
+      logger.info('Summary generation strategy', {
+        useFlexibleSummary,
+        sessionStatus: latestSession.status,
+        hasAudioInsights: !!audioInsights,
+        hasVideoChapters: !!videoChapters && videoChapters.length > 0,
+      });
+
+      let summary: any;
+
+      if (useFlexibleSummary) {
+        // Phase 2: Generate flexible summary with AI-chosen sections
+        onProgress({
+          stage: 'summary',
+          message: 'Generating AI-powered flexible summary...',
+          progress: 85,
+        });
+
+        // Get API key from Tauri storage
+        const apiKey = await invoke<string | null>('get_claude_api_key');
+        if (!apiKey) {
+          logger.warn('No API key found, falling back to legacy summary');
+          // Fallback to legacy
+          summary = await sessionsAgentService.generateSessionSummary(
+            latestSession,
+            latestSession.screenshots || [],
+            latestSession.audioSegments || [],
+            {
+              existingCategories: Array.from(existingCategories),
+              existingSubCategories: Array.from(existingSubCategories),
+              existingTags: Array.from(existingTags),
+              videoChapters,
+              audioInsights,
+            }
+          );
+        } else {
+          logger.info('🎨 Generating flexible summary (Phase 2)...');
+
+          try {
+            summary = await generateFlexibleSummary(
+              latestSession,
+              latestSession.screenshots || [],
+              latestSession.audioSegments || [],
+              {
+                existingCategories: Array.from(existingCategories),
+                existingSubCategories: Array.from(existingSubCategories),
+                existingTags: Array.from(existingTags),
+                videoChapters,
+                audioInsights,
+              },
+              apiKey
+            );
+
+            logger.info('✅ Flexible summary generated', {
+              schemaVersion: summary.schemaVersion,
+              sectionCount: summary.sections?.length || 0,
+              detectedSessionType: summary.generationMetadata?.detectedSessionType,
+              emphasis: summary.generationMetadata?.emphasis,
+            });
+          } catch (flexError: any) {
+            logger.error('Flexible summary generation failed, falling back to legacy', flexError);
+            // Fallback to legacy on error
+            summary = await sessionsAgentService.generateSessionSummary(
+              latestSession,
+              latestSession.screenshots || [],
+              latestSession.audioSegments || [],
+              {
+                existingCategories: Array.from(existingCategories),
+                existingSubCategories: Array.from(existingSubCategories),
+                existingTags: Array.from(existingTags),
+                videoChapters,
+                audioInsights,
+              }
+            );
+          }
         }
-      );
+      } else {
+        // Legacy: Generate standard summary
+        logger.info('📝 Generating legacy summary...');
+        summary = await sessionsAgentService.generateSessionSummary(
+          latestSession,
+          latestSession.screenshots || [],
+          latestSession.audioSegments || [],
+          {
+            existingCategories: Array.from(existingCategories),
+            existingSubCategories: Array.from(existingSubCategories),
+            existingTags: Array.from(existingTags),
+            videoChapters,
+            audioInsights,
+          }
+        );
+      }
 
       const duration = (Date.now() - startTime) / 1000;
       const estimatedCost = this.ESTIMATED_SUMMARY_TOKENS * this.COST_PER_SUMMARY_TOKEN;
 
+      // Extract category/tags from flexible summary if needed
+      let category = summary.category;
+      let subCategory = summary.subCategory;
+      let tags = summary.tags;
+
+      // Flexible summaries don't have category/subCategory at top level
+      if (summary.schemaVersion === '2.0') {
+        // Extract from quickAccess or infer from session type
+        const sessionType = summary.generationMetadata?.detectedSessionType || 'mixed';
+        category = this.inferCategoryFromSessionType(sessionType);
+        subCategory = summary.generationMetadata?.primaryTheme || 'Work Session';
+        tags = summary.quickAccess?.achievements?.slice(0, 3).map((a: string) =>
+          a.toLowerCase().replace(/\s+/g, '-').slice(0, 20)
+        ) || ['work'];
+      }
+
       logger.info('Summary regeneration completed', {
         duration,
         cost: estimatedCost,
-        suggestedCategory: summary.category,
-        suggestedSubCategory: summary.subCategory,
-        suggestedTags: summary.tags?.length || 0,
+        summaryType: summary.schemaVersion === '2.0' ? 'flexible' : 'legacy',
+        suggestedCategory: category,
+        suggestedSubCategory: subCategory,
+        suggestedTags: tags?.length || 0,
       });
 
       return {
         completed: true,
-        summary,
+        summary: {
+          ...summary,
+          category,
+          subCategory,
+          tags,
+        },
         duration,
       };
     } catch (error: any) {
       logger.error('Summary regeneration failed', error);
       throw error;
     }
+  }
+
+  /**
+   * Infer category from detected session type (for flexible summaries)
+   */
+  private inferCategoryFromSessionType(sessionType: string): string {
+    const mapping: Record<string, string> = {
+      'deep-work': 'Deep Work',
+      'exploratory': 'Research',
+      'troubleshooting': 'Deep Work',
+      'collaborative': 'Collaboration',
+      'learning': 'Research',
+      'creative': 'Deep Work',
+      'routine': 'Quick Tasks',
+      'mixed': 'Mixed Work',
+    };
+    return mapping[sessionType] || 'Deep Work';
   }
 
   /**

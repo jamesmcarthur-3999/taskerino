@@ -2,18 +2,22 @@
  * SessionMode Component
  *
  * Session control mode for the navigation island
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - React.memo to prevent re-renders when props haven't changed
+ * - useRef for DOM manipulation to avoid re-renders (session timer)
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { X, Activity, Play, Pause, Square, ArrowRight } from 'lucide-react';
-import type { SessionModeProps } from '../../types';
+import type { SessionModeProps, SessionConfig } from '../../types';
 import { loadLastSessionSettings } from '../../../../utils/lastSessionSettings';
 import { getRadiusClass } from '../../../../design-system/theme';
-import { modeContentVariants, contentSpring } from '../../utils/islandAnimations';
+import { modeContentVariants } from '../../utils/islandAnimations';
 import { useReducedMotion } from '../../../../lib/animations';
 
-export function SessionMode({
+function SessionModeComponent({
   activeSession,
   isSessionActive,
   isSessionPaused,
@@ -32,8 +36,11 @@ export function SessionMode({
   const sessionTimeRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
-  // Format elapsed time helper
-  const formatElapsedTime = (startTime: string) => {
+  /**
+   * PERFORMANCE OPTIMIZATION:
+   * Memoize helper functions to prevent recreating them on every render
+   */
+  const formatElapsedTime = useCallback((startTime: string) => {
     const start = new Date(startTime).getTime();
     const now = new Date().getTime();
     const diff = now - start;
@@ -45,10 +52,9 @@ export function SessionMode({
       return `${hours}h ${minutes}m`;
     }
     return `${minutes}m`;
-  };
+  }, []);
 
-  // Format relative time helper
-  const formatRelativeTime = (timestamp: string) => {
+  const formatRelativeTime = useCallback((timestamp: string) => {
     const now = new Date().getTime();
     const then = new Date(timestamp).getTime();
     const diff = now - then;
@@ -61,7 +67,7 @@ export function SessionMode({
     const hours = Math.floor(minutes / 60);
     if (hours === 1) return '1 hour ago';
     return `${hours} hours ago`;
-  };
+  }, []);
 
   // Live time update for session elapsed time - using ref to avoid re-renders
   useEffect(() => {
@@ -81,7 +87,7 @@ export function SessionMode({
     const savedSettings = loadLastSessionSettings();
     const sessionName = `Session - ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
 
-    await onStartSession({
+    const config: SessionConfig = {
       name: sessionName,
       description: sessionDescription,
       status: 'active',
@@ -93,9 +99,10 @@ export function SessionMode({
       videoRecording: savedSettings.videoRecording,
       audioMode: savedSettings.audioRecording ? 'transcription' : 'off',
       audioReviewCompleted: false,
-    });
+    };
 
-    // Clean up UI after countdown completes
+    await onStartSession(config);
+
     setTimeout(() => {
       onClose();
       onSessionDescriptionChange('');
@@ -119,7 +126,6 @@ export function SessionMode({
       initial="initial"
       animate="animate"
       exit="exit"
-      transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
       className="px-4 py-4"
     >
       <div className="flex items-center justify-between mb-3">
@@ -128,7 +134,14 @@ export function SessionMode({
         </h3>
         <button
           onClick={onClose}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onClose();
+            }
+          }}
           className={`p-1 hover:bg-white/60 ${getRadiusClass('element')} transition-all`}
+          aria-label="Close session mode"
         >
           <X className="w-4 h-4 text-gray-500" />
         </button>
@@ -179,7 +192,18 @@ export function SessionMode({
                   onResumeSession();
                 }
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (isSessionActive) {
+                    onPauseSession();
+                  } else {
+                    onResumeSession();
+                  }
+                }
+              }}
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white ${getRadiusClass('element')} font-semibold hover:shadow-lg transition-all text-sm`}
+              aria-label={isSessionActive ? 'Pause session' : 'Resume session'}
             >
               {isSessionActive ? (
                 <>
@@ -200,7 +224,17 @@ export function SessionMode({
                   onClose();
                 }
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (window.confirm('Stop this session? You can view the results in the Sessions page.')) {
+                    onEndSession();
+                    onClose();
+                  }
+                }
+              }}
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white ${getRadiusClass('element')} font-semibold hover:shadow-lg transition-all text-sm`}
+              aria-label="Stop session"
             >
               <Square className="w-4 h-4" />
               Stop Session
@@ -213,7 +247,15 @@ export function SessionMode({
               onNavigateToSessions();
               onClose();
             }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onNavigateToSessions();
+                onClose();
+              }
+            }}
             className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white/50 hover:bg-white/70 backdrop-blur-sm ${getRadiusClass('element')} transition-all border-2 border-white/60 text-gray-700 hover:text-orange-600 font-medium text-sm`}
+            aria-label="View all screenshots"
           >
             View All Screenshots
             <ArrowRight className="w-4 h-4" />
@@ -235,7 +277,14 @@ export function SessionMode({
               {sessionDescription.trim() && (
                 <button
                   onClick={handleStartClick}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleStartClick();
+                    }
+                  }}
                   className={`w-full px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white ${getRadiusClass('element')} font-bold hover:shadow-xl transition-all text-sm flex items-center justify-center gap-2`}
+                  aria-label="Start session"
                 >
                   <Play className="w-4 h-4" />
                   Start Session
@@ -271,3 +320,11 @@ export function SessionMode({
     </motion.div>
   );
 }
+
+/**
+ * PERFORMANCE OPTIMIZATION:
+ * Memoize the component to prevent unnecessary re-renders.
+ * This is especially important for SessionMode which uses setInterval
+ * for live timer updates via direct DOM manipulation.
+ */
+export const SessionMode = memo(SessionModeComponent);

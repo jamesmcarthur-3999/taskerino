@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, User, Key, CheckCircle2, ArrowRight, ArrowLeft, BookOpen, Zap } from 'lucide-react';
 import { Input } from './Input';
 import { validateName, validateAnthropicKey, validateOpenAIKey } from '../utils/validation';
 import { MODAL_OVERLAY, getGlassClasses, getRadiusClass, BACKGROUND_GRADIENT, getInfoGradient, getSuccessGradient, TRANSITIONS } from '../design-system/theme';
+import { modalBackdropVariants, modalInfoVariants, modalSectionVariants } from '../animations/variants';
 
 interface WelcomeFlowProps {
   onComplete: (name: string, anthropicKey: string, openAIKey: string) => void;
@@ -66,9 +68,28 @@ export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
   };
 
   return (
-    <div className={`${MODAL_OVERLAY} z-[200] flex items-center justify-center p-4 ${BACKGROUND_GRADIENT.primary} animate-gradient`}>
-      {/* Welcome Card */}
-      <div className={`w-full max-w-2xl ${getGlassClasses('medium')} ${getRadiusClass('card')} shadow-2xl overflow-hidden animate-scaleIn`}>
+    <AnimatePresence>
+      {true && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            variants={modalBackdropVariants.smooth}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className={`${MODAL_OVERLAY} z-[200] ${BACKGROUND_GRADIENT.primary} animate-gradient`}
+          />
+
+          {/* Content */}
+          <motion.div
+            variants={modalInfoVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 pointer-events-none"
+          >
+            {/* Welcome Card */}
+            <div className={`w-full max-w-2xl ${getGlassClasses('medium')} ${getRadiusClass('card')} shadow-2xl overflow-hidden pointer-events-auto`}>
         {/* Progress Indicator */}
         <div className="h-2 bg-white/30 flex">
           <div
@@ -415,6 +436,9 @@ export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
           )}
         </div>
       </div>
-    </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

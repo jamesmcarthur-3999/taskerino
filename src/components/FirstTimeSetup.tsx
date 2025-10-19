@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { motion, AnimatePresence } from 'framer-motion';
 import { claudeService } from '../services/claudeService';
 import { Key, Sparkles } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { getModalClasses, getRadiusClass } from '../design-system/theme';
+import { modalBackdropVariants, modalInfoVariants } from '../animations/variants';
 
 interface FirstTimeSetupProps {
   onComplete: () => void;
@@ -48,10 +50,29 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
   const modalClasses = getModalClasses(colorScheme, glassStrength);
 
   return (
-    <div className={modalClasses.overlay}>
-      <div className="w-full max-w-2xl px-6">
-        {/* Welcome Card */}
-        <div className={`${modalClasses.content} p-8 space-y-6`}>
+    <AnimatePresence>
+      {true && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            variants={modalBackdropVariants.smooth}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className={modalClasses.overlay}
+          />
+
+          {/* Content */}
+          <motion.div
+            variants={modalInfoVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none"
+          >
+            <div className="w-full max-w-2xl pointer-events-auto">
+              {/* Welcome Card */}
+              <div className={`${modalClasses.content} p-8 space-y-6`}>
           {/* Header */}
           <div className="text-center space-y-3">
             <div className={`inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-violet-500 to-fuchsia-500 ${getRadiusClass('field')} mb-4`}>
@@ -154,7 +175,10 @@ export function FirstTimeSetup({ onComplete }: FirstTimeSetupProps) {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

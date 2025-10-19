@@ -2,22 +2,24 @@
  * ProcessingMode Component
  *
  * Processing status view mode for the navigation island
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - React.memo to prevent re-renders when props haven't changed
  */
 
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { X, Loader2, CheckCircle2, Edit3 } from 'lucide-react';
 import type { ProcessingModeProps } from '../../types';
 import { getRadiusClass } from '../../../../design-system/theme';
-import { modeContentVariants, contentSpring } from '../../utils/islandAnimations';
-import { useReducedMotion } from '../../../../lib/animations';
+import { modeContentVariants } from '../../utils/islandAnimations';
 
-export function ProcessingMode({
+function ProcessingModeComponent({
   processingJobs,
   completedJobs,
   onClose,
   onJobClick,
 }: ProcessingModeProps) {
-  const prefersReducedMotion = useReducedMotion();
 
   return (
     <motion.div
@@ -25,14 +27,20 @@ export function ProcessingMode({
       initial="initial"
       animate="animate"
       exit="exit"
-      transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
       className="px-4 py-4"
     >
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-bold text-gray-900 text-sm">Processing Status</h3>
         <button
           onClick={onClose}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onClose();
+            }
+          }}
           className={`p-1 hover:bg-white/60 ${getRadiusClass('element')} transition-all`}
+          aria-label="Close processing mode"
         >
           <X className="w-4 h-4 text-gray-500" />
         </button>
@@ -81,10 +89,17 @@ export function ProcessingMode({
               Ready to Review ({completedJobs.length})
             </div>
             {completedJobs.map((job) => (
-              <div
+              <button
                 key={job.id}
-                className={`bg-cyan-50/80 border border-cyan-200/60 ${getRadiusClass('element')} p-3 mb-2 cursor-pointer hover:bg-cyan-100/80 transition-all`}
+                className={`bg-cyan-50/80 border border-cyan-200/60 ${getRadiusClass('element')} p-3 mb-2 cursor-pointer hover:bg-cyan-100/80 transition-all w-full text-left`}
                 onClick={() => onJobClick(job.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onJobClick(job.id);
+                  }
+                }}
+                aria-label={`Review completed job: ${job.input}`}
               >
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" />
@@ -97,7 +112,7 @@ export function ProcessingMode({
                     </p>
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -114,3 +129,9 @@ export function ProcessingMode({
     </motion.div>
   );
 }
+
+/**
+ * PERFORMANCE OPTIMIZATION:
+ * Memoize the component to prevent unnecessary re-renders.
+ */
+export const ProcessingMode = memo(ProcessingModeComponent);

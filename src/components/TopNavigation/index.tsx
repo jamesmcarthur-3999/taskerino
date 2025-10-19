@@ -19,7 +19,6 @@ import { useNavActions } from './useNavActions';
 
 // Components
 import { LogoContainer } from './components/LogoContainer';
-import { MenuButton } from './components/MenuButton';
 import { NavigationIsland } from './components/NavigationIsland';
 import { RightActionsBar } from './components/RightActionsBar';
 
@@ -128,16 +127,9 @@ export function TopNavigation() {
         />
       )}
 
-      {/* Logo Container - Morphs into Menu Button on Scroll */}
+      {/* Logo Container - Fades out as menu morphs to its position */}
       <div className={`fixed top-0 left-0 ${Z_INDEX.modal} pt-4 px-6 pointer-events-none`}>
-        {/* Logo Container (fades out on scroll) */}
         <LogoContainer scrollY={scrollY} />
-
-        {/* Menu Button (fades in on scroll, morphs from logo container) */}
-        <MenuButton
-          scrollY={scrollY}
-          onClick={() => uiDispatch({ type: 'TOGGLE_SUBMENU_OVERLAY' })}
-        />
       </div>
 
       {/* Navigation Island - Center */}

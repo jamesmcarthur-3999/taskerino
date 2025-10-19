@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useUI } from '../context/UIContext';
 import { useSessions } from '../context/SessionsContext';
 import { useTheme } from '../context/ThemeContext';
@@ -11,6 +12,7 @@ import { COLOR_SCHEMES, GLASS_PATTERNS, type ColorScheme, type GlassStrength, ge
 import { Input } from './Input';
 import { Button } from './Button';
 import { validateOpenAIKey, validateAnthropicKey } from '../utils/validation';
+import { modalBackdropVariants, modalSettingsVariants } from '../animations/variants';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -150,20 +152,35 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }, 2000);
   };
 
-  if (!isOpen) return null;
-
   const modalClasses = getModalClasses(colorScheme, glassStrength);
 
   return (
-    <div
-      className={modalClasses.overlay}
-      onClick={handleClose}
-      onKeyDown={handleKeyDown}
-    >
-      <div
-        className={`${modalClasses.content} ${modalClasses.container} max-h-[90vh] overflow-hidden`}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            variants={modalBackdropVariants.standard}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className={modalClasses.overlay}
+            onClick={handleClose}
+            onKeyDown={handleKeyDown}
+          />
+
+          {/* Content */}
+          <motion.div
+            variants={modalSettingsVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none"
+          >
+            <div
+              className={`${modalClasses.content} ${modalClasses.container} max-h-[90vh] overflow-hidden pointer-events-auto`}
+              onClick={(e) => e.stopPropagation()}
+            >
         {/* Header */}
         <div className={`${getModalHeaderClasses(colorScheme)} flex-shrink-0`}>
           <div className="flex items-center justify-between">
@@ -417,7 +434,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

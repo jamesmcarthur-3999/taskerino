@@ -15,7 +15,7 @@ import { SessionTimeline } from './SessionTimeline';
 import { checkScreenRecordingPermission, showMacOSPermissionInstructions } from '../utils/permissions';
 import { LoadingSpinner } from './LoadingSpinner';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
-import { clamp, easeOutQuart } from '../utils/easing';
+import { clamp, easeOutQuart, easeOutCubic } from '../utils/easing';
 import { BACKGROUND_GRADIENT, getGlassClasses, getRadiusClass, getToastClasses } from '../design-system/theme';
 import { useTheme } from '../context/ThemeContext';
 
@@ -47,12 +47,13 @@ import { SessionCard } from './sessions/SessionCard';
 import { SessionsTopBar } from './sessions/SessionsTopBar';
 import { SessionsListPanel } from './sessions/SessionsListPanel';
 import { groupSessionsByDate, calculateTotalStats } from '../utils/sessionHelpers';
+import { MenuMorphPill } from './MenuMorphPill';
 
 export default function SessionsZone() {
   const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment, updateScreenshotAnalysis, addScreenshotComment, toggleScreenshotFlag, setActiveSession, addExtractedTask, addExtractedNote, addContextItem } = useSessions();
   const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
-  const { scrollY } = useScrollAnimation();
+  const { scrollY, registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [lastMetadataUpdate, setLastMetadataUpdate] = useState<string | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
@@ -166,11 +167,32 @@ export default function SessionsZone() {
   // Ref for session list scroll container (enables auto-scroll to live session)
   const sessionListScrollRef = useRef<HTMLDivElement>(null);
 
+  // Register session list as scroll container for menu morphing
+  useEffect(() => {
+    const container = sessionListScrollRef.current;
+    if (!container) return;
+
+    registerScrollContainer(container);
+    return () => unregisterScrollContainer(container);
+  }, [registerScrollContainer, unregisterScrollContainer]);
+
   // Ref for content container (enables scroll-driven expansion)
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Ref for main container to apply dynamic top padding
   const mainContainerRef = useRef<HTMLDivElement>(null);
+
+  // Ref for stats pill to apply scroll-driven fade animation
+  const statsPillRef = useRef<HTMLDivElement>(null);
+
+  // Ref for menu bar wrapper to measure width for responsive compact mode
+  const menuBarWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Ref for hidden measurement element (always in full mode)
+  const menuBarMeasurementRef = useRef<HTMLDivElement>(null);
+
+  // State for compact mode - enables icon-only buttons when space is constrained
+  const [compactMode, setCompactMode] = useState(false);
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
 
@@ -1001,17 +1023,121 @@ export default function SessionsZone() {
 
     // Initial padding is pt-24 (96px)
     const initialPadding = 96;
-    // Menu bar scrolls away over 200px (same as SessionsTopBar transform)
-    const scrollRange = 200;
-
-    // Calculate reduced padding based on scroll
-    // As scrollY goes from 0 to 200, padding goes from 96 to ~20px (keeping some minimum)
     const minPadding = 20;
-    const paddingReduction = Math.min(scrollY, scrollRange) / scrollRange * (initialPadding - minPadding);
-    const newPadding = initialPadding - paddingReduction;
 
-    container.style.paddingTop = `${newPadding}px`;
+    // Delay threshold: content stays at full padding until menu starts morphing
+    const delayThreshold = 150;
+
+    if (scrollY < delayThreshold) {
+      // Keep full padding until menu starts morphing
+      container.style.paddingTop = `${initialPadding}px`;
+    } else {
+      // After threshold, reduce padding over 150px range (150-300px total scroll)
+      const delayedScrollY = scrollY - delayThreshold;
+      const scrollRange = 150;
+
+      // Calculate reduced padding based on delayed scroll
+      const paddingReduction = Math.min(delayedScrollY, scrollRange) / scrollRange * (initialPadding - minPadding);
+      const newPadding = initialPadding - paddingReduction;
+
+      container.style.paddingTop = `${newPadding}px`;
+    }
   }, [scrollY]);
+
+  /**
+   * Stats pill fade animation
+   * Fades out independently as menu morphs (50-300px range)
+   */
+  useEffect(() => {
+    if (!statsPillRef.current) return;
+
+    const pill = statsPillRef.current;
+
+    // Stats fades over 50-300px range
+    const statsRawProgress = clamp((scrollY - 50) / 250, 0, 1);
+
+    // Opacity fade
+    const statsOpacity = 1 - easeOutCubic(statsRawProgress);
+
+    // Subtle scale for refinement
+    const statsScaleProgress = easeOutQuart(statsRawProgress);
+    const statsScale = 1 - (statsScaleProgress * 0.03);
+
+    // Progressive blur for depth
+    const statsBlur = statsRawProgress * 3;
+
+    pill.style.opacity = String(statsOpacity);
+    pill.style.transform = `scale(${statsScale})`;
+    pill.style.filter = `blur(${statsBlur}px)`;
+  }, [scrollY]);
+
+  /**
+   * Responsive compact mode detection
+   * Automatically enables icon-only mode when menu bar would overlap with stats pill
+   *
+   * CORRECT FIX: Measures the FULL (non-compact) width using a hidden element
+   * - Hidden element is always in full mode (compactMode=false)
+   * - We measure that stable width and compare against available space
+   * - No circular dependency: compact mode doesn't affect the measurement
+   */
+  useEffect(() => {
+    const checkOverlap = () => {
+      const measurementElement = menuBarMeasurementRef.current;
+      const statsPill = statsPillRef.current;
+      const visibleContainer = menuBarWrapperRef.current;
+
+      if (!measurementElement || !statsPill || !visibleContainer) {
+        return;
+      }
+
+      // Measure the FULL width from the hidden element (always in full mode)
+      const fullWidth = measurementElement.offsetWidth;
+
+      // Get the visible container's position
+      const visibleRect = visibleContainer.getBoundingClientRect();
+      const statsPillRect = statsPill.getBoundingClientRect();
+
+      // Guard against hidden elements
+      if (fullWidth === 0 || statsPillRect.width === 0) {
+        return;
+      }
+
+      // Calculate where the menu bar WOULD end if it were in full mode
+      const fullModeRight = visibleRect.left + fullWidth;
+
+      // Calculate the gap
+      const gap = statsPillRect.left - fullModeRight;
+
+      // Simple threshold - no hysteresis needed because we're measuring a stable value
+      const REQUIRED_GAP = 40; // Minimum gap between full-width menu bar and stats pill
+      const needsCompact = gap < REQUIRED_GAP;
+
+      // Only update if changed
+      setCompactMode(needsCompact);
+    };
+
+    // Debounce to prevent excessive checks
+    let timeoutId: number | undefined;
+    const debouncedCheck = () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+      timeoutId = window.setTimeout(checkOverlap, 100);
+    };
+
+    // Check on mount
+    checkOverlap();
+
+    // Only observe window resize - menu bar size changes don't matter
+    window.addEventListener('resize', debouncedCheck);
+
+    return () => {
+      window.removeEventListener('resize', debouncedCheck);
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [activeSession]); // Re-check when active session changes
 
   /**
    * Auto-generate session metadata with intelligent throttling
@@ -1388,36 +1514,81 @@ export default function SessionsZone() {
 
       {/* Main content with padding */}
       <div ref={mainContainerRef} className="relative z-10 flex-1 flex flex-col px-6 pb-6 min-h-0" style={{ paddingTop: '96px' }}>
+
+        {/* Hidden measurement element - always in FULL mode (compactMode=false) */}
+        <div ref={menuBarMeasurementRef} style={{ visibility: 'hidden', position: 'absolute', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: -9999 }}>
+          <SessionsTopBar
+            activeSession={activeSession}
+            sessions={sessions}
+            allPastSessions={allPastSessions}
+            isStarting={isStarting}
+            isEnding={isEnding}
+            countdown={countdown}
+            handleQuickStart={handleQuickStart}
+            handleEndSession={handleEndSession}
+            pauseSession={pauseSession}
+            resumeSession={resumeSession}
+            currentSettings={currentSettings}
+            updateScreenshots={updateScreenshots}
+            updateAudio={updateAudio}
+            updateVideo={updateVideo}
+            updateInterval={updateInterval}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            selectedCategories={selectedCategories}
+            selectedSubCategories={selectedSubCategories}
+            selectedTags={selectedTags}
+            onCategoriesChange={setSelectedCategories}
+            onSubCategoriesChange={setSelectedSubCategories}
+            onTagsChange={setSelectedTags}
+            bulkSelectMode={bulkSelectMode}
+            selectedSessionIds={selectedSessionIds}
+            onBulkSelectModeChange={setBulkSelectMode}
+            onSelectedSessionIdsChange={setSelectedSessionIds}
+            compactMode={false}
+          />
+        </div>
+
         {/* Top Controls Bar - In Normal Flow */}
-        <SessionsTopBar
-          activeSession={activeSession}
-          sessions={sessions}
-          allPastSessions={allPastSessions}
-          isStarting={isStarting}
-          isEnding={isEnding}
-          countdown={countdown}
-          handleQuickStart={handleQuickStart}
-          handleEndSession={handleEndSession}
-          pauseSession={pauseSession}
-          resumeSession={resumeSession}
-          currentSettings={currentSettings}
-          updateScreenshots={updateScreenshots}
-          updateAudio={updateAudio}
-          updateVideo={updateVideo}
-          updateInterval={updateInterval}
-          sortBy={sortBy}
-          onSortChange={setSortBy}
-          selectedCategories={selectedCategories}
-          selectedSubCategories={selectedSubCategories}
-          selectedTags={selectedTags}
-          onCategoriesChange={setSelectedCategories}
-          onSubCategoriesChange={setSelectedSubCategories}
-          onTagsChange={setSelectedTags}
-          bulkSelectMode={bulkSelectMode}
-          selectedSessionIds={selectedSessionIds}
-          onBulkSelectModeChange={setBulkSelectMode}
-          onSelectedSessionIdsChange={setSelectedSessionIds}
-        />
+        <div className="flex items-center justify-between relative z-50 mb-4">
+          <div ref={menuBarWrapperRef}>
+            <MenuMorphPill resetKey={selectedSessionId || 'default'}>
+              <SessionsTopBar
+                activeSession={activeSession}
+                sessions={sessions}
+                allPastSessions={allPastSessions}
+                isStarting={isStarting}
+                isEnding={isEnding}
+                countdown={countdown}
+                handleQuickStart={handleQuickStart}
+                handleEndSession={handleEndSession}
+                pauseSession={pauseSession}
+                resumeSession={resumeSession}
+                currentSettings={currentSettings}
+                updateScreenshots={updateScreenshots}
+                updateAudio={updateAudio}
+                updateVideo={updateVideo}
+                updateInterval={updateInterval}
+                sortBy={sortBy}
+                onSortChange={setSortBy}
+                selectedCategories={selectedCategories}
+                selectedSubCategories={selectedSubCategories}
+                selectedTags={selectedTags}
+                onCategoriesChange={setSelectedCategories}
+                onSubCategoriesChange={setSelectedSubCategories}
+                onTagsChange={setSelectedTags}
+                bulkSelectMode={bulkSelectMode}
+                selectedSessionIds={selectedSessionIds}
+                onBulkSelectModeChange={setBulkSelectMode}
+                onSelectedSessionIdsChange={setSelectedSessionIds}
+                compactMode={compactMode}
+              />
+            </MenuMorphPill>
+          </div>
+
+          {/* Stats pill OUTSIDE MenuMorphPill */}
+          <SessionsStatsBar ref={statsPillRef} sessions={sessions} />
+        </div>
 
         {/* Two-Panel Layout */}
         <div ref={contentRef} className="flex-1 flex gap-4 min-h-0 relative mt-4">

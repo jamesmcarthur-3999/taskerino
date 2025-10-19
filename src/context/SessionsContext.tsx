@@ -560,12 +560,22 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
                     const sessions = await storage.load<Session[]>('sessions');
 
                     if (sessions) {
+                      // Clear canvas cache for enriched session (summary was updated)
+                      console.log('🧹 [AUTO-ENRICH] Clearing canvas cache (summary updated)');
+                      const updatedSessions = sessions.map(s =>
+                        s.id === sessionId
+                          ? { ...s, canvasSpec: undefined }
+                          : s
+                      );
+
+                      await storage.save('sessions', updatedSessions);
+
                       // Use LOAD_SESSIONS to avoid duplicate save from dispatch wrapper
                       dispatch({
                         type: 'LOAD_SESSIONS',
-                        payload: { sessions }
+                        payload: { sessions: updatedSessions }
                       });
-                      console.log('✅ [AUTO-ENRICH] React state updated with chapters');
+                      console.log('✅ [AUTO-ENRICH] React state updated with chapters and canvas cache cleared');
                     }
                   } catch (error) {
                     console.error('❌ [AUTO-ENRICH] Failed to update React state:', error);
@@ -586,12 +596,22 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
                     const sessions = await storage.load<Session[]>('sessions');
 
                     if (sessions) {
+                      // Clear canvas cache for enriched session (summary was updated)
+                      console.log('🧹 [AUTO-ENRICH] Clearing canvas cache (summary updated)');
+                      const updatedSessions = sessions.map(s =>
+                        s.id === sessionId
+                          ? { ...s, canvasSpec: undefined }
+                          : s
+                      );
+
+                      await storage.save('sessions', updatedSessions);
+
                       // Use LOAD_SESSIONS to avoid duplicate save from dispatch wrapper
                       dispatch({
                         type: 'LOAD_SESSIONS',
-                        payload: { sessions }
+                        payload: { sessions: updatedSessions }
                       });
-                      console.log('✅ [AUTO-ENRICH] React state synced after enrichment failure');
+                      console.log('✅ [AUTO-ENRICH] React state synced after enrichment failure and canvas cache cleared');
                     }
                   } catch (reloadError) {
                     console.error('❌ [AUTO-ENRICH] CRITICAL: Failed to reload sessions after enrichment failure:', reloadError);

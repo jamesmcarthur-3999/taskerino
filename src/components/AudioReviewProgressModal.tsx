@@ -6,9 +6,11 @@
  */
 
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, Circle, Loader2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { getModalClasses, getModalHeaderClasses, getGlassClasses, getRadiusClass } from '../design-system/theme';
+import { modalBackdropVariants, modalExperienceVariants, modalSectionVariants } from '../animations/variants';
 
 export interface AudioReviewProgress {
   stage: 'preparing' | 'concatenating' | 'analyzing' | 'complete';
@@ -29,8 +31,6 @@ export function AudioReviewProgressModal({
   duration,
 }: AudioReviewProgressModalProps) {
   const { colorScheme, glassStrength } = useTheme();
-
-  if (!isOpen) return null;
 
   // Define stages for visual progress
   const stages = [
@@ -70,11 +70,30 @@ export function AudioReviewProgressModal({
   const modalClasses = getModalClasses(colorScheme, glassStrength);
 
   return (
-    <div className={modalClasses.overlay}>
-      <div
-        className={`${modalClasses.content} max-w-lg w-full`}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop - Immersive (slow, patient for long-running process) */}
+          <motion.div
+            variants={modalBackdropVariants.immersive}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className={modalClasses.overlay}
+          />
+
+          {/* Content - Experience type (fade only, significant stagger) */}
+          <motion.div
+            variants={modalExperienceVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none"
+          >
+            <div
+              className={`${modalClasses.content} max-w-lg w-full pointer-events-auto`}
+              onClick={(e) => e.stopPropagation()}
+            >
         {/* Header */}
         <div className={getModalHeaderClasses(colorScheme)}>
           <div className="flex items-center justify-between">
@@ -180,7 +199,10 @@ export function AudioReviewProgressModal({
             This usually takes 1-2 minutes. You can continue working — we'll notify you when it's done.
           </p>
         </div>
-      </div>
-    </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

@@ -967,9 +967,10 @@ export function getPriorityBadgeClasses(level: PriorityLevel | string): string {
 export const NAVIGATION = {
   // Logo container styles
   logo: {
-    container: 'flex items-center gap-2.5 px-5 py-4 bg-white/40 backdrop-blur-xl rounded-full shadow-xl border-2 border-white/50 ring-1 ring-black/5',
-    iconBg: 'w-6 h-6 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-md',
-    text: 'font-semibold text-base bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent tracking-wide',
+    container: 'flex items-center gap-2.5 px-5 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 backdrop-blur-xl rounded-full shadow-xl shadow-cyan-200/50 border-2 border-white/60 ring-1 ring-cyan-400/30 cursor-pointer transition-all duration-300 hover:shadow-2xl hover:shadow-cyan-300/60 hover:scale-105 hover:brightness-110 active:scale-95',
+    iconBg: 'w-6 h-6 bg-white/95 rounded-lg flex items-center justify-center shadow-md',
+    iconText: 'font-bold text-xs bg-gradient-to-br from-cyan-600 to-blue-600 bg-clip-text text-transparent',
+    text: 'font-semibold text-base text-white tracking-wide drop-shadow-sm',
   },
 
   // Island container styles
@@ -996,7 +997,7 @@ export const NAVIGATION = {
 
   // Quick action button styles
   quickAction: {
-    base: 'p-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-lg hover:shadow-lg transition-all duration-200',
+    base: 'p-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-full hover:shadow-lg transition-all duration-200',
   },
 } as const;
 

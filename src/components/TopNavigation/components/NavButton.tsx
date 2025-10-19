@@ -8,10 +8,14 @@
  * - menu: Menu button
  * - quick-action: Small quick action buttons
  * - search: Search button
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - React.memo to prevent re-renders when props haven't changed
+ * - This is critical as NavButton is rendered in loops (tabs.map)
  */
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, memo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Plus, Pause, Play, Square } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { NAVIGATION, NAV_BUTTON_STYLES } from '../../../design-system/theme';
@@ -79,7 +83,7 @@ export interface NavButtonProps {
 /**
  * NavButton Component
  */
-export function NavButton({
+function NavButtonComponent({
   variant,
   icon: Icon,
   label,
@@ -111,20 +115,23 @@ export function NavButton({
   };
 
   // Calculate if we should show quick action
-  const showQuickAction = quickAction && (isActive || isHovered);
+  const showQuickAction = quickAction && isHovered;
 
-  // Don't add padding-right - let quick actions overlap with right edge naturally
+  // Calculate dynamic right padding based on quick action type
   const getQuickActionPadding = () => {
-    return '';
+    if (!showQuickAction) return 'pr-4';
+    if (quickAction?.type === 'session-controls') return 'pr-24';
+    return 'pr-14';
   };
 
   // Get base classes by variant
   const getVariantClasses = () => {
     switch (variant) {
       case 'tab':
-        const tabBaseClasses = NAVIGATION.tab.base;
+        const tabBaseClasses = NAVIGATION.tab.base.replace('px-4', 'pl-4');
         const tabStateClasses = isActive ? NAVIGATION.tab.active : NAVIGATION.tab.inactive;
-        return `${tabBaseClasses} ${tabStateClasses} ${getQuickActionPadding()}`;
+        const padding = getQuickActionPadding();
+        return `${tabBaseClasses} ${tabStateClasses} ${padding}`;
 
       case 'icon':
         return isActive
@@ -169,11 +176,13 @@ export function NavButton({
           onKeyDown={onBadgeClick ? (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              onBadgeClick(e as any);
+              const syntheticEvent = e as unknown as React.MouseEvent;
+              onBadgeClick(syntheticEvent);
             }
           } : undefined}
           tabIndex={onBadgeClick ? 0 : undefined}
           role={onBadgeClick ? "button" : undefined}
+          aria-label={onBadgeClick ? `${count} items` : undefined}
           whileHover={onBadgeClick && !prefersReducedMotion ? { scale: 1.1 } : undefined}
           whileTap={onBadgeClick && !prefersReducedMotion ? { scale: 0.95 } : undefined}
           transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
@@ -191,11 +200,13 @@ export function NavButton({
           onKeyDown={onBadgeClick ? (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              onBadgeClick(e as any);
+              const syntheticEvent = e as unknown as React.MouseEvent;
+              onBadgeClick(syntheticEvent);
             }
           } : undefined}
           tabIndex={onBadgeClick ? 0 : undefined}
           role={onBadgeClick ? "button" : undefined}
+          aria-label={onBadgeClick ? `${count} processing items` : undefined}
           className={NAVIGATION.badge.processing}
           whileHover={!prefersReducedMotion ? { scale: 1.1 } : undefined}
           whileTap={!prefersReducedMotion ? { scale: 0.95 } : undefined}
@@ -219,11 +230,13 @@ export function NavButton({
           onKeyDown={onBadgeClick ? (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              onBadgeClick(e as any);
+              const syntheticEvent = e as unknown as React.MouseEvent;
+              onBadgeClick(syntheticEvent);
             }
           } : undefined}
           tabIndex={onBadgeClick ? 0 : undefined}
           role={onBadgeClick ? "button" : undefined}
+          aria-label="View session controls"
           className={statusClass}
           title="View session controls"
           whileHover={!prefersReducedMotion ? { scale: 1.15 } : undefined}
@@ -245,7 +258,7 @@ export function NavButton({
     // Session controls (dual buttons)
     if (type === 'session-controls') {
       return (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-2 transition-all duration-200 opacity-100 scale-100">
+        <div key="session-controls" className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-2 transition-all duration-200 opacity-100 scale-100">
           <motion.button
             onClick={(e) => {
               e.stopPropagation();
@@ -260,17 +273,18 @@ export function NavButton({
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 e.stopPropagation();
+                const syntheticEvent = e as unknown as React.MouseEvent;
                 if (isSessionActive) {
-                  onPause?.(e as any);
+                  onPause?.(syntheticEvent);
                 } else {
-                  onResume?.(e as any);
+                  onResume?.(syntheticEvent);
                 }
               }
             }}
             className={NAVIGATION.quickAction.base}
             title={isSessionActive ? 'Pause session' : 'Resume session'}
-            whileHover={!prefersReducedMotion ? { scale: 1.05 } : undefined}
-            whileTap={!prefersReducedMotion ? { scale: 0.95 } : undefined}
+            whileHover={!prefersReducedMotion ? { scale: 1.02 } : undefined}
+            whileTap={!prefersReducedMotion ? { scale: 0.97 } : undefined}
             transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
           >
             {isSessionActive ? (
@@ -289,13 +303,14 @@ export function NavButton({
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 e.stopPropagation();
-                onStop?.(e as any);
+                const syntheticEvent = e as unknown as React.MouseEvent;
+                onStop?.(syntheticEvent);
               }
             }}
             className={`${NAVIGATION.quickAction.base} bg-gradient-to-r from-red-500 to-red-600`}
             title="Stop session"
-            whileHover={!prefersReducedMotion ? { scale: 1.05 } : undefined}
-            whileTap={!prefersReducedMotion ? { scale: 0.95 } : undefined}
+            whileHover={!prefersReducedMotion ? { scale: 1.02 } : undefined}
+            whileTap={!prefersReducedMotion ? { scale: 0.97 } : undefined}
             transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
           >
             <Square className="w-3.5 h-3.5" />
@@ -307,6 +322,7 @@ export function NavButton({
     // Default quick action (Plus button)
     return (
       <motion.button
+        key="quick-action"
         onClick={(e) => {
           e.stopPropagation();
           e.preventDefault();
@@ -316,15 +332,20 @@ export function NavButton({
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             e.stopPropagation();
-            onQuickActionClick?.(e as any);
+            const syntheticEvent = e as unknown as React.MouseEvent;
+            onQuickActionClick?.(syntheticEvent);
           }
         }}
-        className={`absolute right-2 top-1/2 -translate-y-1/2 ${NAVIGATION.quickAction.base}`}
+        className={`absolute right-2 ${NAVIGATION.quickAction.base}`}
         title={quickAction.label}
-        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
-        animate={prefersReducedMotion ? { opacity: showQuickAction ? 1 : 0 } : { opacity: showQuickAction ? 1 : 0, scale: showQuickAction ? 1 : 0.9 }}
-        whileHover={!prefersReducedMotion ? { scale: 1.05 } : undefined}
-        whileTap={!prefersReducedMotion ? { scale: 0.95 } : undefined}
+        animate={{
+          top: '50%',
+          y: '-50%',
+          opacity: showQuickAction ? 1 : 0,
+          scale: prefersReducedMotion ? 1 : (showQuickAction ? 1 : 0.95)
+        }}
+        whileHover={!prefersReducedMotion ? { scale: 1.02 } : undefined}
+        whileTap={!prefersReducedMotion ? { scale: 0.97 } : undefined}
         transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' }}
         style={{ pointerEvents: showQuickAction ? 'auto' : 'none' }}
       >
@@ -349,11 +370,13 @@ export function NavButton({
   return (
     <div className="group flex items-center" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       <motion.button
+        layout
         onClick={onClick}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onClick?.(e as any);
+            const syntheticEvent = e as unknown as React.MouseEvent;
+            onClick?.(syntheticEvent);
           }
         }}
         className={`relative ${getVariantClasses()} ${className}`}
@@ -381,8 +404,18 @@ export function NavButton({
         {renderActiveIndicator()}
 
         {/* Quick action */}
-        {renderQuickAction()}
+        <AnimatePresence>
+          {renderQuickAction()}
+        </AnimatePresence>
       </motion.button>
     </div>
   );
 }
+
+/**
+ * PERFORMANCE OPTIMIZATION:
+ * Memoize the component to prevent unnecessary re-renders.
+ * NavButton is rendered in a loop (tabs.map), so any parent re-render
+ * would re-render all buttons without memoization.
+ */
+export const NavButton = memo(NavButtonComponent);

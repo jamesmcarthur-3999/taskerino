@@ -3,7 +3,15 @@ import type {
   ClaudeMessage,
   ClaudeChatResponse
 } from '../types/tauri-ai-commands';
-import type { Session, SessionSummary, SessionScreenshot, SessionAudioSegment, SessionContextItem } from '../types';
+import type {
+  Session,
+  SessionSummary,
+  SessionScreenshot,
+  SessionAudioSegment,
+  SessionContextItem,
+  FlexibleSessionSummary,
+  SummarySection
+} from '../types';
 
 /**
  * Synthesize session analyses into a comprehensive summary
@@ -122,7 +130,8 @@ Synthesize the timeline data into a cohesive session summary. ${isLiveSession ? 
 6. **Focus Areas**: What activities took the most time?
 
 **Guidelines:**
-- Write a narrative that flows chronologically
+- Write the narrative in flowing PARAGRAPHS (not bullet points) that tells a coherent chronological story
+- Use concise, specific text for achievements/blockers arrays
 - User notes are direct input from the user - treat them as important context
 - PRESERVE temporal context: Include timestamps for achievements and blockers
 - Extract achievements/blockers per screenshot if they represent distinct progress
@@ -131,7 +140,8 @@ Synthesize the timeline data into a cohesive session summary. ${isLiveSession ? 
 - Extract only unique, high-value tasks (not every suggestion)
 - Prioritize tasks based on context and urgency
 - Identify patterns in how time was spent
-- Be concise but informative
+- Take your time - analyze thoroughly without rushing to conclusions
+- Be creative with dynamicInsights - include any interesting patterns or observations you notice
 
 Return a comprehensive session summary as JSON with these fields:
 
@@ -378,8 +388,9 @@ Return ONLY valid JSON (no markdown):
 
     const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
       request: {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5-20250929',
         maxTokens: 4096,
+        temperature: 0.7, // Balanced for analytical + creative work
         messages: [{ role: 'user', content: prompt }],
       }
     });
@@ -421,4 +432,354 @@ function calculateSessionDuration(session: Session): number {
   return Math.floor(
     (endTime.getTime() - new Date(session.startTime).getTime()) / (1000 * 60)
   );
+}
+
+/**
+ * Generate flexible session summary (Phase 2)
+ * AI chooses relevant sections based on session content
+ */
+export async function generateFlexibleSummary(
+  session: Session,
+  screenshots: SessionScreenshot[],
+  audioSegments: SessionAudioSegment[],
+  context: Record<string, any>,
+  apiKey: string
+): Promise<FlexibleSessionSummary> {
+  // Store API key in Tauri backend
+  await invoke('set_claude_api_key', { apiKey: apiKey.trim() });
+
+  const prompt = buildFlexibleSummaryPrompt(session, screenshots, audioSegments, context);
+
+  try {
+    console.log('📊 SessionSynthesis: Generating flexible summary (Phase 2)...');
+
+    const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
+      request: {
+        model: 'claude-sonnet-4-5-20250929',
+        maxTokens: 4096,
+        temperature: 0.8, // Higher for creativity in section selection
+        messages: [{ role: 'user', content: prompt }],
+      }
+    });
+
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response format from Claude');
+    }
+
+    const responseText = content.text.trim();
+    let jsonText = responseText;
+    const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+    if (jsonMatch) {
+      jsonText = jsonMatch[1];
+    }
+
+    const parsed = parseFlexibleSummary(jsonText, session);
+
+    console.log('✅ SessionSynthesis: Flexible summary generated', {
+      sections: parsed.sections.length,
+      sessionType: parsed.generationMetadata.detectedSessionType,
+      confidence: parsed.generationMetadata.confidence,
+    });
+
+    return parsed;
+
+  } catch (error) {
+    console.error('❌ SessionSynthesis: Flexible summary generation failed:', error);
+    // Fallback to standard structure
+    return createFallbackFlexibleSummary(session, screenshots, audioSegments);
+  }
+}
+
+function buildFlexibleSummaryPrompt(
+  session: Session,
+  screenshots: SessionScreenshot[],
+  audioSegments: SessionAudioSegment[],
+  context: Record<string, any>
+): string {
+  const screenshotCount = screenshots.length;
+  const audioCount = audioSegments.length;
+
+  // Extract enriched data from context
+  const videoChapters = context?.videoChapters || [];
+  const audioInsights = context?.audioInsights;
+  const hasVideoChapters = videoChapters.length > 0;
+  const hasAudioInsights = !!audioInsights;
+
+  // Build video chapters section
+  const videoChaptersSection = hasVideoChapters ? `
+
+**Video Chapter Timeline (AI-detected narrative segments):**
+${videoChapters.map((chapter: any, index: number) => {
+  const startMin = Math.floor(chapter.startTime / 60);
+  const endMin = Math.floor(chapter.endTime / 60);
+  const duration = endMin - startMin;
+  return `
+Chapter ${index + 1}: "${chapter.title}"
+- Time: ${startMin}:${String(Math.floor(chapter.startTime % 60)).padStart(2, '0')} - ${endMin}:${String(Math.floor(chapter.endTime % 60)).padStart(2, '0')} (${duration} min)
+- Summary: ${chapter.summary || 'No summary'}
+- Key Topics: ${chapter.keyTopics?.join(', ') || 'None'}`;
+}).join('\n')}` : '';
+
+  // Build audio insights section
+  const audioInsightsSection = hasAudioInsights && audioInsights ? `
+
+**Audio Insights (Deep analysis from audio enrichment):**
+
+**Overall Narrative:** ${audioInsights.narrative || 'No narrative'}
+
+**Emotional Journey:**
+${(audioInsights.emotionalJourney || []).map((e: any) => {
+  const min = Math.floor(e.timestamp / 60);
+  const sec = Math.floor(e.timestamp % 60);
+  return `- ${min}:${String(sec).padStart(2, '0')} - ${e.emotion}: ${e.description}`;
+}).join('\n') || 'No emotional journey data'}
+
+**Key Moments:**
+${(audioInsights.keyMoments || []).map((m: any) => {
+  const min = Math.floor(m.timestamp / 60);
+  const sec = Math.floor(m.timestamp % 60);
+  return `- ${min}:${String(sec).padStart(2, '0')} [${m.type}] ${m.description}`;
+}).join('\n') || 'No key moments'}
+
+**Work Patterns:**
+- Focus Level: ${audioInsights.workPatterns?.focusLevel || 'Unknown'}
+- Flow States: ${(audioInsights.workPatterns?.flowStates || []).length} detected` : '';
+
+  return `You are analyzing a work session titled "${session.name}".
+
+**Session Data:**
+- Duration: ${calculateDuration(session)} minutes
+- Screenshots: ${screenshotCount}
+- Audio segments: ${audioCount}
+- Description: ${session.description || 'No description'}
+
+**Screenshot Timeline:**
+${screenshots.map((s, i) => {
+  const time = new Date(s.timestamp).toLocaleTimeString();
+  const analysis = s.aiAnalysis;
+  return `
+[${time}] Screenshot ${i + 1}:
+- Activity: ${analysis?.detectedActivity || 'Unknown'}
+- Summary: ${analysis?.summary || 'No summary'}
+${analysis?.progressIndicators?.achievements?.length ? `- Achievements: ${analysis.progressIndicators.achievements.join('; ')}` : ''}
+${analysis?.progressIndicators?.blockers?.length ? `- Blockers: ${analysis.progressIndicators.blockers.join('; ')}` : ''}
+${analysis?.progressIndicators?.insights?.length ? `- Insights: ${analysis.progressIndicators.insights.join('; ')}` : ''}
+`.trim();
+}).join('\n\n')}${videoChaptersSection}${audioInsightsSection}
+
+**Analysis Process:**
+Before generating the summary, follow this thinking process:
+1. Review all timeline data chronologically - screenshots, video chapters (if available), and audio insights (if available)
+2. Identify patterns: flow states, context switches, breakthrough moments, emotional arcs
+3. Determine the primary session type based on activity patterns
+4. Select 2-5 sections that BEST represent the unique aspects of THIS specific session
+5. Construct a narrative that emphasizes what makes this session notable
+6. Provide clear reasoning for your design choices
+
+**Your Task:**
+Generate a FLEXIBLE session summary by choosing relevant sections based on what actually happened.
+
+**IMPORTANT:** You have ${hasVideoChapters ? 'detailed video chapter breakdowns' : 'no video chapters'} and ${hasAudioInsights ? 'comprehensive audio insights with emotional journey data' : 'no audio insights'}. ${hasVideoChapters || hasAudioInsights ? 'This is RICH data - use it heavily to inform your analysis. Video chapters provide narrative structure, and audio insights reveal emotional context and flow states.' : 'Base your analysis primarily on screenshot data.'} Use ALL available data sources to inform your section choices.
+
+**Available Section Types:**
+1. **achievements** - Completed milestones (use for productive sessions)
+2. **breakthrough-moments** - Aha! moments (use for learning/discovery sessions)
+3. **blockers** - Obstacles encountered (use when problems were hit)
+4. **learning-highlights** - What was learned (use for educational sessions)
+5. **creative-solutions** - Novel problem-solving (use for innovative work)
+6. **collaboration-wins** - Team successes (use for meetings/pair programming)
+7. **technical-discoveries** - Technical findings (use for coding/debugging)
+8. **timeline** - Chronological events (use for complex multi-phase sessions)
+9. **flow-states** - Deep focus periods (use when sustained focus detected)
+10. **emotional-journey** - Mood progression (use when audio reveals emotional arc)
+11. **problem-solving-journey** - Debugging story (use for troubleshooting sessions)
+12. **focus-areas** - Time breakdown (use for multi-task sessions)
+13. **recommended-tasks** - Follow-up actions (always useful)
+14. **key-insights** - Important observations (always useful)
+
+**Selection Guidelines:**
+- Choose 2-5 sections that BEST represent this session
+- Don't force every session into the same template
+- Emphasize what makes THIS session unique
+- Use "emphasis: high" for the most important aspect
+- Provide reasoning for your choices
+
+**Detect Session Type:**
+- deep-work: Sustained focus on a single task
+- exploratory: Research, learning, discovery
+- troubleshooting: Debugging, fixing issues
+- collaborative: Meeting, pair programming
+- learning: Educational, tutorials, studying
+- creative: Design, brainstorming, innovation
+- routine: Regular maintenance tasks
+- mixed: Multiple types
+
+**Output Format (JSON):**
+{
+  "schemaVersion": "2.0",
+  "narrative": "1-3 paragraph story of the session",
+  "sessionType": "deep-work|exploratory|troubleshooting|...",
+  "primaryTheme": "Brief theme description",
+  "emphasis": "achievement-focused|journey-focused|learning-focused|...",
+  "reasoning": "Why you chose these specific sections",
+  "confidence": 0.85,
+
+  "sections": [
+    {
+      "type": "achievements",
+      "title": "Major Wins",
+      "emphasis": "high",
+      "position": 1,
+      "icon": "trophy",
+      "colorTheme": "success",
+      "data": {
+        "achievements": [
+          {
+            "title": "Completed OAuth flow",
+            "timestamp": "2025-10-17T14:30:00Z",
+            "screenshotIds": ["ss_15"],
+            "impact": "major"
+          }
+        ],
+        "summary": "Three major milestones achieved"
+      }
+    }
+  ]
+}
+
+**Important:**
+- PRESERVE timestamps from screenshots
+- Create sections that tell a story
+- Be creative - this is YOUR canvas design
+- Explain your reasoning clearly
+- Return ONLY valid JSON`;
+}
+
+function parseFlexibleSummary(
+  jsonText: string,
+  session: Session
+): FlexibleSessionSummary {
+  const result = JSON.parse(jsonText);
+
+  return {
+    schemaVersion: '2.0',
+    id: generateId(),
+    generatedAt: new Date().toISOString(),
+    sessionContext: {
+      sessionId: session.id,
+      sessionName: session.name,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      duration: calculateDuration(session),
+      screenshotCount: session.screenshots?.length || 0,
+      audioSegmentCount: session.audioSegments?.length || 0,
+      videoChapterCount: session.video?.chapters?.length || 0,
+    },
+    narrative: result.narrative,
+    sections: result.sections,
+    generationMetadata: {
+      reasoning: result.reasoning,
+      confidence: result.confidence,
+      detectedSessionType: result.sessionType,
+      primaryTheme: result.primaryTheme,
+      emphasis: result.emphasis,
+      dataSources: {
+        screenshots: (session.screenshots?.length || 0) > 0,
+        audio: (session.audioSegments?.length || 0) > 0,
+        video: !!session.video,
+        audioInsights: !!session.audioInsights,
+        videoChapters: !!(session.video?.chapters?.length),
+      },
+      warnings: result.warnings,
+    },
+    quickAccess: computeQuickAccess(result.sections),
+  };
+}
+
+function computeQuickAccess(sections: SummarySection[]) {
+  // Extract legacy fields from sections for backward compatibility
+  const quickAccess: any = {};
+
+  sections.forEach(section => {
+    if (section.type === 'achievements' && 'achievements' in section.data) {
+      quickAccess.achievements = section.data.achievements.map((a: any) => a.title);
+    }
+    if (section.type === 'blockers' && 'blockers' in section.data) {
+      quickAccess.blockers = section.data.blockers.map((b: any) => b.title);
+    }
+    if (section.type === 'recommended-tasks' && 'tasks' in section.data) {
+      quickAccess.tasks = section.data.tasks;
+    }
+    if (section.type === 'key-insights' && 'insights' in section.data) {
+      quickAccess.insights = section.data.insights;
+    }
+  });
+
+  return Object.keys(quickAccess).length > 0 ? quickAccess : undefined;
+}
+
+function createFallbackFlexibleSummary(
+  session: Session,
+  screenshots: SessionScreenshot[],
+  audioSegments: SessionAudioSegment[]
+): FlexibleSessionSummary {
+  // Fallback if AI generation fails
+  return {
+    schemaVersion: '2.0',
+    id: generateId(),
+    generatedAt: new Date().toISOString(),
+    sessionContext: {
+      sessionId: session.id,
+      sessionName: session.name,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      duration: calculateDuration(session),
+      screenshotCount: screenshots.length,
+    },
+    narrative: `Session: ${session.name}. ${screenshots.length} screenshots captured.`,
+    sections: [
+      {
+        type: 'timeline',
+        title: 'Session Timeline',
+        emphasis: 'high',
+        position: 1,
+        data: {
+          events: screenshots.map((s, i) => ({
+            time: s.timestamp,
+            title: s.aiAnalysis?.detectedActivity || `Screenshot ${i + 1}`,
+            description: s.aiAnalysis?.summary || '',
+            type: 'milestone' as const,
+            screenshotIds: [s.id],
+          })),
+        },
+      },
+    ],
+    generationMetadata: {
+      reasoning: 'Fallback summary due to generation error',
+      confidence: 0.3,
+      detectedSessionType: 'mixed',
+      primaryTheme: 'Unknown',
+      emphasis: 'achievement-focused',
+      dataSources: {
+        screenshots: screenshots.length > 0,
+        audio: audioSegments.length > 0,
+        video: false,
+        audioInsights: false,
+        videoChapters: false,
+      },
+      warnings: ['Summary generation failed - using fallback timeline'],
+    },
+  };
+}
+
+function calculateDuration(session: Session): number {
+  if (!session.endTime) return 0;
+  return Math.floor(
+    (new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / 60000
+  );
+}
+
+function generateId(): string {
+  return `summary_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
