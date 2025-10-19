@@ -405,6 +405,7 @@ export default function TasksZone() {
                     e.preventDefault();
                     return;
                   }
+                  e.stopPropagation();
                   e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('taskId', task.id);
                 }}
