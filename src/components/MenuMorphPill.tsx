@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useMemo, Children, isValidElement } from 'react';
 import type { ReactNode, ReactElement } from 'react';
-import { motion, useTransform, useSpring, useMotionValue, AnimatePresence, MotionValue } from 'framer-motion';
+import { motion, useTransform, useSpring, useMotionValue, AnimatePresence, MotionValue, clamp } from 'framer-motion';
 import { Menu } from 'lucide-react';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
+
+// Easing function for smooth morphing animations
+const easeOutQuart = (x: number): number => 1 - Math.pow(1 - x, 4);
 
 interface MenuMorphPillProps {
   children: ReactNode;
@@ -207,11 +210,11 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
   );
 
   const widthSpring = useSpring(widthMotionValue, {
-    stiffness: 500,
-    damping: 50,
-    mass: 0.5,
-    restSpeed: 0.01,
-    restDelta: 0.01,
+    stiffness: 250,
+    damping: 30,
+    mass: 0.8,
+    restSpeed: 0.05,
+    restDelta: 0.05,
   });
 
   // Convert spring to CSS string (always called, not conditional)
@@ -255,18 +258,19 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
         // After transition: use final fixed position (next to logo)
         return finalTop;
       }
-      // During transition (150-220): interpolate from natural → final
+      // During transition (150-220): interpolate from natural → final with easing
       const startTop = naturalPositionRef.current?.top ?? finalTop;
-      const progress = (scroll - 150) / 70;
-      return startTop + (finalTop - startTop) * progress;
+      const progress = clamp((scroll - 150) / 70, 0, 1);
+      const easedProgress = easeOutQuart(progress);
+      return startTop + (finalTop - startTop) * easedProgress;
     }
   );
   const topSpring = useSpring(topMotionValue, {
-    stiffness: 500,
-    damping: 50,
-    mass: 0.5,
-    restSpeed: 0.01,
-    restDelta: 0.01,
+    stiffness: 250,
+    damping: 30,
+    mass: 0.8,
+    restSpeed: 0.05,
+    restDelta: 0.05,
   });
 
   const leftMotionValue = useTransform(
@@ -282,28 +286,29 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
         // After transition: use final fixed position (next to logo)
         return finalLeft;
       }
-      // During transition (150-220): interpolate from natural → final
+      // During transition (150-220): interpolate from natural → final with easing
       const startLeft = naturalPositionRef.current?.left ?? finalLeft;
-      const progress = (scroll - 150) / 70;
-      return startLeft + (finalLeft - startLeft) * progress;
+      const progress = clamp((scroll - 150) / 70, 0, 1);
+      const easedProgress = easeOutQuart(progress);
+      return startLeft + (finalLeft - startLeft) * easedProgress;
     }
   );
   const leftSpring = useSpring(leftMotionValue, {
-    stiffness: 500,
-    damping: 50,
-    mass: 0.5,
-    restSpeed: 0.01,
-    restDelta: 0.01,
+    stiffness: 250,
+    damping: 30,
+    mass: 0.8,
+    restSpeed: 0.05,
+    restDelta: 0.05,
   });
 
   // Border radius
   const borderRadiusRaw = useTransform(scrollYMotionValue, [150, 220], [9999, 9999]);
   const borderRadius = useSpring(borderRadiusRaw, {
-    stiffness: 500,
-    damping: 50,
-    mass: 0.5,
-    restSpeed: 0.01,
-    restDelta: 0.01,
+    stiffness: 250,
+    damping: 30,
+    mass: 0.8,
+    restSpeed: 0.05,
+    restDelta: 0.05,
   });
 
   // Compact button opacity (for crossfade)
