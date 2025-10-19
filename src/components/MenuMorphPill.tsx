@@ -231,10 +231,17 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
       if (initialWidth === null || initialWidth === 0) {
         return '0%';
       }
-      // Calculate percentage where final left position sits within initial width
-      const targetLeftPosition = finalPositionRef.current?.left ?? naturalPositionRef.current?.left ?? 24;
-      const originPercent = (targetLeftPosition / initialWidth) * 100;
-      return `${originPercent}%`;
+
+      // Calculate offset from element's natural position
+      const naturalLeft = naturalPositionRef.current?.left ?? 24;
+      const targetLeftPosition = finalPositionRef.current?.left ?? naturalLeft;
+      const offsetFromStart = targetLeftPosition - naturalLeft;
+
+      // Transform origin as percentage within element width
+      const originPercent = (offsetFromStart / initialWidth) * 100;
+
+      // Clamp to valid range
+      return `${Math.max(0, Math.min(100, originPercent))}%`;
     }
   );
 
@@ -479,7 +486,7 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
 
         {/* Visible content with AnimatePresence */}
         <div className="relative flex items-center w-full flex-nowrap">
-          <AnimatePresence mode="sync">
+          <AnimatePresence mode="wait">
             {/* Full menu content with staggered item exits */}
             {(!isScrolled || overlayOpen) && (
               <motion.div
@@ -528,10 +535,6 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
             {isScrolled && !overlayOpen && (
               <motion.div
                 key="compact-button"
-                initial={{ opacity: 0, scale: 0.85 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.1 } }}
-                transition={{ duration: 0.2 }}
                 style={{
                   opacity: compactOpacity,
                   scale: compactScale,
