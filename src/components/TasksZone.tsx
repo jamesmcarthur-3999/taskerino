@@ -311,7 +311,7 @@ export default function TasksZone() {
       e.stopPropagation();
       setIsDragOver(false);
 
-      const taskId = e.dataTransfer.getData('taskId');
+      const taskId = e.dataTransfer.getData('text/plain');
       const task = tasksState.tasks.find(t => t.id === taskId);
 
       if (task && task.status !== status) {
@@ -407,7 +407,7 @@ export default function TasksZone() {
                   }
                   e.stopPropagation();
                   e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('taskId', task.id);
+                  e.dataTransfer.setData('text/plain', task.id);
                 }}
                 onClick={() => !isEditing && onSelect(task.id)}
                 className={`${cardClasses} select-none ${isEditing ? 'ring-2 ring-cyan-400 !cursor-default' : 'cursor-grab active:cursor-grabbing'}`}

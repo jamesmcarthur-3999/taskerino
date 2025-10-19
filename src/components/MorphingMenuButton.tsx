@@ -22,6 +22,7 @@ import { motion, AnimatePresence, useTransform, useSpring, useMotionValue } from
 import { Menu, X } from 'lucide-react';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
 import { useUI } from '../context/UIContext';
+import { useCompactNavigation } from '../hooks/useCompactNavigation';
 import { NAVIGATION } from '../design-system/theme';
 
 interface MorphingMenuButtonProps {
@@ -36,6 +37,7 @@ export function MorphingMenuButton({
   const { scrollY, scrollYMotionValue } = useScrollAnimation();
   const { state, dispatch } = useUI();
   const { showSubMenuOverlay } = state;
+  const isCompact = useCompactNavigation();
 
   // Animation state management
   const [isHovered, setIsHovered] = useState(false);
@@ -69,14 +71,15 @@ export function MorphingMenuButton({
   // Position: Morphs from relative (inline) to fixed (at logo position)
   const position = (scrollY >= 100 || showSubMenuOverlay) ? 'fixed' : 'relative';
 
-  // Top position: 0 when inline, 16px when scrolled, 80px for overlay
-  const top = showSubMenuOverlay ? 80 : (scrollY >= 100 ? 16 : 0);
+  // Top position: 0 when inline, adaptive for scrolled state based on compact mode
+  const top = showSubMenuOverlay ? 80 : (scrollY >= 100 ? (isCompact ? 12 : 16) : 0);
 
-  // Left position: 0 when inline, 24px when scrolled or overlay
-  const left = scrollY >= 100 || showSubMenuOverlay ? 24 : 0;
+  // Left position: 0 when inline, adaptive for scrolled/overlay based on compact mode
+  const left = scrollY >= 100 || showSubMenuOverlay ? (isCompact ? 12 : 24) : 0;
 
   // Width: full-width → compact (logo + menu text) → overlay full-width
-  const widthValue = showSubMenuOverlay ? 'auto' : (scrollY >= 100 ? 'auto' : 'auto');
+  // In compact-compact mode (narrow + scrolled), set fixed width for circular button
+  const widthValue = showSubMenuOverlay ? 'auto' : (scrollY >= 100 ? (isCompact ? '40px' : 'auto') : 'auto');
 
   // ============================================================================
   // Border Radius Morphing with Spring Physics
@@ -272,7 +275,7 @@ export function MorphingMenuButton({
         onPointerUp={handlePointerUp}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`flex items-center gap-2.5 px-5 py-4 bg-white/40 backdrop-blur-xl border-2 border-white/50 ring-1 ring-black/5 ${shadowClass} origin-top-left overflow-hidden ${showCompactButton ? 'cursor-pointer' : ''} ${isHovered && showCompactButton ? 'bg-white/50' : ''} ${className}`}
+        className={`flex items-center gap-2.5 ${showCompactButton && isCompact ? 'p-0 h-10 w-10 justify-center' : 'px-5 py-4'} bg-white/40 backdrop-blur-xl border-2 border-white/50 ring-1 ring-black/5 ${shadowClass} origin-top-left overflow-hidden ${showCompactButton ? 'cursor-pointer' : ''} ${isHovered && showCompactButton ? 'bg-white/50' : ''} ${className}`}
         role={showCompactButton ? 'button' : undefined}
         aria-label={showCompactButton ? 'Open navigation menu' : undefined}
         aria-expanded={showSubMenuOverlay}
@@ -327,22 +330,28 @@ export function MorphingMenuButton({
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="flex items-center gap-3"
+              className={`flex items-center ${isCompact ? 'justify-center' : 'gap-3'}`}
             >
-              {/* Logo icon only */}
+              {/* Icon - hamburger menu icon in compact-compact mode, logo in normal compact mode */}
               <motion.div variants={itemVariants}>
-                <div className={NAVIGATION.logo.iconBg}>
-                  <span className="text-white font-bold text-xs">T</span>
-                </div>
+                {isCompact ? (
+                  <Menu className="w-5 h-5 text-gray-800" />
+                ) : (
+                  <div className={NAVIGATION.logo.iconBg}>
+                    <span className="text-white font-bold text-xs">T</span>
+                  </div>
+                )}
               </motion.div>
 
-              {/* Menu text */}
-              <motion.span
-                variants={itemVariants}
-                className="font-semibold text-base tracking-wide text-gray-800"
-              >
-                Menu
-              </motion.span>
+              {/* Menu text - only show in normal compact mode, hide in compact-compact mode */}
+              {!isCompact && (
+                <motion.span
+                  variants={itemVariants}
+                  className="font-semibold text-base tracking-wide text-gray-800"
+                >
+                  Menu
+                </motion.span>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
