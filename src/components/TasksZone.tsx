@@ -3,7 +3,6 @@ import { useTasks } from '../context/TasksContext';
 import { useUI } from '../context/UIContext';
 import { useEntities } from '../context/EntitiesContext';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
-import { clamp, easeOutQuart } from '../utils/easing';
 import {
   CheckCircle2,
   Circle,
@@ -16,6 +15,7 @@ import {
   ExternalLink,
   Flag,
   Columns3,
+  GripVertical,
 } from 'lucide-react';
 import type { Task } from '../types';
 import {
@@ -39,8 +39,8 @@ export default function TasksZone() {
   const { state: entitiesState } = useEntities();
   const { registerScrollContainer, unregisterScrollContainer, scrollY } = useScrollAnimation();
 
-  // Scroll container refs
-  const tableScrollContainerRef = useRef<HTMLDivElement>(null);
+  // Scroll container refs (using callback refs for proper registration)
+  const [tableScrollContainer, setTableScrollContainer] = useState<HTMLDivElement | null>(null);
   const kanbanColumnRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Content container refs for scroll-driven expansion
@@ -120,13 +120,13 @@ export default function TasksZone() {
 
   // Register/unregister table scroll container
   useEffect(() => {
-    if (viewMode === 'table' && tableScrollContainerRef.current) {
-      registerScrollContainer(tableScrollContainerRef.current);
+    if (viewMode === 'table' && tableScrollContainer) {
+      registerScrollContainer(tableScrollContainer);
       return () => {
-        unregisterScrollContainer(tableScrollContainerRef.current);
+        unregisterScrollContainer(tableScrollContainer);
       };
     }
-  }, [viewMode, registerScrollContainer, unregisterScrollContainer]);
+  }, [viewMode, tableScrollContainer, registerScrollContainer, unregisterScrollContainer]);
 
   // Register/unregister kanban column scroll containers
   useEffect(() => {
@@ -288,11 +288,22 @@ export default function TasksZone() {
 
     const handleDragOver = (e: React.DragEvent) => {
       e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
       setIsDragOver(true);
     };
 
-    const handleDragLeave = () => {
-      setIsDragOver(false);
+    const handleDragLeave = (e: React.DragEvent) => {
+      // Only clear isDragOver if we're actually leaving the column, not just entering a child
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      if (
+        e.clientX < rect.left ||
+        e.clientX >= rect.right ||
+        e.clientY < rect.top ||
+        e.clientY >= rect.bottom
+      ) {
+        setIsDragOver(false);
+      }
     };
 
     const handleDrop = (e: React.DragEvent) => {
@@ -387,12 +398,22 @@ export default function TasksZone() {
                 key={task.id}
                 draggable={!isEditing}
                 onDragStart={(e) => {
+                  // Prevent drag if clicking on interactive elements
+                  const target = e.target as HTMLElement;
+                  if (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest('button') || target.closest('input')) {
+                    e.preventDefault();
+                    return;
+                  }
                   e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('taskId', task.id);
                 }}
                 onClick={() => !isEditing && onSelect(task.id)}
-                className={`${cardClasses} ${isEditing ? 'ring-2 ring-cyan-400' : ''}`}
-                style={{ transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+                className={`${cardClasses} ${isEditing ? 'ring-2 ring-cyan-400 !cursor-default' : 'cursor-grab active:cursor-grabbing'} relative select-none`}
+                style={{
+                  transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                }}
               >
                 {/* Quick Actions - Show on Hover */}
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1 z-20">
@@ -564,7 +585,7 @@ export default function TasksZone() {
         {/* Secondary animated gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none will-change-transform" />
 
-        <div ref={mainContainerRef} className="relative z-10 flex-1 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
+        <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
           <SpaceMenuBar
             primaryAction={{
               label: 'New Task',
@@ -707,13 +728,13 @@ export default function TasksZone() {
           )}
 
           {/* Table View Component */}
-          <div ref={tableContentRef} className="flex-1 flex overflow-hidden">
+          <div ref={tableContentRef} className="flex-1 min-h-0 flex">
             <TaskTableView
               tasks={displayedTasks}
               onTaskClick={setSelectedTaskIdForInline}
               selectedTaskId={selectedTaskIdForInline}
               groupBy={groupBy}
-              scrollRef={tableScrollContainerRef as React.RefObject<HTMLDivElement>}
+              scrollRef={setTableScrollContainer}
             />
           </div>
         </div>
@@ -728,7 +749,7 @@ export default function TasksZone() {
         {/* Secondary animated gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none will-change-transform" />
 
-        <div ref={mainContainerRef} className="relative z-10 flex-1 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
+        <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
           <SpaceMenuBar
             primaryAction={{
               label: 'New Task',
@@ -871,39 +892,47 @@ export default function TasksZone() {
             )}
 
           {/* Kanban Board */}
-          <div ref={kanbanContentRef} className="grid grid-cols-4 gap-4 flex-1 overflow-hidden">
-            <KanbanColumn
-              title="📋 To Do"
-              status="todo"
-              tasks={displayedTasks.filter(t => t.status === 'todo')}
-              onToggle={handleToggleTask}
-              onSelect={handleSelectTask}
-              scrollRef={(ref) => kanbanColumnRefs.current[0] = ref}
-            />
-            <KanbanColumn
-              title="🔄 In Progress"
-              status="in-progress"
-              tasks={displayedTasks.filter(t => t.status === 'in-progress')}
-              onToggle={handleToggleTask}
-              onSelect={handleSelectTask}
-              scrollRef={(ref) => kanbanColumnRefs.current[1] = ref}
-            />
-            <KanbanColumn
-              title="🚫 Blocked"
-              status="blocked"
-              tasks={displayedTasks.filter(t => t.status === 'blocked')}
-              onToggle={handleToggleTask}
-              onSelect={handleSelectTask}
-              scrollRef={(ref) => kanbanColumnRefs.current[2] = ref}
-            />
-            <KanbanColumn
-              title="✅ Done"
-              status="done"
-              tasks={displayedTasks.filter(t => t.status === 'done')}
-              onToggle={handleToggleTask}
-              onSelect={handleSelectTask}
-              scrollRef={(ref) => kanbanColumnRefs.current[3] = ref}
-            />
+          <div ref={kanbanContentRef} className="flex gap-4 flex-1 overflow-x-auto overflow-y-hidden">
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
+              <KanbanColumn
+                title="To Do"
+                status="todo"
+                tasks={displayedTasks.filter(t => t.status === 'todo')}
+                onToggle={handleToggleTask}
+                onSelect={handleSelectTask}
+                scrollRef={(ref) => kanbanColumnRefs.current[0] = ref}
+              />
+            </div>
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
+              <KanbanColumn
+                title="In Progress"
+                status="in-progress"
+                tasks={displayedTasks.filter(t => t.status === 'in-progress')}
+                onToggle={handleToggleTask}
+                onSelect={handleSelectTask}
+                scrollRef={(ref) => kanbanColumnRefs.current[1] = ref}
+              />
+            </div>
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
+              <KanbanColumn
+                title="Blocked"
+                status="blocked"
+                tasks={displayedTasks.filter(t => t.status === 'blocked')}
+                onToggle={handleToggleTask}
+                onSelect={handleSelectTask}
+                scrollRef={(ref) => kanbanColumnRefs.current[2] = ref}
+              />
+            </div>
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
+              <KanbanColumn
+                title="Done"
+                status="done"
+                tasks={displayedTasks.filter(t => t.status === 'done')}
+                onToggle={handleToggleTask}
+                onSelect={handleSelectTask}
+                scrollRef={(ref) => kanbanColumnRefs.current[3] = ref}
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -7,6 +7,9 @@ export default {
   ],
   theme: {
   	extend: {
+  		screens: {
+  			'compact': '1000px',
+  		},
   		borderRadius: {
   			modal: '32px',
   			card: '24px',

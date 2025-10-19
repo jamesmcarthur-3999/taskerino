@@ -12,6 +12,9 @@ import { FeatureTooltip } from '../../FeatureTooltip';
 import { getSuccessGradient, getInfoGradient, getWarningGradient, getDangerGradient, getNavButtonClasses } from '../../../design-system/theme';
 
 export interface RightActionsBarProps {
+  // Compact mode
+  isCompact?: boolean;
+
   // Notification state
   notificationData: {
     unreadNotifications: Notification[];
@@ -41,6 +44,7 @@ export interface RightActionsBarProps {
 }
 
 export function RightActionsBar({
+  isCompact = false,
   notificationData,
   showNotifications,
   setShowNotifications,
@@ -105,7 +109,7 @@ export function RightActionsBar({
 
   return (
     <div className="fixed top-0 right-0 z-50 pt-4 px-6 pointer-events-none">
-      <div className="flex items-center gap-2 pointer-events-auto">
+      <div className={`flex items-center ${isCompact ? 'gap-1' : 'gap-2'} pointer-events-auto`}>
         {/* Notifications Button */}
         <div className="relative" ref={notificationsRef}>
           <NavButton
@@ -116,6 +120,7 @@ export function RightActionsBar({
             title="Notifications"
             aria-label={`Notifications${hasUnreadNotifications ? ` (${unreadNotifications.length} unread)` : ''}`}
             aria-expanded={showNotifications}
+            isCompact={isCompact}
           >
             {hasUnreadNotifications && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center border-2 border-white shadow-lg">
@@ -240,12 +245,12 @@ export function RightActionsBar({
 
         {/* Ask Ned AI Assistant Button */}
         <NavButton
-          variant="action"
+          variant="icon"
           icon={Sparkles}
-          label="Ask Ned"
           isActive={nedOverlayOpen}
           onClick={onToggleNedOverlay}
           title="Ask Ned - Your AI Assistant (⌘J)"
+          isCompact={isCompact}
         />
 
         {/* Profile Button */}
@@ -255,6 +260,7 @@ export function RightActionsBar({
           isActive={activeTab === 'profile'}
           onClick={onProfileClick}
           title="Profile & Settings (⌘,)"
+          isCompact={isCompact}
         />
       </div>
     </div>

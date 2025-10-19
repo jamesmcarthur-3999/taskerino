@@ -50,6 +50,7 @@ export {
   islandVariants,
   modeContentVariants,
   getModeContentVariants,
+  getIslandVariants,
 } from './island-variants';
 
 // Stagger animations

@@ -31,7 +31,7 @@ interface TaskTableViewProps {
   onTaskClick: (taskId: string | undefined) => void;
   selectedTaskId?: string;
   groupBy: GroupByOption;
-  scrollRef?: React.RefObject<HTMLDivElement>;
+  scrollRef?: React.RefObject<HTMLDivElement> | ((node: HTMLDivElement | null) => void);
 }
 
 type GroupByOption = 'due-date' | 'status' | 'priority' | 'topic' | 'tag' | 'none';
@@ -564,9 +564,9 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
   };
 
   return (
-    <div className="flex-1 flex gap-4 overflow-hidden table-view-container">
+    <div className="flex-1 min-h-0 flex gap-4 overflow-hidden table-view-container">
       {/* LEFT PANEL - Table */}
-      <div className="flex-1 flex flex-col bg-white/30 backdrop-blur-2xl rounded-[24px] border border-white/60 shadow-xl overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col bg-white/30 backdrop-blur-2xl rounded-[24px] border border-white/60 shadow-xl overflow-hidden">
         {/* Column Headers */}
         <div className="flex items-center gap-2 px-4 py-3 border-b-2 border-white/50 bg-white/30 backdrop-blur-sm">
           {columns.map((column) => (
@@ -603,7 +603,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
         </div>
 
         {/* Task Groups */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
           {groupedTasks.map(({ key, label, tasks: groupTasks }) => (
             <div key={key} className="border-b border-white/30 last:border-b-0">
               {/* Group Header */}

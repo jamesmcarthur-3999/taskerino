@@ -85,6 +85,7 @@ interface NavTabsProps {
   onPauseSession: () => void;
   onResumeSession: () => void;
   onEndSession: () => void;
+  isCompact?: boolean;
 }
 
 /**
@@ -203,6 +204,7 @@ function NavTabsComponent({
   onPauseSession,
   onResumeSession,
   onEndSession,
+  isCompact = false,
 }: NavTabsProps) {
   /**
    * PERFORMANCE OPTIMIZATION:
@@ -220,6 +222,7 @@ function NavTabsComponent({
 
   return (
     <motion.div
+      layout
       variants={tabsVariants}
       initial="initial"
       animate="animate"
@@ -227,8 +230,9 @@ function NavTabsComponent({
       transition={{
         opacity: { duration: 0.18 },
         scale: { duration: 0.18 },
+        layout: { duration: 0.3, ease: [0.34, 1.56, 0.64, 1] },
       }}
-      className="flex items-center justify-center gap-2 px-4 py-2"
+      className={`flex items-center justify-center gap-2 px-4 py-2`}
     >
       <LayoutGroup>
         {tabs.map((tab) => {
@@ -252,6 +256,7 @@ function NavTabsComponent({
               onClick={() => onTabClick(tab.id)}
               onHoverChange={(hovered) => setHoveredTab(hovered ? tab.id : null)}
               title={`${tab.label} (${tab.shortcut})`}
+              isCompact={isCompact}
             />
           );
         })}
@@ -264,8 +269,9 @@ function NavTabsComponent({
         icon={Search}
         onClick={onSearchClick}
         title="Search (⌘K)"
+        isCompact={isCompact}
       >
-        <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono">⌘K</kbd>
+        {!isCompact && <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono">⌘K</kbd>}
       </NavButton>
     </motion.div>
   );

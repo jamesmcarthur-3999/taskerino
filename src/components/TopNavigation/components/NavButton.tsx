@@ -18,6 +18,7 @@ import { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Plus, Pause, Play, Square } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import { NAVIGATION, NAV_BUTTON_STYLES } from '../../../design-system/theme';
 import { contentSpring } from '../utils/islandAnimations';
 import { useReducedMotion } from '../../../lib/animations';
@@ -61,6 +62,9 @@ export interface NavButtonProps {
   isActive?: boolean;
   isHovered?: boolean;
 
+  // Compact mode
+  isCompact?: boolean;
+
   // Badge support
   badge?: BadgeConfig;
 
@@ -90,6 +94,7 @@ function NavButtonComponent({
   children,
   isActive = false,
   isHovered: externalIsHovered,
+  isCompact = false,
   badge,
   quickAction,
   onClick,
@@ -117,31 +122,43 @@ function NavButtonComponent({
   // Calculate if we should show quick action
   const showQuickAction = quickAction && isHovered;
 
-  // Calculate dynamic right padding based on quick action type
-  const getQuickActionPadding = () => {
-    if (!showQuickAction) return 'pr-4';
-    if (quickAction?.type === 'session-controls') return 'pr-24';
-    return 'pr-14';
-  };
-
   // Get base classes by variant
   const getVariantClasses = () => {
     switch (variant) {
       case 'tab':
-        const tabBaseClasses = NAVIGATION.tab.base.replace('px-4', 'pl-4');
-        const tabStateClasses = isActive ? NAVIGATION.tab.active : NAVIGATION.tab.inactive;
-        const padding = getQuickActionPadding();
-        return `${tabBaseClasses} ${tabStateClasses} ${padding}`;
+        // Explicit left padding based on compact mode
+        const leftPadding = isCompact ? 'pl-2' : 'pl-4';
+
+        // Explicit right padding based on quick action state
+        const rightPadding = showQuickAction
+          ? (quickAction?.type === 'session-controls' ? 'pr-24' : 'pr-14')
+          : (isCompact ? 'pr-2' : 'pr-4');
+
+        // Remove px-4 from base classes and add our explicit padding
+        const tabBaseClasses = NAVIGATION.tab.base
+          .replace('px-4', '')
+          .replace('rounded-xl', 'rounded-full');  // Tab buttons are PILL-SHAPED with rounded-full
+
+        // Active state styling - simplified since background is handled by animated div
+        const tabStateClasses = isActive
+          ? 'text-cyan-600 relative'
+          : 'bg-white/50 backdrop-blur-md text-gray-600 hover:text-gray-900 hover:bg-white/80 border border-transparent hover:border-white/40';
+
+        const compactSize = isCompact ? 'min-w-14 h-10 justify-center' : '';
+        return `${tabBaseClasses} ${tabStateClasses} ${leftPadding} ${rightPadding} ${compactSize}`;
 
       case 'icon':
+        // Icon buttons are always CIRCULAR with rounded-full
         return isActive
-          ? `${NAV_BUTTON_STYLES.default} bg-white/90 text-cyan-600 shadow-cyan-200/40`
-          : NAV_BUTTON_STYLES.default;
+          ? `relative flex items-center justify-center w-10 h-10 p-2 rounded-full font-medium text-sm transition-all duration-200 bg-white/95 text-cyan-600 shadow-lg border-2 border-cyan-400/60 ring-2 ring-cyan-300/40 shadow-cyan-500/30`
+          : `relative flex items-center justify-center w-10 h-10 p-2 rounded-full font-medium text-sm transition-all duration-200 bg-white/50 backdrop-blur-md text-gray-600 hover:text-gray-900 hover:bg-white/80 hover:shadow-md border border-transparent hover:border-white/40`;
 
       case 'action':
+        const actionPadding = isCompact ? 'px-2' : 'px-4';
+        const actionCompactSize = isCompact ? 'w-10 h-10 justify-center' : '';
         return isActive
-          ? `${NAV_BUTTON_STYLES.primary} flex items-center gap-2`
-          : `${NAV_BUTTON_STYLES.default} flex items-center gap-2`;
+          ? `${NAV_BUTTON_STYLES.primary.replace('px-4', actionPadding)} flex items-center gap-2 ${actionCompactSize}`
+          : `${NAV_BUTTON_STYLES.default.replace('px-4', actionPadding)} flex items-center gap-2 ${actionCompactSize}`;
 
       case 'menu':
         return `${NAV_BUTTON_STYLES.ghost} flex items-center gap-3 hover:shadow-2xl hover:scale-[1.02] active:scale-95 text-gray-800`;
@@ -150,7 +167,9 @@ function NavButtonComponent({
         return NAVIGATION.quickAction.base;
 
       case 'search':
-        return 'flex items-center gap-2 px-3 py-2 rounded-xl text-gray-600 hover:text-gray-900 bg-white/50 backdrop-blur-md hover:bg-white/80 hover:shadow-md transition-all duration-200 border border-transparent hover:border-white/40';
+        const searchPadding = isCompact ? 'px-2 py-2' : 'px-3 py-2';
+        const searchCompactSize = isCompact ? 'w-10 h-10 justify-center' : '';
+        return `flex items-center gap-2 ${searchPadding} rounded-full text-gray-600 hover:text-gray-900 bg-white/50 backdrop-blur-md hover:bg-white/80 hover:shadow-md transition-all duration-200 border border-transparent hover:border-white/40 ${searchCompactSize}`;
 
       default:
         return '';
@@ -165,13 +184,18 @@ function NavButtonComponent({
 
     // Count badge (regular)
     if (type === 'count') {
+      // In compact mode, position badge absolutely in top-right corner
       const badgeClasses = onBadgeClick
         ? NAVIGATION.badge.countClickable
         : NAVIGATION.badge.count;
 
+      const compactPositioning = isCompact
+        ? 'absolute -top-1 -right-1 ml-0'
+        : '';
+
       return (
         <motion.span
-          className={badgeClasses}
+          className={`${badgeClasses} ${compactPositioning}`}
           onClick={onBadgeClick}
           onKeyDown={onBadgeClick ? (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -194,6 +218,11 @@ function NavButtonComponent({
 
     // Processing badge (with spinner)
     if (type === 'processing') {
+      // In compact mode, position badge absolutely in top-right corner
+      const compactPositioning = isCompact
+        ? 'absolute -top-1 -right-1 ml-0'
+        : '';
+
       return (
         <motion.span
           onClick={onBadgeClick}
@@ -207,7 +236,7 @@ function NavButtonComponent({
           tabIndex={onBadgeClick ? 0 : undefined}
           role={onBadgeClick ? "button" : undefined}
           aria-label={onBadgeClick ? `${count} processing items` : undefined}
-          className={NAVIGATION.badge.processing}
+          className={`${NAVIGATION.badge.processing} ${compactPositioning}`}
           whileHover={!prefersReducedMotion ? { scale: 1.1 } : undefined}
           whileTap={!prefersReducedMotion ? { scale: 0.95 } : undefined}
           transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
@@ -224,6 +253,11 @@ function NavButtonComponent({
         ? NAVIGATION.badge.statusActive
         : NAVIGATION.badge.statusPaused;
 
+      // In compact mode, position badge absolutely in top-right corner
+      const compactPositioning = isCompact
+        ? 'absolute top-0 right-0 ml-0'
+        : '';
+
       return (
         <motion.span
           onClick={onBadgeClick}
@@ -237,7 +271,7 @@ function NavButtonComponent({
           tabIndex={onBadgeClick ? 0 : undefined}
           role={onBadgeClick ? "button" : undefined}
           aria-label="View session controls"
-          className={statusClass}
+          className={`${statusClass} ${compactPositioning}`}
           title="View session controls"
           whileHover={!prefersReducedMotion ? { scale: 1.15 } : undefined}
           whileTap={!prefersReducedMotion ? { scale: 0.95 } : undefined}
@@ -354,60 +388,109 @@ function NavButtonComponent({
     );
   };
 
-  // Render active indicator (for tabs)
-  const renderActiveIndicator = () => {
-    if (variant !== 'tab' || !isActive) return null;
 
-    return (
-      <motion.div
-        className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full"
-        layoutId="activeTabIndicator"
-        transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
-      />
-    );
-  };
+  // Determine tooltip label (use label or aria-label)
+  const tooltipLabel = label || ariaLabel || title || '';
+
+  // Button element
+  const buttonElement = (
+    <motion.button
+      layout="preserve-aspect"
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const syntheticEvent = e as unknown as React.MouseEvent;
+          onClick?.(syntheticEvent);
+        }
+      }}
+      className={`relative ${getVariantClasses()} ${className}`}
+      style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+      title={isCompact ? undefined : title}
+      aria-label={isCompact ? tooltipLabel : ariaLabel}
+      aria-expanded={ariaExpanded}
+      whileHover={!prefersReducedMotion && (variant === 'tab' || variant === 'search') ? { scale: 1.02 } : undefined}
+      whileTap={!prefersReducedMotion ? { scale: 0.95 } : undefined}
+      transition={prefersReducedMotion ? { duration: 0 } : {
+        ...contentSpring,
+        layout: { duration: 0.3, ease: [0.34, 1.56, 0.64, 1] },
+      }}
+    >
+      {/* Animated active background - smoothly transitions between tabs */}
+      {variant === 'tab' && isActive && (
+        <motion.div
+          layoutId="activeTabBackground"
+          className="absolute inset-0 bg-white/95 backdrop-blur-lg rounded-full border-2 border-cyan-400/60 ring-2 ring-cyan-300/40 shadow-lg shadow-cyan-500/30"
+          initial={prefersReducedMotion ? { scale: 1 } : { scale: 0.95 }}
+          animate={{ scale: 1 }}
+          transition={prefersReducedMotion ? { duration: 0 } : {
+            type: "spring",
+            stiffness: 380,
+            damping: 30,
+          }}
+          style={{ zIndex: -1 }}
+        />
+      )}
+
+      {/* Icon */}
+      {Icon && <Icon className={variant === 'icon' || variant === 'action' || variant === 'menu' ? 'w-5 h-5' : 'w-4 h-4'} />}
+
+      {/* Label with AnimatePresence for smooth fade out */}
+      <AnimatePresence mode="wait" initial={false}>
+        {label && !isCompact && (
+          <motion.span
+            key="label"
+            layout="position"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={prefersReducedMotion ? { duration: 0 } : {
+              opacity: { duration: 0.25, ease: 'easeInOut' },
+              scale: { duration: 0.25, ease: 'easeInOut' },
+              layout: { duration: 0.3, ease: [0.34, 1.56, 0.64, 1] },
+            }}
+            className={variant === 'action' || variant === 'menu' ? 'font-semibold text-sm' : ''}
+          >
+            {label}
+          </motion.span>
+        )}
+      </AnimatePresence>
+
+      {/* Custom children */}
+      {children}
+
+      {/* Badge */}
+      {renderBadge()}
+
+      {/* Quick action */}
+      <AnimatePresence>
+        {renderQuickAction()}
+      </AnimatePresence>
+    </motion.button>
+  );
 
   return (
     <div className="group flex items-center" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-      <motion.button
-        layout
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            const syntheticEvent = e as unknown as React.MouseEvent;
-            onClick?.(syntheticEvent);
-          }
-        }}
-        className={`relative ${getVariantClasses()} ${className}`}
-        style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-        title={title}
-        aria-label={ariaLabel}
-        aria-expanded={ariaExpanded}
-        whileHover={!prefersReducedMotion && (variant === 'tab' || variant === 'search') ? { scale: 1.02 } : undefined}
-        whileTap={!prefersReducedMotion ? { scale: 0.95 } : undefined}
-        transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
-      >
-        {/* Icon */}
-        {Icon && <Icon className={variant === 'icon' || variant === 'action' || variant === 'menu' ? 'w-5 h-5' : 'w-4 h-4'} />}
-
-        {/* Label */}
-        {label && <span className={variant === 'action' || variant === 'menu' ? 'font-semibold text-sm' : ''}>{label}</span>}
-
-        {/* Custom children */}
-        {children}
-
-        {/* Badge */}
-        {renderBadge()}
-
-        {/* Active indicator */}
-        {renderActiveIndicator()}
-
-        {/* Quick action */}
-        <AnimatePresence>
-          {renderQuickAction()}
-        </AnimatePresence>
-      </motion.button>
+      {isCompact && tooltipLabel ? (
+        <Tooltip.Provider>
+          <Tooltip.Root delayDuration={300}>
+            <Tooltip.Trigger asChild>
+              {buttonElement}
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content
+                className="z-50 px-3 py-1.5 text-sm text-white bg-gray-900 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95"
+                sideOffset={5}
+              >
+                {tooltipLabel}
+                <Tooltip.Arrow className="fill-gray-900" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+        </Tooltip.Provider>
+      ) : (
+        buttonElement
+      )}
     </div>
   );
 }

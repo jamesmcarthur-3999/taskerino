@@ -16,6 +16,7 @@ import { Z_INDEX } from '../../design-system/theme';
 import { useIslandState } from './hooks/useIslandState';
 import { useNavData } from './useNavData';
 import { useNavActions } from './useNavActions';
+import { useCompactNavigation } from '../../hooks/useCompactNavigation';
 
 // Components
 import { LogoContainer } from './components/LogoContainer';
@@ -26,6 +27,9 @@ export function TopNavigation() {
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { pauseSession, resumeSession, endSession, startSession, activeSessionId } = useSessions();
   const { scrollY } = useScrollAnimation();
+
+  // Compact mode hook
+  const isCompact = useCompactNavigation();
 
   // Island state management hook
   const islandStateHook = useIslandState();
@@ -129,7 +133,7 @@ export function TopNavigation() {
 
       {/* Logo Container - Fades out as menu morphs to its position */}
       <div className={`fixed top-0 left-0 ${Z_INDEX.modal} pt-4 px-6 pointer-events-none`}>
-        <LogoContainer scrollY={scrollY} />
+        <LogoContainer scrollY={scrollY} isCompact={isCompact} />
       </div>
 
       {/* Navigation Island - Center */}
@@ -180,6 +184,7 @@ export function TopNavigation() {
 
       {/* Right Actions Bar */}
       <RightActionsBar
+        isCompact={isCompact}
         notificationData={navData.notificationData}
         showNotifications={showNotifications}
         setShowNotifications={setShowNotifications}

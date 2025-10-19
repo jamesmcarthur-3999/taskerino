@@ -50,6 +50,40 @@ export const islandVariants: Variants = {
 };
 
 /**
+ * Get island variants based on compact mode
+ * Returns responsive widths that prevent button cutoff in non-compact mode
+ *
+ * @param isCompact - Whether the navigation is in compact mode
+ * @returns Variants object with appropriate widths for current mode
+ */
+export function getIslandVariants(isCompact: boolean): Variants {
+  if (isCompact) {
+    return {
+      collapsed: {
+        width: 400, // Compact mode: Icon-only buttons with minimal spacing
+        scale: 1,
+      },
+      expanded: {
+        width: 384, // Compact expanded mode (24rem)
+        scale: 1,
+      },
+    };
+  }
+
+  // Non-compact mode: Full width with button labels
+  return {
+    collapsed: {
+      width: 720, // Increased from 640px to ensure all buttons with labels fit without cutoff
+      scale: 1,
+    },
+    expanded: {
+      width: 672, // Standard expanded width (max-w-2xl = 42rem = 672px)
+      scale: 1,
+    },
+  };
+}
+
+/**
  * Mode content variants
  * Controls the entrance/exit animations for mode components
  * (Search, Task, Note, Processing, Session modes)
