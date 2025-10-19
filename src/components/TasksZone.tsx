@@ -308,6 +308,7 @@ export default function TasksZone() {
 
     const handleDrop = (e: React.DragEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       setIsDragOver(false);
 
       const taskId = e.dataTransfer.getData('taskId');
