@@ -981,8 +981,8 @@ export const NAVIGATION = {
 
   // Tab styles
   tab: {
-    base: 'relative flex items-center gap-2 px-4 h-10 rounded-xl font-medium text-sm transition-all duration-200',
-    active: 'bg-white/90 backdrop-blur-lg shadow-lg text-cyan-600 border border-white/60',
+    base: 'relative flex items-center gap-2 px-4 h-10 rounded-full font-medium text-sm transition-all duration-200',
+    active: 'bg-white/95 backdrop-blur-lg shadow-lg text-cyan-600 border-2 border-cyan-400/60 ring-2 ring-cyan-300/40 shadow-cyan-500/30',
     inactive: 'bg-white/50 backdrop-blur-md text-gray-600 hover:text-gray-900 hover:bg-white/80 hover:shadow-md border border-transparent hover:border-white/40',
   },
 
@@ -999,6 +999,40 @@ export const NAVIGATION = {
   quickAction: {
     base: 'p-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-full hover:shadow-lg transition-all duration-200',
   },
+} as const;
+
+/**
+ * Responsive navigation patterns for compact and full modes
+ */
+export const RESPONSIVE_NAVIGATION = {
+  compact: {
+    button: {
+      size: 'min-w-14 h-10',  // 56px wide × 40px tall (pill-shaped)
+      padding: 'px-2',
+      gap: 'gap-2',
+    },
+    island: {
+      maxWidth: '24rem',  // 384px (reduced from 448px)
+      gap: 'gap-2',
+    },
+    logo: {
+      width: 'w-10',  // Just the T icon
+    },
+    tooltip: {
+      delay: 300,  // 300ms delay as specified
+    }
+  },
+  full: {
+    button: {
+      size: 'h-10',  // Current height
+      padding: 'px-4',
+      gap: 'gap-2',
+    },
+    island: {
+      maxWidth: '80rem',  // 1280px (max-w-7xl) - wide enough to prevent button cutoff
+      gap: 'gap-2',
+    },
+  }
 } as const;
 
 /**

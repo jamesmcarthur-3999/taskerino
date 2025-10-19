@@ -144,7 +144,7 @@ export function ScrollAnimationProvider({ children }: { children: ReactNode }) {
     return () => {
       document.removeEventListener('scroll', handleScroll, { capture: true });
     };
-  }, [scrollState.direction]);
+  }, []);
 
   return (
     <ScrollAnimationContext.Provider

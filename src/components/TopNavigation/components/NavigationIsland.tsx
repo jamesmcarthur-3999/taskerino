@@ -22,8 +22,11 @@ import { ProcessingMode } from './island-modes/ProcessingMode';
 import { SessionMode } from './island-modes/SessionMode';
 import type { IslandState } from '../types';
 import type { TabType } from '../../../types';
-import { islandVariants, springConfig } from '../utils/islandAnimations';
+import { springConfig } from '../utils/islandAnimations';
 import { NAVIGATION } from '../../../design-system/theme';
+import { useCompactNavigation } from '../../../hooks/useCompactNavigation';
+import { springs, durations, easings } from '../../../animations/tokens';
+import { useReducedMotion, getIslandVariants } from '../../../lib/animations';
 
 interface ProcessingData {
   processingJobs: Array<{ id: string; input: string; progress: number }>;
@@ -160,6 +163,8 @@ export function NavigationIsland({
   onJobClick,
 }: NavigationIslandProps) {
   const isExpanded = islandState !== 'collapsed';
+  const isCompact = useCompactNavigation();
+  const prefersReducedMotion = useReducedMotion();
 
   /**
    * PERFORMANCE OPTIMIZATION:
@@ -187,22 +192,70 @@ export function NavigationIsland({
     navData.sessionData.isSessionPaused,
   ]);
 
+  /**
+   * ANIMATION CONFIGURATION:
+   * Memoize animation properties based on state and user preferences
+   */
+  const dynamicIslandVariants = useMemo(() => {
+    return getIslandVariants(isCompact);
+  }, [isCompact]);
+
+  const islandTransition = useMemo(() => {
+    if (prefersReducedMotion) {
+      return { duration: 0 };
+    }
+    return {
+      ...springConfig,
+      layout: springs.smooth,
+      width: springs.smooth, // Smooth spring transition for width changes
+      maxWidth: springs.smooth,
+      backgroundColor: {
+        duration: durations.s.normal,
+        ease: 'easeInOut',
+      },
+      backdropFilter: {
+        duration: durations.s.normal,
+        ease: 'easeInOut',
+      },
+    };
+  }, [prefersReducedMotion]);
+
+  const modeContentTransition = useMemo(() => {
+    if (prefersReducedMotion) {
+      return { duration: 0 };
+    }
+    return {
+      duration: durations.s.fast,
+      ease: 'easeInOut',
+    };
+  }, [prefersReducedMotion]);
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 px-6 pointer-events-none">
       <motion.div
         layoutId="navigation-island"
-        layout
         initial={false}
-        animate={isExpanded ? 'expanded' : 'collapsed'}
-        variants={islandVariants}
-        transition={springConfig}
-        style={{ willChange: isExpanded ? 'width, height, transform' : 'auto' }}
+        animate={{
+          // Width animations based on state AND compact mode
+          ...(isExpanded ? dynamicIslandVariants.expanded : dynamicIslandVariants.collapsed),
+          // Max width based on compact mode
+          maxWidth: isCompact ? '24rem' : '80rem', // 384px / 1280px
+          // Background opacity changes on expand/collapse
+          backgroundColor: isExpanded
+            ? 'rgba(255, 255, 255, 0.5)'
+            : 'rgba(255, 255, 255, 0.4)',
+        }}
+        transition={islandTransition}
+        style={{
+          willChange: isExpanded || !isCompact ? 'width, transform, background-color, backdrop-filter' : 'auto',
+        }}
         className={`
-          ${NAVIGATION.island.container}
+          backdrop-blur-2xl rounded-[40px] shadow-2xl border-2 border-white/50 ring-1 ring-black/5
           pointer-events-auto overflow-hidden
-          max-w-2xl
+          ${isCompact ? 'max-w-sm' : 'max-w-7xl'}
           relative
         `}
+        aria-expanded={isExpanded}
       >
         {/* Navigation Tabs - Visible when collapsed */}
         <AnimatePresence>
@@ -222,84 +275,115 @@ export function NavigationIsland({
               onPauseSession={navActions.onPauseSession}
               onResumeSession={navActions.onResumeSession}
               onEndSession={navActions.onEndSession}
+              isCompact={isCompact}
             />
             </div>
           )}
         </AnimatePresence>
 
         {/* Mode Components - Visible when expanded */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {islandState === 'search-expanded' && (
-            <div className="w-full">
-            <SearchMode
+            <motion.div
               key="search-mode"
-              searchQuery={searchQuery}
-              searchInputRef={searchInputRef}
-              onSearchQueryChange={onSearchQueryChange}
-              onNavigate={onNavigate}
-              onOpenSidebar={onOpenSidebar}
-              onClose={onClose}
-            />
-            </div>
+              className="w-full"
+              initial={{ opacity: 0, scale: 0.98, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -4 }}
+              transition={modeContentTransition}
+            >
+              <SearchMode
+                searchQuery={searchQuery}
+                searchInputRef={searchInputRef}
+                onSearchQueryChange={onSearchQueryChange}
+                onNavigate={onNavigate}
+                onOpenSidebar={onOpenSidebar}
+                onClose={onClose}
+              />
+            </motion.div>
           )}
           {islandState === 'task-expanded' && (
-            <div className="w-full">
-            <TaskMode
+            <motion.div
               key="task-mode"
-              taskTitle={taskTitle}
-              taskDueDate={taskDueDate}
-              showSuccess={showSuccess}
-              createdTaskId={createdTaskId}
-              onTaskTitleChange={onTaskTitleChange}
-              onTaskDueDateChange={onTaskDueDateChange}
-              onCreateTask={onCreateTask}
-              onViewTask={onViewTask}
-              onClose={onClose}
-            />
-            </div>
+              className="w-full"
+              initial={{ opacity: 0, scale: 0.98, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -4 }}
+              transition={modeContentTransition}
+            >
+              <TaskMode
+                taskTitle={taskTitle}
+                taskDueDate={taskDueDate}
+                showSuccess={showSuccess}
+                createdTaskId={createdTaskId}
+                onTaskTitleChange={onTaskTitleChange}
+                onTaskDueDateChange={onTaskDueDateChange}
+                onCreateTask={onCreateTask}
+                onViewTask={onViewTask}
+                onClose={onClose}
+              />
+            </motion.div>
           )}
           {islandState === 'note-expanded' && (
-            <div className="w-full">
-            <NoteMode
+            <motion.div
               key="note-mode"
-              noteInput={noteInput}
-              onNoteInputChange={onNoteInputChange}
-              onSaveNote={onSaveNote}
-              onSendToAI={onSendToAI}
-              onClose={onClose}
-            />
-            </div>
+              className="w-full"
+              initial={{ opacity: 0, scale: 0.98, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -4 }}
+              transition={modeContentTransition}
+            >
+              <NoteMode
+                noteInput={noteInput}
+                onNoteInputChange={onNoteInputChange}
+                onSaveNote={onSaveNote}
+                onSendToAI={onSendToAI}
+                onClose={onClose}
+              />
+            </motion.div>
           )}
           {islandState === 'processing-expanded' && (
-            <div className="w-full">
-            <ProcessingMode
+            <motion.div
               key="processing-mode"
-              processingJobs={navData.processingData.processingJobs}
-              completedJobs={navData.processingData.completedJobs}
-              onJobClick={onJobClick}
-              onClose={onClose}
-            />
-            </div>
+              className="w-full"
+              initial={{ opacity: 0, scale: 0.98, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -4 }}
+              transition={modeContentTransition}
+            >
+              <ProcessingMode
+                processingJobs={navData.processingData.processingJobs}
+                completedJobs={navData.processingData.completedJobs}
+                onJobClick={onJobClick}
+                onClose={onClose}
+              />
+            </motion.div>
           )}
           {islandState === 'session-expanded' && (
-            <div className="w-full">
-            <SessionMode
+            <motion.div
               key="session-mode"
-              activeSession={navData.sessionData.activeSession}
-              isSessionActive={navData.sessionData.isSessionActive}
-              isSessionPaused={navData.sessionData.isSessionPaused}
-              isStarting={isStarting}
-              countdown={countdown}
-              sessionDescription={sessionDescription}
-              onSessionDescriptionChange={onSessionDescriptionChange}
-              onPauseSession={onPauseSession}
-              onResumeSession={onResumeSession}
-              onEndSession={onEndSession}
-              onStartSession={onStartSession}
-              onNavigateToSessions={onNavigateToSessions}
-              onClose={onClose}
-            />
-            </div>
+              className="w-full"
+              initial={{ opacity: 0, scale: 0.98, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -4 }}
+              transition={modeContentTransition}
+            >
+              <SessionMode
+                activeSession={navData.sessionData.activeSession}
+                isSessionActive={navData.sessionData.isSessionActive}
+                isSessionPaused={navData.sessionData.isSessionPaused}
+                isStarting={isStarting}
+                countdown={countdown}
+                sessionDescription={sessionDescription}
+                onSessionDescriptionChange={onSessionDescriptionChange}
+                onPauseSession={onPauseSession}
+                onResumeSession={onResumeSession}
+                onEndSession={onEndSession}
+                onStartSession={onStartSession}
+                onNavigateToSessions={onNavigateToSessions}
+                onClose={onClose}
+              />
+            </motion.div>
           )}
         </AnimatePresence>
       </motion.div>
