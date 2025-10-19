@@ -408,15 +408,13 @@ export default function TasksZone() {
                   e.dataTransfer.setData('taskId', task.id);
                 }}
                 onClick={() => !isEditing && onSelect(task.id)}
-                className={`${cardClasses} ${isEditing ? 'ring-2 ring-cyan-400 !cursor-default' : 'cursor-grab active:cursor-grabbing'} relative select-none`}
+                className={`${cardClasses} select-none ${isEditing ? 'ring-2 ring-cyan-400 !cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
                 style={{
                   transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none',
                 }}
               >
                 {/* Quick Actions - Show on Hover */}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1 z-20">
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-200 flex items-center gap-1 z-20">
                   <Button
                     variant="secondary"
                     size="sm"
