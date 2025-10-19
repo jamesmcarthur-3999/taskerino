@@ -145,31 +145,35 @@ function NavButtonComponent({
           : 'bg-white/50 backdrop-blur-md text-gray-600 hover:text-gray-900 hover:bg-white/80 border border-transparent hover:border-white/40';
 
         const compactSize = isCompact ? 'min-w-14 h-10 justify-center' : '';
-        return `${tabBaseClasses} ${tabStateClasses} ${leftPadding} ${rightPadding} ${compactSize}`;
+        const focusStyles = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2';
+        return `${tabBaseClasses} ${tabStateClasses} ${leftPadding} ${rightPadding} ${compactSize} ${focusStyles}`;
 
       case 'icon':
         // Icon buttons are always CIRCULAR with rounded-full
+        const iconFocusStyles = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2';
         return isActive
-          ? `relative flex items-center justify-center w-10 h-10 p-2 rounded-full font-medium text-sm transition-all duration-200 bg-white/95 text-cyan-600 shadow-lg border-2 border-cyan-400/60 ring-2 ring-cyan-300/40 shadow-cyan-500/30`
-          : `relative flex items-center justify-center w-10 h-10 p-2 rounded-full font-medium text-sm transition-all duration-200 bg-white/50 backdrop-blur-md text-gray-600 hover:text-gray-900 hover:bg-white/80 hover:shadow-md border border-transparent hover:border-white/40`;
+          ? `relative flex items-center justify-center w-10 h-10 p-2 rounded-full font-medium text-sm transition-all duration-200 bg-white/95 text-cyan-600 shadow-lg border-2 border-cyan-400/60 ring-2 ring-cyan-300/40 shadow-cyan-500/30 ${iconFocusStyles}`
+          : `relative flex items-center justify-center w-10 h-10 p-2 rounded-full font-medium text-sm transition-all duration-200 bg-white/50 backdrop-blur-md text-gray-600 hover:text-gray-900 hover:bg-white/80 hover:shadow-md border border-transparent hover:border-white/40 ${iconFocusStyles}`;
 
       case 'action':
         const actionPadding = isCompact ? 'px-2' : 'px-4';
         const actionCompactSize = isCompact ? 'w-10 h-10 justify-center' : '';
+        const actionFocusStyles = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2';
         return isActive
-          ? `${NAV_BUTTON_STYLES.primary.replace('px-4', actionPadding)} flex items-center gap-2 ${actionCompactSize}`
-          : `${NAV_BUTTON_STYLES.default.replace('px-4', actionPadding)} flex items-center gap-2 ${actionCompactSize}`;
+          ? `${NAV_BUTTON_STYLES.primary.replace('px-4', actionPadding)} flex items-center gap-2 ${actionCompactSize} ${actionFocusStyles}`
+          : `${NAV_BUTTON_STYLES.default.replace('px-4', actionPadding)} flex items-center gap-2 ${actionCompactSize} ${actionFocusStyles}`;
 
       case 'menu':
-        return `${NAV_BUTTON_STYLES.ghost} flex items-center gap-3 hover:shadow-2xl hover:scale-[1.02] active:scale-95 text-gray-800`;
+        return `${NAV_BUTTON_STYLES.ghost} flex items-center gap-3 hover:shadow-2xl hover:scale-[1.02] active:scale-95 text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2`;
 
       case 'quick-action':
-        return NAVIGATION.quickAction.base;
+        return `${NAVIGATION.quickAction.base} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-1`;
 
       case 'search':
         const searchPadding = isCompact ? 'px-2 py-2' : 'px-3 py-2';
         const searchCompactSize = isCompact ? 'w-10 h-10 justify-center' : '';
-        return `flex items-center gap-2 ${searchPadding} rounded-full text-gray-600 hover:text-gray-900 bg-white/50 backdrop-blur-md hover:bg-white/80 hover:shadow-md transition-all duration-200 border border-transparent hover:border-white/40 ${searchCompactSize}`;
+        const searchFocusStyles = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2';
+        return `flex items-center gap-2 ${searchPadding} rounded-full text-gray-600 hover:text-gray-900 bg-white/50 backdrop-blur-md hover:bg-white/80 hover:shadow-md transition-all duration-200 border border-transparent hover:border-white/40 ${searchCompactSize} ${searchFocusStyles}`;
 
       default:
         return '';

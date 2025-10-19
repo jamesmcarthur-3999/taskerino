@@ -133,9 +133,10 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
       if (scrollY < 5 && !naturalPositionRef.current) {
         const rect = spacerRef.current.getBoundingClientRect();
 
+        // Convert viewport-relative coordinates to document-relative
         naturalPositionRef.current = {
-          top: rect.top,
-          left: rect.left,
+          top: rect.top + window.scrollY,
+          left: rect.left + window.scrollX,
           width: rect.width,
           height: rect.height
         };
@@ -155,9 +156,10 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
           const logoRect = logoContainer.getBoundingClientRect();
           // Position button 12px to the right of the logo
           const gap = 12;
+          // Convert viewport-relative coordinates to document-relative
           finalPositionRef.current = {
             top: 16, // Match logo's top padding (pt-4)
-            left: logoRect.right + gap
+            left: logoRect.right + window.scrollX + gap
           };
         } else {
           // Fallback if logo not found
