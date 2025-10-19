@@ -676,9 +676,5 @@ export function SessionsTopBar({
     </>
   );
 
-  return (
-    <div className="flex items-center gap-3 bg-white/40 backdrop-blur-xl border-2 border-white/50 rounded-[24px] p-1.5 shadow-lg">
-      {renderSessionControls()}
-    </div>
-  );
+  return renderSessionControls();
 }

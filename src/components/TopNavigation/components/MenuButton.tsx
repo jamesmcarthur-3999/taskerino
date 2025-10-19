@@ -9,6 +9,7 @@ import { useRef, useEffect } from 'react';
 import { Menu } from 'lucide-react';
 import { NAV_CONSTANTS } from '../constants';
 import { easeOutElasticLight, clamp } from '../../../utils/easing';
+import { useCompactNavigation } from '../../../hooks/useCompactNavigation';
 
 interface MenuButtonProps {
   scrollY: number;
@@ -17,6 +18,7 @@ interface MenuButtonProps {
 
 export function MenuButton({ scrollY, onClick }: MenuButtonProps) {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const isCompact = useCompactNavigation();
 
   // Direct DOM manipulation for scroll animations (60fps smooth)
   useEffect(() => {
@@ -39,7 +41,7 @@ export function MenuButton({ scrollY, onClick }: MenuButtonProps) {
     <button
       ref={menuButtonRef}
       onClick={onClick}
-      className="absolute top-4 left-6 flex items-center gap-3 px-5 py-4 bg-white/40 backdrop-blur-xl rounded-full shadow-xl border-2 border-white/50 ring-1 ring-black/5 pointer-events-auto transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] hover:bg-white/50 active:scale-95 text-gray-800 group"
+      className={`absolute ${isCompact ? 'top-3 left-3 h-10 w-10 justify-center p-0' : 'top-4 left-6 gap-3 px-5 py-4'} flex items-center bg-white/40 backdrop-blur-xl rounded-full shadow-xl border-2 border-white/50 ring-1 ring-black/5 pointer-events-auto transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] hover:bg-white/50 active:scale-95 text-gray-800 group`}
       style={{
         opacity: 0,
         transitionProperty: 'box-shadow, background, transform',
@@ -47,8 +49,8 @@ export function MenuButton({ scrollY, onClick }: MenuButtonProps) {
       }}
       aria-label="Open navigation menu"
     >
-      <Menu className="w-6 h-6 group-hover:rotate-180 transition-transform duration-500" />
-      <span className="font-semibold text-base tracking-wide">Menu</span>
+      <Menu className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6'} group-hover:rotate-180 transition-transform duration-500`} />
+      {!isCompact && <span className="font-semibold text-base tracking-wide">Menu</span>}
     </button>
   );
 }
