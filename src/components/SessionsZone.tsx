@@ -1137,7 +1137,7 @@ export default function SessionsZone() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [activeSession]); // Re-check when active session changes
+  }, [activeSession, scrollY]); // Re-check when active session changes
 
   /**
    * Auto-generate session metadata with intelligent throttling

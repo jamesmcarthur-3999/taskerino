@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Play, Pause, Square, Clock, CheckCircle2, CheckCheck, Camera as CameraIcon, Mic, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Session } from '../../types';
@@ -7,10 +7,7 @@ import { ToggleButton } from './ToggleButton';
 import { DropdownTrigger } from '../DropdownTrigger';
 import { SessionsFilterMenu } from './SessionsFilterMenu';
 import { SessionsSortMenu } from './SessionsSortMenu';
-import { SessionsStatsBar } from './SessionsStatsBar';
-import { useScrollAnimation } from '../../contexts/ScrollAnimationContext';
-import { useUI } from '../../context/UIContext';
-import { getWarningGradient, getSuccessGradient, getDangerGradient, getGradientClasses, getGlassClasses, getRadiusClass } from '../../design-system/theme';
+import { getWarningGradient, getSuccessGradient, getDangerGradient, getGradientClasses, getRadiusClass } from '../../design-system/theme';
 import { useTheme } from '../../context/ThemeContext';
 
 interface SessionsTopBarProps {
@@ -93,102 +90,6 @@ export function SessionsTopBar({
   const resumeGradient = getSuccessGradient('strong');
   const pauseGradient = getWarningGradient('strong');
   const { colorScheme } = useTheme();
-
-  // Refs and scroll animation
-  const topBarRef = useRef<HTMLDivElement>(null);
-  const statsPillRef = useRef<HTMLDivElement>(null);
-  const { scrollY } = useScrollAnimation();
-  const { state, dispatch } = useUI();
-  const { showSubMenuOverlay } = state;
-  const rafIdRef = useRef<number | null>(null);
-  const isScrollingRef = useRef(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ESC key listener to close overlay
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showSubMenuOverlay) {
-        dispatch({ type: 'SET_SUBMENU_OVERLAY', payload: false });
-      }
-    };
-
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [showSubMenuOverlay, dispatch]);
-
-  // Apply scroll-driven transformations
-  useEffect(() => {
-    const applyTransforms = () => {
-      if (!topBarRef.current) return;
-
-      // Top bar transformations (0-200px range)
-      const clampedScroll = Math.min(scrollY, 200);
-      const opacity = 1 - (clampedScroll / 200);
-      const scale = 1 - (clampedScroll / 200) * 0.2;
-      const translateY = -clampedScroll;
-
-      topBarRef.current.style.transform = `translateY(${translateY}px) scale(${scale})`;
-      topBarRef.current.style.opacity = String(opacity);
-
-      // Stats pill transformations (0-150px range)
-      if (statsPillRef.current) {
-        const clampedStatsScroll = Math.min(scrollY, 150);
-        const statsOpacity = 1 - (clampedStatsScroll / 150);
-        const statsScale = 1 - (clampedStatsScroll / 150) * 0.05;
-        const statsBlur = (clampedStatsScroll / 150) * 4;
-
-        statsPillRef.current.style.opacity = String(statsOpacity);
-        statsPillRef.current.style.transform = `scale(${statsScale})`;
-        statsPillRef.current.style.filter = `blur(${statsBlur}px)`;
-      }
-
-      rafIdRef.current = null;
-    };
-
-    // Cancel any pending animation frame
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current);
-    }
-
-    // Schedule new animation frame
-    rafIdRef.current = requestAnimationFrame(applyTransforms);
-
-    // Manage will-change optimization
-    if (!isScrollingRef.current) {
-      isScrollingRef.current = true;
-      if (topBarRef.current) {
-        topBarRef.current.style.willChange = 'transform, opacity';
-      }
-      if (statsPillRef.current) {
-        statsPillRef.current.style.willChange = 'transform, opacity, filter';
-      }
-    }
-
-    // Clear existing timeout
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-
-    // Remove will-change after scrolling stops
-    scrollTimeoutRef.current = setTimeout(() => {
-      isScrollingRef.current = false;
-      if (topBarRef.current) {
-        topBarRef.current.style.willChange = 'auto';
-      }
-      if (statsPillRef.current) {
-        statsPillRef.current.style.willChange = 'auto';
-      }
-    }, 150);
-
-    return () => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-      }
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, [scrollY]);
 
   // Helper function to render session controls
   const renderSessionControls = () => (
@@ -775,54 +676,9 @@ export function SessionsTopBar({
     </>
   );
 
-  // Determine if overlay should be shown
-  const shouldShowOverlay = showSubMenuOverlay && scrollY > 100;
-
   return (
-    <>
-      {/* Overlay Mode */}
-      <AnimatePresence>
-        {shouldShowOverlay && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/20 z-[60]"
-              onClick={() => dispatch({ type: 'SET_SUBMENU_OVERLAY', payload: false })}
-            />
-
-            {/* Overlay Menu Bar */}
-            <motion.div
-              initial={{ y: -20, opacity: 0, scale: 0.95 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: -20, opacity: 0, scale: 0.95 }}
-              transition={{
-                type: 'spring',
-                stiffness: 300,
-                damping: 30
-              }}
-              className="fixed top-[80px] left-[24px] z-[70] origin-top-left"
-            >
-              <div className={`flex items-center gap-3 ${getGlassClasses('medium')} ${getRadiusClass('card')} p-1.5 shadow-lg`}>
-                {renderSessionControls()}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Normal Mode */}
-      <div className="flex items-center justify-between relative z-50 mb-4">
-        <div ref={topBarRef} className="flex items-center gap-3 bg-white/40 backdrop-blur-xl border-2 border-white/50 rounded-[24px] p-1.5 shadow-lg">
-          {renderSessionControls()}
-        </div>
-
-        {/* Stats Pill - Right Side */}
-        <SessionsStatsBar ref={statsPillRef} sessions={sessions} />
-      </div>
-    </>
+    <div className="flex items-center gap-3 bg-white/40 backdrop-blur-xl border-2 border-white/50 rounded-[24px] p-1.5 shadow-lg">
+      {renderSessionControls()}
+    </div>
   );
 }
