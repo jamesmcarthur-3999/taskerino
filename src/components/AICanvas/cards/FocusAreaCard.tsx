@@ -40,7 +40,7 @@ export function FocusAreaCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 cursor-default`}
+      className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 border-l-4 border-blue-500 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 cursor-default`}
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         {/* Icon and Name */}
@@ -89,10 +89,10 @@ export function FocusAreaCard({
               <button
                 key={screenshot.id}
                 onClick={() => onClickScreenshot?.(screenshot)}
-                className="w-6 h-6 rounded bg-gray-200 hover:bg-gray-300 transition-colors text-xs text-gray-700 flex items-center justify-center"
+                className="w-6 h-6 rounded bg-white/20 hover:bg-white/30 hover:scale-105 transition-all duration-200 cursor-pointer border border-white/20 text-xs text-gray-700 flex items-center justify-center"
                 title="View screenshot"
               >
-                <span className="text-[10px]">=ø</span>
+                <span className="text-[10px]">ðŸ“¸</span>
               </button>
             ))}
             {relatedScreenshots.length > 3 && (

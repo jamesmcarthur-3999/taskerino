@@ -1,220 +1,27 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Session, SessionSummary, SessionScreenshot, SessionAudioSegment, VideoChapter } from '../types';
+import type {
+  Session,
+  SessionSummary,
+  SessionScreenshot,
+  SessionAudioSegment,
+  VideoChapter,
+  CanvasSpec,
+  CanvasTheme,
+  CanvasLayout,
+  CanvasSection,
+  AICanvasSessionCharacteristics,
+  TemporalAnalysis,
+  ContentRichness,
+  AchievementProfile,
+  EnergyAnalysis,
+  NarrativeStructure,
+  EnrichedSessionCharacteristics,
+  Moment,
+  Milestone,
+  Learning,
+  StoryType,
+} from '../types';
 import type { ClaudeChatResponse, ClaudeMessage } from '../types/tauri-ai-commands';
-
-// ============================================================================
-// TYPE DEFINITIONS
-// ============================================================================
-
-export interface CanvasSpec {
-  theme: CanvasTheme;
-  layout: CanvasLayout;
-  metadata: {
-    generatedAt: string;
-    sessionType: string;
-    confidence: number;
-  };
-}
-
-export interface CanvasTheme {
-  primary: string;
-  secondary: string;
-  mood: 'energetic' | 'calm' | 'focused' | 'celebratory';
-  explanation: string;
-}
-
-export interface CanvasLayout {
-  type: 'timeline' | 'story' | 'dashboard' | 'grid' | 'flow';
-  sections: CanvasSection[];
-  emphasis: 'chronological' | 'thematic' | 'achievement-focused';
-}
-
-export interface CanvasSection {
-  id: string;
-  type: 'hero' | 'timeline' | 'achievements' | 'blockers' | 'insights' | 'gallery' | 'split' | 'media';
-  emphasis: 'low' | 'medium' | 'high';
-  position: number;
-  content?: any;
-  left?: CanvasSection;
-  right?: CanvasSection;
-}
-
-export interface AICanvasSessionCharacteristics {
-  screenshotCount: number;
-  audioSegmentCount: number;
-  videoChapterCount: number;
-  achievementCount: number;
-  blockerCount: number;
-  insightCount: number;
-  duration: number;
-  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'late-night';
-  type: 'coding' | 'meeting' | 'learning' | 'mixed' | 'research';
-  intensity: 'light' | 'moderate' | 'heavy';
-  mood: 'productive' | 'challenging' | 'exploratory' | 'breakthrough';
-  hasAudio: boolean;
-  hasVideo: boolean;
-  hasSummary: boolean;
-  hasNarrative: boolean;
-}
-
-/**
- * Temporal analysis of session flow and rhythm
- */
-export interface TemporalAnalysis {
-  /** Overall session arc pattern (e.g., "steady-climb", "rollercoaster", "plateau") */
-  sessionArc: string;
-
-  /** Peak moments of high activity or achievement */
-  peakMoments: Moment[];
-
-  /** Valley moments of low activity or struggle */
-  valleys: Moment[];
-
-  /** Rhythm pattern (e.g., "steady", "burst-and-pause", "chaotic") */
-  rhythm: string;
-
-  /** Screenshots per hour */
-  screenshotDensity: number;
-
-  /** Number of significant context switches */
-  contextSwitches: number;
-}
-
-/**
- * Content richness indicators
- */
-export interface ContentRichness {
-  /** Audio transcript word count */
-  audioWordCount: number;
-
-  /** Video chapter count */
-  videoChapterCount: number;
-
-  /** Code activity detected from screenshots */
-  hasCodeActivity: boolean;
-
-  /** Written notes or documentation detected */
-  hasNotesActivity: boolean;
-
-  /** Total OCR text extracted */
-  ocrTextLength: number;
-
-  /** Diversity of detected activities */
-  activityDiversity: number; // 0-1 score
-}
-
-/**
- * Achievement profile for the session
- */
-export interface AchievementProfile {
-  /** Major milestones reached */
-  milestones: Milestone[];
-
-  /** Breakthrough moments */
-  breakthroughs: Learning[];
-
-  /** Key learnings extracted */
-  learnings: Learning[];
-
-  /** Problems solved count */
-  problemsSolved: number;
-
-  /** Blocker analysis */
-  blockerAnalysis: string;
-}
-
-/**
- * Energy and focus analysis
- */
-export interface EnergyAnalysis {
-  /** Overall intensity level (0-100) */
-  intensity: number;
-
-  /** Focus quality (0-100) */
-  focusQuality: number;
-
-  /** Struggle level (0-100) */
-  struggleLevel: number;
-
-  /** Breakthrough moment if detected */
-  breakthroughMoment: Moment | null;
-
-  /** Inferred mood */
-  mood: string;
-}
-
-/**
- * Narrative structure for storytelling
- */
-export interface NarrativeStructure {
-  /** Story type classification */
-  storyType: StoryType;
-
-  /** Primary goal of the session */
-  goal: string | null;
-
-  /** Main conflict or challenge */
-  conflict: string | null;
-
-  /** Resolution or outcome */
-  resolution: string | null;
-
-  /** Transformation or learning */
-  transformation: string | null;
-}
-
-/**
- * Enriched session characteristics with all analysis dimensions
- */
-export interface EnrichedSessionCharacteristics extends AICanvasSessionCharacteristics {
-  temporal: TemporalAnalysis;
-  richness: ContentRichness;
-  achievements: AchievementProfile;
-  energy: EnergyAnalysis;
-  narrative: NarrativeStructure;
-}
-
-/**
- * A significant moment in the session
- */
-export interface Moment {
-  timestamp: string;
-  description: string;
-  importance: 'low' | 'medium' | 'high';
-  screenshotIds?: string[];
-}
-
-/**
- * A milestone achievement
- */
-export interface Milestone {
-  title: string;
-  timestamp: string;
-  description: string;
-  screenshotIds?: string[];
-}
-
-/**
- * A learning or insight
- */
-export interface Learning {
-  insight: string;
-  timestamp: string;
-  context?: string;
-}
-
-/**
- * Story classification types
- */
-export type StoryType =
-  | 'hero-journey'      // Started with goal, faced challenges, achieved victory
-  | 'problem-solving'   // Encountered issue, debugged, resolved
-  | 'exploration'       // Learning and discovering new territory
-  | 'building'          // Creating something from scratch
-  | 'optimization'      // Improving existing work
-  | 'collaboration'     // Working with others
-  | 'struggle'          // Facing challenges without clear resolution
-  | 'mixed';            // Multiple story threads
 
 // ============================================================================
 // SERVICE CLASS
@@ -1147,7 +954,7 @@ Design the canvas now.`;
       .forEach(km => {
         learnings.push({
           insight: km.description,
-          timestamp: new Date(session.startTime).getTime() + (km.timestamp * 1000),
+          timestamp: new Date(new Date(session.startTime).getTime() + (km.timestamp * 1000)).toISOString(),
           context: km.context,
         });
       });
@@ -1304,8 +1111,8 @@ Design the canvas now.`;
       return 'building';
     }
 
-    // Collaboration: Meeting indicators
-    if (session.type === 'meeting' || (session.audioSegments?.length || 0) > 5) {
+    // Collaboration: Meeting indicators (high audio activity)
+    if ((session.audioSegments?.length || 0) > 5) {
       return 'collaboration';
     }
 

@@ -54,7 +54,7 @@ export function CreativeSolutionCard({
         <div className="flex-1 min-w-0">
           {/* Title with emoji */}
           <div className="flex items-start gap-2 mb-2">
-            <span className="text-2xl flex-shrink-0">=¡</span>
+            <span className="text-2xl flex-shrink-0">âœ¨</span>
             <h4 className="text-gray-900 font-semibold flex-1">{title}</h4>
           </div>
 
@@ -97,10 +97,10 @@ export function CreativeSolutionCard({
                   <button
                     key={screenshot.id}
                     onClick={() => onClickScreenshot?.(screenshot)}
-                    className="w-6 h-6 rounded bg-gray-200 hover:bg-gray-300 transition-colors text-xs text-gray-700 flex items-center justify-center"
+                    className="w-6 h-6 rounded bg-white/20 hover:bg-white/30 hover:scale-105 transition-all duration-200 cursor-pointer border border-white/20 text-xs text-gray-700 flex items-center justify-center"
                     title="View screenshot"
                   >
-                    <span className="text-[10px]">=ø</span>
+                    <span className="text-[10px]">ðŸ“¸</span>
                   </button>
                 ))}
                 {relatedScreenshots.length > 3 && (

@@ -34,8 +34,8 @@ export function LearningCard({
 }: LearningCardProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className={`${getGlassClasses('subtle')} ${getRadiusClass('card')} p-6 border-l-4 border-purple-500 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 cursor-default`}
     >
@@ -77,7 +77,7 @@ export function LearningCard({
                   <button
                     key={screenshotId}
                     onClick={() => onClickScreenshot?.(screenshotId)}
-                    className="w-8 h-8 rounded bg-purple-100 hover:bg-purple-200 transition-colors text-xs text-purple-700 flex items-center justify-center"
+                    className="w-8 h-8 rounded bg-white/20 hover:bg-white/30 hover:scale-105 transition-all duration-200 cursor-pointer border border-white/20 text-xs text-purple-700 flex items-center justify-center"
                     title="View screenshot"
                   >
                     <span className="text-[10px]">📸</span>

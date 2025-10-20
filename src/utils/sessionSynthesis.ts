@@ -937,24 +937,30 @@ Generate a FLEXIBLE session summary by choosing relevant sections based on what 
         "relatedTasks": [
           {
             "taskId": "task_123",
-            "taskTitle": "Implement authentication system",
+            "title": "Implement authentication system",
             "relevance": "This session worked on the OAuth flow, which is part of this larger task",
-            "relationship": "worked-on|completed|referenced|blocked-by"
+            "status": "in-progress",
+            "priority": "high",
+            "screenshotIds": ["ss_5", "ss_12"]
           }
         ],
         "relatedNotes": [
           {
             "noteId": "note_456",
-            "noteSummary": "Research on OAuth libraries",
+            "summary": "Research on OAuth libraries",
             "relevance": "Referenced this research during implementation",
-            "relationship": "referenced|built-upon|updated"
+            "tags": ["oauth", "authentication", "security"],
+            "createdAt": "2025-10-15T10:00:00Z",
+            "screenshotIds": ["ss_3"]
           }
         ],
         "duplicatePrevention": [
           {
-            "almostSuggested": "Write tests for OAuth flow",
-            "existingTask": "Write comprehensive auth tests",
-            "reasoning": "Almost suggested test task, but found existing task already covers this"
+            "suggestedTitle": "Write tests for OAuth flow",
+            "existingTaskId": "task_789",
+            "existingTaskTitle": "Write comprehensive auth tests",
+            "similarity": 0.85,
+            "reason": "Almost suggested test task, but found existing task already covers this"
           }
         ]
       }
