@@ -19,16 +19,14 @@ import { TaskCard } from './cards/TaskCard';
 import { HeroTimeline } from './heroes/HeroTimeline';
 import { HeroSplit } from './heroes/HeroSplit';
 import { HeroCelebration } from './heroes/HeroCelebration';
-// New Hero Imports (to be created)
-// import { HeroFocus } from './heroes/HeroFocus';
-// import { HeroDiscovery } from './heroes/HeroDiscovery';
-// import { HeroProblemSolver } from './heroes/HeroProblemSolver';
-// New Card Imports (to be created)
-// import { LearningCard } from './cards/LearningCard';
-// import { BreakthroughCard } from './cards/BreakthroughCard';
-// import { FlowStateCard } from './cards/FlowStateCard';
-// import { ContextSwitchCard } from './cards/ContextSwitchCard';
-// import { ProblemSolutionCard } from './cards/ProblemSolutionCard';
+import { HeroFocus } from './heroes/HeroFocus';
+import { HeroDiscovery } from './heroes/HeroDiscovery';
+import { HeroProblemSolver } from './heroes/HeroProblemSolver';
+import { LearningCard } from './cards/LearningCard';
+import { BreakthroughCard } from './cards/BreakthroughCard';
+import { FlowStateCard } from './cards/FlowStateCard';
+import { ContextSwitchCard } from './cards/ContextSwitchCard';
+import { ProblemSolutionCard } from './cards/ProblemSolutionCard';
 import { getRadiusClass, getGlassClasses } from '../../design-system/theme';
 import { Calendar, Clock, Camera, TrendingUp } from 'lucide-react';
 import { fadeInVariants, createStaggerVariants } from '../../lib/animations';
@@ -372,21 +370,15 @@ function HeroSection({
   const characteristics = analyzeSessionCharacteristics(session);
 
   // NEW: HeroFocus for deep work sessions
-  // Uncomment when HeroFocus is created
-  /*
-  if (characteristics.isDeepWork && summary) {
-    const focusMetrics = {
-      duration: characteristics.sessionDuration,
-      achievements: characteristics.achievements.length,
-      focusScore: Math.min(100, (characteristics.achievements.length / (characteristics.sessionDuration / 30)) * 100)
-    };
+  if (characteristics.isDeepWork && summary && characteristics.achievements && characteristics.achievements.length > 0) {
+    const focusScore = Math.min(100, (characteristics.achievements.length / (characteristics.sessionDuration / 30)) * 100);
 
     return (
       <HeroFocus
-        title={session.name}
-        narrative={summary.narrative || ''}
-        focusMetrics={focusMetrics}
-        stats={stats}
+        taskName={session.name}
+        duration={characteristics.sessionDuration}
+        achievement={characteristics.achievements[0].text}
+        focusScore={focusScore}
         theme={{
           primary: theme.primary,
           secondary: theme.secondary,
@@ -394,18 +386,19 @@ function HeroSection({
       />
     );
   }
-  */
 
   // NEW: HeroDiscovery for learning sessions
-  // Uncomment when HeroDiscovery is created
-  /*
-  if (characteristics.isLearning && summary) {
+  if (characteristics.isLearning && summary && characteristics.learnings && characteristics.learnings.length > 0) {
+    const learnings = characteristics.learnings.map(l => l.title);
+    const insights = learnings.map(l => `Learning: ${l}`);
+
     return (
       <HeroDiscovery
         title={session.name}
-        learnings={characteristics.learnings}
-        discoveries={extractBreakthroughs(summary).length}
-        stats={stats}
+        topicsExplored={learnings}
+        keyInsights={insights}
+        resourcesUsed={session.screenshots?.length || 0}
+        duration={characteristics.sessionDuration}
         theme={{
           primary: theme.primary,
           secondary: theme.secondary,
@@ -413,11 +406,8 @@ function HeroSection({
       />
     );
   }
-  */
 
   // NEW: HeroProblemSolver for problem-solving sessions
-  // Uncomment when HeroProblemSolver is created
-  /*
   if (characteristics.isProblemSolving && summary) {
     return (
       <HeroProblemSolver
@@ -433,7 +423,6 @@ function HeroSection({
       />
     );
   }
-  */
 
   // Check canvas spec metadata for session type hints
   if (spec.metadata?.sessionType) {
@@ -807,8 +796,6 @@ function SectionRenderer({
   }
 
   // NEW: Learning section
-  // Uncomment when LearningCard is created
-  /*
   if (section.type === 'learning') {
     if (!session.summary) return null;
     const learnings = extractLearningMoments(session.summary);
@@ -823,24 +810,16 @@ function SectionRenderer({
         {learnings.map((learning, idx) => (
           <LearningCard
             key={idx}
-            title={learning.title}
-            description={learning.description}
+            discovery={learning.title}
+            context={learning.description}
             timestamp={learning.timestamp}
-            confidence={learning.confidence}
-            theme={{
-              mode: 'light',
-              primaryColor: spec.theme.primary,
-            }}
           />
         ))}
       </CardSection>
     );
   }
-  */
 
   // NEW: Breakthrough section
-  // Uncomment when BreakthroughCard is created
-  /*
   if (section.type === 'breakthrough') {
     if (!session.summary) return null;
     const breakthroughs = extractBreakthroughs(session.summary);
@@ -855,29 +834,17 @@ function SectionRenderer({
         {breakthroughs.map((breakthrough, idx) => (
           <BreakthroughCard
             key={idx}
-            achievement={breakthrough.achievement}
-            description={breakthrough.description}
+            moment={breakthrough.achievement}
+            beforeState={breakthrough.description}
+            impact={breakthrough.impact as 'low' | 'medium' | 'high' | undefined}
             timestamp={breakthrough.timestamp}
-            impact={breakthrough.impact}
-            relatedScreenshots={
-              breakthrough.screenshotIds
-                ? session.screenshots?.filter(s => breakthrough.screenshotIds!.includes(s.id))
-                : undefined
-            }
-            theme={{
-              mode: 'light',
-              primaryColor: spec.theme.primary,
-            }}
           />
         ))}
       </CardSection>
     );
   }
-  */
 
   // NEW: Problem-solving section
-  // Uncomment when ProblemSolutionCard is created
-  /*
   if (section.type === 'problem-solving') {
     if (!session.summary) return null;
     const solutions = extractProblemSolutions(session.summary);
@@ -894,27 +861,15 @@ function SectionRenderer({
             key={idx}
             problem={solution.problem}
             solution={solution.solution}
-            severity={solution.severity}
+            impact={solution.severity as 'low' | 'medium' | 'high' | undefined}
             timestamp={solution.timestamp}
-            relatedScreenshots={
-              solution.screenshotIds
-                ? session.screenshots?.filter(s => solution.screenshotIds!.includes(s.id))
-                : undefined
-            }
-            theme={{
-              mode: 'light',
-              primaryColor: spec.theme.primary,
-            }}
           />
         ))}
       </CardSection>
     );
   }
-  */
 
   // NEW: Flow states section
-  // Uncomment when FlowStateCard is created
-  /*
   if (section.type === 'flow-states') {
     const flowStates = detectFlowStates(session);
     if (flowStates.length === 0) return null;
@@ -928,25 +883,16 @@ function SectionRenderer({
         {flowStates.map((flowState, idx) => (
           <FlowStateCard
             key={idx}
-            startTime={flowState.startTime}
-            endTime={flowState.endTime}
-            duration={flowState.duration}
             activity={flowState.activity}
-            intensity={flowState.intensity}
-            theme={{
-              mode: 'light',
-              primaryColor: spec.theme.primary,
-            }}
+            duration={flowState.duration}
+            focusScore={flowState.intensity === 'high' ? 90 : flowState.intensity === 'medium' ? 70 : 50}
           />
         ))}
       </CardSection>
     );
   }
-  */
 
   // NEW: Context switches section
-  // Uncomment when ContextSwitchCard is created
-  /*
   if (section.type === 'context-switches') {
     if (!session.summary) return null;
     const switches = detectContextSwitches(session.summary);
@@ -964,18 +910,13 @@ function SectionRenderer({
             from={switchData.from}
             to={switchData.to}
             timestamp={switchData.timestamp}
-            impact={switchData.impact}
+            impact={switchData.impact as 'low' | 'medium' | 'high' | undefined}
             reason={switchData.reason}
-            theme={{
-              mode: 'light',
-              primaryColor: spec.theme.primary,
-            }}
           />
         ))}
       </CardSection>
     );
   }
-  */
 
   // Unknown section type - skip
   return null;
