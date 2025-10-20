@@ -186,7 +186,7 @@ export default function SessionsZone() {
   const statsPillRef = useRef<HTMLDivElement>(null);
 
   // Ref for menu bar wrapper to measure width for responsive compact mode
-  const menuBarWrapperRef = useRef<HTMLDivElement>(null);
+  // OPTION C: menuBarWrapperRef removed - no longer needed with flexbox layout
 
   // Ref for hidden measurement element (always in full mode)
   const menuBarMeasurementRef = useRef<HTMLDivElement>(null);
@@ -1103,17 +1103,16 @@ export default function SessionsZone() {
     const checkOverlap = () => {
       const measurementElement = menuBarMeasurementRef.current;
       const statsPill = statsPillRef.current;
-      const visibleContainer = menuBarWrapperRef.current;
 
-      if (!measurementElement || !statsPill || !visibleContainer) {
+      if (!measurementElement || !statsPill) {
         return;
       }
 
       // Measure the FULL width from the hidden element (always in full mode)
       const fullWidth = measurementElement.offsetWidth;
 
-      // Get the visible container's position
-      const visibleRect = visibleContainer.getBoundingClientRect();
+      // Get the visible container's position (use measurement element)
+      const visibleRect = measurementElement.getBoundingClientRect();
       const statsPillRect = statsPill.getBoundingClientRect();
 
       // Guard against hidden elements
@@ -1594,40 +1593,38 @@ export default function SessionsZone() {
 
         {/* Top Controls Bar - In Normal Flow */}
         <div className="flex items-center justify-between relative z-50 mb-4">
-          <div ref={menuBarWrapperRef}>
-            <MenuMorphPill resetKey={selectedSessionId || 'default'}>
-              <SessionsTopBar
-                activeSession={activeSession}
-                sessions={sessions}
-                allPastSessions={allPastSessions}
-                isStarting={isStarting}
-                isEnding={isEnding}
-                countdown={countdown}
-                handleQuickStart={handleQuickStart}
-                handleEndSession={handleEndSession}
-                pauseSession={pauseSession}
-                resumeSession={resumeSession}
-                currentSettings={currentSettings}
-                updateScreenshots={updateScreenshots}
-                updateAudio={updateAudio}
-                updateVideo={updateVideo}
-                updateInterval={updateInterval}
-                sortBy={sortBy}
-                onSortChange={setSortBy}
-                selectedCategories={selectedCategories}
-                selectedSubCategories={selectedSubCategories}
-                selectedTags={selectedTags}
-                onCategoriesChange={setSelectedCategories}
-                onSubCategoriesChange={setSelectedSubCategories}
-                onTagsChange={setSelectedTags}
-                bulkSelectMode={bulkSelectMode}
-                selectedSessionIds={selectedSessionIds}
-                onBulkSelectModeChange={setBulkSelectMode}
-                onSelectedSessionIdsChange={setSelectedSessionIds}
-                compactMode={compactMode}
-              />
-            </MenuMorphPill>
-          </div>
+          <MenuMorphPill resetKey={selectedSessionId || 'default'}>
+            <SessionsTopBar
+              activeSession={activeSession}
+              sessions={sessions}
+              allPastSessions={allPastSessions}
+              isStarting={isStarting}
+              isEnding={isEnding}
+              countdown={countdown}
+              handleQuickStart={handleQuickStart}
+              handleEndSession={handleEndSession}
+              pauseSession={pauseSession}
+              resumeSession={resumeSession}
+              currentSettings={currentSettings}
+              updateScreenshots={updateScreenshots}
+              updateAudio={updateAudio}
+              updateVideo={updateVideo}
+              updateInterval={updateInterval}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+              selectedCategories={selectedCategories}
+              selectedSubCategories={selectedSubCategories}
+              selectedTags={selectedTags}
+              onCategoriesChange={setSelectedCategories}
+              onSubCategoriesChange={setSelectedSubCategories}
+              onTagsChange={setSelectedTags}
+              bulkSelectMode={bulkSelectMode}
+              selectedSessionIds={selectedSessionIds}
+              onBulkSelectModeChange={setBulkSelectMode}
+              onSelectedSessionIdsChange={setSelectedSessionIds}
+              compactMode={compactMode}
+            />
+          </MenuMorphPill>
 
           {/* Stats pill OUTSIDE MenuMorphPill */}
           <SessionsStatsBar ref={statsPillRef} sessions={sessions} />
