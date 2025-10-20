@@ -1327,7 +1327,7 @@ export class SessionEnrichmentService {
    */
   private async processRelatedContextLinks(
     sessionId: string,
-    relatedSection: import('../types').RelatedContextSection,
+    relatedSection: RelatedContextSection,
     logger: ReturnType<typeof this.createLogger>
   ): Promise<{
     tasksLinked: number;
@@ -1346,7 +1346,7 @@ export class SessionEnrichmentService {
       // Process task links
       if (relatedSection.data.relatedTasks.length > 0) {
         try {
-          const tasks = await storage.load<import('../types').Task[]>('tasks') || [];
+          const tasks = await storage.load<Task[]>('tasks') || [];
           let tasksUpdated = false;
 
           relatedSection.data.relatedTasks.forEach(relatedTask => {
@@ -1386,7 +1386,7 @@ export class SessionEnrichmentService {
       // Process note links
       if (relatedSection.data.relatedNotes.length > 0) {
         try {
-          const notes = await storage.load<import('../types').Note[]>('notes') || [];
+          const notes = await storage.load<Note[]>('notes') || [];
           let notesUpdated = false;
 
           relatedSection.data.relatedNotes.forEach(relatedNote => {
@@ -1485,6 +1485,57 @@ export class SessionEnrichmentService {
         updatedSession.category = result.summary.summary.category;
         updatedSession.subCategory = result.summary.summary.subCategory;
         updatedSession.tags = result.summary.summary.tags;
+
+        // Process related-context section if present (flexible summaries only)
+        if (isFlexibleSummary(result.summary.summary)) {
+          const relatedSection = result.summary.summary.sections.find(
+            s => s.type === 'related-context'
+          ) as RelatedContextSection | undefined;
+
+          if (relatedSection) {
+            logger.info('Processing related context links', {
+              tasks: relatedSection.data.relatedTasks.length,
+              notes: relatedSection.data.relatedNotes.length,
+            });
+
+            const linkResult = await this.processRelatedContextLinks(
+              session.id,
+              relatedSection,
+              logger
+            );
+
+            logger.info('Related context linking complete', {
+              tasksLinked: linkResult.tasksLinked,
+              notesLinked: linkResult.notesLinked,
+              errors: linkResult.errors.length,
+            });
+
+            // Add to warnings if there were errors (non-fatal)
+            if (linkResult.errors.length > 0) {
+              result.warnings.push(...linkResult.errors);
+            }
+
+            // Update session's extracted IDs arrays
+            const linkedTaskIds = relatedSection.data.relatedTasks.map(t => t.taskId);
+            const linkedNoteIds = relatedSection.data.relatedNotes.map(n => n.noteId);
+
+            // Merge with existing (avoid duplicates)
+            updatedSession.extractedTaskIds = Array.from(new Set([
+              ...updatedSession.extractedTaskIds,
+              ...linkedTaskIds,
+            ]));
+
+            updatedSession.extractedNoteIds = Array.from(new Set([
+              ...updatedSession.extractedNoteIds,
+              ...linkedNoteIds,
+            ]));
+
+            logger.info('Session extracted IDs updated', {
+              totalTaskIds: updatedSession.extractedTaskIds.length,
+              totalNoteIds: updatedSession.extractedNoteIds.length,
+            });
+          }
+        }
       }
 
       // Update enrichment status

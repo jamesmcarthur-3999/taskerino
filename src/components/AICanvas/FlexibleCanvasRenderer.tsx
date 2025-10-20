@@ -627,6 +627,240 @@ function SectionContentRenderer({
 }
 
 /**
+ * Related Context Section Renderer
+ * Displays related tasks and notes from the session
+ */
+interface RelatedContextSectionRendererProps {
+  section: RelatedContextSection;
+}
+
+function RelatedContextSectionRenderer({ section }: RelatedContextSectionRendererProps) {
+  const [activeTab, setActiveTab] = useState<'tasks' | 'notes'>('tasks');
+  const { state: uiState, dispatch: uiDispatch } = useUI();
+  const { state: tasksState } = useTasks();
+  const { state: notesState } = useNotes();
+
+  const relatedTasksData = section.data.relatedTasks || [];
+  const relatedNotesData = section.data.relatedNotes || [];
+
+  const hasTasks = relatedTasksData.length > 0;
+  const hasNotes = relatedNotesData.length > 0;
+
+  // Get full task and note objects from state
+  const tasks = relatedTasksData
+    .map(rt => {
+      const task = tasksState.tasks.find(t => t.id === rt.taskId);
+      return task ? { task, relevance: rt.relevance } : null;
+    })
+    .filter((item): item is { task: Task; relevance: string } => item !== null);
+
+  const notes = relatedNotesData
+    .map(rn => {
+      const note = notesState.notes.find(n => n.id === rn.noteId);
+      return note ? { note, relevance: rn.relevance } : null;
+    })
+    .filter((item): item is { note: Note; relevance: string } => item !== null);
+
+  // Auto-select tab based on what's available
+  useEffect(() => {
+    if (!hasTasks && hasNotes) setActiveTab('notes');
+  }, [hasTasks, hasNotes]);
+
+  const handleTaskClick = (taskId: string) => {
+    const taskItem = tasks.find(t => t.task.id === taskId);
+    if (taskItem) {
+      uiDispatch({
+        type: 'OPEN_SIDEBAR',
+        payload: {
+          type: 'task',
+          itemId: taskId,
+          label: taskItem.task.title,
+        },
+      });
+    }
+  };
+
+  const handleNoteClick = (noteId: string) => {
+    uiDispatch({
+      type: 'OPEN_SIDEBAR',
+      payload: {
+        type: 'note',
+        itemId: noteId,
+        label: 'Note Details',
+      },
+    });
+  };
+
+  const totalItems = relatedTasksData.length + relatedNotesData.length;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className={`${getGlassClasses('medium')} ${getRadiusClass('modal')} p-6 shadow-xl`}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <Link2 className="w-5 h-5 text-cyan-600" />
+        <h3 className="text-lg font-bold text-gray-900">
+          {section.title || 'Related Work'}
+        </h3>
+        <span className="ml-auto text-sm text-gray-600">
+          {totalItems} item{totalItems !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {/* Tabs */}
+      {hasTasks && hasNotes && (
+        <div className={`flex gap-2 mb-6 ${getGlassClasses('medium')} ${getRadiusClass('field')} p-1.5 inline-flex`}>
+          <button
+            onClick={() => setActiveTab('tasks')}
+            className={`px-4 py-2 ${getRadiusClass('element')} font-medium text-sm transition-all ${
+              activeTab === 'tasks'
+                ? 'bg-white shadow-md text-gray-900'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Tasks ({tasks.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`px-4 py-2 ${getRadiusClass('element')} font-medium text-sm transition-all ${
+              activeTab === 'notes'
+                ? 'bg-white shadow-md text-gray-900'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Notes ({notes.length})
+          </button>
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="space-y-3">
+        {activeTab === 'tasks' && hasTasks && (
+          <AnimatePresence mode="wait">
+            {tasks.map((item, idx) => (
+              <motion.div
+                key={item.task.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                onClick={() => handleTaskClick(item.task.id)}
+                className={`${getGlassClasses('subtle')} ${getRadiusClass('element')} p-4 cursor-pointer hover:bg-white/80 transition-all group`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className="font-semibold text-gray-900">
+                        {item.task.title}
+                      </span>
+                      <StatusBadge status={item.task.status} />
+                      <PriorityBadge priority={item.task.priority} />
+                    </div>
+                    <p className="text-sm text-gray-700 mb-2">
+                      {item.relevance}
+                    </p>
+                    {item.task.dueDate && (
+                      <div className="flex items-center gap-1 text-xs text-gray-600">
+                        <Calendar size={12} />
+                        Due: {new Date(item.task.dueDate).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors flex-shrink-0" />
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        )}
+
+        {activeTab === 'notes' && hasNotes && (
+          <AnimatePresence mode="wait">
+            {notes.map((item, idx) => (
+              <motion.div
+                key={item.note.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                onClick={() => handleNoteClick(item.note.id)}
+                className={`${getGlassClasses('subtle')} ${getRadiusClass('element')} p-4 cursor-pointer hover:bg-white/80 transition-all group`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="font-semibold text-gray-900">
+                        {item.note.summary}
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-700 mb-3">
+                      {item.relevance}
+                    </p>
+                    {item.note.tags && item.note.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.note.tags.map(tag => (
+                          <span
+                            key={tag}
+                            className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-md"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors flex-shrink-0" />
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        )}
+
+        {!hasTasks && !hasNotes && (
+          <div className="text-center py-8 text-gray-500">
+            No related tasks or notes found.
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+/**
+ * Helper Badge Components
+ */
+function StatusBadge({ status }: { status: string }) {
+  const colors = {
+    'todo': 'bg-gray-100 text-gray-700',
+    'in-progress': 'bg-blue-100 text-blue-700',
+    'done': 'bg-green-100 text-green-700',
+    'blocked': 'bg-red-100 text-red-700',
+  };
+
+  return (
+    <span className={`px-2 py-0.5 text-xs font-medium rounded-md ${colors[status as keyof typeof colors] || colors.todo}`}>
+      {status}
+    </span>
+  );
+}
+
+function PriorityBadge({ priority }: { priority: string }) {
+  const colors = {
+    'low': 'bg-gray-100 text-gray-600',
+    'medium': 'bg-yellow-100 text-yellow-700',
+    'high': 'bg-orange-100 text-orange-700',
+    'urgent': 'bg-red-100 text-red-700',
+  };
+
+  return (
+    <span className={`px-2 py-0.5 text-xs font-medium rounded-md ${colors[priority as keyof typeof colors] || colors.medium}`}>
+      {priority}
+    </span>
+  );
+}
+
+/**
  * AI metadata badge showing reasoning and confidence
  */
 function AIMetadataBadge({ summary }: { summary: FlexibleSessionSummary }) {

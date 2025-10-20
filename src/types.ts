@@ -709,6 +709,57 @@ export interface SessionSummary {
 // ============================================================================
 
 /**
+ * Session Summary Context
+ *
+ * Additional context provided to the AI when generating session summaries.
+ * This data helps the AI create more informed summaries by providing access
+ * to related items and enrichment data from various sources.
+ *
+ * All fields are optional for backward compatibility and to support
+ * incremental enrichment (not all data may be available for every session).
+ */
+export interface SessionSummaryContext {
+  /** Existing categories from the system (for tag consistency) */
+  existingCategories?: string[];
+
+  /** Existing sub-categories from the system (for tag consistency) */
+  existingSubCategories?: string[];
+
+  /** Existing tags from the system (for tag consistency) */
+  existingTags?: string[];
+
+  /** Video chapters from AI-detected semantic boundaries (if video recording enabled) */
+  videoChapters?: VideoChapter[];
+
+  /** Audio insights from comprehensive GPT-4o audio review (if audio recording enabled) */
+  audioInsights?: AudioInsights;
+
+  /**
+   * Related items discovered through context search
+   *
+   * When present, the AI can use this to:
+   * - Link to existing work instead of suggesting duplicates
+   * - Understand the broader project context
+   * - Make more informed recommendations
+   *
+   * Set to null when no search was performed or no results found.
+   */
+  relatedContext?: {
+    /** Related tasks found in the system */
+    tasks: Task[];
+
+    /** Related notes found in the system */
+    notes: Note[];
+
+    /** Search query used to find related items */
+    searchQuery: string;
+
+    /** Brief summary of search results */
+    searchSummary: string;
+  } | null;
+}
+
+/**
  * Flexible session summary where AI chooses relevant sections
  *
  * Instead of forcing every session into the same template (achievements, blockers, etc.),

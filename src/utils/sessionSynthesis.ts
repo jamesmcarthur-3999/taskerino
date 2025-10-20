@@ -10,8 +10,15 @@ import type {
   SessionAudioSegment,
   SessionContextItem,
   FlexibleSessionSummary,
-  SummarySection
+  SummarySection,
+  Task,
+  Note,
+  Company,
+  Contact,
+  Topic
 } from '../types';
+import { contextAgent } from '../services/contextAgent';
+import { getStorage } from '../services/storage';
 
 /**
  * Synthesize session analyses into a comprehensive summary
@@ -435,6 +442,192 @@ function calculateSessionDuration(session: Session): number {
 }
 
 /**
+ * Discover related tasks and notes for context-aware session enrichment
+ *
+ * Searches existing tasks/notes that may be relevant to this session
+ * to avoid duplicate suggestions and enable smart linking.
+ *
+ * This is a critical step in Phase 2 (flexible) enrichment that provides
+ * the AI with context about existing work before generating recommendations.
+ *
+ * @param session - Session to find context for
+ * @returns Related tasks, notes, and search metadata, or null if search fails
+ */
+async function discoverRelatedContext(
+  session: Session
+): Promise<{
+  tasks: Task[];
+  notes: Note[];
+  searchQuery: string;
+  searchSummary: string;
+} | null> {
+  const startTime = Date.now();
+
+  try {
+    console.log('🔍 SessionSynthesis: Discovering related context for session...');
+
+    // ========================================================================
+    // 1. BUILD SEARCH QUERY FROM SESSION DATA
+    // ========================================================================
+
+    const queryParts: string[] = [];
+
+    // Session name and description (highest priority)
+    if (session.name) {
+      queryParts.push(session.name);
+    }
+    if (session.description) {
+      queryParts.push(session.description);
+    }
+
+    // Session tags (curated by user or AI)
+    if (session.tags && session.tags.length > 0) {
+      queryParts.push(...session.tags);
+    }
+
+    // Category and subcategory (AI-assigned classification)
+    if (session.category) {
+      queryParts.push(session.category);
+    }
+    if (session.subCategory) {
+      queryParts.push(session.subCategory);
+    }
+
+    // Extract keywords from video chapters if available
+    if (session.video?.chapters && session.video.chapters.length > 0) {
+      session.video.chapters.forEach(chapter => {
+        if (chapter.title) {
+          queryParts.push(chapter.title);
+        }
+        if (chapter.keyTopics && chapter.keyTopics.length > 0) {
+          queryParts.push(...chapter.keyTopics);
+        }
+      });
+    }
+
+    // Extract themes from audio insights if available
+    if (session.audioInsights) {
+      // Add narrative themes
+      if (session.audioInsights.narrative) {
+        // Extract first 100 chars of narrative as context
+        queryParts.push(session.audioInsights.narrative.substring(0, 100));
+      }
+
+      // Add key moments descriptions
+      if (session.audioInsights.keyMoments && session.audioInsights.keyMoments.length > 0) {
+        session.audioInsights.keyMoments.forEach(moment => {
+          if (moment.description) {
+            queryParts.push(moment.description.substring(0, 50));
+          }
+        });
+      }
+    }
+
+    // Extract keywords from recent screenshot analyses
+    if (session.screenshots && session.screenshots.length > 0) {
+      const recentScreenshots = session.screenshots.slice(-5); // Last 5 screenshots
+      recentScreenshots.forEach(screenshot => {
+        if (screenshot.aiAnalysis?.detectedActivity) {
+          queryParts.push(screenshot.aiAnalysis.detectedActivity);
+        }
+        if (screenshot.aiAnalysis?.keyElements && screenshot.aiAnalysis.keyElements.length > 0) {
+          queryParts.push(...screenshot.aiAnalysis.keyElements.slice(0, 3));
+        }
+      });
+    }
+
+    // Combine and truncate to 500 chars max
+    const searchQuery = queryParts
+      .join(' ')
+      .substring(0, 500)
+      .trim();
+
+    // Early return if query too short
+    if (searchQuery.length < 10) {
+      console.log('⚠️ SessionSynthesis: Search query too short, skipping context discovery');
+      return null;
+    }
+
+    console.log('📝 SessionSynthesis: Search query generated', {
+      queryLength: searchQuery.length,
+      queryPreview: searchQuery.substring(0, 100) + '...',
+    });
+
+    // ========================================================================
+    // 2. LOAD DATA FROM STORAGE IN PARALLEL
+    // ========================================================================
+
+    const storage = await getStorage();
+
+    const [tasks, notes, companies, contacts, topics] = await Promise.all([
+      storage.load<Task[]>('tasks').then(t => t || []),
+      storage.load<Note[]>('notes').then(n => n || []),
+      storage.load<Company[]>('companies').then(c => c || []),
+      storage.load<Contact[]>('contacts').then(c => c || []),
+      storage.load<Topic[]>('topics').then(t => t || []),
+    ]);
+
+    console.log('📊 SessionSynthesis: Loaded data from storage', {
+      tasks: tasks.length,
+      notes: notes.length,
+      companies: companies.length,
+      contacts: contacts.length,
+      topics: topics.length,
+    });
+
+    // ========================================================================
+    // 3. SEARCH WITH CONTEXT AGENT (WITH TIMEOUT PROTECTION)
+    // ========================================================================
+
+    const TIMEOUT_MS = 30000; // 30 seconds max
+
+    const searchPromise = contextAgent.search(
+      searchQuery,
+      notes,
+      tasks,
+      companies,
+      contacts,
+      topics
+    );
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Context discovery timeout')), TIMEOUT_MS)
+    );
+
+    const searchResult = await Promise.race([searchPromise, timeoutPromise]);
+
+    // Limit results to top 10 tasks and top 10 notes
+    const relatedTasks = searchResult.tasks.slice(0, 10);
+    const relatedNotes = searchResult.notes.slice(0, 10);
+
+    const duration = Date.now() - startTime;
+
+    console.log('✅ SessionSynthesis: Related context discovered', {
+      tasksFound: relatedTasks.length,
+      notesFound: relatedNotes.length,
+      durationMs: duration,
+      summary: searchResult.summary,
+    });
+
+    return {
+      tasks: relatedTasks,
+      notes: relatedNotes,
+      searchQuery,
+      searchSummary: searchResult.summary || `Found ${relatedTasks.length} tasks and ${relatedNotes.length} notes`,
+    };
+
+  } catch (error) {
+    // Non-fatal: log and return null (enrichment continues without context)
+    const duration = Date.now() - startTime;
+    console.warn('⚠️ SessionSynthesis: Context discovery failed (non-fatal)', {
+      error: error instanceof Error ? error.message : String(error),
+      durationMs: duration,
+    });
+    return null;
+  }
+}
+
+/**
  * Generate flexible session summary (Phase 2)
  * AI chooses relevant sections based on session content
  */
@@ -445,10 +638,26 @@ export async function generateFlexibleSummary(
   context: Record<string, any>,
   apiKey: string
 ): Promise<FlexibleSessionSummary> {
+  const startTime = Date.now();
+
   // Store API key in Tauri backend
   await invoke('set_claude_api_key', { apiKey: apiKey.trim() });
 
-  const prompt = buildFlexibleSummaryPrompt(session, screenshots, audioSegments, context);
+  // Discover related context (tasks/notes already in system)
+  const relatedContext = await discoverRelatedContext(session);
+
+  // Merge related context into the context object
+  const enrichedContext = {
+    ...context,
+    relatedContext: relatedContext ? {
+      tasks: relatedContext.tasks,
+      notes: relatedContext.notes,
+      searchQuery: relatedContext.searchQuery,
+      searchSummary: relatedContext.searchSummary,
+    } : null,
+  };
+
+  const prompt = buildFlexibleSummaryPrompt(session, screenshots, audioSegments, enrichedContext);
 
   try {
     console.log('📊 SessionSynthesis: Generating flexible summary (Phase 2)...');
@@ -715,6 +924,39 @@ Generate a FLEXIBLE session summary by choosing relevant sections based on what 
           }
         ],
         "summary": "Three major milestones achieved"
+      }
+    },
+    {
+      "type": "related-context",
+      "title": "Related Work",
+      "emphasis": "medium",
+      "position": 2,
+      "icon": "link",
+      "colorTheme": "info",
+      "data": {
+        "relatedTasks": [
+          {
+            "taskId": "task_123",
+            "taskTitle": "Implement authentication system",
+            "relevance": "This session worked on the OAuth flow, which is part of this larger task",
+            "relationship": "worked-on|completed|referenced|blocked-by"
+          }
+        ],
+        "relatedNotes": [
+          {
+            "noteId": "note_456",
+            "noteSummary": "Research on OAuth libraries",
+            "relevance": "Referenced this research during implementation",
+            "relationship": "referenced|built-upon|updated"
+          }
+        ],
+        "duplicatePrevention": [
+          {
+            "almostSuggested": "Write tests for OAuth flow",
+            "existingTask": "Write comprehensive auth tests",
+            "reasoning": "Almost suggested test task, but found existing task already covers this"
+          }
+        ]
       }
     }
   ]
