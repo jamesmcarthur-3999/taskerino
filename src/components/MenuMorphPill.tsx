@@ -3,7 +3,6 @@ import type { ReactNode, ReactElement } from 'react';
 import { motion, useTransform, useSpring, useMotionValue, AnimatePresence, MotionValue, clamp } from 'framer-motion';
 import { Menu } from 'lucide-react';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
-import { useNavigationCoordination } from '../contexts/NavigationCoordinationContext';
 import { springs } from '../animations/tokens';
 import { MENU_PILL } from '../design-system/theme';
 
@@ -99,7 +98,7 @@ function StaggeredItem({
  */
 export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphPillProps) {
   const { scrollY, scrollYMotionValue } = useScrollAnimation();
-  const { menuButtonPhase, invalidateMeasurements } = useNavigationCoordination();
+  // OPTION C: NavigationCoordinationContext removed - no longer needed
   const [overlayOpen, setOverlayOpen] = useState(false);
 
   // Refs for width measurement
@@ -226,9 +225,6 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
         finalPositionRef.current = null;
         setHasMeasured(false);
 
-        // Invalidate coordination context measurements
-        invalidateMeasurements();
-
         rafId = null;
       });
     };
@@ -238,7 +234,7 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
       window.removeEventListener('resize', handleResize);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [invalidateMeasurements]);
+  }, []);
 
   // Reset natural position when resetKey changes (e.g., note change, sidebar toggle)
   useEffect(() => {
