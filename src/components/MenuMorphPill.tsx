@@ -154,30 +154,18 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
         }
       }
 
-      // Measure natural position only when at top of page (layout is stable)
-      if (scrollY === 0 && !naturalPositionRef.current && spacerRef.current) {
+      // PHASE 1 FIX: Measure SPACER position throughout pre-transition range
+      // Changed from scrollY < 5 to scrollY < thresholds.start to allow position capture during natural state
+      if (scrollY < thresholds.start && !naturalPositionRef.current) {
         const rect = spacerRef.current.getBoundingClientRect();
 
         // Convert viewport-relative coordinates to document-relative
-        const measuredTop = rect.top + window.scrollY;
-        const measuredLeft = rect.left + window.scrollX;
-
-        // Validation: natural position should be reasonable (below logo area)
-        if (measuredTop > 50 && measuredTop < 2000) {
-          naturalPositionRef.current = {
-            top: measuredTop,
-            left: measuredLeft,
-            width: rect.width,
-            height: rect.height
-          };
-
-          console.log('📐 Natural position measured:', {
-            top: measuredTop,
-            left: measuredLeft,
-            scrollY,
-            rectTop: rect.top
-          });
-        }
+        naturalPositionRef.current = {
+          top: rect.top + window.scrollY,
+          left: rect.left + window.scrollX,
+          width: rect.width,
+          height: rect.height
+        };
       }
     }
   }, [scrollY, hasMeasured, initialWidthMotionValue, childArray, thresholds.start]);
@@ -206,58 +194,17 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
             top: 16, // Match logo's top padding (pt-4)
             left: logoRect.right + window.scrollX + gap
           };
-
-          console.log('📍 Final position measured:', {
-            top: 16,
-            left: logoRect.right + window.scrollX + gap,
-            logoRight: logoRect.right,
-            gap
-          });
         } else {
           // Fallback if logo not found
           finalPositionRef.current = {
             top: 16,
             left: 184 // Original fallback value
           };
-
-          console.warn('⚠️ Logo container not found, using fallback position');
         }
       });
     }
   }, [resetKey]); // Re-run when resetKey changes to recalculate logo position
 
-  // Force initial natural position measurement on mount
-  // Uses double rAF to ensure layout is fully settled
-  useEffect(() => {
-    if (naturalPositionRef.current || !spacerRef.current) return;
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!naturalPositionRef.current && spacerRef.current) {
-          const rect = spacerRef.current.getBoundingClientRect();
-          const measuredTop = rect.top + window.scrollY;
-          const measuredLeft = rect.left + window.scrollX;
-
-          // Validation: natural position should be reasonable (below logo area)
-          if (measuredTop > 50 && measuredTop < 2000) {
-            naturalPositionRef.current = {
-              top: measuredTop,
-              left: measuredLeft,
-              width: rect.width,
-              height: rect.height
-            };
-
-            console.log('📐 Natural position measured (mount):', {
-              top: measuredTop,
-              left: measuredLeft,
-              rectTop: rect.top,
-              windowScrollY: window.scrollY
-            });
-          }
-        }
-      });
-    });
-  }, []); // Run once on mount
 
   // Handle resize with requestAnimationFrame-based debouncing
   // Ensures smooth recalculation of viewport-relative values without layout thrashing
