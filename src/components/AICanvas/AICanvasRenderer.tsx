@@ -408,14 +408,18 @@ function HeroSection({
   }
 
   // NEW: HeroProblemSolver for problem-solving sessions
-  if (characteristics.isProblemSolving && summary) {
+  if (characteristics.isProblemSolving && summary && characteristics.solutions && characteristics.solutions.length > 0) {
+    const primaryProblem = characteristics.solutions[0].problem;
+    const solutionFound = characteristics.solutions.length > 0;
+    const breakthroughMoment = solutionFound ? characteristics.solutions[0].solution : undefined;
+
     return (
       <HeroProblemSolver
-        title={session.name}
-        problemsSolved={characteristics.solutions.length}
-        blockers={characteristics.blockers}
-        solutions={characteristics.solutions}
-        stats={stats}
+        problemStatement={primaryProblem}
+        solutionFound={solutionFound}
+        approachesTried={characteristics.solutions.length}
+        duration={characteristics.sessionDuration}
+        breakthroughMoment={breakthroughMoment}
         theme={{
           primary: theme.primary,
           secondary: theme.secondary,
@@ -835,8 +839,8 @@ function SectionRenderer({
           <BreakthroughCard
             key={idx}
             moment={breakthrough.achievement}
-            beforeState={breakthrough.description}
-            impact={breakthrough.impact as 'low' | 'medium' | 'high' | undefined}
+            beforeState={'description' in breakthrough ? breakthrough.description : undefined}
+            impact={breakthrough.impact === 'high' || breakthrough.impact === 'medium' || breakthrough.impact === 'low' ? breakthrough.impact : 'medium'}
             timestamp={breakthrough.timestamp}
           />
         ))}
@@ -861,7 +865,7 @@ function SectionRenderer({
             key={idx}
             problem={solution.problem}
             solution={solution.solution}
-            impact={solution.severity as 'low' | 'medium' | 'high' | undefined}
+            difficulty={solution.severity === 'high' || solution.severity === 'critical' ? 'hard' : solution.severity === 'low' ? 'easy' : 'medium'}
             timestamp={solution.timestamp}
           />
         ))}
@@ -907,10 +911,10 @@ function SectionRenderer({
         {switches.map((switchData, idx) => (
           <ContextSwitchCard
             key={idx}
-            from={switchData.from}
-            to={switchData.to}
+            fromTask={switchData.from}
+            toTask={switchData.to}
             timestamp={switchData.timestamp}
-            impact={switchData.impact as 'low' | 'medium' | 'high' | undefined}
+            impact={switchData.impact === 'high' ? 'disruptive' : switchData.impact === 'low' ? 'productive' : 'neutral'}
             reason={switchData.reason}
           />
         ))}
