@@ -133,8 +133,9 @@ export function TopNavigation() {
         />
       )}
 
-      {/* OPTION C: CSS Grid container for navigation layout */}
+      {/* Navigation layout: Grid for edges, absolute positioning for center */}
       <header className="fixed top-0 left-0 right-0 z-50 pt-4 px-6">
+        {/* Grid container for Logo, MenuButton, and Actions at edges */}
         <div className={`grid gap-3 items-start ${
           scrollY >= 100
             ? 'grid-cols-[auto_min-content_1fr_auto]'  // 4 columns when MenuButton shown
@@ -157,53 +158,8 @@ export function TopNavigation() {
             </motion.div>
           )}
 
-          {/* Column 3: Navigation Island - Flex-grow with centering wrapper */}
-          <div className="flex justify-center pointer-events-none min-w-0">
-            <NavigationIsland
-              islandState={islandState}
-              onClose={closeIsland}
-              islandStateHook={islandStateHook}
-              navData={navData}
-              navActions={navActions}
-              activeTab={uiState.activeTab}
-              hoveredTab={hoveredTab}
-              setHoveredTab={setHoveredTab}
-              // Search mode props
-              searchQuery={islandStateHook.searchQuery}
-              searchInputRef={searchInputRef}
-              onSearchQueryChange={islandStateHook.setSearchQuery}
-              onNavigate={navActions.handleTabClick}
-              onOpenSidebar={(type, itemId, label) => {
-                uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type, itemId, label } });
-              }}
-              // Task mode props
-              taskTitle={islandStateHook.taskTitle}
-              taskDueDate={islandStateHook.taskDueDate}
-              showSuccess={islandStateHook.showTaskSuccess}
-              createdTaskId={createdTaskId}
-              onTaskTitleChange={islandStateHook.setTaskTitle}
-              onTaskDueDateChange={islandStateHook.setTaskDueDate}
-              onCreateTask={navActions.handleCreateQuickTask}
-              onViewTask={() => navActions.handleViewTask(createdTaskId)}
-              // Note mode props
-              noteInput={islandStateHook.noteInput}
-              onNoteInputChange={islandStateHook.setNoteInput}
-              onSaveNote={navActions.handleSaveQuickNote}
-              onSendToAI={navActions.handleSendToAI}
-              // Session mode props
-              isStarting={isStarting}
-              countdown={countdown}
-              sessionDescription={islandStateHook.sessionDescription}
-              onSessionDescriptionChange={islandStateHook.setSessionDescription}
-              onPauseSession={navActions.onPauseSession}
-              onResumeSession={navActions.onResumeSession}
-              onEndSession={navActions.onEndSession}
-              onStartSession={navActions.onStartSession}
-              onNavigateToSessions={navActions.onNavigateToSessions}
-              // Processing mode props
-              onJobClick={navActions.onJobClick}
-            />
-          </div>
+          {/* Column 3: Empty spacer (Island now positioned absolutely) */}
+          <div className="min-w-0" />
 
           {/* Column 4: Actions Bar - Fixed width */}
           <div className="pointer-events-none">
@@ -225,6 +181,57 @@ export function TopNavigation() {
               uiDispatch={uiDispatch}
             />
           </div>
+        </div>
+
+        {/* Navigation Island - Absolutely centered, independent of grid */}
+        <div
+          className="absolute left-1/2 top-0 -translate-x-1/2 pointer-events-none"
+          style={{ width: 'fit-content' }}
+        >
+          <NavigationIsland
+            islandState={islandState}
+            onClose={closeIsland}
+            islandStateHook={islandStateHook}
+            navData={navData}
+            navActions={navActions}
+            activeTab={uiState.activeTab}
+            hoveredTab={hoveredTab}
+            setHoveredTab={setHoveredTab}
+            // Search mode props
+            searchQuery={islandStateHook.searchQuery}
+            searchInputRef={searchInputRef}
+            onSearchQueryChange={islandStateHook.setSearchQuery}
+            onNavigate={navActions.handleTabClick}
+            onOpenSidebar={(type, itemId, label) => {
+              uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type, itemId, label } });
+            }}
+            // Task mode props
+            taskTitle={islandStateHook.taskTitle}
+            taskDueDate={islandStateHook.taskDueDate}
+            showSuccess={islandStateHook.showTaskSuccess}
+            createdTaskId={createdTaskId}
+            onTaskTitleChange={islandStateHook.setTaskTitle}
+            onTaskDueDateChange={islandStateHook.setTaskDueDate}
+            onCreateTask={navActions.handleCreateQuickTask}
+            onViewTask={() => navActions.handleViewTask(createdTaskId)}
+            // Note mode props
+            noteInput={islandStateHook.noteInput}
+            onNoteInputChange={islandStateHook.setNoteInput}
+            onSaveNote={navActions.handleSaveQuickNote}
+            onSendToAI={navActions.handleSendToAI}
+            // Session mode props
+            isStarting={isStarting}
+            countdown={countdown}
+            sessionDescription={islandStateHook.sessionDescription}
+            onSessionDescriptionChange={islandStateHook.setSessionDescription}
+            onPauseSession={navActions.onPauseSession}
+            onResumeSession={navActions.onResumeSession}
+            onEndSession={navActions.onEndSession}
+            onStartSession={navActions.onStartSession}
+            onNavigateToSessions={navActions.onNavigateToSessions}
+            // Processing mode props
+            onJobClick={navActions.onJobClick}
+          />
         </div>
       </header>
     </>
