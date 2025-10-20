@@ -131,76 +131,84 @@ export function TopNavigation() {
         />
       )}
 
-      {/* Logo Container - Fades out as menu morphs to its position */}
-      {/* PHASE 1 FIX: Added data-logo-container attribute for reliable MenuMorphPill positioning */}
-      <div data-logo-container className={`fixed top-0 left-0 ${Z_INDEX.modal} pt-4 px-6 pointer-events-none`}>
-        <LogoContainer scrollY={scrollY} isCompact={isCompact} />
-      </div>
+      {/* OPTION C: Single flex container for three-column layout */}
+      <header className="fixed top-0 left-0 right-0 z-50 pt-4 px-6">
+        <div className="flex justify-between items-start gap-3">
+          {/* Left: Logo - Fixed width, no shrink */}
+          <div data-logo-container className="flex-shrink-0 pointer-events-none">
+            <LogoContainer scrollY={scrollY} isCompact={isCompact} />
+          </div>
 
-      {/* Navigation Island - Center */}
-      <NavigationIsland
-        islandState={islandState}
-        onClose={closeIsland}
-        islandStateHook={islandStateHook}
-        navData={navData}
-        navActions={navActions}
-        activeTab={uiState.activeTab}
-        hoveredTab={hoveredTab}
-        setHoveredTab={setHoveredTab}
-        // Search mode props
-        searchQuery={islandStateHook.searchQuery}
-        searchInputRef={searchInputRef}
-        onSearchQueryChange={islandStateHook.setSearchQuery}
-        onNavigate={navActions.handleTabClick}
-        onOpenSidebar={(type, itemId, label) => {
-          uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type, itemId, label } });
-        }}
-        // Task mode props
-        taskTitle={islandStateHook.taskTitle}
-        taskDueDate={islandStateHook.taskDueDate}
-        showSuccess={islandStateHook.showTaskSuccess}
-        createdTaskId={createdTaskId}
-        onTaskTitleChange={islandStateHook.setTaskTitle}
-        onTaskDueDateChange={islandStateHook.setTaskDueDate}
-        onCreateTask={navActions.handleCreateQuickTask}
-        onViewTask={() => navActions.handleViewTask(createdTaskId)}
-        // Note mode props
-        noteInput={islandStateHook.noteInput}
-        onNoteInputChange={islandStateHook.setNoteInput}
-        onSaveNote={navActions.handleSaveQuickNote}
-        onSendToAI={navActions.handleSendToAI}
-        // Session mode props
-        isStarting={isStarting}
-        countdown={countdown}
-        sessionDescription={islandStateHook.sessionDescription}
-        onSessionDescriptionChange={islandStateHook.setSessionDescription}
-        onPauseSession={navActions.onPauseSession}
-        onResumeSession={navActions.onResumeSession}
-        onEndSession={navActions.onEndSession}
-        onStartSession={navActions.onStartSession}
-        onNavigateToSessions={navActions.onNavigateToSessions}
-        // Processing mode props
-        onJobClick={navActions.onJobClick}
-      />
+          {/* Center: Navigation Island - Flex-grow with centering wrapper */}
+          <div className="flex-grow flex justify-center pointer-events-none min-w-0">
+            <NavigationIsland
+              islandState={islandState}
+              onClose={closeIsland}
+              islandStateHook={islandStateHook}
+              navData={navData}
+              navActions={navActions}
+              activeTab={uiState.activeTab}
+              hoveredTab={hoveredTab}
+              setHoveredTab={setHoveredTab}
+              // Search mode props
+              searchQuery={islandStateHook.searchQuery}
+              searchInputRef={searchInputRef}
+              onSearchQueryChange={islandStateHook.setSearchQuery}
+              onNavigate={navActions.handleTabClick}
+              onOpenSidebar={(type, itemId, label) => {
+                uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type, itemId, label } });
+              }}
+              // Task mode props
+              taskTitle={islandStateHook.taskTitle}
+              taskDueDate={islandStateHook.taskDueDate}
+              showSuccess={islandStateHook.showTaskSuccess}
+              createdTaskId={createdTaskId}
+              onTaskTitleChange={islandStateHook.setTaskTitle}
+              onTaskDueDateChange={islandStateHook.setTaskDueDate}
+              onCreateTask={navActions.handleCreateQuickTask}
+              onViewTask={() => navActions.handleViewTask(createdTaskId)}
+              // Note mode props
+              noteInput={islandStateHook.noteInput}
+              onNoteInputChange={islandStateHook.setNoteInput}
+              onSaveNote={navActions.handleSaveQuickNote}
+              onSendToAI={navActions.handleSendToAI}
+              // Session mode props
+              isStarting={isStarting}
+              countdown={countdown}
+              sessionDescription={islandStateHook.sessionDescription}
+              onSessionDescriptionChange={islandStateHook.setSessionDescription}
+              onPauseSession={navActions.onPauseSession}
+              onResumeSession={navActions.onResumeSession}
+              onEndSession={navActions.onEndSession}
+              onStartSession={navActions.onStartSession}
+              onNavigateToSessions={navActions.onNavigateToSessions}
+              // Processing mode props
+              onJobClick={navActions.onJobClick}
+            />
+          </div>
 
-      {/* Right Actions Bar */}
-      <RightActionsBar
-        isCompact={isCompact}
-        notificationData={navData.notificationData}
-        showNotifications={showNotifications}
-        setShowNotifications={setShowNotifications}
-        notifications={uiState.notifications}
-        pinnedNotesCount={uiState.pinnedNotes.length}
-        referencePanelOpen={uiState.referencePanelOpen}
-        onToggleReferencePanel={() => uiDispatch({ type: 'TOGGLE_REFERENCE_PANEL' })}
-        showReferencePanelTooltip={showReferencePanelTooltip}
-        setShowReferencePanelTooltip={setShowReferencePanelTooltip}
-        nedOverlayOpen={uiState.nedOverlay.isOpen}
-        onToggleNedOverlay={() => uiDispatch({ type: 'TOGGLE_NED_OVERLAY' })}
-        activeTab={uiState.activeTab}
-        onProfileClick={navActions.handleProfileClick}
-        uiDispatch={uiDispatch}
-      />
+          {/* Right: Actions Bar - Fixed width, no shrink */}
+          <div className="flex-shrink-0 pointer-events-none">
+            <RightActionsBar
+              isCompact={isCompact}
+              notificationData={navData.notificationData}
+              showNotifications={showNotifications}
+              setShowNotifications={setShowNotifications}
+              notifications={uiState.notifications}
+              pinnedNotesCount={uiState.pinnedNotes.length}
+              referencePanelOpen={uiState.referencePanelOpen}
+              onToggleReferencePanel={() => uiDispatch({ type: 'TOGGLE_REFERENCE_PANEL' })}
+              showReferencePanelTooltip={showReferencePanelTooltip}
+              setShowReferencePanelTooltip={setShowReferencePanelTooltip}
+              nedOverlayOpen={uiState.nedOverlay.isOpen}
+              onToggleNedOverlay={() => uiDispatch({ type: 'TOGGLE_NED_OVERLAY' })}
+              activeTab={uiState.activeTab}
+              onProfileClick={navActions.handleProfileClick}
+              uiDispatch={uiDispatch}
+            />
+          </div>
+        </div>
+      </header>
     </>
   );
 }
