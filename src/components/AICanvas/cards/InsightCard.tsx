@@ -8,12 +8,15 @@ import React from 'react';
 import { Lightbulb } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getGlassClasses, getRadiusClass } from '../../../design-system/theme';
+import type { SessionScreenshot } from '../../../types';
+import { ScreenshotThumbnail } from '../ScreenshotThumbnail';
 
 export interface InsightCardProps {
   insight: string;
   timestamp: string;
   tags?: string[];
-  relatedScreenshots?: string[];
+  relatedScreenshots?: SessionScreenshot[];
+  onClickScreenshot?: (screenshot: SessionScreenshot) => void;
   theme?: ThemeConfig;
 }
 
@@ -28,6 +31,7 @@ export function InsightCard({
   timestamp,
   tags,
   relatedScreenshots,
+  onClickScreenshot,
   theme,
 }: InsightCardProps) {
   return (
@@ -71,12 +75,26 @@ export function InsightCard({
             </div>
           )}
 
-          {/* Related Screenshots Count */}
+          {/* Related Screenshots */}
           {relatedScreenshots && relatedScreenshots.length > 0 && (
-            <div className="mt-3 text-xs text-gray-600">
-              <span className="inline-flex items-center gap-1">
-                📸 {relatedScreenshots.length} screenshot{relatedScreenshots.length !== 1 ? 's' : ''}
-              </span>
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-xs text-gray-600">Related:</span>
+              <div className="flex gap-1">
+                {relatedScreenshots.slice(0, 3).map((screenshot) => (
+                  <ScreenshotThumbnail
+                    key={screenshot.id}
+                    screenshot={screenshot}
+                    size="sm"
+                    onClick={() => onClickScreenshot?.(screenshot)}
+                    showIcon
+                  />
+                ))}
+                {relatedScreenshots.length > 3 && (
+                  <span className="text-xs text-gray-500">
+                    +{relatedScreenshots.length - 3}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>

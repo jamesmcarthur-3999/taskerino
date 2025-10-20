@@ -8,15 +8,17 @@ import React from 'react';
 import { Target } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getGlassClasses, getRadiusClass } from '../../../design-system/theme';
+import type { SessionScreenshot } from '../../../types';
+import { ScreenshotThumbnail } from '../ScreenshotThumbnail';
 
 export interface FlowStateCardProps {
   duration: number;
   activity: string;
   focusScore: number; // 0-100
-  screenshotSequence?: string[];
+  screenshotSequence?: SessionScreenshot[];
   timestamp?: string;
   theme?: CanvasTheme;
-  onClickScreenshot?: (id: string) => void;
+  onClickScreenshot?: (screenshot: SessionScreenshot) => void;
 }
 
 interface CanvasTheme {
@@ -127,16 +129,18 @@ export function FlowStateCard({
             <div className="mt-3">
               <p className="text-xs text-gray-600 mb-2">Session progression:</p>
               <div className="flex gap-1 overflow-x-auto pb-1">
-                {screenshotSequence.map((screenshotId, index) => (
-                  <button
-                    key={screenshotId}
-                    onClick={() => onClickScreenshot?.(screenshotId)}
-                    className="flex-shrink-0 w-10 h-10 rounded bg-white/20 hover:bg-white/30 hover:scale-105 transition-all duration-200 cursor-pointer border border-white/20 flex flex-col items-center justify-center relative group"
-                    title={`Screenshot ${index + 1}`}
-                  >
-                    <span className="text-[10px]">📸</span>
-                    <span className="text-[8px] text-cyan-700 font-semibold">{index + 1}</span>
-                  </button>
+                {screenshotSequence.map((screenshot, index) => (
+                  <div key={screenshot.id} className="flex-shrink-0 relative">
+                    <ScreenshotThumbnail
+                      screenshot={screenshot}
+                      size="md"
+                      onClick={() => onClickScreenshot?.(screenshot)}
+                      showIcon
+                    />
+                    <span className="absolute -bottom-1 -right-1 bg-cyan-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center border border-white">
+                      {index + 1}
+                    </span>
+                  </div>
                 ))}
               </div>
             </div>

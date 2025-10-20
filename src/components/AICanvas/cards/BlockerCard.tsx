@@ -9,12 +9,14 @@ import { AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getGlassClasses, getRadiusClass } from '../../../design-system/theme';
 import type { SessionScreenshot } from '../../../types';
+import { ScreenshotThumbnail } from '../ScreenshotThumbnail';
 
 export interface BlockerCardProps {
   blocker: string;
   severity?: 'low' | 'medium' | 'high' | 'critical';
   timestamp?: string;
   relatedScreenshots?: SessionScreenshot[];
+  onClickScreenshot?: (screenshot: SessionScreenshot) => void;
   status?: string;
   resolution?: string;
   theme?: ThemeConfig;
@@ -31,6 +33,7 @@ export function BlockerCard({
   severity = 'medium',
   timestamp,
   relatedScreenshots,
+  onClickScreenshot,
   theme,
 }: BlockerCardProps) {
   // Severity affects border and icon color intensity
@@ -101,13 +104,13 @@ export function BlockerCard({
               <span className="text-xs text-gray-600">Evidence:</span>
               <div className="flex gap-1">
                 {relatedScreenshots.slice(0, 3).map((screenshot) => (
-                  <div
+                  <ScreenshotThumbnail
                     key={screenshot.id}
-                    className="w-6 h-6 rounded bg-gray-200 text-xs text-gray-700 flex items-center justify-center"
-                    title="Screenshot"
-                  >
-                    <span className="text-[10px]">📸</span>
-                  </div>
+                    screenshot={screenshot}
+                    size="sm"
+                    onClick={() => onClickScreenshot?.(screenshot)}
+                    showIcon
+                  />
                 ))}
                 {relatedScreenshots.length > 3 && (
                   <span className="text-xs text-gray-500">

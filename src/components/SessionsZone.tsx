@@ -48,6 +48,7 @@ import { SessionsTopBar } from './sessions/SessionsTopBar';
 import { SessionsListPanel } from './sessions/SessionsListPanel';
 import { groupSessionsByDate, calculateTotalStats } from '../utils/sessionHelpers';
 import { MenuMorphPill } from './MenuMorphPill';
+import { MenuPortal } from './MenuPortal';
 
 export default function SessionsZone() {
   const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment, updateScreenshotAnalysis, addScreenshotComment, toggleScreenshotFlag, setActiveSession, addExtractedTask, addExtractedNote, addContextItem } = useSessions();
@@ -1591,8 +1592,8 @@ export default function SessionsZone() {
           />
         </div>
 
-        {/* Top Controls Bar - In Normal Flow */}
-        <div className="flex items-center justify-between relative z-50 mb-4">
+        {/* Top Controls Bar - Portaled to TopNavigation */}
+        <MenuPortal>
           <MenuMorphPill resetKey={selectedSessionId || 'default'}>
             <SessionsTopBar
               activeSession={activeSession}
@@ -1625,8 +1626,10 @@ export default function SessionsZone() {
               compactMode={compactMode}
             />
           </MenuMorphPill>
+        </MenuPortal>
 
-          {/* Stats pill OUTSIDE MenuMorphPill */}
+        {/* Stats pill - remains in zone content */}
+        <div className="mb-4">
           <SessionsStatsBar ref={statsPillRef} sessions={sessions} />
         </div>
 

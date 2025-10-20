@@ -817,6 +817,11 @@ function SectionRenderer({
             discovery={learning.title}
             context={learning.description}
             timestamp={learning.timestamp}
+            relatedScreenshots={
+              learning.screenshotIds
+                ? session.screenshots?.filter(s => learning.screenshotIds!.includes(s.id))
+                : undefined
+            }
           />
         ))}
       </CardSection>
@@ -842,6 +847,11 @@ function SectionRenderer({
             beforeState={'description' in breakthrough ? breakthrough.description : undefined}
             impact={breakthrough.impact === 'high' || breakthrough.impact === 'medium' || breakthrough.impact === 'low' ? breakthrough.impact : 'medium'}
             timestamp={breakthrough.timestamp}
+            relatedScreenshots={
+              breakthrough.screenshotIds
+                ? session.screenshots?.filter(s => breakthrough.screenshotIds!.includes(s.id))
+                : undefined
+            }
           />
         ))}
       </CardSection>
@@ -867,6 +877,11 @@ function SectionRenderer({
             solution={solution.solution}
             difficulty={solution.severity === 'high' || solution.severity === 'critical' ? 'hard' : solution.severity === 'low' ? 'easy' : 'medium'}
             timestamp={solution.timestamp}
+            relatedScreenshots={
+              solution.screenshotIds
+                ? session.screenshots?.filter(s => solution.screenshotIds!.includes(s.id))
+                : undefined
+            }
           />
         ))}
       </CardSection>

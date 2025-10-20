@@ -131,16 +131,19 @@ export function TopNavigation() {
         />
       )}
 
-      {/* OPTION C: Single flex container for three-column layout */}
+      {/* OPTION C: CSS Grid container for navigation layout */}
       <header className="fixed top-0 left-0 right-0 z-50 pt-4 px-6">
-        <div className="flex justify-between items-start gap-3">
-          {/* Left: Logo - Fixed width, no shrink */}
-          <div data-logo-container className="flex-shrink-0 pointer-events-none">
+        <div className="grid grid-cols-[auto_min-content_1fr_auto] gap-3 items-start">
+          {/* Column 1: Logo - Fixed width */}
+          <div data-logo-container className="pointer-events-none">
             <LogoContainer scrollY={scrollY} isCompact={isCompact} />
           </div>
 
-          {/* Center: Navigation Island - Flex-grow with centering wrapper */}
-          <div className="flex-grow flex justify-center pointer-events-none min-w-0">
+          {/* Column 2: Menu Portal Target - min-content (0 width when empty) */}
+          <div id="menu-portal-target" className="pointer-events-none min-w-0" />
+
+          {/* Column 3: Navigation Island - Flex-grow with centering wrapper */}
+          <div className="flex justify-center pointer-events-none min-w-0">
             <NavigationIsland
               islandState={islandState}
               onClose={closeIsland}
@@ -187,8 +190,8 @@ export function TopNavigation() {
             />
           </div>
 
-          {/* Right: Actions Bar - Fixed width, no shrink */}
-          <div className="flex-shrink-0 pointer-events-none">
+          {/* Column 4: Actions Bar - Fixed width */}
+          <div className="pointer-events-none">
             <RightActionsBar
               isCompact={isCompact}
               notificationData={navData.notificationData}

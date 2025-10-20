@@ -8,6 +8,8 @@ import React from 'react';
 import { Lightbulb, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getGlassClasses, getRadiusClass } from '../../../design-system/theme';
+import type { SessionScreenshot } from '../../../types';
+import { ScreenshotThumbnail } from '../ScreenshotThumbnail';
 
 export interface BreakthroughCardProps {
   moment: string;
@@ -15,6 +17,8 @@ export interface BreakthroughCardProps {
   afterState?: string;
   impact: 'high' | 'medium' | 'low';
   timestamp?: string;
+  relatedScreenshots?: SessionScreenshot[];
+  onClickScreenshot?: (screenshot: SessionScreenshot) => void;
   theme?: CanvasTheme;
 }
 
@@ -30,6 +34,8 @@ export function BreakthroughCard({
   afterState,
   impact,
   timestamp,
+  relatedScreenshots,
+  onClickScreenshot,
   theme,
 }: BreakthroughCardProps) {
   // Impact determines styling intensity
@@ -151,6 +157,29 @@ export function BreakthroughCard({
                 minute: '2-digit',
               })}
             </p>
+          )}
+
+          {/* Related Screenshots */}
+          {relatedScreenshots && relatedScreenshots.length > 0 && (
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-xs text-gray-600">Evidence:</span>
+              <div className="flex gap-1">
+                {relatedScreenshots.slice(0, 3).map((screenshot) => (
+                  <ScreenshotThumbnail
+                    key={screenshot.id}
+                    screenshot={screenshot}
+                    size="sm"
+                    onClick={() => onClickScreenshot?.(screenshot)}
+                    showIcon
+                  />
+                ))}
+                {relatedScreenshots.length > 3 && (
+                  <span className="text-xs text-gray-500">
+                    +{relatedScreenshots.length - 3}
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -8,14 +8,16 @@ import React from 'react';
 import { BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getGlassClasses, getRadiusClass } from '../../../design-system/theme';
+import type { SessionScreenshot } from '../../../types';
+import { ScreenshotThumbnail } from '../ScreenshotThumbnail';
 
 export interface LearningCardProps {
   discovery: string;
   context?: string;
-  relatedScreenshots?: string[];
+  relatedScreenshots?: SessionScreenshot[];
   timestamp?: string;
   theme?: CanvasTheme;
-  onClickScreenshot?: (id: string) => void;
+  onClickScreenshot?: (screenshot: SessionScreenshot) => void;
 }
 
 interface CanvasTheme {
@@ -73,15 +75,14 @@ export function LearningCard({
             <div className="flex items-center gap-2 mt-3">
               <span className="text-xs text-gray-600">Related:</span>
               <div className="flex gap-1">
-                {relatedScreenshots.slice(0, 4).map((screenshotId, index) => (
-                  <button
-                    key={screenshotId}
-                    onClick={() => onClickScreenshot?.(screenshotId)}
-                    className="w-8 h-8 rounded bg-white/20 hover:bg-white/30 hover:scale-105 transition-all duration-200 cursor-pointer border border-white/20 text-xs text-purple-700 flex items-center justify-center"
-                    title="View screenshot"
-                  >
-                    <span className="text-[10px]">📸</span>
-                  </button>
+                {relatedScreenshots.slice(0, 4).map((screenshot) => (
+                  <ScreenshotThumbnail
+                    key={screenshot.id}
+                    screenshot={screenshot}
+                    size="sm"
+                    onClick={() => onClickScreenshot?.(screenshot)}
+                    showIcon
+                  />
                 ))}
                 {relatedScreenshots.length > 4 && (
                   <span className="text-xs text-gray-500 flex items-center">

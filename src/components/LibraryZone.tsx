@@ -11,6 +11,7 @@ import { NoteDetailInline } from './NoteDetailInline';
 import { Input } from './Input';
 import { SpaceMenuBar } from './SpaceMenuBar';
 import { MenuMorphPill } from './MenuMorphPill';
+import { MenuPortal } from './MenuPortal';
 import { StandardFilterPanel } from './StandardFilterPanel';
 import { InlineTagManager } from './InlineTagManager';
 import { CollapsibleSidebar } from './CollapsibleSidebar';
@@ -339,9 +340,8 @@ export default function LibraryZone() {
       <div className={`absolute inset-0 ${BACKGROUND_GRADIENT.secondary} pointer-events-none will-change-transform`} />
 
       <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '110px' }}>
-        {/* Header - Two-pill layout: Menu controls (left) + Stats (right) */}
-        <div className="flex items-center justify-between mb-4">
-          {/* LEFT: Menu controls pill */}
+        {/* Header - Menu portaled to TopNavigation */}
+        <MenuPortal>
           <MenuMorphPill resetKey={`${selectedNoteIdForInline}-${isSidebarExpanded}`}>
             <SpaceMenuBar
               primaryAction={{
@@ -419,8 +419,10 @@ export default function LibraryZone() {
               className=""
             />
           </MenuMorphPill>
+        </MenuPortal>
 
-          {/* RIGHT: Stats pill - separate, independent fade animation */}
+        {/* Stats pill - remains in zone content with fade animation */}
+        <div className="mb-4">
           <div
             ref={statsPillRef}
             className="flex items-center gap-2 text-sm text-gray-700 bg-white/30 backdrop-blur-sm px-4 py-2 rounded-[24px] border border-white/60"
