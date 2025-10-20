@@ -1,22 +1,31 @@
 /**
  * useCompactNavigation Hook
  *
- * REFACTORED to use NavigationCoordinationContext
- *
- * No more:
- * - Constant DOM measurements on every scroll
- * - Flip-flopping between states
- * - Uncoordinated animations
- *
- * Now:
- * - Single source of truth from context
- * - Cached measurements
- * - Coordinated with menu button morphing
+ * SIMPLIFIED for Option C - no coordination context needed
+ * Uses media query only to determine compact mode
  */
 
-import { useNavigationCoordination } from '../contexts/NavigationCoordinationContext';
+import { useEffect, useState } from 'react';
 
 export const useCompactNavigation = () => {
-  const { isIslandCompact } = useNavigationCoordination();
-  return isIslandCompact;
+  const [isCompact, setIsCompact] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 1000px)');
+
+    const updateCompactState = (matches: boolean) => {
+      setIsCompact(matches);
+    };
+
+    // Set initial state
+    updateCompactState(mediaQuery.matches);
+
+    // Listen for changes
+    const handler = (e: MediaQueryListEvent) => updateCompactState(e.matches);
+    mediaQuery.addEventListener('change', handler);
+
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  return isCompact;
 };
