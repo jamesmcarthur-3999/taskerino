@@ -144,10 +144,16 @@ export type ClaudeContentBlock =
   | {
       type: "text";
       text: string;
+      cache_control?: {
+        type: "ephemeral";
+      };
     }
   | {
       type: "image";
       source: ClaudeImageSource;
+      cache_control?: {
+        type: "ephemeral";
+      };
     }
   | {
       type: "tool_use";
@@ -187,8 +193,8 @@ export interface ClaudeChatRequest {
   maxTokens: number;
   /** Conversation history */
   messages: ClaudeMessage[];
-  /** Optional system prompt */
-  system?: string;
+  /** Optional system prompt - can be string or array of blocks with cache control */
+  system?: string | ClaudeSystemBlock[];
   /** Optional temperature for response randomness (0.0-1.0) */
   temperature?: number;
 }
@@ -209,6 +215,10 @@ export interface ClaudeUsage {
   inputTokens: number;
   /** Number of tokens in the output */
   outputTokens: number;
+  /** Number of tokens used to create cache (optional, only present when using prompt caching) */
+  cacheCreationInputTokens?: number;
+  /** Number of tokens read from cache (optional, only present when using prompt caching) */
+  cacheReadInputTokens?: number;
 }
 
 /**

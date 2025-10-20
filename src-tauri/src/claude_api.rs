@@ -56,6 +56,7 @@ pub async fn claude_chat_completion(
             .post(&format!("{}/messages", CLAUDE_API_BASE))
             .header("x-api-key", &api_key)
             .header("anthropic-version", ANTHROPIC_VERSION)
+            .header("anthropic-beta", "prompt-caching-2024-07-31")
             .header("Content-Type", "application/json")
             .json(&request_body)
             .send()
@@ -141,7 +142,7 @@ pub async fn claude_chat_completion_vision(
         model,
         max_tokens,
         messages,
-        system,
+        system: system.map(|s| serde_json::Value::String(s)),
         temperature,
     };
 
@@ -216,6 +217,7 @@ async fn stream_claude_response(
         .post(&format!("{}/messages", CLAUDE_API_BASE))
         .header("x-api-key", api_key)
         .header("anthropic-version", ANTHROPIC_VERSION)
+        .header("anthropic-beta", "prompt-caching-2024-07-31")
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()

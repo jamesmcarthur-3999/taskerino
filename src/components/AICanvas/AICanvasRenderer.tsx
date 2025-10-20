@@ -19,6 +19,16 @@ import { TaskCard } from './cards/TaskCard';
 import { HeroTimeline } from './heroes/HeroTimeline';
 import { HeroSplit } from './heroes/HeroSplit';
 import { HeroCelebration } from './heroes/HeroCelebration';
+// New Hero Imports (to be created)
+// import { HeroFocus } from './heroes/HeroFocus';
+// import { HeroDiscovery } from './heroes/HeroDiscovery';
+// import { HeroProblemSolver } from './heroes/HeroProblemSolver';
+// New Card Imports (to be created)
+// import { LearningCard } from './cards/LearningCard';
+// import { BreakthroughCard } from './cards/BreakthroughCard';
+// import { FlowStateCard } from './cards/FlowStateCard';
+// import { ContextSwitchCard } from './cards/ContextSwitchCard';
+// import { ProblemSolutionCard } from './cards/ProblemSolutionCard';
 import { getRadiusClass, getGlassClasses } from '../../design-system/theme';
 import { Calendar, Clock, Camera, TrendingUp } from 'lucide-react';
 import { fadeInVariants, createStaggerVariants } from '../../lib/animations';
@@ -81,6 +91,218 @@ function hasTemporalData(summary: SessionSummary): boolean {
     summary.blockersEnhanced?.length ||
     summary.keyMoments?.length
   );
+}
+
+/**
+ * Extract learning moments from summary data
+ */
+function extractLearningMoments(summary: SessionSummary) {
+  const learnings = [];
+
+  // Extract from dynamic insights
+  const insights = getDynamicInsights(summary);
+  learnings.push(...insights.filter(i =>
+    i.type === 'learning' || i.type === 'discovery'
+  ).map(i => ({
+    title: i.title,
+    description: i.description,
+    timestamp: i.timestamp,
+    confidence: i.confidence
+  })));
+
+  // Extract from key insights tagged as learnings
+  // Note: keyInsights type doesn't have tags property yet - this is future-proofing
+  // if (summary.keyInsights) {
+  //   learnings.push(...summary.keyInsights
+  //     .filter(i => i.tags?.includes('learning') || i.tags?.includes('discovery'))
+  //     .map(i => ({
+  //       title: 'Key Learning',
+  //       description: i.insight,
+  //       timestamp: i.timestamp
+  //     }))
+  //   );
+  // }
+
+  return learnings;
+}
+
+/**
+ * Extract breakthrough moments from achievements
+ */
+function extractBreakthroughs(summary: SessionSummary) {
+  const achievements = getAchievements(summary);
+  const moments = getKeyMoments(summary);
+
+  const breakthroughs = [];
+
+  // High-importance achievements
+  breakthroughs.push(...achievements
+    .filter(a => a.importance === 'high' || a.importance === 'critical')
+    .map(a => ({
+      achievement: a.text,
+      timestamp: a.timestamp,
+      screenshotIds: a.screenshotIds,
+      impact: a.importance
+    }))
+  );
+
+  // Breakthrough-type key moments
+  breakthroughs.push(...moments
+    .filter(m => m.type === 'breakthrough' || m.type === 'milestone')
+    .map(m => ({
+      achievement: m.title,
+      description: m.description,
+      timestamp: m.timestamp,
+      impact: m.impact
+    }))
+  );
+
+  return breakthroughs;
+}
+
+/**
+ * Extract problem-solving data from blockers
+ */
+function extractProblemSolutions(summary: SessionSummary) {
+  const blockers = getBlockers(summary);
+
+  return blockers
+    .filter(b => b.resolution)
+    .map(b => ({
+      problem: b.text,
+      solution: b.resolution!,
+      severity: b.severity,
+      timestamp: b.timestamp,
+      screenshotIds: b.screenshotIds
+    }));
+}
+
+/**
+ * Detect flow states from temporal patterns
+ */
+function detectFlowStates(session: Session): Array<{
+  startTime: string;
+  endTime: string;
+  duration: number;
+  activity: string;
+  intensity: 'high' | 'medium' | 'low';
+}> {
+  const flowStates: Array<{
+    startTime: string;
+    endTime: string;
+    duration: number;
+    activity: string;
+    intensity: 'high' | 'medium' | 'low';
+  }> = [];
+
+  if (!session.summary) return flowStates;
+
+  // Look for periods with high achievement density
+  const achievements = getAchievements(session.summary);
+  const moments = getKeyMoments(session.summary);
+
+  // Group achievements by time windows (30-minute intervals)
+  const timeWindows = new Map<string, any[]>();
+
+  [...achievements, ...moments].forEach(item => {
+    if (!item.timestamp) return;
+
+    const time = new Date(item.timestamp);
+    const windowKey = `${time.getHours()}:${Math.floor(time.getMinutes() / 30) * 30}`;
+
+    if (!timeWindows.has(windowKey)) {
+      timeWindows.set(windowKey, []);
+    }
+    timeWindows.get(windowKey)!.push(item);
+  });
+
+  // Identify high-activity windows as flow states
+  for (const [windowKey, items] of timeWindows.entries()) {
+    if (items.length >= 3) { // Threshold for "flow"
+      const [hour, minute] = windowKey.split(':').map(Number);
+      const startTime = new Date(session.startTime);
+      startTime.setHours(hour, minute, 0, 0);
+
+      const endTime = new Date(startTime);
+      endTime.setMinutes(endTime.getMinutes() + 30);
+
+      flowStates.push({
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        duration: 30,
+        activity: 'High productivity period',
+        intensity: (items.length >= 5 ? 'high' : 'medium') as 'high' | 'medium' | 'low'
+      });
+    }
+  }
+
+  return flowStates;
+}
+
+/**
+ * Detect context switches from key moments
+ */
+function detectContextSwitches(summary: SessionSummary) {
+  const moments = getKeyMoments(summary);
+
+  return moments
+    .filter(m => m.type === 'context_switch' || m.type === 'transition')
+    .map(m => ({
+      from: m.title,
+      to: m.description,
+      timestamp: m.timestamp,
+      impact: m.impact,
+      reason: m.description
+    }));
+}
+
+/**
+ * Analyze session characteristics for hero selection
+ */
+function analyzeSessionCharacteristics(session: Session) {
+  const duration = session.endTime
+    ? Math.floor((new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / 60000)
+    : 0;
+
+  const summary = session.summary;
+  if (!summary) {
+    return {
+      isDeepWork: false,
+      isLearning: false,
+      isProblemSolving: false,
+      isCelebration: false,
+      sessionDuration: duration
+    };
+  }
+
+  const achievements = getAchievements(summary);
+  const blockers = getBlockers(summary);
+  const learnings = extractLearningMoments(summary);
+  const solutions = extractProblemSolutions(summary);
+
+  // Deep work: Long session with steady progress
+  const isDeepWork = duration >= 120 && achievements.length >= 5;
+
+  // Learning: Has learning moments or discovery insights
+  const isLearning = learnings.length >= 2;
+
+  // Problem solving: Multiple blockers with resolutions
+  const isProblemSolving = solutions.length >= 2;
+
+  // Celebration: High-impact achievements
+  const isCelebration = achievements.some(a => a.importance === 'high' || a.importance === 'critical');
+
+  return {
+    isDeepWork,
+    isLearning,
+    isProblemSolving,
+    isCelebration,
+    sessionDuration: duration,
+    achievements,
+    blockers,
+    learnings,
+    solutions
+  };
 }
 
 interface AICanvasRendererProps {
@@ -146,7 +368,84 @@ function HeroSection({
   const { theme, layout } = spec;
   const summary = session.summary;
 
-  // Select hero variant based on layout emphasis
+  // Analyze session characteristics for hero selection
+  const characteristics = analyzeSessionCharacteristics(session);
+
+  // NEW: HeroFocus for deep work sessions
+  // Uncomment when HeroFocus is created
+  /*
+  if (characteristics.isDeepWork && summary) {
+    const focusMetrics = {
+      duration: characteristics.sessionDuration,
+      achievements: characteristics.achievements.length,
+      focusScore: Math.min(100, (characteristics.achievements.length / (characteristics.sessionDuration / 30)) * 100)
+    };
+
+    return (
+      <HeroFocus
+        title={session.name}
+        narrative={summary.narrative || ''}
+        focusMetrics={focusMetrics}
+        stats={stats}
+        theme={{
+          primary: theme.primary,
+          secondary: theme.secondary,
+        }}
+      />
+    );
+  }
+  */
+
+  // NEW: HeroDiscovery for learning sessions
+  // Uncomment when HeroDiscovery is created
+  /*
+  if (characteristics.isLearning && summary) {
+    return (
+      <HeroDiscovery
+        title={session.name}
+        learnings={characteristics.learnings}
+        discoveries={extractBreakthroughs(summary).length}
+        stats={stats}
+        theme={{
+          primary: theme.primary,
+          secondary: theme.secondary,
+        }}
+      />
+    );
+  }
+  */
+
+  // NEW: HeroProblemSolver for problem-solving sessions
+  // Uncomment when HeroProblemSolver is created
+  /*
+  if (characteristics.isProblemSolving && summary) {
+    return (
+      <HeroProblemSolver
+        title={session.name}
+        problemsSolved={characteristics.solutions.length}
+        blockers={characteristics.blockers}
+        solutions={characteristics.solutions}
+        stats={stats}
+        theme={{
+          primary: theme.primary,
+          secondary: theme.secondary,
+        }}
+      />
+    );
+  }
+  */
+
+  // Check canvas spec metadata for session type hints
+  if (spec.metadata?.sessionType) {
+    const sessionType = spec.metadata.sessionType;
+
+    // Future hero routing based on sessionType
+    // if (sessionType === 'deep-work') return <HeroFocus ... />;
+    // if (sessionType === 'learning') return <HeroDiscovery ... />;
+    // if (sessionType === 'problem-solving') return <HeroProblemSolver ... />;
+  }
+
+  // EXISTING: Achievement-focused hero
   if (layout.emphasis === 'achievement-focused' && summary) {
     const achievements = getAchievements(summary);
     if (achievements.length > 0) {
@@ -166,6 +465,7 @@ function HeroSection({
     }
   }
 
+  // EXISTING: Story or flow layout hero
   if (layout.type === 'story' || layout.type === 'flow') {
     return (
       <HeroSplit
@@ -181,7 +481,7 @@ function HeroSection({
     );
   }
 
-  // Default: Timeline hero
+  // EXISTING: Default timeline hero
   return (
     <HeroTimeline
       title={session.name}
@@ -302,7 +602,7 @@ function SectionRenderer({
         />
         {!hasEnhancedData && (
           <p className="text-xs text-gray-500 mt-2 text-center">
-            💡 Tip: Re-enrich this session to see temporal timeline
+            Tip: Re-enrich this session to see temporal timeline
           </p>
         )}
       </motion.div>
@@ -415,7 +715,7 @@ function SectionRenderer({
     );
   }
 
-  // Key Moments section (NEW - only if data available)
+  // Key Moments section (EXISTING - enhanced temporal data)
   if (section.type === 'key-moments') {
     if (!session.summary) return null;
     const moments = getKeyMoments(session.summary);
@@ -466,7 +766,7 @@ function SectionRenderer({
     );
   }
 
-  // Dynamic Insights section (NEW - only if data available)
+  // Dynamic Insights section (EXISTING - enhanced AI insights)
   if (section.type === 'dynamic-insights') {
     if (!session.summary) return null;
     const insights = getDynamicInsights(session.summary);
@@ -505,6 +805,177 @@ function SectionRenderer({
       </CardSection>
     );
   }
+
+  // NEW: Learning section
+  // Uncomment when LearningCard is created
+  /*
+  if (section.type === 'learning') {
+    if (!session.summary) return null;
+    const learnings = extractLearningMoments(session.summary);
+    if (learnings.length === 0) return null;
+
+    return (
+      <CardSection
+        title="Learnings"
+        icon="📚"
+        gradient="from-blue-500 to-indigo-500"
+      >
+        {learnings.map((learning, idx) => (
+          <LearningCard
+            key={idx}
+            title={learning.title}
+            description={learning.description}
+            timestamp={learning.timestamp}
+            confidence={learning.confidence}
+            theme={{
+              mode: 'light',
+              primaryColor: spec.theme.primary,
+            }}
+          />
+        ))}
+      </CardSection>
+    );
+  }
+  */
+
+  // NEW: Breakthrough section
+  // Uncomment when BreakthroughCard is created
+  /*
+  if (section.type === 'breakthrough') {
+    if (!session.summary) return null;
+    const breakthroughs = extractBreakthroughs(session.summary);
+    if (breakthroughs.length === 0) return null;
+
+    return (
+      <CardSection
+        title="Breakthroughs"
+        icon="🚀"
+        gradient="from-yellow-500 to-orange-500"
+      >
+        {breakthroughs.map((breakthrough, idx) => (
+          <BreakthroughCard
+            key={idx}
+            achievement={breakthrough.achievement}
+            description={breakthrough.description}
+            timestamp={breakthrough.timestamp}
+            impact={breakthrough.impact}
+            relatedScreenshots={
+              breakthrough.screenshotIds
+                ? session.screenshots?.filter(s => breakthrough.screenshotIds!.includes(s.id))
+                : undefined
+            }
+            theme={{
+              mode: 'light',
+              primaryColor: spec.theme.primary,
+            }}
+          />
+        ))}
+      </CardSection>
+    );
+  }
+  */
+
+  // NEW: Problem-solving section
+  // Uncomment when ProblemSolutionCard is created
+  /*
+  if (section.type === 'problem-solving') {
+    if (!session.summary) return null;
+    const solutions = extractProblemSolutions(session.summary);
+    if (solutions.length === 0) return null;
+
+    return (
+      <CardSection
+        title="Problems Solved"
+        icon="🔧"
+        gradient="from-orange-500 to-red-500"
+      >
+        {solutions.map((solution, idx) => (
+          <ProblemSolutionCard
+            key={idx}
+            problem={solution.problem}
+            solution={solution.solution}
+            severity={solution.severity}
+            timestamp={solution.timestamp}
+            relatedScreenshots={
+              solution.screenshotIds
+                ? session.screenshots?.filter(s => solution.screenshotIds!.includes(s.id))
+                : undefined
+            }
+            theme={{
+              mode: 'light',
+              primaryColor: spec.theme.primary,
+            }}
+          />
+        ))}
+      </CardSection>
+    );
+  }
+  */
+
+  // NEW: Flow states section
+  // Uncomment when FlowStateCard is created
+  /*
+  if (section.type === 'flow-states') {
+    const flowStates = detectFlowStates(session);
+    if (flowStates.length === 0) return null;
+
+    return (
+      <CardSection
+        title="Flow States"
+        icon="🌊"
+        gradient="from-teal-500 to-cyan-500"
+      >
+        {flowStates.map((flowState, idx) => (
+          <FlowStateCard
+            key={idx}
+            startTime={flowState.startTime}
+            endTime={flowState.endTime}
+            duration={flowState.duration}
+            activity={flowState.activity}
+            intensity={flowState.intensity}
+            theme={{
+              mode: 'light',
+              primaryColor: spec.theme.primary,
+            }}
+          />
+        ))}
+      </CardSection>
+    );
+  }
+  */
+
+  // NEW: Context switches section
+  // Uncomment when ContextSwitchCard is created
+  /*
+  if (section.type === 'context-switches') {
+    if (!session.summary) return null;
+    const switches = detectContextSwitches(session.summary);
+    if (switches.length === 0) return null;
+
+    return (
+      <CardSection
+        title="Context Switches"
+        icon="🔀"
+        gradient="from-pink-500 to-purple-500"
+      >
+        {switches.map((switchData, idx) => (
+          <ContextSwitchCard
+            key={idx}
+            from={switchData.from}
+            to={switchData.to}
+            timestamp={switchData.timestamp}
+            impact={switchData.impact}
+            reason={switchData.reason}
+            theme={{
+              mode: 'light',
+              primaryColor: spec.theme.primary,
+            }}
+          />
+        ))}
+      </CardSection>
+    );
+  }
+  */
 
   // Unknown section type - skip
   return null;
@@ -552,7 +1023,7 @@ function AIBadge({ spec }: { spec: CanvasSpec }) {
       variants={fadeInVariants}
     >
       <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/20 to-pink-500/20 backdrop-blur-sm rounded-full text-sm text-gray-700">
-        ✨ <strong>AI-Designed Canvas</strong> - Generated with {Math.round(spec.metadata.confidence * 100)}% confidence
+        <strong>AI-Designed Canvas</strong> - Generated with {Math.round(spec.metadata.confidence * 100)}% confidence
         <span className="text-xs text-gray-500 ml-2">
           ({spec.metadata.sessionType} • {spec.theme.mood})
         </span>

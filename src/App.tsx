@@ -9,6 +9,7 @@ import { TasksProvider } from './context/TasksContext';
 import { EnrichmentProvider } from './context/EnrichmentContext';
 import { SessionsProvider } from './context/SessionsContext';
 import { ScrollAnimationProvider } from './contexts/ScrollAnimationContext';
+import { NavigationCoordinationProvider } from './contexts/NavigationCoordinationContext';
 import { TopNavigation } from './components/TopNavigation';
 import { ReferencePanel } from './components/ReferencePanel';
 import { QuickTaskModal } from './components/QuickTaskModal';
@@ -389,20 +390,22 @@ export default function App() {
     <SettingsProvider>
       <UIProvider>
         <ScrollAnimationProvider>
-          <EntitiesProvider>
-            <NotesProvider>
-              <TasksProvider>
-                <EnrichmentProvider>
-                  <SessionsProvider>
-                    {/* OLD AppProvider - TODO: Remove once all components are migrated (13 remaining) */}
-                    <AppProvider>
-                      <AppContent />
-                    </AppProvider>
-                  </SessionsProvider>
-                </EnrichmentProvider>
-              </TasksProvider>
-            </NotesProvider>
-          </EntitiesProvider>
+          <NavigationCoordinationProvider>
+            <EntitiesProvider>
+              <NotesProvider>
+                <TasksProvider>
+                  <EnrichmentProvider>
+                    <SessionsProvider>
+                      {/* OLD AppProvider - TODO: Remove once all components are migrated (13 remaining) */}
+                      <AppProvider>
+                        <AppContent />
+                      </AppProvider>
+                    </SessionsProvider>
+                  </EnrichmentProvider>
+                </TasksProvider>
+              </NotesProvider>
+            </EntitiesProvider>
+          </NavigationCoordinationProvider>
         </ScrollAnimationProvider>
       </UIProvider>
     </SettingsProvider>

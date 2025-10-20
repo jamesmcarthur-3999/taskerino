@@ -9,6 +9,13 @@
  * - Metadata-aware search
  * - Smart summarization for large result sets
  * - Returns structured data with IDs
+ * - Prompt caching for 70-85% cost reduction (system prompt + database context cached)
+ *
+ * Caching Behavior:
+ * - First request: Pays full price, creates cache (valid for 5 minutes)
+ * - Subsequent requests: 90% discount on cached tokens (system prompt + database context)
+ * - Cache persists for 5 minutes after last use
+ * - Expected savings: ~15K tokens cached per request
  */
 
 import { invoke } from '@tauri-apps/api/core';
@@ -95,25 +102,65 @@ export class ContextAgentService {
     const systemPrompt = this.buildSystemPrompt();
     const dataContext = this.buildDataContext(notes, tasks, companies, contacts, topics);
 
-    // Add user query to thread
-    thread.messages.push({
-      role: 'user',
-      content: `${thread.messages.length === 0 ? dataContext + '\n\n' : ''}${query}`,
-    });
+    // For the first message in thread, add database context with cache control
+    // For subsequent messages, only send the query (cached context is reused)
+    if (thread.messages.length === 0) {
+      thread.messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: dataContext,
+            cache_control: { type: 'ephemeral' },
+          },
+          {
+            type: 'text',
+            text: query,
+          },
+        ],
+      });
+    } else {
+      thread.messages.push({
+        role: 'user',
+        content: query,
+      });
+    }
 
     try {
+      // Build system prompt with cache control
+      const systemBlocks = [
+        {
+          type: 'text' as const,
+          text: systemPrompt,
+          cache_control: { type: 'ephemeral' as const },
+        },
+      ];
+
       // Call Claude Haiku via Tauri
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
           model: 'claude-3-5-haiku-20241022',
           maxTokens: 4096,
-          system: systemPrompt,
+          system: systemBlocks,
           messages: thread.messages,
         },
       });
 
       const content = response.content[0];
       const responseText = content.type === 'text' ? content.text : '';
+
+      // Log cache usage stats for monitoring
+      if (response.usage.cacheCreationInputTokens || response.usage.cacheReadInputTokens) {
+        console.log('🔥 Context Agent Cache Stats:', {
+          input: response.usage.inputTokens,
+          output: response.usage.outputTokens,
+          cacheCreation: response.usage.cacheCreationInputTokens || 0,
+          cacheRead: response.usage.cacheReadInputTokens || 0,
+          cacheSavings: response.usage.cacheReadInputTokens
+            ? `${Math.round(((response.usage.cacheReadInputTokens / (response.usage.inputTokens + response.usage.cacheReadInputTokens)) * 100))}% of input cached`
+            : '(cache warming)',
+        });
+      }
 
       // Add assistant response to thread
       thread.messages.push({

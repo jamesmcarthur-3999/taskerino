@@ -275,9 +275,156 @@ Output tasks:
 Return valid JSON only (no markdown).`;
 
     try {
-      // Build content array for vision support
+      // Build content array with prompt caching enabled
+      // Split prompt into cacheable static instructions and dynamic user input
+      const staticInstructions = `<system_instructions>
+${settings.systemInstructions}
+</system_instructions>
+${learningsSection}
+
+<core_rules>
+1. Topic Hierarchy: PRIMARY (Customer/Company) > SECONDARY (People) > TERTIARY (Features/Tech)
+2. Note Consolidation: ONE comprehensive note per customer/topic from each input
+3. Update vs Create: Check if recent note exists for same topic before creating new
+4. Duplicate Detection: Check existing tasks; if duplicate, add to skippedTasks array with reason
+5. Task Extraction: Create SEPARATE task for EACH distinct action item mentioned
+</core_rules>
+
+<task_requirements>
+For EVERY task, provide ALL fields:
+- title: Clear, actionable
+- description: REQUIRED, 1-2 sentences (never empty/null)
+- sourceExcerpt: REQUIRED, exact quote from input (never empty/null)
+- dueDate + dueTime: If temporal context exists, BOTH required (18:00 for EOD, 09:00 for morning)
+- dueDateReasoning: Why this date/time chosen
+- tags: 2-4 relevant tags
+- priority: high/medium/low
+- suggestedSubtasks: If multi-step task
+</task_requirements>
+
+<note_structure>
+Use markdown with:
+- ## for headers (Context, Discussion, Decisions, Next Steps)
+- **bold** for key terms/names
+- Bullet lists (-) and numbered lists (1. 2. 3.)
+- Clear sections for scanability
+</note_structure>
+
+<output_schema>
+{
+  "inputType": "call_transcript" | "meeting_note" | "quick_note",
+  "primaryTopic": {"name": "", "type": "company", "confidence": 0.95, "matchedExisting": ""},
+  "secondaryTopics": [{"name": "", "type": "person", "relationTo": ""}],
+  "noteStrategy": {"action": "create"|"update", "shouldConsolidate": true, "updateNoteId": ""},
+  "note": {
+    "content": "## Context\n\n...\n\n## Discussion Points\n\n...\n\n## Next Steps\n\n...",
+    "summary": "One-line summary (max 100 chars)",
+    "topicAssociation": "",
+    "tags": ["tag1", "tag2"],
+    "source": "call"|"email"|"thought"|"other",
+    "sentiment": "positive"|"neutral"|"negative",
+    "keyPoints": ["Point 1", "Point 2"],
+    "relatedTopics": ["Topic 1"]
+  },
+  "tasks": [
+    {
+      "title": "",
+      "priority": "high",
+      "dueDate": "2025-10-05",
+      "dueTime": "18:00",
+      "dueDateReasoning": "",
+      "description": "",
+      "tags": [],
+      "suggestedSubtasks": [],
+      "sourceExcerpt": "",
+      "relatedTo": ""
+    }
+  ],
+  "skippedTasks": [{"title": "", "reason": "duplicate", "existingTaskTitle": "", "sourceExcerpt": ""}],
+  "tags": [],
+  "sentiment": "positive"
+}
+</output_schema>
+
+<temporal_context>
+${(() => {
+  const now = new Date();
+  const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const monthDay = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const currentTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  return `${dayOfWeek}, ${monthDay} at ${currentTime}
+ISO Date: ${now.toISOString().split('T')[0]}
+Business Hours: 09:00-18:00 | EOD: 18:00`;
+})()}
+
+Date Inference:
+- "EOD today" → ${new Date().toISOString().split('T')[0]} at 18:00
+- "tomorrow" → ${new Date(Date.now() + 86400000).toISOString().split('T')[0]} at 09:00
+- "by Friday"/"end of week" → Next Friday at 18:00
+- "next week" → Next Monday at 09:00
+- "ASAP"/"urgent" → today
+- No context → null
+</temporal_context>
+
+<example>
+Input: "Follow up with Sarah about pricing, send proposal EOD Friday"
+Output tasks:
+[
+  {
+    "title": "Follow up with Sarah about pricing",
+    "description": "Follow up with Sarah regarding pricing discussion.",
+    "sourceExcerpt": "Follow up with Sarah about pricing",
+    "dueDate": null,
+    "dueTime": null,
+    "dueDateReasoning": "No specific deadline",
+    "priority": "medium",
+    "tags": ["follow-up", "pricing"]
+  },
+  {
+    "title": "Send proposal",
+    "description": "Send proposal by end of day Friday.",
+    "sourceExcerpt": "send proposal EOD Friday",
+    "dueDate": "[Friday]",
+    "dueTime": "18:00",
+    "dueDateReasoning": "EOD Friday specified",
+    "priority": "high",
+    "tags": ["proposal"]
+  }
+]
+</example>
+
+Return valid JSON only (no markdown).`;
+
+      const dynamicContext = `
+<existing_data>
+Topics: ${topicList}
+
+Recent Notes:
+${recentNotes || 'No recent notes'}
+
+Existing Tasks (check for duplicates):
+${recentTasks}
+</existing_data>
+
+<user_input>
+${text}
+</user_input>
+${attachmentInfo}`;
+
+      // Build content blocks with prompt caching
+      // Cache the static instructions (system rules, schema, examples)
+      // Keep dynamic data (user input, existing data) uncached
       const contentBlocks: ClaudeContentBlock[] = [
-        { type: 'text', text: prompt }
+        {
+          type: 'text',
+          text: staticInstructions,
+          cache_control: { type: 'ephemeral' }
+        },
+        {
+          type: 'text',
+          text: dynamicContext
+        }
       ];
 
       // Add image attachments to content blocks
@@ -339,7 +486,7 @@ Return valid JSON only (no markdown).`;
             }
           }
         }
-        console.log('✅ Total content blocks to send to Claude:', contentBlocks.length, '(1 text +', contentBlocks.length - 1, 'images)');
+        console.log('✅ Total content blocks to send to Claude:', contentBlocks.length, '(2 text blocks +', contentBlocks.length - 2, 'images)');
       }
 
       // Build messages array
@@ -662,12 +809,8 @@ ${topicTasks.filter(t => !t.done).map(t => `- ${t.title} (${t.priority})`).join(
 `;
     }).join('\n---\n');
 
-    const prompt = `${settings.systemInstructions}
-
-**Knowledge Base:**
-${context}
-
-**Question:** ${question}
+    // Split into cacheable static instructions and dynamic data
+    const staticQueryInstructions = `${settings.systemInstructions}
 
 Provide a helpful, specific answer using the information above. Include which topics you're referencing and suggest follow-up questions if relevant.
 
@@ -686,9 +829,28 @@ Return ONLY valid JSON (no markdown):
   "suggestedFollowUps": ["What about pricing?", "Any recent updates?"]
 }`;
 
+    const dynamicQueryContext = `
+**Knowledge Base:**
+${context}
+
+**Question:** ${question}`;
+
     try {
+      // Use content blocks with prompt caching
+      const contentBlocks: ClaudeContentBlock[] = [
+        {
+          type: 'text',
+          text: staticQueryInstructions,
+          cache_control: { type: 'ephemeral' }
+        },
+        {
+          type: 'text',
+          text: dynamicQueryContext
+        }
+      ];
+
       const messages: ClaudeMessage[] = [
-        { role: 'user', content: prompt }
+        { role: 'user', content: contentBlocks }
       ];
 
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
@@ -763,9 +925,8 @@ Return ONLY valid JSON (no markdown):
       throw new Error('API key not set. Please configure your Claude API key in Settings.');
     }
 
-    const prompt = `${optimizationContext}
-
-**Your Task:**
+    // Split into cacheable static instructions and dynamic data
+    const staticOptimizationInstructions = `**Your Task:**
 Analyze the learning system performance and determine if parameter adjustments are needed.
 
 **Decision Criteria:**
@@ -795,12 +956,24 @@ Return ONLY valid JSON (no markdown):
   }
 }
 
-Only include "suggestedSettings" if shouldOptimize is true. Make conservative adjustments (5-10% changes at most).
-`;
+Only include "suggestedSettings" if shouldOptimize is true. Make conservative adjustments (5-10% changes at most).`;
 
     try {
+      // Use content blocks with prompt caching
+      const contentBlocks: ClaudeContentBlock[] = [
+        {
+          type: 'text',
+          text: staticOptimizationInstructions,
+          cache_control: { type: 'ephemeral' }
+        },
+        {
+          type: 'text',
+          text: optimizationContext
+        }
+      ];
+
       const messages: ClaudeMessage[] = [
-        { role: 'user', content: prompt }
+        { role: 'user', content: contentBlocks }
       ];
 
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {

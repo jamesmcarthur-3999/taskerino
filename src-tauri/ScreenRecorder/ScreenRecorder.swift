@@ -210,6 +210,57 @@ public class ScreenRecorder: NSObject {
     fileprivate var height: Int32 = 720
     fileprivate var fps: Int32 = 15
 
+    // Codec detection - lazy property to test HEVC availability once
+    private lazy var codecConfiguration: (codec: AVVideoCodecType, profile: String) = {
+        // Test HEVC availability by attempting to create a test AVAssetWriter
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("hevc_test.mp4")
+
+        do {
+            // Clean up any existing test file
+            if FileManager.default.fileExists(atPath: tempURL.path) {
+                try? FileManager.default.removeItem(at: tempURL)
+            }
+
+            // Try to create an asset writer with HEVC
+            let testWriter = try AVAssetWriter(url: tempURL, fileType: .mp4)
+
+            let hevcSettings: [String: Any] = [
+                AVVideoCodecKey: AVVideoCodecType.hevc,
+                AVVideoWidthKey: 1280,
+                AVVideoHeightKey: 720
+            ]
+
+            let testInput = AVAssetWriterInput(mediaType: .video, outputSettings: hevcSettings)
+
+            if testWriter.canAdd(testInput) {
+                // HEVC is supported
+                print("✅ HEVC codec is available - will use HEVC encoding for reduced file sizes")
+
+                // Clean up test file
+                try? FileManager.default.removeItem(at: tempURL)
+
+                // HEVC doesn't use AVVideoProfileLevelKey - encoder chooses optimal profile
+                return (.hevc, "")
+            } else {
+                // HEVC not supported
+                print("⚠️  HEVC codec not available - falling back to H.264 encoding")
+
+                // Clean up test file
+                try? FileManager.default.removeItem(at: tempURL)
+
+                return (.h264, AVVideoProfileLevelH264HighAutoLevel)
+            }
+        } catch {
+            // Error testing HEVC - fall back to H.264
+            print("⚠️  Error testing HEVC codec: \(error) - falling back to H.264 encoding")
+
+            // Clean up test file
+            try? FileManager.default.removeItem(at: tempURL)
+
+            return (.h264, AVVideoProfileLevelH264HighAutoLevel)
+        }
+    }()
+
     fileprivate func startRecording(path: String) async throws {
         guard !isRecording else {
             print("⚠️  Already recording")
@@ -330,16 +381,26 @@ public class ScreenRecorder: NSObject {
         // Create asset writer
         let writer = try AVAssetWriter(url: url, fileType: .mp4)
 
-        // Configure video settings
+        // Configure video settings with detected codec (HEVC or H.264 fallback)
+        let codecConfig = codecConfiguration
+        print("📹 Using codec: \(codecConfig.codec.rawValue)")
+
+        // Build compression properties - only add profile level for H.264
+        var compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: 1_200_000, // 1.2 Mbps
+            AVVideoExpectedSourceFrameRateKey: fps
+        ]
+
+        // Add profile level only for H.264 (HEVC uses automatic profile selection)
+        if !codecConfig.profile.isEmpty {
+            compressionProperties[AVVideoProfileLevelKey] = codecConfig.profile
+        }
+
         let videoSettings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoCodecKey: codecConfig.codec,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 1_200_000, // 1.2 Mbps
-                AVVideoExpectedSourceFrameRateKey: fps,
-                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
-            ]
+            AVVideoCompressionPropertiesKey: compressionProperties
         ]
 
         // Create video input

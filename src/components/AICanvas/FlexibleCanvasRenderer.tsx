@@ -14,6 +14,17 @@ import { HeroSplit } from './heroes/HeroSplit';
 import { HeroCelebration } from './heroes/HeroCelebration';
 import { getRadiusClass, getGlassClasses } from '../../design-system/theme';
 import { fadeInVariants, createStaggerVariants } from '../../lib/animations';
+import {
+  LearningCard,
+  BreakthroughCard,
+  ProblemSolvingCard,
+  TechnicalDiscoveryCard,
+  FlowStateCard,
+  FocusAreaCard,
+  EmotionalJourneyCard,
+  CreativeSolutionCard,
+  CollaborationCard,
+} from './cards';
 
 interface FlexibleCanvasRendererProps {
   session: Session;
@@ -252,11 +263,13 @@ function SectionContentRenderer({
     return (
       <div className="space-y-3">
         {section.data.moments.map((moment: any, idx: number) => (
-          <div key={idx} className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4`}>
-            <div className="font-semibold text-gray-900 mb-2">💡 {moment.title}</div>
-            <p className="text-sm text-gray-700">{moment.description}</p>
-            <p className="text-xs text-gray-500 mt-2">{moment.context}</p>
-          </div>
+          <BreakthroughCard
+            key={idx}
+            moment={moment.title || moment.description}
+            beforeState={moment.context}
+            impact="medium"
+            timestamp={moment.timestamp}
+          />
         ))}
       </div>
     );
@@ -264,71 +277,24 @@ function SectionContentRenderer({
 
   if (section.type === 'problem-solving-journey' && 'approach' in section.data) {
     return (
-      <div className="space-y-4">
-        <div className="font-semibold text-gray-900">Problem: {section.data.problem}</div>
-        <div className="space-y-2">
-          {section.data.approach.map((step: any, idx: number) => (
-            <div key={idx} className={`${getGlassClasses('subtle')} ${getRadiusClass('field')} p-3`}>
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">
-                  {step.step}
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-gray-900">{step.action}</div>
-                  <div className="text-xs text-gray-600 mt-1">{step.outcome}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        {section.data.resolution && (
-          <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded">
-            <div className="font-semibold text-green-900">✓ Resolution</div>
-            <div className="text-sm text-green-800">{section.data.resolution}</div>
-          </div>
-        )}
-      </div>
+      <ProblemSolvingCard
+        problem={section.data.problem}
+        approach={section.data.approach}
+        resolution={section.data.resolution}
+      />
     );
   }
 
   if (section.type === 'learning-highlights' && 'learnings' in section.data) {
-    const categoryIcons: Record<string, string> = {
-      technical: '💻',
-      process: '⚙️',
-      tool: '🔧',
-      domain: '📚',
-      other: '📝',
-    };
-
     return (
       <div className="space-y-3">
         {section.data.learnings.map((learning: any, idx: number) => (
-          <div
+          <LearningCard
             key={idx}
-            className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 border-l-4 border-yellow-500`}
-          >
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2">
-                {learning.category && (
-                  <span className="text-lg" title={learning.category}>
-                    {categoryIcons[learning.category] || categoryIcons.other}
-                  </span>
-                )}
-                <div className="font-semibold text-gray-900">{learning.topic}</div>
-              </div>
-              {learning.category && (
-                <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium">
-                  {learning.category}
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-gray-700 mb-2">{learning.insight}</p>
-            {learning.timestamp && (
-              <div className="text-xs text-gray-500">
-                {new Date(learning.timestamp).toLocaleTimeString()}
-              </div>
-            )}
-          </div>
+            discovery={learning.insight || learning.topic}
+            context={learning.topic !== learning.insight ? learning.topic : undefined}
+            timestamp={learning.timestamp}
+          />
         ))}
       </div>
     );
@@ -338,28 +304,13 @@ function SectionContentRenderer({
     return (
       <div className="space-y-3">
         {section.data.discoveries.map((discovery: any, idx: number) => (
-          <div
+          <TechnicalDiscoveryCard
             key={idx}
-            className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 border-l-4 border-emerald-500`}
-          >
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex-1">
-                <div className="font-semibold text-gray-900 mb-2">{discovery.title}</div>
-                <span className="inline-block text-xs px-2 py-1 bg-emerald-100 text-emerald-800 rounded-full font-medium">
-                  {discovery.technology}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-start gap-2 mt-3">
-              <span className="text-lg flex-shrink-0">🔍</span>
-              <p className="text-sm text-gray-700">{discovery.finding}</p>
-            </div>
-            {discovery.timestamp && (
-              <div className="text-xs text-gray-500 mt-2">
-                {new Date(discovery.timestamp).toLocaleTimeString()}
-              </div>
-            )}
-          </div>
+            title={discovery.title}
+            technology={discovery.technology}
+            finding={discovery.finding}
+            timestamp={discovery.timestamp}
+          />
         ))}
       </div>
     );
@@ -414,24 +365,6 @@ function SectionContentRenderer({
   }
 
   if (section.type === 'flow-states' && 'flowPeriods' in section.data) {
-    const qualityColors = {
-      deep: 'bg-purple-600',
-      moderate: 'bg-purple-400',
-      shallow: 'bg-purple-200',
-    };
-
-    const qualityTextColors = {
-      deep: 'text-white',
-      moderate: 'text-white',
-      shallow: 'text-purple-900',
-    };
-
-    const qualityBadgeColors = {
-      deep: 'bg-purple-700 text-white',
-      moderate: 'bg-purple-500 text-white',
-      shallow: 'bg-purple-300 text-purple-900',
-    };
-
     return (
       <div className="space-y-4">
         {/* Summary Stats */}
@@ -455,29 +388,12 @@ function SectionContentRenderer({
         {/* Flow Periods */}
         <div className="space-y-3">
           {section.data.flowPeriods.map((period: any, idx: number) => (
-            <div
+            <FlowStateCard
               key={idx}
-              className={`${getGlassClasses('medium')} ${getRadiusClass('field')} overflow-hidden`}
-            >
-              <div className={`${qualityColors[period.quality as keyof typeof qualityColors]} p-4`}>
-                <div className="flex items-start justify-between mb-2">
-                  <div className={`font-semibold ${qualityTextColors[period.quality as keyof typeof qualityTextColors]}`}>
-                    {period.activity}
-                  </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${qualityBadgeColors[period.quality as keyof typeof qualityBadgeColors]}`}>
-                    {period.quality}
-                  </span>
-                </div>
-                <div className={`flex items-center gap-4 text-sm ${qualityTextColors[period.quality as keyof typeof qualityTextColors]}`}>
-                  <span>
-                    {new Date(period.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    {' → '}
-                    {new Date(period.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  <span className="font-medium">{period.duration} min</span>
-                </div>
-              </div>
-            </div>
+              activity={period.activity}
+              duration={period.duration}
+              focusScore={period.quality === 'deep' ? 90 : period.quality === 'moderate' ? 70 : 50}
+            />
           ))}
         </div>
       </div>
@@ -575,24 +491,32 @@ function SectionContentRenderer({
     );
   }
 
-  if (section.type === 'timeline' && 'milestones' in section.data) {
+  if (section.type === 'timeline' && 'events' in section.data) {
+    const events = section.data.events as Array<{
+      time: string;
+      title: string;
+      description: string;
+      type: 'start' | 'milestone' | 'blocker' | 'breakthrough' | 'end';
+      screenshotIds?: string[];
+    }>;
+
     return (
       <div className="space-y-4">
         <div className="relative border-l-2 border-gray-300 ml-4 pl-6 space-y-6">
-          {section.data.milestones.map((milestone: any, idx: number) => (
+          {events.map((event, idx: number) => (
             <div key={idx} className="relative">
               {/* Timeline dot */}
               <div className="absolute -left-[1.875rem] top-2 w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow" />
 
-              {/* Milestone card */}
+              {/* Event card */}
               <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4`}>
                 <div className="flex items-start justify-between gap-3 mb-2">
-                  <div className="font-semibold text-gray-900">{milestone.title}</div>
+                  <div className="font-semibold text-gray-900">{event.title}</div>
                   <div className="text-xs text-gray-500 flex-shrink-0">
-                    {new Date(milestone.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(event.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
-                <p className="text-sm text-gray-700">{milestone.description}</p>
+                <p className="text-sm text-gray-700">{event.description}</p>
               </div>
             </div>
           ))}
@@ -605,64 +529,40 @@ function SectionContentRenderer({
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {section.data.areas.map((area: any, idx: number) => (
-          <div
+          <FocusAreaCard
             key={idx}
-            className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4`}
-          >
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="font-semibold text-gray-900">{area.name}</div>
-              <div className="flex-shrink-0">
-                <div className="text-2xl font-bold text-blue-600">{area.timeSpent}</div>
-                <div className="text-xs text-gray-500">minutes</div>
-              </div>
-            </div>
-            {area.tasks && area.tasks.length > 0 && (
-              <div className="mt-3 space-y-1">
-                {area.tasks.map((task: string, taskIdx: number) => (
-                  <div key={taskIdx} className="text-xs text-gray-600 flex items-start gap-2">
-                    <span className="text-blue-500">•</span>
-                    <span>{task}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+            name={area.name}
+            timeSpent={area.timeSpent}
+            tasks={area.tasks}
+          />
         ))}
       </div>
     );
   }
 
-  if (section.type === 'emotional-journey' && 'phases' in section.data) {
-    const emotionColors = {
-      frustrated: { bg: 'bg-red-500', text: 'text-red-900', emoji: '😤' },
-      confused: { bg: 'bg-orange-400', text: 'text-orange-900', emoji: '🤔' },
-      focused: { bg: 'bg-blue-500', text: 'text-blue-900', emoji: '🎯' },
-      excited: { bg: 'bg-yellow-400', text: 'text-yellow-900', emoji: '🤩' },
-      satisfied: { bg: 'bg-green-500', text: 'text-green-900', emoji: '😊' },
-      neutral: { bg: 'bg-gray-400', text: 'text-gray-900', emoji: '😐' },
+  if (section.type === 'emotional-journey' && 'journey' in section.data) {
+    const journey = section.data.journey as Array<{
+      timestamp: string;
+      emotion: string;
+      description: string;
+      context: string;
+    }>;
+
+    const validEmotions = ['frustrated', 'confused', 'focused', 'excited', 'satisfied', 'neutral'] as const;
+    const isValidEmotion = (emotion: string): emotion is typeof validEmotions[number] => {
+      return validEmotions.includes(emotion as any);
     };
 
     return (
       <div className="space-y-3">
-        {section.data.phases.map((phase: any, idx: number) => {
-          const colors = emotionColors[phase.emotion as keyof typeof emotionColors] || emotionColors.neutral;
-          return (
-            <div key={idx} className={`${getGlassClasses('medium')} ${getRadiusClass('field')} overflow-hidden`}>
-              <div className={`${colors.bg} p-4`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">{colors.emoji}</span>
-                    <span className={`font-semibold ${colors.text} capitalize`}>{phase.emotion}</span>
-                  </div>
-                  <span className={`text-sm ${colors.text} opacity-90`}>
-                    {new Date(phase.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <p className={`text-sm ${colors.text}`}>{phase.context}</p>
-              </div>
-            </div>
-          );
-        })}
+        {journey.map((phase, idx: number) => (
+          <EmotionalJourneyCard
+            key={idx}
+            emotion={isValidEmotion(phase.emotion) ? phase.emotion : 'neutral'}
+            context={phase.context}
+            startTime={phase.timestamp}
+          />
+        ))}
       </div>
     );
   }
@@ -671,75 +571,38 @@ function SectionContentRenderer({
     return (
       <div className="space-y-3">
         {section.data.solutions.map((solution: any, idx: number) => (
-          <div
+          <CreativeSolutionCard
             key={idx}
-            className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 border-l-4 border-pink-500`}
-          >
-            <div className="flex items-start gap-3 mb-2">
-              <span className="text-2xl flex-shrink-0">💡</span>
-              <div className="flex-1">
-                <div className="font-semibold text-gray-900 mb-2">{solution.title}</div>
-                <p className="text-sm text-gray-700 mb-3">{solution.description}</p>
-
-                {solution.approach && (
-                  <div className="bg-pink-50 rounded p-3 mb-2">
-                    <div className="text-xs font-semibold text-pink-700 mb-1">Approach</div>
-                    <p className="text-sm text-gray-700">{solution.approach}</p>
-                  </div>
-                )}
-
-                {solution.outcome && (
-                  <div className="bg-green-50 rounded p-3">
-                    <div className="text-xs font-semibold text-green-700 mb-1">Outcome</div>
-                    <p className="text-sm text-gray-700">{solution.outcome}</p>
-                  </div>
-                )}
-
-                {solution.timestamp && (
-                  <div className="text-xs text-gray-500 mt-2">
-                    {new Date(solution.timestamp).toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+            title={solution.title}
+            description={solution.description}
+            approach={solution.approach}
+            outcome={solution.outcome}
+            timestamp={solution.timestamp}
+          />
         ))}
       </div>
     );
   }
 
-  if (section.type === 'collaboration-wins' && 'wins' in section.data) {
+  if (section.type === 'collaboration-wins' && 'collaborations' in section.data) {
+    const collaborations = section.data.collaborations as Array<{
+      title: string;
+      description: string;
+      participants?: string[];
+      timestamp?: string;
+      outcome?: string;
+    }>;
+
     return (
       <div className="space-y-3">
-        {section.data.wins.map((win: any, idx: number) => (
-          <div
+        {collaborations.map((collab, idx: number) => (
+          <CollaborationCard
             key={idx}
-            className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 border-l-4 border-teal-500`}
-          >
-            <div className="flex items-start gap-3 mb-2">
-              <span className="text-2xl flex-shrink-0">🤝</span>
-              <div className="flex-1">
-                <div className="font-semibold text-gray-900 mb-2">{win.title}</div>
-                <p className="text-sm text-gray-700 mb-3">{win.description}</p>
-
-                {win.participants && win.participants.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {win.participants.map((participant: string, pIdx: number) => (
-                      <span key={pIdx} className="text-xs px-2 py-1 bg-teal-100 text-teal-700 rounded-full">
-                        {participant}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {win.timestamp && (
-                  <div className="text-xs text-gray-500">
-                    {new Date(win.timestamp).toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+            title={collab.title}
+            description={collab.description}
+            participants={collab.participants}
+            timestamp={collab.timestamp}
+          />
         ))}
       </div>
     );

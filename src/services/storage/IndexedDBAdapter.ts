@@ -8,6 +8,7 @@
 import { StorageAdapter, validateJSON } from './StorageAdapter';
 import type { StorageInfo, BackupInfo } from './StorageAdapter';
 import JSZip from 'jszip';
+import { compressData, decompressData, isCompressed } from './compressionUtils';
 
 interface StoredCollection {
   name: string;
@@ -133,29 +134,47 @@ export class IndexedDBAdapter extends StorageAdapter {
   async save<T>(collection: string, data: T): Promise<void> {
     await this.ensureInitialized();
 
-    return this.writeQueue.enqueue(() => {
-      return new Promise<void>((resolve, reject) => {
-        const transaction = this.db!.transaction([this.COLLECTIONS_STORE], 'readwrite');
-        const store = transaction.objectStore(this.COLLECTIONS_STORE);
+    return this.writeQueue.enqueue(async () => {
+      try {
+        // Serialize to JSON
+        const jsonString = JSON.stringify(data);
 
-        const record: StoredCollection = {
-          name: collection,
-          data: data,
-          timestamp: Date.now()
-        };
+        // Compress the JSON data
+        let storedData: any;
+        try {
+          const compressed = await compressData(jsonString);
+          storedData = compressed; // Store as compressed string
+        } catch (compressionError) {
+          console.warn(`⚠️  Compression failed for ${collection}, storing uncompressed:`, compressionError);
+          storedData = data; // Fallback to uncompressed
+        }
 
-        const request = store.put(record);
+        return new Promise<void>((resolve, reject) => {
+          const transaction = this.db!.transaction([this.COLLECTIONS_STORE], 'readwrite');
+          const store = transaction.objectStore(this.COLLECTIONS_STORE);
 
-        request.onsuccess = () => {
-          console.log(`💾 Saved ${collection} to IndexedDB`);
-          resolve();
-        };
+          const record: StoredCollection = {
+            name: collection,
+            data: storedData,
+            timestamp: Date.now()
+          };
 
-        request.onerror = () => {
-          console.error(`Failed to save ${collection}:`, request.error);
-          reject(new Error(`Failed to save ${collection}: ${request.error}`));
-        };
-      });
+          const request = store.put(record);
+
+          request.onsuccess = () => {
+            console.log(`💾 Saved ${collection} to IndexedDB`);
+            resolve();
+          };
+
+          request.onerror = () => {
+            console.error(`Failed to save ${collection}:`, request.error);
+            reject(new Error(`Failed to save ${collection}: ${request.error}`));
+          };
+        });
+      } catch (error) {
+        console.error(`Failed to save ${collection}:`, error);
+        throw error;
+      }
     });
   }
 
@@ -176,10 +195,25 @@ export class IndexedDBAdapter extends StorageAdapter {
       const store = transaction.objectStore(this.COLLECTIONS_STORE);
       const request = store.get(collection);
 
-      request.onsuccess = () => {
+      request.onsuccess = async () => {
         const result = request.result as StoredCollection | undefined;
         if (result) {
-          resolve(result.data as T);
+          try {
+            // Check if data is compressed
+            if (typeof result.data === 'string' && isCompressed(result.data)) {
+              console.log(`📦 Decompressing ${collection}...`);
+              const decompressed = await decompressData(result.data);
+              const parsed = JSON.parse(decompressed);
+              resolve(parsed as T);
+            } else {
+              // Uncompressed data (backward compatible)
+              resolve(result.data as T);
+            }
+          } catch (decompressionError) {
+            console.error(`Failed to decompress ${collection}:`, decompressionError);
+            // Try to use data as-is if decompression fails
+            resolve(result.data as T);
+          }
         } else {
           console.log(`ℹ️  Collection ${collection} does not exist in IndexedDB`);
           resolve(null);

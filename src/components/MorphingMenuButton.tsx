@@ -75,7 +75,8 @@ export function MorphingMenuButton({
   const top = showSubMenuOverlay ? 80 : (scrollY >= 100 ? (isCompact ? 12 : 16) : 0);
 
   // Left position: 0 when inline, adaptive for scrolled/overlay based on compact mode
-  const left = scrollY >= 100 || showSubMenuOverlay ? (isCompact ? 12 : 24) : 0;
+  // On compact mode, position further right to avoid navigation island overlap
+  const left = scrollY >= 100 || showSubMenuOverlay ? (isCompact ? 72 : 24) : 0;
 
   // Width: full-width → compact (logo + menu text) → overlay full-width
   // In compact-compact mode (narrow + scrolled), set fixed width for circular button
@@ -268,7 +269,7 @@ export function MorphingMenuButton({
           scale: showCompactButton ? scaleSpring : 1,
           rotate: rotationSpring,
           willChange: willChangeStyle,
-          zIndex: 95,
+          zIndex: 100,
         }}
         onClick={handleClick}
         onPointerDown={handlePointerDown}

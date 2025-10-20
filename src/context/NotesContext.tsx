@@ -136,9 +136,14 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
     const timestamp = note.timestamp;
 
+    // Create lookup Maps for O(1) access
+    const companiesMap = new Map(entitiesContext.state.companies.map(c => [c.id, c]));
+    const contactsMap = new Map(entitiesContext.state.contacts.map(c => [c.id, c]));
+    const topicsMap = new Map(entitiesContext.state.topics.map(t => [t.id, t]));
+
     // Update companies
     linkedCompanyIds.forEach(id => {
-      const company = entitiesContext.state.companies.find(c => c.id === id);
+      const company = companiesMap.get(id);
       if (company) {
         entitiesContext.dispatch({
           type: 'UPDATE_COMPANY',
@@ -153,7 +158,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
     // Update contacts
     linkedContactIds.forEach(id => {
-      const contact = entitiesContext.state.contacts.find(c => c.id === id);
+      const contact = contactsMap.get(id);
       if (contact) {
         entitiesContext.dispatch({
           type: 'UPDATE_CONTACT',
@@ -168,7 +173,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
     // Update topics
     linkedTopicIds.forEach(id => {
-      const topic = entitiesContext.state.topics.find(t => t.id === id);
+      const topic = topicsMap.get(id);
       if (topic) {
         entitiesContext.dispatch({
           type: 'UPDATE_TOPIC',
@@ -204,9 +209,14 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       linkedTopicIds.push(deletedNote.topicId);
     }
 
+    // Create lookup Maps for O(1) access
+    const companiesMap = new Map(entitiesContext.state.companies.map(c => [c.id, c]));
+    const contactsMap = new Map(entitiesContext.state.contacts.map(c => [c.id, c]));
+    const topicsMap = new Map(entitiesContext.state.topics.map(t => [t.id, t]));
+
     // Update companies
     linkedCompanyIds.forEach(id => {
-      const company = entitiesContext.state.companies.find(c => c.id === id);
+      const company = companiesMap.get(id);
       if (company) {
         entitiesContext.dispatch({
           type: 'UPDATE_COMPANY',
@@ -220,7 +230,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
     // Update contacts
     linkedContactIds.forEach(id => {
-      const contact = entitiesContext.state.contacts.find(c => c.id === id);
+      const contact = contactsMap.get(id);
       if (contact) {
         entitiesContext.dispatch({
           type: 'UPDATE_CONTACT',
@@ -234,7 +244,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
     // Update topics
     linkedTopicIds.forEach(id => {
-      const topic = entitiesContext.state.topics.find(t => t.id === id);
+      const topic = topicsMap.get(id);
       if (topic) {
         entitiesContext.dispatch({
           type: 'UPDATE_TOPIC',
@@ -312,9 +322,14 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       });
     });
 
+    // Create lookup Maps for O(1) access
+    const companiesMap = new Map(entitiesContext.state.companies.map(c => [c.id, c]));
+    const contactsMap = new Map(entitiesContext.state.contacts.map(c => [c.id, c]));
+    const topicsMap = new Map(entitiesContext.state.topics.map(t => [t.id, t]));
+
     // Apply updates to companies
     companyUpdates.forEach((update, companyId) => {
-      const company = entitiesContext.state.companies.find(c => c.id === companyId);
+      const company = companiesMap.get(companyId);
       if (company) {
         entitiesContext.dispatch({
           type: 'UPDATE_COMPANY',
@@ -329,7 +344,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
     // Apply updates to contacts
     contactUpdates.forEach((update, contactId) => {
-      const contact = entitiesContext.state.contacts.find(c => c.id === contactId);
+      const contact = contactsMap.get(contactId);
       if (contact) {
         entitiesContext.dispatch({
           type: 'UPDATE_CONTACT',
@@ -344,7 +359,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
     // Apply updates to topics
     topicUpdates.forEach((update, topicId) => {
-      const topic = entitiesContext.state.topics.find(t => t.id === topicId);
+      const topic = topicsMap.get(topicId);
       if (topic) {
         entitiesContext.dispatch({
           type: 'UPDATE_TOPIC',

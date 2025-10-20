@@ -1045,23 +1045,29 @@ export default function SessionsZone() {
   }, [scrollY]);
 
   /**
-   * Stats pill fade animation
-   * Fades out independently as menu morphs (50-300px range)
+   * Stats pill fade animation - SYNCHRONIZED with menu morph animation
+   * Uses viewport-relative thresholds matching MenuMorphPill for coherent motion
+   * Fades out gracefully as menu morphs, creating unified visual flow
    */
   useEffect(() => {
     if (!statsPillRef.current) return;
 
     const pill = statsPillRef.current;
 
-    // Stats fades over 50-300px range
-    const statsRawProgress = clamp((scrollY - 50) / 250, 0, 1);
+    // Get viewport-relative thresholds (same calculation as MenuMorphPill)
+    const viewportHeight = window.innerHeight;
+    const startThreshold = Math.max(viewportHeight * 0.15, 100);
+    const transitionRange = Math.max(viewportHeight * 0.12, 100);
+    const endThreshold = startThreshold + transitionRange;
 
-    // Opacity fade
-    const statsOpacity = 1 - easeOutCubic(statsRawProgress);
+    // Stats fades over same range as menu morphing for synchronized motion
+    const statsRawProgress = clamp((scrollY - startThreshold) / transitionRange, 0, 1);
 
-    // Subtle scale for refinement
-    const statsScaleProgress = easeOutQuart(statsRawProgress);
-    const statsScale = 1 - (statsScaleProgress * 0.03);
+    // Opacity fade - NO manual easing, browser handles interpolation smoothly
+    const statsOpacity = 1 - statsRawProgress;
+
+    // Subtle scale for refinement - linear is sufficient with CSS transitions
+    const statsScale = 1 - (statsRawProgress * 0.03);
 
     // Progressive blur for depth
     const statsBlur = statsRawProgress * 3;
@@ -1069,6 +1075,7 @@ export default function SessionsZone() {
     pill.style.opacity = String(statsOpacity);
     pill.style.transform = `scale(${statsScale})`;
     pill.style.filter = `blur(${statsBlur}px)`;
+    pill.style.transition = 'opacity 0.15s ease-out, transform 0.15s ease-out, filter 0.15s ease-out';
   }, [scrollY]);
 
   /**
@@ -1079,8 +1086,20 @@ export default function SessionsZone() {
    * - Hidden element is always in full mode (compactMode=false)
    * - We measure that stable width and compare against available space
    * - No circular dependency: compact mode doesn't affect the measurement
+   * - PHASE 2: Viewport-aware gap threshold for better responsiveness
    */
   useEffect(() => {
+    // Viewport-aware compact threshold calculation
+    // Smaller screens need less gap, larger screens benefit from more breathing room
+    const getCompactThresholds = () => {
+      const isMobile = window.innerWidth < 1024;
+      const base = isMobile ? 20 : 40;
+      return {
+        compact: base,
+        expand: base + 20  // Hysteresis band to prevent flickering
+      };
+    };
+
     const checkOverlap = () => {
       const measurementElement = menuBarMeasurementRef.current;
       const statsPill = statsPillRef.current;
@@ -1108,9 +1127,22 @@ export default function SessionsZone() {
       // Calculate the gap
       const gap = statsPillRect.left - fullModeRight;
 
-      // Simple threshold - no hysteresis needed because we're measuring a stable value
-      const REQUIRED_GAP = 40; // Minimum gap between full-width menu bar and stats pill
-      const needsCompact = gap < REQUIRED_GAP;
+      // Get viewport-aware thresholds (adapts to screen size)
+      const thresholds = getCompactThresholds();
+
+      let needsCompact = compactMode; // Default to current state
+
+      if (compactMode) {
+        // Currently compact - only expand if gap is comfortably large
+        if (gap > thresholds.expand) {
+          needsCompact = false;
+        }
+      } else {
+        // Currently expanded - only compact if gap is too small
+        if (gap < thresholds.compact) {
+          needsCompact = true;
+        }
+      }
 
       // Only update if changed
       setCompactMode(needsCompact);
@@ -1463,6 +1495,17 @@ export default function SessionsZone() {
     }
   };
 
+  // PHASE 1 FIX: Handle session selection with smooth scroll reset
+  // When user clicks on a different session, smoothly scroll to top of list
+  const handleSessionClick = (sessionId: string | null) => {
+    // Add smooth scroll to top when session changes
+    const scrollContainer = sessionListScrollRef.current;
+    if (scrollContainer && sessionId !== selectedSessionId) {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    setSelectedSessionId(sessionId);
+  };
+
   // Get current settings (from active session if running, otherwise from last settings)
   const currentSettings: LastSessionSettings = activeSession ? {
     enableScreenshots: activeSession.enableScreenshots,
@@ -1645,7 +1688,7 @@ export default function SessionsZone() {
               alert('Bulk export feature coming soon!');
             }}
             selectedSessionId={selectedSessionId}
-            onSessionClick={setSelectedSessionId}
+            onSessionClick={handleSessionClick}
             onSessionSelect={(id) => {
               const newSet = new Set(selectedSessionIds);
               if (newSet.has(id)) {

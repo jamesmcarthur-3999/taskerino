@@ -107,10 +107,16 @@ pub enum ClaudeMessageContent {
 #[serde(tag = "type")]
 pub enum ClaudeContentBlock {
     #[serde(rename = "text")]
-    Text { text: String },
+    Text {
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<serde_json::Value>,
+    },
     #[serde(rename = "image")]
     Image {
         source: ClaudeImageSource,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<serde_json::Value>,
     },
 }
 
@@ -131,7 +137,7 @@ pub struct ClaudeChatRequest {
     pub model: String,
     pub max_tokens: u32,
     pub messages: Vec<ClaudeMessage>,
-    pub system: Option<String>,
+    pub system: Option<serde_json::Value>,  // Accepts both String and Array with cache_control
     pub temperature: Option<f32>,
 }
 
@@ -155,6 +161,11 @@ pub enum ClaudeResponseContent {
 pub struct ClaudeUsage {
     pub input_tokens: u32,
     pub output_tokens: u32,
+    // Prompt caching fields (optional, only present when using cache)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_creation_input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_read_input_tokens: Option<u32>,
 }
 
 // ============================================================================

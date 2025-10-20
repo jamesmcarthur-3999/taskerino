@@ -9,6 +9,7 @@ import { BaseDirectory, exists, readTextFile, writeTextFile, mkdir, remove, read
 import { StorageAdapter, formatBytes, validateJSON, calculateChecksum } from './StorageAdapter';
 import type { StorageInfo, BackupInfo } from './StorageAdapter';
 import JSZip from 'jszip';
+import { compressData, decompressData, isCompressed } from './compressionUtils';
 
 /**
  * Write queue with mutex to prevent concurrent storage writes
@@ -114,12 +115,24 @@ export class TauriFileSystemAdapter extends StorageAdapter {
         // Calculate checksum for integrity
         const checksum = await calculateChecksum(jsonData);
 
+        // Compress the JSON data
+        let compressedData: string;
+        let compressionFailed = false;
+        try {
+          compressedData = await compressData(jsonData);
+        } catch (compressionError) {
+          console.warn(`⚠️  Compression failed for ${collection}, storing uncompressed:`, compressionError);
+          compressedData = jsonData;
+          compressionFailed = true;
+        }
+
         // Add metadata
         const dataWithMeta = {
           version: 1,
           checksum,
           timestamp: Date.now(),
-          data
+          compressed: !compressionFailed,
+          data: compressedData
         };
 
         const finalData = JSON.stringify(dataWithMeta, null, 2);
@@ -211,9 +224,24 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
       // Check if it has metadata wrapper
       if (parsed.version && parsed.data !== undefined) {
+        let actualData = parsed.data;
+
+        // Check if data is compressed
+        if (typeof actualData === 'string' && isCompressed(actualData)) {
+          console.log(`📦 Decompressing ${collection}...`);
+          try {
+            const decompressed = await decompressData(actualData);
+            actualData = JSON.parse(decompressed);
+          } catch (decompressionError) {
+            console.error(`Failed to decompress ${collection}:`, decompressionError);
+            return await this.loadFromBackup(collection);
+          }
+        }
+
         // Verify checksum if present
-        if (parsed.checksum) {
-          const dataStr = JSON.stringify(parsed.data, null, 2);
+        if (parsed.checksum && !parsed.compressed) {
+          // Only verify checksum for uncompressed data
+          const dataStr = JSON.stringify(actualData, null, 2);
           const checksum = await calculateChecksum(dataStr);
 
           if (checksum !== parsed.checksum) {
@@ -222,7 +250,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
           }
         }
 
-        return parsed.data as T;
+        return actualData as T;
       }
 
       // Old format without metadata wrapper
@@ -269,7 +297,20 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
       // Return data (handle both old and new format)
       if (parsed.version && parsed.data !== undefined) {
-        return parsed.data as T;
+        let actualData = parsed.data;
+
+        // Check if backup data is compressed
+        if (typeof actualData === 'string' && isCompressed(actualData)) {
+          try {
+            const decompressed = await decompressData(actualData);
+            actualData = JSON.parse(decompressed);
+          } catch (decompressionError) {
+            console.error(`Failed to decompress backup for ${collection}:`, decompressionError);
+            return null;
+          }
+        }
+
+        return actualData as T;
       }
       return parsed as T;
     } catch (error) {

@@ -382,7 +382,11 @@ export default function TasksZone() {
             </div>
           </div>
         </div>
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 space-y-2">
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto p-2 space-y-2"
+          onDragOver={(e) => e.preventDefault()}
+        >
           {tasks.map(task => {
             const taskTopic = topic(task);
             const isOverdue = isTaskOverdue(task);
@@ -408,6 +412,9 @@ export default function TasksZone() {
                   e.stopPropagation();
                   e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('text/plain', task.id);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault(); // Allow dropping over cards
                 }}
                 onClick={() => !isEditing && onSelect(task.id)}
                 className={`${cardClasses} select-none ${isEditing ? 'ring-2 ring-cyan-400 !cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
@@ -892,8 +899,12 @@ export default function TasksZone() {
             )}
 
           {/* Kanban Board */}
-          <div ref={kanbanContentRef} className="flex gap-4 flex-1 overflow-x-auto overflow-y-hidden">
-            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
+          <div
+            ref={kanbanContentRef}
+            className="flex gap-4 flex-1 overflow-x-auto overflow-y-hidden"
+            onDragOver={(e) => e.preventDefault()}
+          >
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full" onDragOver={(e) => e.preventDefault()}>
               <KanbanColumn
                 title="To Do"
                 status="todo"
@@ -903,7 +914,7 @@ export default function TasksZone() {
                 scrollRef={(ref) => kanbanColumnRefs.current[0] = ref}
               />
             </div>
-            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full" onDragOver={(e) => e.preventDefault()}>
               <KanbanColumn
                 title="In Progress"
                 status="in-progress"
@@ -913,7 +924,7 @@ export default function TasksZone() {
                 scrollRef={(ref) => kanbanColumnRefs.current[1] = ref}
               />
             </div>
-            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full" onDragOver={(e) => e.preventDefault()}>
               <KanbanColumn
                 title="Blocked"
                 status="blocked"
@@ -923,7 +934,7 @@ export default function TasksZone() {
                 scrollRef={(ref) => kanbanColumnRefs.current[2] = ref}
               />
             </div>
-            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full" onDragOver={(e) => e.preventDefault()}>
               <KanbanColumn
                 title="Done"
                 status="done"

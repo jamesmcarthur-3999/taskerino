@@ -3,9 +3,24 @@ import type { ReactNode, ReactElement } from 'react';
 import { motion, useTransform, useSpring, useMotionValue, AnimatePresence, MotionValue, clamp } from 'framer-motion';
 import { Menu } from 'lucide-react';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
+import { useNavigationCoordination } from '../contexts/NavigationCoordinationContext';
 
 // Easing function for smooth morphing animations
 const easeOutQuart = (x: number): number => 1 - Math.pow(1 - x, 4);
+
+// Unified scroll thresholds - matches NavigationCoordinationContext
+// NO MORE independent thresholds that cause desync
+const SCROLL_THRESHOLDS = {
+  start: 100,   // Menu button starts morphing
+  end: 250,     // Menu button fully compact (matches context)
+} as const;
+
+// Viewport-proportional width calculations
+// Ensures smooth scaling across all screen sizes from mobile (320px) to 5K (5120px)
+const getResponsiveWidths = () => ({
+  initial: Math.min(window.innerWidth * 0.35, 500),  // Max 500px for readability
+  compact: Math.max(window.innerWidth * 0.09, 140)   // Min 140px to fit "Menu" button
+});
 
 interface MenuMorphPillProps {
   children: ReactNode;
@@ -23,6 +38,7 @@ interface StaggeredItemProps {
   startScroll: number;
   staggerOffset: number;
   animationRange: number;
+  maxScroll: number; // Maximum scroll boundary to clamp stagger
   overlayOpen?: boolean;
 }
 
@@ -33,11 +49,13 @@ function StaggeredItem({
   startScroll,
   staggerOffset,
   animationRange,
+  maxScroll,
   overlayOpen = false,
 }: StaggeredItemProps) {
-  // Calculate per-item scroll ranges
+  // Calculate per-item scroll ranges with boundary clamping
+  // Ensures stagger animations complete within the global animation range
   const itemStartScroll = startScroll + (index * staggerOffset);
-  const itemEndScroll = itemStartScroll + animationRange;
+  const itemEndScroll = Math.min(itemStartScroll + animationRange, maxScroll);
 
   // Create MotionValues using useTransform - GPU accelerated
   // When overlay is open, freeze animations at full visibility
@@ -83,6 +101,7 @@ function StaggeredItem({
  */
 export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphPillProps) {
   const { scrollY, scrollYMotionValue } = useScrollAnimation();
+  const { menuButtonPhase, invalidateMeasurements } = useNavigationCoordination();
   const [overlayOpen, setOverlayOpen] = useState(false);
 
   // Refs for width measurement
@@ -94,6 +113,12 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
   // MotionValue for initial width
   const initialWidthMotionValue = useMotionValue<number | null>(null);
   const [hasMeasured, setHasMeasured] = useState(false);
+
+  // Use FIXED thresholds (no more dynamic recalculation)
+  const thresholds = SCROLL_THRESHOLDS;
+
+  // Viewport-proportional widths state (recalculated on resize)
+  const [responsiveWidths, setResponsiveWidths] = useState(getResponsiveWidths());
 
   // Store the ORIGINAL natural position/dimensions when in document flow (scrollY = 0)
   // This represents where the element naturally lives before any positioning changes
@@ -109,10 +134,10 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }, []);
 
-  // States
-  const isScrolled = scrollY >= 220;
-  const isTransitioning = scrollY >= 150 && scrollY < 220;
-  const shouldBeFixed = scrollY >= 150; // Go fixed when morphing starts
+  // States (using viewport-relative thresholds)
+  const isScrolled = scrollY >= thresholds.end;
+  const isTransitioning = scrollY >= thresholds.start && scrollY < thresholds.end;
+  const shouldBeFixed = scrollY >= thresholds.start; // Go fixed when morphing starts
 
   // Convert children to array for individual animations
   const childArray = useMemo(() => {
@@ -120,9 +145,9 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
   }, [children]);
 
   // Measure width for morphing animation AND capture natural position
-  // This runs when scrollY < 150 to establish baseline measurements
+  // This runs when scrollY < thresholds.start to establish baseline measurements
   useEffect(() => {
-    if (spacerRef.current && menuContentRef.current && scrollY < 150) {
+    if (spacerRef.current && menuContentRef.current && scrollY < thresholds.start) {
       const width = menuContentRef.current.offsetWidth;
 
       if (width > 0) {
@@ -132,8 +157,9 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
         }
       }
 
-      // Measure SPACER position (which is always in document flow)
-      if (scrollY < 5 && !naturalPositionRef.current) {
+      // PHASE 1 FIX: Measure SPACER position throughout pre-transition range
+      // Changed from scrollY < 5 to scrollY < thresholds.start to allow position capture during natural state
+      if (scrollY < thresholds.start && !naturalPositionRef.current) {
         const rect = spacerRef.current.getBoundingClientRect();
 
         // Convert viewport-relative coordinates to document-relative
@@ -145,21 +171,28 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
         };
       }
     }
-  }, [scrollY, hasMeasured, initialWidthMotionValue, childArray]);
+  }, [scrollY, hasMeasured, initialWidthMotionValue, childArray, thresholds.start]);
 
   // Calculate final position (next to logo) independently of scroll state
   // This ensures the scrolled button position is always correct, even after note changes
   useEffect(() => {
-    if (!finalPositionRef.current) {
+    // PHASE 1 FIX: Force remeasurement when resetKey changes
+    const shouldRemeasure = !finalPositionRef.current || resetKey !== undefined;
+
+    if (shouldRemeasure) {
       // Small delay to ensure logo is in the DOM after note changes
       requestAnimationFrame(() => {
-        // Find the logo in the TopNavigation component
-        const logoContainer = document.querySelector('[class*="from-cyan-500"]') as HTMLElement;
+        // Use data-logo-container attribute for reliable logo detection
+        const logoContainer =
+          document.querySelector('[data-logo-container]') as HTMLElement ||
+          document.querySelector('[class*="from-cyan-500"]') as HTMLElement;
+
         if (logoContainer) {
           const logoRect = logoContainer.getBoundingClientRect();
-          // Position button 12px to the right of the logo
           const gap = 12;
-          // Convert viewport-relative coordinates to document-relative
+
+          // CORRECT POSITIONING: Menu button goes BETWEEN logo and island
+          // Position immediately after logo with gap
           finalPositionRef.current = {
             top: 16, // Match logo's top padding (pt-4)
             left: logoRect.right + window.scrollX + gap
@@ -176,23 +209,38 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
   }, [resetKey]); // Re-run when resetKey changes to recalculate logo position
 
 
-  // Handle resize - reset all measurements
+  // Handle resize with requestAnimationFrame-based debouncing
+  // Ensures smooth recalculation of viewport-relative values without layout thrashing
   useEffect(() => {
+    let rafId: number | null = null;
+
     const handleResize = () => {
-      if (containerRef.current && menuContentRef.current && scrollY === 0) {
-        const width = menuContentRef.current.offsetWidth;
-        if (width > 0) {
-          initialWidthMotionValue.set(width);
-        }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
       }
-      // Reset natural position capture on resize so it gets remeasured
-      naturalPositionRef.current = null;
-      finalPositionRef.current = null;
+
+      rafId = requestAnimationFrame(() => {
+        // Update viewport-proportional widths
+        setResponsiveWidths(getResponsiveWidths());
+
+        // Force remeasurement of element positions
+        naturalPositionRef.current = null;
+        finalPositionRef.current = null;
+        setHasMeasured(false);
+
+        // Invalidate coordination context measurements
+        invalidateMeasurements();
+
+        rafId = null;
+      });
     };
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [scrollY, initialWidthMotionValue]);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [invalidateMeasurements]);
 
   // Reset natural position when resetKey changes (e.g., note change, sidebar toggle)
   useEffect(() => {
@@ -202,26 +250,29 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
     setHasMeasured(false);
   }, [resetKey]);
 
-  // SOLUTION 2: Width transform with spring for unified motion
-  const widthMotionValue = useTransform(
+  // GPU-ACCELERATED WIDTH: Use scaleX transform instead of width changes
+  // Width changes trigger layout recalculation (expensive, causes jank)
+  // scaleX uses GPU compositing layer (smooth 60fps performance)
+  const initialWidth = initialWidthMotionValue.get() || responsiveWidths.initial;
+  const targetWidth = responsiveWidths.compact;
+
+  // Calculate scaleX factor: target width / initial width
+  const scaleXMotionValue = useTransform(
     scrollYMotionValue,
-    [150, 220],
-    [initialWidthMotionValue.get() || 400, 140]
+    [thresholds.start, thresholds.end],
+    [1, targetWidth / initialWidth] // Scale from 1 (100%) to compressed ratio
   );
 
-  const widthSpring = useSpring(widthMotionValue, {
-    stiffness: 250,
+  const scaleXSpring = useSpring(scaleXMotionValue, {
+    stiffness: 350,
     damping: 30,
-    mass: 0.8,
-    restSpeed: 0.05,
-    restDelta: 0.05,
+    mass: 0.6,
+    restSpeed: 0.001,  // Tighter rest detection for crisp finish
+    restDelta: 0.001,
   });
 
-  // Convert spring to CSS string (always called, not conditional)
-  const widthString = useTransform(widthSpring, (w) => `${Math.round(w)}px`);
-
-  // Apply width based on state
-  const containerWidth = overlayOpen ? 'auto' : (scrollY < 150 ? 'auto' : widthString);
+  // Container width is now fixed (no CSS width animation, only transform)
+  const containerWidth = overlayOpen ? 'auto' : (scrollY < thresholds.start ? 'auto' : initialWidth);
 
   // Dynamic transform-origin that points to final destination
   const transformOriginX = useTransform(
@@ -252,32 +303,35 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
 
   // Position springs - smooth interpolation throughout the entire scroll range
   // Key insight: We need to interpolate from natural position → final position (next to logo)
+  // Uses viewport-relative thresholds for smooth transitions across all screen sizes
+  // NO MANUAL EASING - let spring physics provide natural motion
   const topMotionValue = useTransform(
     scrollYMotionValue,
     (scroll) => {
       const finalTop = finalPositionRef.current?.top ?? 16;
 
-      if (scroll < 150) {
+      if (scroll < thresholds.start) {
         // Before transition: use natural position
         return naturalPositionRef.current?.top ?? 110; // Use initial padding as fallback
       }
-      if (scroll >= 220) {
+      if (scroll >= thresholds.end) {
         // After transition: use final fixed position (next to logo)
         return finalTop;
       }
-      // During transition (150-220): interpolate from natural → final with easing
+      // During transition: LINEAR interpolation (spring handles easing)
       const startTop = naturalPositionRef.current?.top ?? finalTop;
-      const progress = clamp((scroll - 150) / 70, 0, 1);
-      const easedProgress = easeOutQuart(progress);
-      return startTop + (finalTop - startTop) * easedProgress;
+      const transitionRange = thresholds.end - thresholds.start;
+      const progress = clamp((scroll - thresholds.start) / transitionRange, 0, 1);
+      // Removed easeOutQuart - spring damping provides natural easing
+      return startTop + (finalTop - startTop) * progress;
     }
   );
   const topSpring = useSpring(topMotionValue, {
-    stiffness: 250,
+    stiffness: 350,
     damping: 30,
-    mass: 0.8,
-    restSpeed: 0.05,
-    restDelta: 0.05,
+    mass: 0.6,
+    restSpeed: 0.001,
+    restDelta: 0.001,
   });
 
   const leftMotionValue = useTransform(
@@ -285,55 +339,58 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
     (scroll) => {
       const finalLeft = finalPositionRef.current?.left ?? 184;
 
-      if (scroll < 150) {
+      if (scroll < thresholds.start) {
         // Before transition: use natural position
         return naturalPositionRef.current?.left ?? 24; // Use reasonable fallback
       }
-      if (scroll >= 220) {
+      if (scroll >= thresholds.end) {
         // After transition: use final fixed position (next to logo)
         return finalLeft;
       }
-      // During transition (150-220): interpolate from natural → final with easing
+      // During transition: LINEAR interpolation (spring handles easing)
       const startLeft = naturalPositionRef.current?.left ?? finalLeft;
-      const progress = clamp((scroll - 150) / 70, 0, 1);
-      const easedProgress = easeOutQuart(progress);
-      return startLeft + (finalLeft - startLeft) * easedProgress;
+      const transitionRange = thresholds.end - thresholds.start;
+      const progress = clamp((scroll - thresholds.start) / transitionRange, 0, 1);
+      // Removed easeOutQuart - spring damping provides natural easing
+      return startLeft + (finalLeft - startLeft) * progress;
     }
   );
   const leftSpring = useSpring(leftMotionValue, {
-    stiffness: 250,
+    stiffness: 350,
     damping: 30,
-    mass: 0.8,
-    restSpeed: 0.05,
-    restDelta: 0.05,
+    mass: 0.6,
+    restSpeed: 0.001,
+    restDelta: 0.001,
   });
 
-  // Border radius
-  const borderRadiusRaw = useTransform(scrollYMotionValue, [150, 220], [9999, 9999]);
+  // Border radius (using viewport-relative thresholds)
+  const borderRadiusRaw = useTransform(scrollYMotionValue, [thresholds.start, thresholds.end], [9999, 9999]);
   const borderRadius = useSpring(borderRadiusRaw, {
-    stiffness: 250,
+    stiffness: 350,
     damping: 30,
-    mass: 0.8,
-    restSpeed: 0.05,
-    restDelta: 0.05,
+    mass: 0.6,
+    restSpeed: 0.001,
+    restDelta: 0.001,
   });
 
-  // Compact button opacity (for crossfade)
+  // PHASE 1 FIX: Extend compact button animation range to reduce pop-in effect
+  // Changed from last 20% to last 50% of transition for smoother fade-in
+  // This gives the button more time to fade in gracefully
   const compactOpacity = useTransform(
     scrollYMotionValue,
-    [200, 220],
+    [thresholds.end - (thresholds.end - thresholds.start) * 0.5, thresholds.end],
     [0, 1]
   );
 
   const compactScale = useTransform(
     scrollYMotionValue,
-    [200, 220],
+    [thresholds.end - (thresholds.end - thresholds.start) * 0.5, thresholds.end],
     [0.85, 1]
   );
 
   const compactY = useTransform(
     scrollYMotionValue,
-    [200, 220],
+    [thresholds.end - (thresholds.end - thresholds.start) * 0.5, thresholds.end],
     [-20, 0]
   );
 
@@ -388,8 +445,8 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
     return () => window.removeEventListener('keydown', handleEscape);
   }, [overlayOpen]);
 
-  // Will-change optimization
-  const willChangeActive = scrollY > 150 && scrollY < 240;
+  // Will-change optimization (active during transition + buffer)
+  const willChangeActive = scrollY > thresholds.start && scrollY < thresholds.end + 40;
 
   // Shadow
   const shadowClass = useMemo(() => {
@@ -454,11 +511,13 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
           top: topValue,
           left: leftValue,
           borderRadius,
+          // Apply both scaleX (width morphing) and uniform scale (hover effect)
+          scaleX: scrollY >= thresholds.start ? scaleXSpring : 1,
           scale: isScrolled ? scaleValue : 1,
           width: containerWidth,
-          transformOrigin,
+          transformOrigin: scrollY >= thresholds.start ? 'left center' : transformOrigin,
           willChange: willChangeActive ? 'transform, opacity' : 'auto',
-          zIndex: 95,
+          zIndex: 100, // Higher than Navigation Island (z-50) to prevent overlap
         }}
         onClick={(e) => {
           // Only handle click if it's directly on the container (not a child button/dropdown)
@@ -503,9 +562,10 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
                     key={index}
                     index={index}
                     scrollYMotionValue={scrollYMotionValue}
-                    startScroll={150}
+                    startScroll={thresholds.start}
                     staggerOffset={10}
-                    animationRange={70}
+                    animationRange={thresholds.end - thresholds.start}
+                    maxScroll={thresholds.end}
                     overlayOpen={overlayOpen}
                   >
                     {child as ReactElement}
