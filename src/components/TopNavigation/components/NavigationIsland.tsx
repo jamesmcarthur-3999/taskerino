@@ -231,33 +231,32 @@ export function NavigationIsland({
   }, [prefersReducedMotion]);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-4 px-6 pointer-events-none">
-      <motion.div
-        layoutId="navigation-island"
-        data-navigation-island
-        initial={false}
-        animate={{
-          // Width animations based on state AND compact mode
-          ...(isExpanded ? dynamicIslandVariants.expanded : dynamicIslandVariants.collapsed),
-          // Max width based on compact mode
-          maxWidth: isCompact ? '24rem' : '80rem', // 384px / 1280px
-          // Background opacity changes on expand/collapse
-          backgroundColor: isExpanded
-            ? 'rgba(255, 255, 255, 0.5)'
-            : 'rgba(255, 255, 255, 0.4)',
-        }}
-        transition={islandTransition}
-        style={{
-          willChange: isExpanded || !isCompact ? 'width, transform, background-color, backdrop-filter' : 'auto',
-        }}
-        className={`
-          backdrop-blur-2xl rounded-[40px] shadow-2xl border-2 border-white/50 ring-1 ring-black/5
-          pointer-events-auto overflow-hidden
-          ${isCompact ? 'max-w-sm' : 'max-w-7xl'}
-          relative
-        `}
-        aria-expanded={isExpanded}
-      >
+    <motion.div
+      layoutId="navigation-island"
+      data-navigation-island
+      initial={false}
+      animate={{
+        // Width animations based on state AND compact mode
+        ...(isExpanded ? dynamicIslandVariants.expanded : dynamicIslandVariants.collapsed),
+        // Max width based on compact mode
+        maxWidth: isCompact ? '24rem' : '80rem', // 384px / 1280px
+        // Background opacity changes on expand/collapse
+        backgroundColor: isExpanded
+          ? 'rgba(255, 255, 255, 0.5)'
+          : 'rgba(255, 255, 255, 0.4)',
+      }}
+      transition={islandTransition}
+      style={{
+        willChange: isExpanded || !isCompact ? 'width, transform, background-color, backdrop-filter' : 'auto',
+      }}
+      className={`
+        min-w-0 backdrop-blur-2xl rounded-[40px] shadow-2xl border-2 border-white/50 ring-1 ring-black/5
+        pointer-events-auto overflow-hidden
+        ${isCompact ? 'max-w-sm' : 'max-w-7xl'}
+        relative
+      `}
+      aria-expanded={isExpanded}
+    >
         {/* Navigation Tabs - Visible when collapsed */}
         <AnimatePresence>
           {islandState === 'collapsed' && (
@@ -387,7 +386,6 @@ export function NavigationIsland({
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.div>
-    </nav>
+    </motion.div>
   );
 }
