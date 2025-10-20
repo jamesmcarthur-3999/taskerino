@@ -5,9 +5,9 @@
  * Each session gets a unique layout based on the sections the AI selected.
  */
 
-import React from 'react';
-import { motion } from 'framer-motion';
-import type { Session, FlexibleSessionSummary, SummarySection } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import type { Session, FlexibleSessionSummary, SummarySection, RelatedContextSection, Task, Note } from '../../types';
 import type { CanvasSpec } from '../../services/aiCanvasGenerator';
 import { HeroTimeline } from './heroes/HeroTimeline';
 import { HeroSplit } from './heroes/HeroSplit';
@@ -25,6 +25,10 @@ import {
   CreativeSolutionCard,
   CollaborationCard,
 } from './cards';
+import { Link2, Calendar, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { useUI } from '../../context/UIContext';
+import { useTasks } from '../../context/TasksContext';
+import { useNotes } from '../../context/NotesContext';
 
 interface FlexibleCanvasRendererProps {
   session: Session;
@@ -606,6 +610,10 @@ function SectionContentRenderer({
         ))}
       </div>
     );
+  }
+
+  if (section.type === 'related-context') {
+    return <RelatedContextSectionRenderer section={section as RelatedContextSection} />;
   }
 
   // Generic fallback for other section types

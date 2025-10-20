@@ -45,7 +45,11 @@ import type {
   SessionAudioSegment,
   AudioInsights,
   VideoChapter,
+  Task,
+  Note,
+  RelatedContextSection,
 } from '../types';
+import { isFlexibleSummary } from '../types';
 import { audioReviewService } from './audioReviewService';
 import { videoChapteringService } from './videoChapteringService';
 import { sessionsAgentService } from './sessionsAgentService';
@@ -1305,6 +1309,126 @@ export class SessionEnrichmentService {
       'mixed': 'Mixed Work',
     };
     return mapping[sessionType] || 'Deep Work';
+  }
+
+  /**
+   * Process related-context section and create bidirectional links
+   *
+   * Links tasks/notes to the session by:
+   * 1. Updating task.sourceSessionId / note.sourceSessionId
+   * 2. Adding IDs to session.extractedTaskIds / session.extractedNoteIds
+   *
+   * This creates a bidirectional relationship for easy navigation and
+   * ensures referential integrity across the knowledge graph.
+   *
+   * @param sessionId - Session to link items to
+   * @param relatedSection - Related context section from AI summary
+   * @param logger - Logger instance for tracking
+   */
+  private async processRelatedContextLinks(
+    sessionId: string,
+    relatedSection: import('../types').RelatedContextSection,
+    logger: ReturnType<typeof this.createLogger>
+  ): Promise<{
+    tasksLinked: number;
+    notesLinked: number;
+    errors: string[];
+  }> {
+    const result = {
+      tasksLinked: 0,
+      notesLinked: 0,
+      errors: [] as string[],
+    };
+
+    try {
+      const storage = await getStorage();
+
+      // Process task links
+      if (relatedSection.data.relatedTasks.length > 0) {
+        try {
+          const tasks = await storage.load<import('../types').Task[]>('tasks') || [];
+          let tasksUpdated = false;
+
+          relatedSection.data.relatedTasks.forEach(relatedTask => {
+            const task = tasks.find(t => t.id === relatedTask.taskId);
+            if (task) {
+              // Only update if not already linked to this session
+              if (task.sourceSessionId !== sessionId) {
+                task.sourceSessionId = sessionId;
+                tasksUpdated = true;
+                result.tasksLinked++;
+                logger.info('Linked task to session', {
+                  taskId: task.id,
+                  taskTitle: task.title,
+                  sessionId,
+                });
+              }
+            } else {
+              const error = `Task ${relatedTask.taskId} not found`;
+              result.errors.push(error);
+              logger.warn(error);
+            }
+          });
+
+          if (tasksUpdated) {
+            await storage.save('tasks', tasks);
+            logger.info('Tasks updated with session links', {
+              count: result.tasksLinked,
+            });
+          }
+        } catch (error: any) {
+          const errorMsg = `Failed to link tasks: ${error.message}`;
+          result.errors.push(errorMsg);
+          logger.error(errorMsg, error);
+        }
+      }
+
+      // Process note links
+      if (relatedSection.data.relatedNotes.length > 0) {
+        try {
+          const notes = await storage.load<import('../types').Note[]>('notes') || [];
+          let notesUpdated = false;
+
+          relatedSection.data.relatedNotes.forEach(relatedNote => {
+            const note = notes.find(n => n.id === relatedNote.noteId);
+            if (note) {
+              // Only update if not already linked to this session
+              if (note.sourceSessionId !== sessionId) {
+                note.sourceSessionId = sessionId;
+                notesUpdated = true;
+                result.notesLinked++;
+                logger.info('Linked note to session', {
+                  noteId: note.id,
+                  noteSummary: note.summary.substring(0, 50),
+                  sessionId,
+                });
+              }
+            } else {
+              const error = `Note ${relatedNote.noteId} not found`;
+              result.errors.push(error);
+              logger.warn(error);
+            }
+          });
+
+          if (notesUpdated) {
+            await storage.save('notes', notes);
+            logger.info('Notes updated with session links', {
+              count: result.notesLinked,
+            });
+          }
+        } catch (error: any) {
+          const errorMsg = `Failed to link notes: ${error.message}`;
+          result.errors.push(errorMsg);
+          logger.error(errorMsg, error);
+        }
+      }
+
+      return result;
+    } catch (error: any) {
+      logger.error('Critical error in processRelatedContextLinks', error);
+      result.errors.push(`Critical error: ${error.message}`);
+      return result;
+    }
   }
 
   /**

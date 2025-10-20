@@ -806,6 +806,7 @@ export type SummarySection =
   | FocusAreasSection
   | RecommendedTasksSection
   | KeyInsightsSection
+  | RelatedContextSection
   | CustomSection;
 
 /** Base section interface */
@@ -1004,6 +1005,65 @@ export interface KeyInsightsSection extends BaseSummarySection {
       importance: 'minor' | 'moderate' | 'major';
       category?: string;
     }>;
+  };
+}
+
+/**
+ * Related Context Section
+ *
+ * Links this session to existing tasks and notes in the system.
+ * Helps avoid duplicate suggestions and provides continuity across sessions.
+ *
+ * This section is AI-generated during flexible summary enrichment when
+ * related tasks/notes are discovered through intelligent search.
+ */
+export interface RelatedContextSection extends BaseSummarySection {
+  type: 'related-context';
+  title: string; // e.g., "Related Work"
+  data: {
+    /** Existing tasks that relate to this session's work */
+    relatedTasks: Array<{
+      taskId: string;
+      title: string;
+      relevance: string;      // AI explanation of why it's related
+      status: 'todo' | 'in-progress' | 'done' | 'blocked';
+      priority: 'low' | 'medium' | 'high' | 'urgent';
+      dueDate?: string;
+      screenshotIds?: string[];  // Screenshots that reference this task
+    }>;
+
+    /** Existing notes that provide context for this session */
+    relatedNotes: Array<{
+      noteId: string;
+      summary: string;
+      relevance: string;      // AI explanation of why it's related
+      tags: string[];
+      createdAt: string;
+      screenshotIds?: string[]; // Screenshots that reference this note
+    }>;
+
+    /** Tasks AI almost suggested but found existing duplicates */
+    duplicatePrevention?: Array<{
+      suggestedTitle: string;
+      existingTaskId: string;
+      existingTaskTitle: string;
+      similarity: number;     // 0-1 confidence score
+      reason: string;         // Why considered duplicate
+    }>;
+
+    /** Summary of search used to find related items */
+    searchMetadata?: {
+      query: string;
+      tasksFound: number;
+      notesFound: number;
+      searchDuration: number;
+    };
+  };
+  metadata: {
+    itemCount: number;        // Total tasks + notes
+    hasTaskLinks: boolean;
+    hasNoteLinks: boolean;
+    hasDuplicatePrevention: boolean;
   };
 }
 

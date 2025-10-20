@@ -546,6 +546,65 @@ ${(audioInsights.keyMoments || []).map((m: any) => {
 - Focus Level: ${audioInsights.workPatterns?.focusLevel || 'Unknown'}
 - Flow States: ${(audioInsights.workPatterns?.flowStates || []).length} detected` : '';
 
+  // Build related items section
+  const relatedItemsSection = context?.relatedContext ? `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXISTING RELATED WORK (Context-Aware Intelligence)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**IMPORTANT:** The following ${context.relatedContext.tasks.length} tasks and ${context.relatedContext.notes.length} notes
+already exist in the system and are potentially related to this session's work:
+
+${context.relatedContext.tasks.length > 0 ? `
+**EXISTING TASKS (${context.relatedContext.tasks.length}):**
+${context.relatedContext.tasks.map((t: any, idx: number) => `
+${idx + 1}. [ID: ${t.id}] ${t.title}
+   Status: ${t.status} | Priority: ${t.priority}${t.dueDate ? ` | Due: ${new Date(t.dueDate).toLocaleDateString()}` : ''}
+   ${t.description ? `Description: ${t.description.substring(0, 200)}...` : 'No description'}
+   ${t.tags?.length ? `Tags: ${t.tags.join(', ')}` : ''}
+   ${t.sourceSessionId ? `(From session ${t.sourceSessionId})` : '(Standalone task)'}
+`).join('\n')}
+` : 'No related tasks found.'}
+
+${context.relatedContext.notes.length > 0 ? `
+**EXISTING NOTES (${context.relatedContext.notes.length}):**
+${context.relatedContext.notes.map((n: any, idx: number) => `
+${idx + 1}. [ID: ${n.id}] ${n.summary.substring(0, 150)}...
+   Tags: ${n.tags.join(', ')} | Created: ${new Date(n.timestamp).toLocaleDateString()}
+   Content: ${n.content.substring(0, 250).replace(/\n/g, ' ')}...
+   ${n.sourceSessionId ? `(From session ${n.sourceSessionId})` : '(Standalone note)'}
+`).join('\n')}
+` : 'No related notes found.'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL CONTEXT-AWARE INSTRUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. **USE THE related-context SECTION TYPE**:
+   - If you found tasks/notes above that are DIRECTLY relevant to this session's work, include a "related-context" section
+   - Explain HOW each task/note relates to this session
+   - Only include items with clear, direct connections (not vague similarities)
+
+2. **AVOID DUPLICATE RECOMMENDATIONS**:
+   - DO NOT suggest tasks in next-steps that duplicate existing tasks above
+   - If work is already captured in an existing task, reference it instead of creating a new one
+   - Use duplicatePrevention field to show what you almost suggested but found existing
+
+3. **INTELLIGENT LINKING**:
+   - If this session worked on an in-progress task, link it in related-context
+   - If this session referenced a note for context/research, link it
+   - If this session completed an existing task, mark it in achievements and link it
+
+4. **FILL GENUINE GAPS**:
+   - Only recommend NEW tasks in next-steps for:
+     * Follow-up work not yet captured in any existing task
+     * Newly discovered requirements
+     * Complementary work (tests, documentation, etc.)
+   - Be conservative - fewer, high-quality suggestions are better than many duplicates
+
+` : '';
+
   return `You are analyzing a work session titled "${session.name}".
 
 **Session Data:**
@@ -566,7 +625,10 @@ ${analysis?.progressIndicators?.achievements?.length ? `- Achievements: ${analys
 ${analysis?.progressIndicators?.blockers?.length ? `- Blockers: ${analysis.progressIndicators.blockers.join('; ')}` : ''}
 ${analysis?.progressIndicators?.insights?.length ? `- Insights: ${analysis.progressIndicators.insights.join('; ')}` : ''}
 `.trim();
-}).join('\n\n')}${videoChaptersSection}${audioInsightsSection}
+}).join('\n\n')}
+
+**Enrichment Data:**
+${videoChaptersSection}${audioInsightsSection}${relatedItemsSection}
 
 **Analysis Process:**
 Before generating the summary, follow this thinking process:
@@ -597,13 +659,23 @@ Generate a FLEXIBLE session summary by choosing relevant sections based on what 
 12. **focus-areas** - Time breakdown (use for multi-task sessions)
 13. **recommended-tasks** - Follow-up actions (always useful)
 14. **key-insights** - Important observations (always useful)
+15. **task-breakdown** - Subtask breakdown (use for complex implementation sessions)
+16. **related-context** - Links to existing tasks/notes (use when related work exists)
+    - Include: relatedTasks (with relevance explanation), relatedNotes (with relevance)
+    - Include: duplicatePrevention (tasks you almost suggested but found existing)
+    - ONLY use if you found DIRECTLY relevant existing items above
+    - If no related items exist, skip this section entirely
 
-**Selection Guidelines:**
+**Important Section Selection Guidelines:**
 - Choose 2-5 sections that BEST represent this session
 - Don't force every session into the same template
 - Emphasize what makes THIS session unique
 - Use "emphasis: high" for the most important aspect
 - Provide reasoning for your choices
+- **CRITICAL**: If related tasks/notes exist, ALWAYS check them before suggesting new tasks
+  * Use related-context section to link to existing relevant work
+  * In recommended-tasks section, only suggest tasks NOT already covered by existing items
+  * Show duplicate prevention reasoning to demonstrate you checked for overlaps
 
 **Detect Session Type:**
 - deep-work: Sustained focus on a single task
