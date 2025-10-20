@@ -294,10 +294,23 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
   );
 
   // Position springs - smooth interpolation throughout the entire scroll range
-  // OPTION C: Position handled by flex container, these springs are disabled
+  // Zone submenu positioning: Morphs from natural position to fixed position next to logo
   const topMotionValue = useTransform(
     scrollYMotionValue,
-    () => 0 // Always return 0 (no positioning)
+    [thresholds.start, thresholds.end],
+    () => {
+      if (scrollY < thresholds.start) {
+        return naturalPositionRef.current?.top || 0;
+      } else if (scrollY >= thresholds.end) {
+        return finalPositionRef.current?.top || 16;
+      } else {
+        // Interpolate between natural and final during transition
+        const progress = (scrollY - thresholds.start) / (thresholds.end - thresholds.start);
+        const naturalTop = naturalPositionRef.current?.top || 0;
+        const finalTop = finalPositionRef.current?.top || 16;
+        return naturalTop + (finalTop - naturalTop) * progress;
+      }
+    }
   );
   const topSpring = useSpring(topMotionValue, {
     ...springs.snappy,
@@ -307,7 +320,20 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
 
   const leftMotionValue = useTransform(
     scrollYMotionValue,
-    () => 0 // Always return 0 (no positioning)
+    [thresholds.start, thresholds.end],
+    () => {
+      if (scrollY < thresholds.start) {
+        return naturalPositionRef.current?.left || 0;
+      } else if (scrollY >= thresholds.end) {
+        return finalPositionRef.current?.left || 184;
+      } else {
+        // Interpolate between natural and final during transition
+        const progress = (scrollY - thresholds.start) / (thresholds.end - thresholds.start);
+        const naturalLeft = naturalPositionRef.current?.left || 0;
+        const finalLeft = finalPositionRef.current?.left || 184;
+        return naturalLeft + (finalLeft - naturalLeft) * progress;
+      }
+    }
   );
   const leftSpring = useSpring(leftMotionValue, {
     ...springs.snappy,
@@ -405,11 +431,11 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
     return 'shadow-lg';
   }, [isScrolled, overlayOpen]);
 
-  // OPTION C: No position switching - container handles positioning
-  // Keep these variables for now (will remove in Phase 4 cleanup)
-  const position = undefined; // Not used
-  const topValue = 0; // Not used
-  const leftValue = 0; // Not used
+  // Position switching for zone submenus
+  // Morphs from relative (in flow) to fixed (next to logo)
+  const position = shouldBeFixed ? 'fixed' : 'relative';
+  const topValue = shouldBeFixed ? topSpring : undefined;
+  const leftValue = shouldBeFixed ? leftSpring : undefined;
 
   return (
     <>
@@ -456,7 +482,10 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
           }
         }}
         style={{
-          // OPTION C: No position, top, left - handled by parent container
+          // Zone submenu positioning: morphs from relative to fixed position
+          position,
+          top: topValue,
+          left: leftValue,
           borderRadius,
           // Apply both scaleX (width morphing) and uniform scale (hover effect)
           scaleX: scrollY >= thresholds.start ? scaleXSpring : 1,
