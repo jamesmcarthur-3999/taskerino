@@ -297,8 +297,7 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
   // Zone submenu positioning: Morphs from natural position to fixed position next to logo
   const topMotionValue = useTransform(
     scrollYMotionValue,
-    [thresholds.start, thresholds.end],
-    () => {
+    (scrollY) => {
       if (scrollY < thresholds.start) {
         return naturalPositionRef.current?.top || 0;
       } else if (scrollY >= thresholds.end) {
@@ -320,8 +319,7 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
 
   const leftMotionValue = useTransform(
     scrollYMotionValue,
-    [thresholds.start, thresholds.end],
-    () => {
+    (scrollY) => {
       if (scrollY < thresholds.start) {
         return naturalPositionRef.current?.left || 0;
       } else if (scrollY >= thresholds.end) {
