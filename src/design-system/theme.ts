@@ -1036,6 +1036,30 @@ export const RESPONSIVE_NAVIGATION = {
 } as const;
 
 /**
+ * Menu Morphing Pill Constants
+ * Used by MenuMorphPill component for scroll-driven morphing
+ */
+export const MENU_PILL = {
+  width: {
+    expanded: 400,  // Full width (natural inline state)
+    compact: 140,   // Compact width (scrolled state)
+  },
+  borderRadius: {
+    expanded: 24,   // Rounded rectangle (inline)
+    compact: 9999,  // Fully rounded pill (scrolled)
+  },
+  scrollThresholds: {
+    start: 100,     // When morphing begins
+    end: 250,       // When fully compact
+    hysteresis: 10, // Anti-flicker buffer zone
+  },
+  stagger: {
+    offset: 10,     // Scroll offset per item
+    range: 150,     // Total animation range (end - start)
+  },
+} as const;
+
+/**
  * Navigation button style variants
  */
 export type NavButtonVariant = 'default' | 'primary' | 'danger' | 'ghost';
