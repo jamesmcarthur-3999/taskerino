@@ -9,6 +9,7 @@ import { Target } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getGlassClasses, getRadiusClass } from '../../../design-system/theme';
 import type { SessionScreenshot } from '../../../types';
+import { ScreenshotThumbnail } from '../ScreenshotThumbnail';
 
 export interface FocusAreaCardProps {
   name: string;
@@ -86,14 +87,13 @@ export function FocusAreaCard({
           <span className="text-xs text-gray-600">Related:</span>
           <div className="flex gap-1">
             {relatedScreenshots.slice(0, 3).map((screenshot) => (
-              <button
+              <ScreenshotThumbnail
                 key={screenshot.id}
+                screenshot={screenshot}
+                size="sm"
                 onClick={() => onClickScreenshot?.(screenshot)}
-                className="w-6 h-6 rounded bg-white/20 hover:bg-white/30 hover:scale-105 transition-all duration-200 cursor-pointer border border-white/20 text-xs text-gray-700 flex items-center justify-center"
-                title="View screenshot"
-              >
-                <span className="text-[10px]">📸</span>
-              </button>
+                showIcon
+              />
             ))}
             {relatedScreenshots.length > 3 && (
               <span className="text-xs text-gray-500">

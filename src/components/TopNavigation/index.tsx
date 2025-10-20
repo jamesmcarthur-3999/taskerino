@@ -135,7 +135,11 @@ export function TopNavigation() {
 
       {/* OPTION C: CSS Grid container for navigation layout */}
       <header className="fixed top-0 left-0 right-0 z-50 pt-4 px-6">
-        <div className="grid grid-cols-[auto_min-content_1fr_auto] gap-3 items-start">
+        <div className={`grid gap-3 items-start ${
+          scrollY >= 100
+            ? 'grid-cols-[auto_min-content_1fr_auto]'  // 4 columns when MenuButton shown
+            : 'grid-cols-[auto_1fr_auto]'               // 3 columns when MenuButton hidden
+        }`}>
           {/* Column 1: Logo - Fixed width */}
           <div data-logo-container className="pointer-events-none">
             <LogoContainer scrollY={scrollY} isCompact={isCompact} />

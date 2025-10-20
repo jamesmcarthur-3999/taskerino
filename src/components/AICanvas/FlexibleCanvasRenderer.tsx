@@ -368,7 +368,19 @@ function SectionContentRenderer({
     );
   }
 
-  if (section.type === 'flow-states' && 'flowPeriods' in section.data) {
+  if (section.type === 'flow-states') {
+    const flowPeriods = section.data.flowPeriods || [];
+    const totalFlowTime = section.data.totalFlowTime || 0;
+    const flowPercentage = section.data.flowPercentage || 0;
+
+    if (flowPeriods.length === 0) {
+      return (
+        <div className="text-sm text-gray-600 italic p-4">
+          No flow states detected in this session.
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4">
         {/* Summary Stats */}
@@ -376,13 +388,13 @@ function SectionContentRenderer({
           <div className="flex items-center justify-between">
             <div>
               <div className="text-2xl font-bold text-purple-600">
-                {section.data.totalFlowTime} minutes
+                {totalFlowTime} minutes
               </div>
               <div className="text-sm text-gray-600">Total Flow Time</div>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-purple-600">
-                {section.data.flowPercentage}%
+                {flowPercentage}%
               </div>
               <div className="text-sm text-gray-600">of Session</div>
             </div>
@@ -391,7 +403,7 @@ function SectionContentRenderer({
 
         {/* Flow Periods */}
         <div className="space-y-3">
-          {section.data.flowPeriods.map((period: any, idx: number) => (
+          {flowPeriods.map((period: any, idx: number) => (
             <FlowStateCard
               key={idx}
               activity={period.activity}
@@ -618,10 +630,17 @@ function SectionContentRenderer({
 
   // Generic fallback for other section types
   return (
-    <div className="text-sm text-gray-700">
-      <pre className="whitespace-pre-wrap bg-gray-50 p-4 rounded">
-        {JSON.stringify(section.data, null, 2)}
-      </pre>
+    <div className="text-sm text-gray-700 p-4 bg-yellow-50 border border-yellow-200 rounded">
+      <p className="font-semibold">⚠️ Unable to render section: {section.type}</p>
+      <p className="text-xs mt-2">This section type is not yet supported in the canvas renderer.</p>
+      {import.meta.env.DEV && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-blue-600">Show debug data (dev only)</summary>
+          <pre className="whitespace-pre-wrap bg-gray-50 p-4 rounded mt-2 text-xs">
+            {JSON.stringify(section.data, null, 2)}
+          </pre>
+        </details>
+      )}
     </div>
   );
 }

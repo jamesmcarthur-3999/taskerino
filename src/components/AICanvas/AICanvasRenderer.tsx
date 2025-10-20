@@ -105,7 +105,8 @@ function extractLearningMoments(summary: SessionSummary) {
     title: i.title,
     description: i.description,
     timestamp: i.timestamp,
-    confidence: i.confidence
+    confidence: i.confidence,
+    screenshotIds: i.screenshotIds || []
   })));
 
   // Extract from key insights tagged as learnings
@@ -151,7 +152,8 @@ function extractBreakthroughs(summary: SessionSummary) {
       achievement: m.title,
       description: m.description,
       timestamp: m.timestamp,
-      impact: m.impact
+      impact: m.impact,
+      screenshotIds: m.screenshotIds || []
     }))
   );
 
@@ -184,6 +186,8 @@ function detectFlowStates(session: Session): Array<{
   duration: number;
   activity: string;
   intensity: 'high' | 'medium' | 'low';
+  timestamp: string;
+  screenshotSequence: string[];
 }> {
   const flowStates: Array<{
     startTime: string;
@@ -191,6 +195,8 @@ function detectFlowStates(session: Session): Array<{
     duration: number;
     activity: string;
     intensity: 'high' | 'medium' | 'low';
+    timestamp: string;
+    screenshotSequence: string[];
   }> = [];
 
   if (!session.summary) return flowStates;
@@ -224,12 +230,23 @@ function detectFlowStates(session: Session): Array<{
       const endTime = new Date(startTime);
       endTime.setMinutes(endTime.getMinutes() + 30);
 
+      // Collect relevant screenshots in time window
+      const screenshotSequence = session.screenshots
+        ?.filter(screenshot => {
+          if (!screenshot.timestamp) return false;
+          const screenshotTime = new Date(screenshot.timestamp);
+          return screenshotTime >= startTime && screenshotTime <= endTime;
+        })
+        .map(screenshot => screenshot.id) || [];
+
       flowStates.push({
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
         duration: 30,
         activity: 'High productivity period',
-        intensity: (items.length >= 5 ? 'high' : 'medium') as 'high' | 'medium' | 'low'
+        intensity: (items.length >= 5 ? 'high' : 'medium') as 'high' | 'medium' | 'low',
+        timestamp: startTime.toISOString(),
+        screenshotSequence
       });
     }
   }
@@ -243,6 +260,7 @@ function detectFlowStates(session: Session): Array<{
 function detectContextSwitches(summary: SessionSummary) {
   const moments = getKeyMoments(summary);
 
+  // TODO: Fix field extraction - currently using title/description instead of actual task names
   return moments
     .filter(m => m.type === 'context_switch' || m.type === 'transition')
     .map(m => ({

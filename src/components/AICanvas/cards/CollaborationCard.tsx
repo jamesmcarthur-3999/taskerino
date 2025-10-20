@@ -9,6 +9,7 @@ import { Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getGlassClasses, getRadiusClass } from '../../../design-system/theme';
 import type { SessionScreenshot } from '../../../types';
+import { ScreenshotThumbnail } from '../ScreenshotThumbnail';
 
 export interface CollaborationCardProps {
   title: string;
@@ -87,14 +88,13 @@ export function CollaborationCard({
               <span className="text-xs text-gray-600">Related:</span>
               <div className="flex gap-1">
                 {relatedScreenshots.slice(0, 3).map((screenshot) => (
-                  <button
+                  <ScreenshotThumbnail
                     key={screenshot.id}
+                    screenshot={screenshot}
+                    size="sm"
                     onClick={() => onClickScreenshot?.(screenshot)}
-                    className="w-6 h-6 rounded bg-gray-200 hover:bg-gray-300 transition-colors text-xs text-gray-700 flex items-center justify-center"
-                    title="View screenshot"
-                  >
-                    <span className="text-[10px]">📸</span>
-                  </button>
+                    showIcon
+                  />
                 ))}
                 {relatedScreenshots.length > 3 && (
                   <span className="text-xs text-gray-500">
