@@ -593,105 +593,106 @@ export default function TasksZone() {
         <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none will-change-transform" />
 
         <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
-          <SpaceMenuBar
-            primaryAction={{
-              label: 'New Task',
-              icon: <Plus size={16} />,
-              onClick: handleCreateNewTask,
-              gradient: 'cyan',
-            }}
-            viewControls={{
-              views: [
-                { id: 'table', label: 'Table', icon: <Rows3 size={16} /> },
-                { id: 'kanban', label: 'Kanban', icon: <Columns3 size={16} /> },
-              ],
-              activeView: 'table',
-              onViewChange: (id) => id === 'kanban' && setViewMode('kanban'),
-            }}
-            dropdowns={[
-              {
-                label: 'Group',
-                value: groupBy,
-                options: [
-                  { value: 'due-date', label: 'Due Date' },
-                  { value: 'status', label: 'Status' },
-                  { value: 'priority', label: 'Priority' },
-                  { value: 'topic', label: 'Topic' },
-                  { value: 'tag', label: 'Tag' },
-                  { value: 'none', label: 'None' },
+          <div className="bg-white/40 backdrop-blur-2xl rounded-[9999px] border-2 border-white/50 shadow-xl px-4 py-2 mb-4">
+            <SpaceMenuBar
+              primaryAction={{
+                label: 'New Task',
+                icon: <Plus size={16} />,
+                onClick: handleCreateNewTask,
+                gradient: 'cyan',
+              }}
+              viewControls={{
+                views: [
+                  { id: 'table', label: 'Table', icon: <Rows3 size={16} /> },
+                  { id: 'kanban', label: 'Kanban', icon: <Columns3 size={16} /> },
                 ],
-                onChange: (value) => setGroupBy(value as typeof groupBy),
-              },
-            ]}
-            filters={{
-              active: showFilters,
-              count: [!showCompleted, filterPriority !== 'all', filterDueDate !== 'all', filterTags.length > 0].filter(Boolean).length,
-              onToggle: () => setShowFilters(!showFilters),
-              panel: showFilters ? (
-                <StandardFilterPanel
-                  title="Filter Tasks"
-                  sections={[
-                    {
-                      title: 'COMPLETION STATUS',
-                      items: [
-                        { id: 'all', label: 'All Tasks' },
-                        { id: 'active', label: 'Active Only' },
-                      ],
-                      selectedIds: showCompleted ? ['all'] : ['active'],
-                      onToggle: (id) => setShowCompleted(id === 'all'),
-                      multiSelect: false,
-                    },
-                    {
-                      title: 'PRIORITY LEVEL',
-                      items: [
-                        { id: 'all', label: 'All' },
-                        { id: 'urgent', label: 'Urgent' },
-                        { id: 'high', label: 'High' },
-                        { id: 'medium', label: 'Medium' },
-                        { id: 'low', label: 'Low' },
-                      ],
-                      selectedIds: filterPriority !== 'all' ? [filterPriority] : ['all'],
-                      onToggle: (id) => setFilterPriority(id as typeof filterPriority),
-                      multiSelect: false,
-                    },
-                    {
-                      title: 'DUE DATE RANGE',
-                      items: [
-                        { id: 'all', label: 'All Dates' },
-                        { id: 'overdue', label: '⚠️ Overdue' },
-                        { id: 'today', label: '📅 Today' },
-                        { id: 'week', label: '📆 This Week' },
-                      ],
-                      selectedIds: filterDueDate !== 'all' ? [filterDueDate] : ['all'],
-                      onToggle: (id) => setFilterDueDate(id as typeof filterDueDate),
-                      multiSelect: false,
-                    },
-                    ...(topTags.length > 0 ? [{
-                      title: 'TAGS',
-                      items: topTags.map(tag => ({
-                        id: tag,
-                        label: `#${tag}`,
-                      })),
-                      selectedIds: filterTags,
-                      onToggle: handleToggleTagFilter,
-                      multiSelect: true,
-                    }] : []),
-                  ]}
-                  onClearAll={() => {
-                    setShowCompleted(true);
-                    setFilterPriority('all');
-                    setFilterDueDate('all');
-                    setFilterTags([]);
-                  }}
-                />
-              ) : undefined,
-            }}
-            stats={{
-              total: tasksState.tasks.length,
-              filtered: displayedTasks.length,
-            }}
-            className="mb-4"
-          />
+                activeView: 'table',
+                onViewChange: (id) => id === 'kanban' && setViewMode('kanban'),
+              }}
+              dropdowns={[
+                {
+                  label: 'Group',
+                  value: groupBy,
+                  options: [
+                    { value: 'due-date', label: 'Due Date' },
+                    { value: 'status', label: 'Status' },
+                    { value: 'priority', label: 'Priority' },
+                    { value: 'topic', label: 'Topic' },
+                    { value: 'tag', label: 'Tag' },
+                    { value: 'none', label: 'None' },
+                  ],
+                  onChange: (value) => setGroupBy(value as typeof groupBy),
+                },
+              ]}
+              filters={{
+                active: showFilters,
+                count: [!showCompleted, filterPriority !== 'all', filterDueDate !== 'all', filterTags.length > 0].filter(Boolean).length,
+                onToggle: () => setShowFilters(!showFilters),
+                panel: showFilters ? (
+                  <StandardFilterPanel
+                    title="Filter Tasks"
+                    sections={[
+                      {
+                        title: 'COMPLETION STATUS',
+                        items: [
+                          { id: 'all', label: 'All Tasks' },
+                          { id: 'active', label: 'Active Only' },
+                        ],
+                        selectedIds: showCompleted ? ['all'] : ['active'],
+                        onToggle: (id) => setShowCompleted(id === 'all'),
+                        multiSelect: false,
+                      },
+                      {
+                        title: 'PRIORITY LEVEL',
+                        items: [
+                          { id: 'all', label: 'All' },
+                          { id: 'urgent', label: 'Urgent' },
+                          { id: 'high', label: 'High' },
+                          { id: 'medium', label: 'Medium' },
+                          { id: 'low', label: 'Low' },
+                        ],
+                        selectedIds: filterPriority !== 'all' ? [filterPriority] : ['all'],
+                        onToggle: (id) => setFilterPriority(id as typeof filterPriority),
+                        multiSelect: false,
+                      },
+                      {
+                        title: 'DUE DATE RANGE',
+                        items: [
+                          { id: 'all', label: 'All Dates' },
+                          { id: 'overdue', label: '⚠️ Overdue' },
+                          { id: 'today', label: '📅 Today' },
+                          { id: 'week', label: '📆 This Week' },
+                        ],
+                        selectedIds: filterDueDate !== 'all' ? [filterDueDate] : ['all'],
+                        onToggle: (id) => setFilterDueDate(id as typeof filterDueDate),
+                        multiSelect: false,
+                      },
+                      ...(topTags.length > 0 ? [{
+                        title: 'TAGS',
+                        items: topTags.map(tag => ({
+                          id: tag,
+                          label: `#${tag}`,
+                        })),
+                        selectedIds: filterTags,
+                        onToggle: handleToggleTagFilter,
+                        multiSelect: true,
+                      }] : []),
+                    ]}
+                    onClearAll={() => {
+                      setShowCompleted(true);
+                      setFilterPriority('all');
+                      setFilterDueDate('all');
+                      setFilterTags([]);
+                    }}
+                  />
+                ) : undefined,
+              }}
+              stats={{
+                total: tasksState.tasks.length,
+                filtered: displayedTasks.length,
+              }}
+            />
+          </div>
 
           {/* Task Views Tooltip */}
           <FeatureTooltip
@@ -757,105 +758,106 @@ export default function TasksZone() {
         <div className="absolute inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse pointer-events-none will-change-transform" />
 
         <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '96px' }}>
-          <SpaceMenuBar
-            primaryAction={{
-              label: 'New Task',
-              icon: <Plus size={16} />,
-              onClick: handleCreateNewTask,
-              gradient: 'cyan',
-            }}
-            viewControls={{
-              views: [
-                { id: 'table', label: 'Table', icon: <Rows3 size={16} /> },
-                { id: 'kanban', label: 'Kanban', icon: <Columns3 size={16} /> },
-              ],
-              activeView: 'kanban',
-              onViewChange: (id) => id === 'table' && setViewMode('table'),
-            }}
-            dropdowns={[
-              {
-                label: 'Group',
-                value: groupBy,
-                options: [
-                  { value: 'due-date', label: 'Due Date' },
-                  { value: 'status', label: 'Status' },
-                  { value: 'priority', label: 'Priority' },
-                  { value: 'topic', label: 'Topic' },
-                  { value: 'tag', label: 'Tag' },
-                  { value: 'none', label: 'None' },
+          <div className="bg-white/40 backdrop-blur-2xl rounded-[9999px] border-2 border-white/50 shadow-xl px-4 py-2 mb-4">
+            <SpaceMenuBar
+              primaryAction={{
+                label: 'New Task',
+                icon: <Plus size={16} />,
+                onClick: handleCreateNewTask,
+                gradient: 'cyan',
+              }}
+              viewControls={{
+                views: [
+                  { id: 'table', label: 'Table', icon: <Rows3 size={16} /> },
+                  { id: 'kanban', label: 'Kanban', icon: <Columns3 size={16} /> },
                 ],
-                onChange: (value) => setGroupBy(value as typeof groupBy),
-              },
-            ]}
-            filters={{
-              active: showFilters,
-              count: [!showCompleted, filterPriority !== 'all', filterDueDate !== 'all', filterTags.length > 0].filter(Boolean).length,
-              onToggle: () => setShowFilters(!showFilters),
-              panel: showFilters ? (
-                <StandardFilterPanel
-                  title="Filter Tasks"
-                  sections={[
-                    {
-                      title: 'COMPLETION STATUS',
-                      items: [
-                        { id: 'all', label: 'All Tasks' },
-                        { id: 'active', label: 'Active Only' },
-                      ],
-                      selectedIds: showCompleted ? ['all'] : ['active'],
-                      onToggle: (id) => setShowCompleted(id === 'all'),
-                      multiSelect: false,
-                    },
-                    {
-                      title: 'PRIORITY LEVEL',
-                      items: [
-                        { id: 'all', label: 'All' },
-                        { id: 'urgent', label: 'Urgent' },
-                        { id: 'high', label: 'High' },
-                        { id: 'medium', label: 'Medium' },
-                        { id: 'low', label: 'Low' },
-                      ],
-                      selectedIds: filterPriority !== 'all' ? [filterPriority] : ['all'],
-                      onToggle: (id) => setFilterPriority(id as typeof filterPriority),
-                      multiSelect: false,
-                    },
-                    {
-                      title: 'DUE DATE RANGE',
-                      items: [
-                        { id: 'all', label: 'All Dates' },
-                        { id: 'overdue', label: '⚠️ Overdue' },
-                        { id: 'today', label: '📅 Today' },
-                        { id: 'week', label: '📆 This Week' },
-                      ],
-                      selectedIds: filterDueDate !== 'all' ? [filterDueDate] : ['all'],
-                      onToggle: (id) => setFilterDueDate(id as typeof filterDueDate),
-                      multiSelect: false,
-                    },
-                    ...(topTags.length > 0 ? [{
-                      title: 'TAGS',
-                      items: topTags.map(tag => ({
-                        id: tag,
-                        label: `#${tag}`,
-                      })),
-                      selectedIds: filterTags,
-                      onToggle: handleToggleTagFilter,
-                      multiSelect: true,
-                    }] : []),
-                  ]}
-                  onClearAll={() => {
-                    setShowCompleted(true);
-                    setFilterPriority('all');
-                    setFilterDueDate('all');
-                    setFilterTags([]);
-                  }}
-                />
-              ) : undefined,
-            }}
-            stats={{
-              total: tasksState.tasks.length,
-              filtered: displayedTasks.length,
-            }}
-            className="mb-4"
-          />
+                activeView: 'kanban',
+                onViewChange: (id) => id === 'table' && setViewMode('table'),
+              }}
+              dropdowns={[
+                {
+                  label: 'Group',
+                  value: groupBy,
+                  options: [
+                    { value: 'due-date', label: 'Due Date' },
+                    { value: 'status', label: 'Status' },
+                    { value: 'priority', label: 'Priority' },
+                    { value: 'topic', label: 'Topic' },
+                    { value: 'tag', label: 'Tag' },
+                    { value: 'none', label: 'None' },
+                  ],
+                  onChange: (value) => setGroupBy(value as typeof groupBy),
+                },
+              ]}
+              filters={{
+                active: showFilters,
+                count: [!showCompleted, filterPriority !== 'all', filterDueDate !== 'all', filterTags.length > 0].filter(Boolean).length,
+                onToggle: () => setShowFilters(!showFilters),
+                panel: showFilters ? (
+                  <StandardFilterPanel
+                    title="Filter Tasks"
+                    sections={[
+                      {
+                        title: 'COMPLETION STATUS',
+                        items: [
+                          { id: 'all', label: 'All Tasks' },
+                          { id: 'active', label: 'Active Only' },
+                        ],
+                        selectedIds: showCompleted ? ['all'] : ['active'],
+                        onToggle: (id) => setShowCompleted(id === 'all'),
+                        multiSelect: false,
+                      },
+                      {
+                        title: 'PRIORITY LEVEL',
+                        items: [
+                          { id: 'all', label: 'All' },
+                          { id: 'urgent', label: 'Urgent' },
+                          { id: 'high', label: 'High' },
+                          { id: 'medium', label: 'Medium' },
+                          { id: 'low', label: 'Low' },
+                        ],
+                        selectedIds: filterPriority !== 'all' ? [filterPriority] : ['all'],
+                        onToggle: (id) => setFilterPriority(id as typeof filterPriority),
+                        multiSelect: false,
+                      },
+                      {
+                        title: 'DUE DATE RANGE',
+                        items: [
+                          { id: 'all', label: 'All Dates' },
+                          { id: 'overdue', label: '⚠️ Overdue' },
+                          { id: 'today', label: '📅 Today' },
+                          { id: 'week', label: '📆 This Week' },
+                        ],
+                        selectedIds: filterDueDate !== 'all' ? [filterDueDate] : ['all'],
+                        onToggle: (id) => setFilterDueDate(id as typeof filterDueDate),
+                        multiSelect: false,
+                      },
+                      ...(topTags.length > 0 ? [{
+                        title: 'TAGS',
+                        items: topTags.map(tag => ({
+                          id: tag,
+                          label: `#${tag}`,
+                        })),
+                        selectedIds: filterTags,
+                        onToggle: handleToggleTagFilter,
+                        multiSelect: true,
+                      }] : []),
+                    ]}
+                    onClearAll={() => {
+                      setShowCompleted(true);
+                      setFilterPriority('all');
+                      setFilterDueDate('all');
+                      setFilterTags([]);
+                    }}
+                  />
+                ) : undefined,
+              }}
+              stats={{
+                total: tasksState.tasks.length,
+                filtered: displayedTasks.length,
+              }}
+            />
+          </div>
 
           {/* Task Views Tooltip */}
           <FeatureTooltip

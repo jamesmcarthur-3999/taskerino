@@ -339,94 +339,94 @@ export default function LibraryZone() {
       <div className={`absolute inset-0 ${BACKGROUND_GRADIENT.secondary} pointer-events-none will-change-transform`} />
 
       <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '110px' }}>
-        {/* Header - Menu fades out when scrolled */}
+        {/* Header with Stats Pill - Side by Side Layout */}
         <motion.div
-          className="mb-4"
+          className="flex items-center justify-between gap-4 mb-4"
           animate={{ opacity: scrollY < 100 ? 1 : 0 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
         >
-          <SpaceMenuBar
-              primaryAction={{
-                label: 'New Note',
-                icon: <Plus size={16} />,
-                onClick: handleCreateNewNote,
-                gradient: 'purple',
-              }}
-              dropdowns={[
-                {
-                  label: 'Sort',
-                  value: noteSortBy,
-                  options: [
-                    { value: 'recent', label: 'Recent' },
-                    { value: 'oldest', label: 'Oldest' },
-                    { value: 'alphabetical', label: 'A-Z' },
-                  ],
-                  onChange: (value) => setNoteSortBy(value as typeof noteSortBy),
-                },
-              ]}
-              filters={{
-                active: showFilters,
-                count: [
-                  selectedCompanyId ? 1 : 0,
-                  selectedContactId ? 1 : 0,
-                  selectedTopicId ? 1 : 0,
-                  selectedTags.length,
-                ].reduce((a, b) => a + b, 0),
-                onToggle: () => setShowFilters(!showFilters),
-                panel: showFilters ? (
-                  <StandardFilterPanel
-                    title="Filter Notes"
-                    sections={[
-                      {
-                        title: 'COMPANIES',
-                        items: sortedCompanies.map(c => ({ id: c.id, label: c.name })),
-                        selectedIds: selectedCompanyId ? [selectedCompanyId] : [],
-                        onToggle: (id) => setSelectedCompanyId(id === selectedCompanyId ? undefined : id),
-                        multiSelect: false,
-                      },
-                      {
-                        title: 'CONTACTS',
-                        items: sortedContacts.map(c => ({ id: c.id, label: c.name })),
-                        selectedIds: selectedContactId ? [selectedContactId] : [],
-                        onToggle: (id) => setSelectedContactId(id === selectedContactId ? undefined : id),
-                        multiSelect: false,
-                      },
-                      {
-                        title: 'TOPICS',
-                        items: sortedTopics.map(t => ({ id: t.id, label: t.name })),
-                        selectedIds: selectedTopicId ? [selectedTopicId] : [],
-                        onToggle: (id) => setSelectedTopicId(id === selectedTopicId ? undefined : id),
-                        multiSelect: false,
-                      },
-                      {
-                        title: 'TAGS',
-                        items: allTags.slice(0, 8).map(({ tag }) => ({ id: tag, label: `#${tag}` })),
-                        selectedIds: selectedTags,
-                        onToggle: toggleTag,
-                        multiSelect: true,
-                      },
-                    ]}
-                    onClearAll={() => {
-                      setSelectedCompanyId(undefined);
-                      setSelectedContactId(undefined);
-                      setSelectedTopicId(undefined);
-                      setSelectedTags([]);
-                      setSelectedSources([]);
-                      setSelectedSentiments([]);
-                    }}
-                  />
-                ) : undefined,
-              }}
-              stats={undefined}
-              className=""
-            />
-        </motion.div>
+          <div className="bg-white/40 backdrop-blur-2xl rounded-[9999px] border-2 border-white/50 shadow-xl px-4 py-2">
+            <SpaceMenuBar
+                primaryAction={{
+                  label: 'New Note',
+                  icon: <Plus size={16} />,
+                  onClick: handleCreateNewNote,
+                  gradient: 'purple',
+                }}
+                dropdowns={[
+                  {
+                    label: 'Sort',
+                    value: noteSortBy,
+                    options: [
+                      { value: 'recent', label: 'Recent' },
+                      { value: 'oldest', label: 'Oldest' },
+                      { value: 'alphabetical', label: 'A-Z' },
+                    ],
+                    onChange: (value) => setNoteSortBy(value as typeof noteSortBy),
+                  },
+                ]}
+                filters={{
+                  active: showFilters,
+                  count: [
+                    selectedCompanyId ? 1 : 0,
+                    selectedContactId ? 1 : 0,
+                    selectedTopicId ? 1 : 0,
+                    selectedTags.length,
+                  ].reduce((a, b) => a + b, 0),
+                  onToggle: () => setShowFilters(!showFilters),
+                  panel: showFilters ? (
+                    <StandardFilterPanel
+                      title="Filter Notes"
+                      sections={[
+                        {
+                          title: 'COMPANIES',
+                          items: sortedCompanies.map(c => ({ id: c.id, label: c.name })),
+                          selectedIds: selectedCompanyId ? [selectedCompanyId] : [],
+                          onToggle: (id) => setSelectedCompanyId(id === selectedCompanyId ? undefined : id),
+                          multiSelect: false,
+                        },
+                        {
+                          title: 'CONTACTS',
+                          items: sortedContacts.map(c => ({ id: c.id, label: c.name })),
+                          selectedIds: selectedContactId ? [selectedContactId] : [],
+                          onToggle: (id) => setSelectedContactId(id === selectedContactId ? undefined : id),
+                          multiSelect: false,
+                        },
+                        {
+                          title: 'TOPICS',
+                          items: sortedTopics.map(t => ({ id: t.id, label: t.name })),
+                          selectedIds: selectedTopicId ? [selectedTopicId] : [],
+                          onToggle: (id) => setSelectedTopicId(id === selectedTopicId ? undefined : id),
+                          multiSelect: false,
+                        },
+                        {
+                          title: 'TAGS',
+                          items: allTags.slice(0, 8).map(({ tag }) => ({ id: tag, label: `#${tag}` })),
+                          selectedIds: selectedTags,
+                          onToggle: toggleTag,
+                          multiSelect: true,
+                        },
+                      ]}
+                      onClearAll={() => {
+                        setSelectedCompanyId(undefined);
+                        setSelectedContactId(undefined);
+                        setSelectedTopicId(undefined);
+                        setSelectedTags([]);
+                        setSelectedSources([]);
+                        setSelectedSentiments([]);
+                      }}
+                    />
+                  ) : undefined,
+                }}
+                stats={undefined}
+                className=""
+              />
+          </div>
 
-        {/* Stats pill - remains in zone content with fade animation */}
-        <div className="mb-4">
+          {/* Stats pill - side-by-side with menu */}
           <div
             ref={statsPillRef}
-            className="flex items-center gap-2 text-sm text-gray-700 bg-white/30 backdrop-blur-sm px-4 py-2 rounded-[24px] border border-white/60"
+            className="flex items-center gap-2 text-sm text-gray-700 bg-white/30 backdrop-blur-sm px-4 py-2 rounded-[9999px] border border-white/60"
           >
             <span>{notesState.notes.length} total</span>
             {displayedNotes.length !== notesState.notes.length && (
@@ -436,7 +436,7 @@ export default function LibraryZone() {
               </>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Split-screen Layout */}
         <div ref={contentRef} className="flex-1 min-h-0 flex gap-4 relative items-stretch">

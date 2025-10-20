@@ -1591,48 +1591,48 @@ export default function SessionsZone() {
           />
         </div>
 
-        {/* Top Controls Bar - Fades out when scrolled */}
+        {/* Top Controls Bar with Stats Pill - Side by Side Layout */}
         <motion.div
-          className="mb-4"
+          className="flex items-center justify-between gap-4 mb-4"
           animate={{ opacity: scrollY < 100 ? 1 : 0 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
         >
-          <SessionsTopBar
-              activeSession={activeSession}
-              sessions={sessions}
-              allPastSessions={allPastSessions}
-              isStarting={isStarting}
-              isEnding={isEnding}
-              countdown={countdown}
-              handleQuickStart={handleQuickStart}
-              handleEndSession={handleEndSession}
-              pauseSession={pauseSession}
-              resumeSession={resumeSession}
-              currentSettings={currentSettings}
-              updateScreenshots={updateScreenshots}
-              updateAudio={updateAudio}
-              updateVideo={updateVideo}
-              updateInterval={updateInterval}
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-              selectedCategories={selectedCategories}
-              selectedSubCategories={selectedSubCategories}
-              selectedTags={selectedTags}
-              onCategoriesChange={setSelectedCategories}
-              onSubCategoriesChange={setSelectedSubCategories}
-              onTagsChange={setSelectedTags}
-              bulkSelectMode={bulkSelectMode}
-              selectedSessionIds={selectedSessionIds}
-              onBulkSelectModeChange={setBulkSelectMode}
-              onSelectedSessionIdsChange={setSelectedSessionIds}
-              compactMode={compactMode}
-            />
-        </motion.div>
+          <div className="bg-white/40 backdrop-blur-2xl rounded-[9999px] border-2 border-white/50 shadow-xl px-4 py-2">
+            <SessionsTopBar
+                activeSession={activeSession}
+                sessions={sessions}
+                allPastSessions={allPastSessions}
+                isStarting={isStarting}
+                isEnding={isEnding}
+                countdown={countdown}
+                handleQuickStart={handleQuickStart}
+                handleEndSession={handleEndSession}
+                pauseSession={pauseSession}
+                resumeSession={resumeSession}
+                currentSettings={currentSettings}
+                updateScreenshots={updateScreenshots}
+                updateAudio={updateAudio}
+                updateVideo={updateVideo}
+                updateInterval={updateInterval}
+                sortBy={sortBy}
+                onSortChange={setSortBy}
+                selectedCategories={selectedCategories}
+                selectedSubCategories={selectedSubCategories}
+                selectedTags={selectedTags}
+                onCategoriesChange={setSelectedCategories}
+                onSubCategoriesChange={setSelectedSubCategories}
+                onTagsChange={setSelectedTags}
+                bulkSelectMode={bulkSelectMode}
+                selectedSessionIds={selectedSessionIds}
+                onBulkSelectModeChange={setBulkSelectMode}
+                onSelectedSessionIdsChange={setSelectedSessionIds}
+                compactMode={compactMode}
+              />
+          </div>
 
-        {/* Stats pill - remains in zone content */}
-        <div className="mb-4">
+          {/* Stats pill - side-by-side with menu */}
           <SessionsStatsBar ref={statsPillRef} sessions={sessions} />
-        </div>
+        </motion.div>
 
         {/* Two-Panel Layout */}
         <div ref={contentRef} className="flex-1 flex gap-4 min-h-0 relative mt-4">

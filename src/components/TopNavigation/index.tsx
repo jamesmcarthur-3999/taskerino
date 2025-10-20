@@ -141,14 +141,17 @@ export function TopNavigation() {
             <LogoContainer scrollY={scrollY} isCompact={isCompact} />
           </div>
 
-          {/* Column 2: Menu Button - Fades in when scrolled */}
-          <motion.div
-            className="min-w-0"
-            animate={{ opacity: scrollY >= 100 ? 1 : 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-          >
-            <MenuButton />
-          </motion.div>
+          {/* Column 2: Menu Button - Conditionally rendered when scrolled */}
+          {scrollY >= 100 && (
+            <motion.div
+              className="min-w-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
+              <MenuButton />
+            </motion.div>
+          )}
 
           {/* Column 3: Navigation Island - Flex-grow with centering wrapper */}
           <div className="flex justify-center pointer-events-none min-w-0">
