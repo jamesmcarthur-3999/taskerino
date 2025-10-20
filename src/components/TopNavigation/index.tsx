@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { useUI } from '../../context/UIContext';
 import { useSessions } from '../../context/SessionsContext';
 import { useScrollAnimation } from '../../contexts/ScrollAnimationContext';
@@ -22,6 +23,7 @@ import { useCompactNavigation } from '../../hooks/useCompactNavigation';
 import { LogoContainer } from './components/LogoContainer';
 import { NavigationIsland } from './components/NavigationIsland';
 import { RightActionsBar } from './components/RightActionsBar';
+import { MenuButton } from '../MenuButton';
 
 export function TopNavigation() {
   const { state: uiState, dispatch: uiDispatch } = useUI();
@@ -139,8 +141,14 @@ export function TopNavigation() {
             <LogoContainer scrollY={scrollY} isCompact={isCompact} />
           </div>
 
-          {/* Column 2: Menu Portal Target - min-content (0 width when empty) */}
-          <div id="menu-portal-target" className="pointer-events-none min-w-0" />
+          {/* Column 2: Menu Button - Fades in when scrolled */}
+          <motion.div
+            className="min-w-0"
+            animate={{ opacity: scrollY >= 100 ? 1 : 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            <MenuButton />
+          </motion.div>
 
           {/* Column 3: Navigation Island - Flex-grow with centering wrapper */}
           <div className="flex justify-center pointer-events-none min-w-0">

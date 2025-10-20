@@ -47,8 +47,7 @@ import { SessionCard } from './sessions/SessionCard';
 import { SessionsTopBar } from './sessions/SessionsTopBar';
 import { SessionsListPanel } from './sessions/SessionsListPanel';
 import { groupSessionsByDate, calculateTotalStats } from '../utils/sessionHelpers';
-import { MenuMorphPill } from './MenuMorphPill';
-import { MenuPortal } from './MenuPortal';
+import { motion } from 'framer-motion';
 
 export default function SessionsZone() {
   const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment, updateScreenshotAnalysis, addScreenshotComment, toggleScreenshotFlag, setActiveSession, addExtractedTask, addExtractedNote, addContextItem } = useSessions();
@@ -1592,10 +1591,13 @@ export default function SessionsZone() {
           />
         </div>
 
-        {/* Top Controls Bar - Portaled to TopNavigation */}
-        <MenuPortal>
-          <MenuMorphPill resetKey={selectedSessionId || 'default'}>
-            <SessionsTopBar
+        {/* Top Controls Bar - Fades out when scrolled */}
+        <motion.div
+          className="mb-4"
+          animate={{ opacity: scrollY < 100 ? 1 : 0 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          <SessionsTopBar
               activeSession={activeSession}
               sessions={sessions}
               allPastSessions={allPastSessions}
@@ -1625,8 +1627,7 @@ export default function SessionsZone() {
               onSelectedSessionIdsChange={setSelectedSessionIds}
               compactMode={compactMode}
             />
-          </MenuMorphPill>
-        </MenuPortal>
+        </motion.div>
 
         {/* Stats pill - remains in zone content */}
         <div className="mb-4">

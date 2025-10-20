@@ -10,8 +10,7 @@ import { Clock, FileText, Search, X, SlidersHorizontal, CheckSquare, Plus } from
 import { NoteDetailInline } from './NoteDetailInline';
 import { Input } from './Input';
 import { SpaceMenuBar } from './SpaceMenuBar';
-import { MenuMorphPill } from './MenuMorphPill';
-import { MenuPortal } from './MenuPortal';
+import { motion } from 'framer-motion';
 import { StandardFilterPanel } from './StandardFilterPanel';
 import { InlineTagManager } from './InlineTagManager';
 import { CollapsibleSidebar } from './CollapsibleSidebar';
@@ -340,10 +339,13 @@ export default function LibraryZone() {
       <div className={`absolute inset-0 ${BACKGROUND_GRADIENT.secondary} pointer-events-none will-change-transform`} />
 
       <div ref={mainContainerRef} className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6" style={{ paddingTop: '110px' }}>
-        {/* Header - Menu portaled to TopNavigation */}
-        <MenuPortal>
-          <MenuMorphPill resetKey={`${selectedNoteIdForInline}-${isSidebarExpanded}`}>
-            <SpaceMenuBar
+        {/* Header - Menu fades out when scrolled */}
+        <motion.div
+          className="mb-4"
+          animate={{ opacity: scrollY < 100 ? 1 : 0 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          <SpaceMenuBar
               primaryAction={{
                 label: 'New Note',
                 icon: <Plus size={16} />,
@@ -418,8 +420,7 @@ export default function LibraryZone() {
               stats={undefined}
               className=""
             />
-          </MenuMorphPill>
-        </MenuPortal>
+        </motion.div>
 
         {/* Stats pill - remains in zone content with fade animation */}
         <div className="mb-4">
