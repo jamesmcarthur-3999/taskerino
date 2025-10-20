@@ -4,16 +4,14 @@ import { motion, useTransform, useSpring, useMotionValue, AnimatePresence, Motio
 import { Menu } from 'lucide-react';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
 import { useNavigationCoordination } from '../contexts/NavigationCoordinationContext';
+import { springs } from '../animations/tokens';
+import { MENU_PILL } from '../design-system/theme';
 
 // Easing function for smooth morphing animations
 const easeOutQuart = (x: number): number => 1 - Math.pow(1 - x, 4);
 
-// Unified scroll thresholds - matches NavigationCoordinationContext
-// NO MORE independent thresholds that cause desync
-const SCROLL_THRESHOLDS = {
-  start: 100,   // Menu button starts morphing
-  end: 250,     // Menu button fully compact (matches context)
-} as const;
+// Use centralized design system tokens
+const SCROLL_THRESHOLDS = MENU_PILL.scrollThresholds;
 
 // Viewport-proportional width calculations
 // Ensures smooth scaling across all screen sizes from mobile (320px) to 5K (5120px)
@@ -264,9 +262,7 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
   );
 
   const scaleXSpring = useSpring(scaleXMotionValue, {
-    stiffness: 350,
-    damping: 30,
-    mass: 0.6,
+    ...springs.snappy,
     restSpeed: 0.001,  // Tighter rest detection for crisp finish
     restDelta: 0.001,
   });
@@ -308,9 +304,7 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
     () => 0 // Always return 0 (no positioning)
   );
   const topSpring = useSpring(topMotionValue, {
-    stiffness: 350,
-    damping: 30,
-    mass: 0.6,
+    ...springs.snappy,
     restSpeed: 0.001,
     restDelta: 0.001,
   });
@@ -320,19 +314,19 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
     () => 0 // Always return 0 (no positioning)
   );
   const leftSpring = useSpring(leftMotionValue, {
-    stiffness: 350,
-    damping: 30,
-    mass: 0.6,
+    ...springs.snappy,
     restSpeed: 0.001,
     restDelta: 0.001,
   });
 
-  // Border radius (using viewport-relative thresholds)
-  const borderRadiusRaw = useTransform(scrollYMotionValue, [thresholds.start, thresholds.end], [9999, 9999]);
+  // Border radius (using viewport-relative thresholds and design system tokens)
+  const borderRadiusRaw = useTransform(
+    scrollYMotionValue,
+    [thresholds.start, thresholds.end],
+    [MENU_PILL.borderRadius.expanded, MENU_PILL.borderRadius.compact]
+  );
   const borderRadius = useSpring(borderRadiusRaw, {
-    stiffness: 350,
-    damping: 30,
-    mass: 0.6,
+    ...springs.snappy,
     restSpeed: 0.001,
     restDelta: 0.001,
   });
@@ -372,11 +366,7 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
 
   // Hover scale
   const [isHovered, setIsHovered] = useState(false);
-  const scaleValue = useSpring(1, {
-    stiffness: 500,
-    damping: 40,
-    mass: 0.4,
-  });
+  const scaleValue = useSpring(1, springs.stiff);
 
   const handleMouseEnter = () => {
     setIsHovered(true);
