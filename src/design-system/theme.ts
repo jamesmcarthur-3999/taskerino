@@ -1045,8 +1045,8 @@ export const MENU_PILL = {
     compact: 140,   // Compact width (scrolled state)
   },
   borderRadius: {
-    expanded: 24,   // Rounded rectangle (inline)
-    compact: 9999,  // Fully rounded pill (scrolled)
+    expanded: 24 as number,   // Rounded rectangle (inline)
+    compact: 9999 as number,  // Fully rounded pill (scrolled)
   },
   scrollThresholds: {
     start: 100,     // When morphing begins

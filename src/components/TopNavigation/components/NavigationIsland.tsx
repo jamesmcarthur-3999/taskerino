@@ -226,7 +226,7 @@ export function NavigationIsland({
     }
     return {
       duration: durations.s.fast,
-      ease: 'easeInOut',
+      ease: [0.4, 0, 0.2, 1] as [number, number, number, number],
     };
   }, [prefersReducedMotion]);
 

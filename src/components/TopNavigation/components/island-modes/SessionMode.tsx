@@ -96,7 +96,7 @@ function SessionModeComponent({
       tags: [],
       audioRecording: savedSettings.audioRecording,
       enableScreenshots: savedSettings.enableScreenshots,
-      videoRecording: savedSettings.videoRecording,
+      videoRecording: savedSettings.videoRecording ?? false,
       audioMode: savedSettings.audioRecording ? 'transcription' : 'off',
       audioReviewCompleted: false,
     };
