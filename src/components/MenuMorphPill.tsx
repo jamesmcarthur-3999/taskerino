@@ -302,29 +302,10 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
   );
 
   // Position springs - smooth interpolation throughout the entire scroll range
-  // Key insight: We need to interpolate from natural position → final position (next to logo)
-  // Uses viewport-relative thresholds for smooth transitions across all screen sizes
-  // NO MANUAL EASING - let spring physics provide natural motion
+  // OPTION C: Position handled by flex container, these springs are disabled
   const topMotionValue = useTransform(
     scrollYMotionValue,
-    (scroll) => {
-      const finalTop = finalPositionRef.current?.top ?? 16;
-
-      if (scroll < thresholds.start) {
-        // Before transition: use natural position
-        return naturalPositionRef.current?.top ?? 110; // Use initial padding as fallback
-      }
-      if (scroll >= thresholds.end) {
-        // After transition: use final fixed position (next to logo)
-        return finalTop;
-      }
-      // During transition: LINEAR interpolation (spring handles easing)
-      const startTop = naturalPositionRef.current?.top ?? finalTop;
-      const transitionRange = thresholds.end - thresholds.start;
-      const progress = clamp((scroll - thresholds.start) / transitionRange, 0, 1);
-      // Removed easeOutQuart - spring damping provides natural easing
-      return startTop + (finalTop - startTop) * progress;
-    }
+    () => 0 // Always return 0 (no positioning)
   );
   const topSpring = useSpring(topMotionValue, {
     stiffness: 350,
@@ -336,24 +317,7 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
 
   const leftMotionValue = useTransform(
     scrollYMotionValue,
-    (scroll) => {
-      const finalLeft = finalPositionRef.current?.left ?? 184;
-
-      if (scroll < thresholds.start) {
-        // Before transition: use natural position
-        return naturalPositionRef.current?.left ?? 24; // Use reasonable fallback
-      }
-      if (scroll >= thresholds.end) {
-        // After transition: use final fixed position (next to logo)
-        return finalLeft;
-      }
-      // During transition: LINEAR interpolation (spring handles easing)
-      const startLeft = naturalPositionRef.current?.left ?? finalLeft;
-      const transitionRange = thresholds.end - thresholds.start;
-      const progress = clamp((scroll - thresholds.start) / transitionRange, 0, 1);
-      // Removed easeOutQuart - spring damping provides natural easing
-      return startLeft + (finalLeft - startLeft) * progress;
-    }
+    () => 0 // Always return 0 (no positioning)
   );
   const leftSpring = useSpring(leftMotionValue, {
     stiffness: 350,
@@ -455,12 +419,11 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
     return 'shadow-lg';
   }, [isScrolled, overlayOpen]);
 
-  // ALWAYS fixed positioning - no switching
-  const position = 'fixed';
-
-  // Always use spring values
-  const topValue = topSpring;
-  const leftValue = leftSpring;
+  // OPTION C: No position switching - container handles positioning
+  // Keep these variables for now (will remove in Phase 4 cleanup)
+  const position = undefined; // Not used
+  const topValue = 0; // Not used
+  const leftValue = 0; // Not used
 
   return (
     <>
@@ -507,9 +470,7 @@ export function MenuMorphPill({ children, className = '', resetKey }: MenuMorphP
           }
         }}
         style={{
-          position,
-          top: topValue,
-          left: leftValue,
+          // OPTION C: No position, top, left - handled by parent container
           borderRadius,
           // Apply both scaleX (width morphing) and uniform scale (hover effect)
           scaleX: scrollY >= thresholds.start ? scaleXSpring : 1,
