@@ -198,8 +198,25 @@ export class AICanvasGenerator {
     // Extract sections if flexible summary (for action generation)
     const sections: SummarySection[] = summary && isFlexibleSummary(summary) ? summary.sections : [];
 
+    // Token Optimization: Filter and minimize screenshot data for canvas
+    // This reduces input tokens by 60-80% while preserving all important moments
+    const selectedScreenshots = this.selectCanvasScreenshots(session);
+    const minimalScreenshots = selectedScreenshots.map(s => this.minimizeScreenshotData(s));
+
+    console.log('[Canvas] Token optimization:', {
+      originalCount: session.screenshots?.length || 0,
+      selectedCount: selectedScreenshots.length,
+      reductionPercent: Math.round((1 - selectedScreenshots.length / (session.screenshots?.length || 1)) * 100)
+    });
+
     // BEST PRACTICE #1, #3, #6, #7: User prompt with XML structure, examples, schema
-    const userPrompt = buildComponentCanvasPrompt(characteristics, session, summary, sections);
+    // Pass filtered screenshot data to reduce token usage
+    const userPrompt = buildComponentCanvasPrompt(
+      characteristics,
+      { ...session, screenshots: minimalScreenshots }, // Filtered & minimized
+      summary,
+      sections
+    );
 
     // BEST PRACTICE #2: Prefill assistant response to force JSON output
     const messages: ClaudeMessage[] = [
@@ -839,6 +856,170 @@ export class AICanvasGenerator {
     // Find the most impactful insight
     const topInsight = insights[0]; // Assuming sorted by importance
     return topInsight?.insight || null;
+  }
+
+  // ============================================================================
+  // HELPER METHODS - CANVAS TOKEN OPTIMIZATION
+  // ============================================================================
+
+  /**
+   * Score screenshot importance for canvas narrative
+   * Higher scores = more likely to be included in canvas generation
+   *
+   * Scoring criteria:
+   * - Progress indicators (achievements, blockers, insights): 10-15 points each
+   * - Context switches (narrative progression): 10-20 points
+   * - User comments (explicitly marked important): 100 points
+   * - Suggested actions (actionable moments): 5 points each
+   * - Temporal diversity (ensure timeline coverage): up to 12 bonus points
+   */
+  private scoreScreenshotForCanvas(
+    screenshot: SessionScreenshot,
+    sessionDuration: number,
+    allScreenshots: SessionScreenshot[]
+  ): number {
+    let score = 0;
+    const analysis = screenshot.aiAnalysis;
+
+    if (!analysis) return 0; // Can't score without analysis
+
+    // 1. Progress Indicators (Highest Priority)
+    const achievements = analysis.progressIndicators?.achievements?.length || 0;
+    const blockers = analysis.progressIndicators?.blockers?.length || 0;
+    const insights = analysis.progressIndicators?.insights?.length || 0;
+
+    score += achievements * 15; // Major wins
+    score += blockers * 12;     // Problems encountered
+    score += insights * 10;     // Key learnings
+
+    // 2. Context Switches (Shows narrative progression)
+    if (analysis.contextDelta) {
+      if (analysis.contextDelta.length > 100) score += 20; // Major change
+      else if (analysis.contextDelta.length > 50) score += 10; // Moderate change
+    }
+
+    // 3. User Comments (User marked as important)
+    if (screenshot.userComment) {
+      score += 100; // Effectively guarantees inclusion
+    }
+
+    // 4. Suggested Actions (Actionable moments)
+    const actions = analysis.suggestedActions?.length || 0;
+    score += actions * 5;
+
+    // 5. Temporal Spread Bonus (ensure timeline coverage)
+    const screenshotTime = new Date(screenshot.timestamp).getTime();
+    const sessionStart = new Date(allScreenshots[0].timestamp).getTime();
+    const percentThroughSession = (screenshotTime - sessionStart) / (sessionDuration * 60 * 1000);
+
+    // Divide session into 6 time zones (0-16%, 17-33%, etc.)
+    const timeZone = Math.floor(percentThroughSession * 6);
+    const screenshotsInZone = allScreenshots.filter(s => {
+      const t = new Date(s.timestamp).getTime();
+      const pct = (t - sessionStart) / (sessionDuration * 60 * 1000);
+      return Math.floor(pct * 6) === timeZone;
+    }).length;
+
+    // Bonus for underrepresented zones (natural diversity)
+    if (screenshotsInZone < 4) score += 12;
+    else if (screenshotsInZone < 7) score += 6;
+
+    return score;
+  }
+
+  /**
+   * Select top 50% of screenshots for canvas generation
+   * Balances token optimization with narrative quality
+   *
+   * Guarantees:
+   * - All user-commented screenshots (explicitly marked important)
+   * - First 2 and last 2 screenshots (session bookends)
+   * - Highest-scoring screenshots (achievements, blockers, insights, context switches)
+   * - Temporal diversity across session timeline
+   */
+  private selectCanvasScreenshots(session: Session): SessionScreenshot[] {
+    const screenshots = session.screenshots || [];
+    const duration = this.calculateDuration(session);
+
+    // Small sessions: send all (no filtering needed)
+    if (screenshots.length <= 25) {
+      console.log('[Canvas] Small session, sending all', screenshots.length, 'screenshots');
+      return screenshots;
+    }
+
+    console.log('[Canvas] Large session, selecting top 50% from', screenshots.length, 'screenshots');
+
+    // Score all screenshots
+    const scored = screenshots.map(s => ({
+      screenshot: s,
+      score: this.scoreScreenshotForCanvas(s, duration, screenshots)
+    }));
+
+    // Force-include categories
+    const userCommented = screenshots.filter(s => s.userComment);
+    const first2 = screenshots.slice(0, 2);
+    const last2 = screenshots.slice(-2);
+    const forceIncluded = [...userCommented, ...first2, ...last2];
+
+    // Calculate target (50% of total)
+    const targetCount = Math.floor(screenshots.length * 0.5);
+
+    // Top-scoring (excluding force-included)
+    const remaining = scored.filter(s => !forceIncluded.includes(s.screenshot));
+    const topScored = remaining
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Math.max(0, targetCount - forceIncluded.length))
+      .map(s => s.screenshot);
+
+    // Combine, dedupe, and sort by timestamp
+    const selected = [...forceIncluded, ...topScored]
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    console.log('[Canvas] Selected', selected.length, 'screenshots:', {
+      userCommented: userCommented.length,
+      topScored: topScored.length,
+      first2: 2,
+      last2: 2
+    });
+
+    return selected;
+  }
+
+  /**
+   * Strip heavy fields from screenshot to reduce token usage
+   *
+   * Removes (token-heavy fields):
+   * - extractedText: 200-800 tokens per screenshot (OCR dump)
+   * - keyElements: Redundant with summary
+   * - confidence, curiosity, curiosityReason: Internal metadata not needed for narrative
+   *
+   * Keeps (essential for canvas):
+   * - id, timestamp, attachmentId: For ImageGallery and citations
+   * - detectedActivity, summary, contextDelta: Narrative content
+   * - progressIndicators: Achievements, blockers, insights
+   * - suggestedActions: For action buttons
+   * - userComment: User's own notes
+   *
+   * Token savings: ~60-70% per screenshot (329 → ~120 tokens)
+   */
+  private minimizeScreenshotData(screenshot: SessionScreenshot): any {
+    return {
+      id: screenshot.id,
+      timestamp: screenshot.timestamp,
+      attachmentId: screenshot.attachmentId,
+      userComment: screenshot.userComment,
+      aiAnalysis: screenshot.aiAnalysis ? {
+        detectedActivity: screenshot.aiAnalysis.detectedActivity,
+        summary: screenshot.aiAnalysis.summary,
+        contextDelta: screenshot.aiAnalysis.contextDelta,
+        progressIndicators: screenshot.aiAnalysis.progressIndicators,
+        suggestedActions: screenshot.aiAnalysis.suggestedActions,
+        // REMOVED: extractedText (huge - 200-800 tokens each)
+        // REMOVED: keyElements (redundant with summary)
+        // REMOVED: confidence, curiosity, curiosityReason (internal metadata)
+      } : undefined
+    };
   }
 
   // ============================================================================

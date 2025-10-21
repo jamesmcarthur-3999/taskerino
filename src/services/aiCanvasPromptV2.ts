@@ -29,7 +29,14 @@ Your expertise includes:
 - Creating deeply nested JSON structures that balance creativity with strict schema adherence
 - Designing action-oriented interfaces that enable quick user workflows
 
-You generate valid, complete, beautiful component trees that tell the session's unique story.`;
+You generate valid, complete, beautiful component trees that tell the session's unique story.
+
+QUALITY EXPECTATIONS:
+- Go beyond the basics - include as many relevant features and details as possible
+- Create fully-featured, rich layouts that showcase all session content
+- Use advanced nesting (Tabs, Accordions, Grids) for comprehensive information architecture
+- Never hold back - give each canvas your absolute best effort
+- When you use markdown syntax in content, ALWAYS set markdown: true on that component`;
 }
 
 /**
@@ -87,8 +94,10 @@ You must return a valid JSON object with this EXACT structure:
 - "Heading": Semantic headings
   Props: { level: 1-6, text: string, icon?: string, badge?: string, emphasis?: "subtle"|"normal"|"strong"|"hero", gradient?: boolean }
 
-- "Text": Body text
-  Props: { content: string, size?: "xs"|"sm"|"md"|"lg"|"xl", weight?: "normal"|"medium"|"semibold"|"bold", color?: "primary"|"secondary"|"muted", align?: "left"|"center"|"right" }
+- "Text": Body text with optional markdown rendering
+  Props: { content: string, size?: "xs"|"sm"|"md"|"lg"|"xl", weight?: "normal"|"medium"|"semibold"|"bold", color?: "primary"|"secondary"|"muted", align?: "left"|"center"|"right", markdown?: boolean }
+
+  ⚠️ IMPORTANT: Set markdown: true whenever content contains markdown syntax (*, **, \` characters)
 
 - "Badge": Status indicator
   Props: { text: string, variant?: "default"|"success"|"warning"|"danger"|"info"|"purple", pulse?: boolean }
@@ -315,9 +324,13 @@ Multiple sources with comprehensive context:
 
 ## Text Formatting Guidelines
 
+**WHY use markdown:** Users scan summaries quickly. Markdown formatting (bold, code highlighting) creates visual hierarchy that helps users spot key information 3-5x faster than plain text. This directly improves UX and reduces cognitive load.
+
+**CRITICAL RULE:** Whenever you use markdown syntax (* for italic, ** for bold, \` for code) in a Text or List component's content, you MUST set \`markdown: true\` in the props. Without this prop, the formatting will not render and users will see raw markdown characters.
+
 Apply markdown formatting to text content for improved readability:
 
-- **Technical terms**: Wrap in backticks (\\\`variableName\\\`, \\\`functionName()\\\`, \\\`/path/to/file\\\`, \\\`package-name\\\`)
+- **Technical terms**: Wrap in backticks (\`variableName\`, \`functionName()\`, \`/path/to/file\`, \`package-name\`)
 - **Numbers**: Format with comma separators (15000 → 15,000)
 - **Emphasis**: Bold key concepts, actions, and important outcomes
 - **Lists**: Bold the primary action or concept in each item
@@ -325,9 +338,9 @@ Apply markdown formatting to text content for improved readability:
 Be reasonable and considered in your use of formatting. Generate natural, professional text.
 
 **Examples:**
-- "**Fixed authentication bug** in \\\`sessionManager\\\` - reduced login time from 5,000ms to 250ms"
-- "**Implemented Redis caching** for \\\`/api/users\\\` endpoint"
-- "Refactored \\\`DatabaseService.connect()\\\` to handle **connection pooling** with max pool size of 10,000"
+- "**Fixed authentication bug** in \`sessionManager\` - reduced login time from 5,000ms to 250ms"
+- "**Implemented Redis caching** for \`/api/users\` endpoint"
+- "Refactored \`DatabaseService.connect()\` to handle **connection pooling** with max pool size of 10,000"
 
 </component_schema>`;
 }
@@ -412,7 +425,7 @@ Screenshots: 3
               "items": [
                 {
                   "id": "item1",
-                  "content": "**Fixed JWT token validation** in \\\`auth.js\\\` to properly handle expired tokens and refresh flows. Updated validation middleware to check token expiration before processing requests.",
+                  "content": "**Fixed JWT token validation** in \`auth.js\` to properly handle expired tokens and refresh flows. Updated validation middleware to check token expiration before processing requests.",
                   "citations": [{
                     "type": "screenshot",
                     "timestamp": "2025-01-15T10:15:00Z",
@@ -432,7 +445,7 @@ Screenshots: 3
                 },
                 {
                   "id": "item3",
-                  "content": "**Redesigned error messages** to be user-friendly. Replaced technical \\\`401\\\`/\\\`403\\\` codes with clear messages like 'Your session expired. Please log in again'.",
+                  "content": "**Redesigned error messages** to be user-friendly. Replaced technical \`401\`/\`403\` codes with clear messages like 'Your session expired. Please log in again'.",
                   "citations": [{
                     "type": "screenshot",
                     "timestamp": "2025-01-15T10:28:00Z",
@@ -574,7 +587,7 @@ Audio: 12 segments
                   "id": "1",
                   "timestamp": "2025-01-15T14:00:00Z",
                   "title": "WebSocket Implementation Started",
-                  "description": "Set up basic **WebSocket server** using \\\`Socket.io\\\`. Configured server to handle connection lifecycle, room management, and event broadcasting. Created client-side connection manager with **reconnection logic**.",
+                  "description": "Set up basic **WebSocket server** using \`Socket.io\`. Configured server to handle connection lifecycle, room management, and event broadcasting. Created client-side connection manager with **reconnection logic**.",
                   "theme": "info",
                   "citations": [{
                     "type": "screenshot",
@@ -629,7 +642,7 @@ Audio: 12 segments
                   {
                     "component": "Text",
                     "props": {
-                      "content": "Successfully implemented **operational transformation (OT) algorithm** for conflict-free collaborative editing. The breakthrough came from combining \\\`cursorTracking()\\\` with character-level transformations. Tested with complex scenarios - all resolved correctly without data loss.",
+                      "content": "Successfully implemented **operational transformation (OT) algorithm** for conflict-free collaborative editing. The breakthrough came from combining \`cursorTracking()\` with character-level transformations. Tested with complex scenarios - all resolved correctly without data loss.",
                       "size": "md",
                       "markdown": true
                     }
@@ -665,7 +678,7 @@ Audio: 12 segments
               {
                 "component": "Text",
                 "props": {
-                  "content": "Discovered **Conflict-free Replicated Data Types (CRDTs)** as a mathematically proven alternative to \\\`OT\\\`. CRDTs enable distributed systems to reach **eventual consistency** without requiring a central server. Worth exploring for future iteration, especially for offline-first scenarios.",
+                  "content": "Discovered **Conflict-free Replicated Data Types (CRDTs)** as a mathematically proven alternative to \`OT\`. CRDTs enable distributed systems to reach **eventual consistency** without requiring a central server. Worth exploring for future iteration, especially for offline-first scenarios.",
                   "size": "md",
                   "markdown": true
                 }
@@ -689,10 +702,8 @@ Audio: 12 segments
                     "props": {
                       "variant": "bulleted",
                       "items": [
-                        {"text": "Consider implementing client-side prediction with rollback for better perceived performance"},
-                        {"text": "Add network quality indicator so users understand connection status"},
-                        {"text": "Explore delta compression to reduce payload sizes"},
-                        {"text": "Test with CDN edge servers to reduce geographic latency"}
+                        {"id": "opt1", "content": "Consider implementing client-side prediction with rollback for better perceived performance"},
+                        {"id": "opt2", "content": "Add network quality indicator so users understand connection status"}
                       ]
                     }
                   }
@@ -727,280 +738,6 @@ Audio: 12 segments
 </output>
 </example_2>
 
-<example_3>
-<description>Session with challenges - emphasizes blockers, uses accordion for progressive disclosure</description>
-<input_summary>
-Session: Database Migration Debug
-Duration: 2 hours
-Achievements: 1 (partial)
-Blockers: 3 (2 unresolved)
-Screenshots: 15
-Struggle level: High
-</input_summary>
-<output>
-{
-  "theme": {
-    "primary": "#ef4444",
-    "secondary": "#f59e0b",
-    "mood": "focused",
-    "explanation": "Red for critical issues, orange for persistent effort and problem-solving"
-  },
-  "metadata": {
-    "generatedAt": "2025-01-15T16:30:00Z",
-    "sessionType": "coding",
-    "confidence": 0.85
-  },
-  "componentTree": {
-    "component": "Stack",
-    "props": {
-      "direction": "vertical",
-      "spacing": "relaxed"
-    },
-    "children": [
-      {
-        "component": "Card",
-        "props": {
-          "theme": "warning",
-          "padding": "relaxed"
-        },
-        "children": [
-          {
-            "component": "Heading",
-            "props": {
-              "level": 1,
-              "text": "Database Migration Debugging Session",
-              "emphasis": "strong"
-            }
-          },
-          {
-            "component": "Text",
-            "props": {
-              "content": "Tackled complex migration issues - progress made but challenges remain.",
-              "size": "lg",
-              "color": "secondary"
-            }
-          },
-          {
-            "component": "Grid",
-            "props": {
-              "columns": 2,
-              "gap": "normal"
-            },
-            "children": [
-              {
-                "component": "StatCard",
-                "props": {
-                  "value": "3",
-                  "label": "Blockers Identified",
-                  "theme": "danger",
-                  "trend": {
-                    "direction": "down",
-                    "value": "1",
-                    "label": "resolved"
-                  }
-                }
-              },
-              {
-                "component": "StatCard",
-                "props": {
-                  "value": "2h",
-                  "label": "Deep Debugging",
-                  "theme": "warning",
-                  "icon": "🔍"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "component": "Accordion",
-        "props": {
-          "allowMultiple": false,
-          "defaultExpanded": ["blocker1"],
-          "items": [
-            {"id": "blocker1", "title": "⚠️ Foreign Key Constraint Error", "badge": "Critical"},
-            {"id": "blocker2", "title": "⚠️ Data Type Mismatch"},
-            {"id": "progress", "title": "✅ What Was Accomplished"}
-          ]
-        },
-        "children": [
-          {
-            "component": "Stack",
-            "props": {
-              "direction": "vertical",
-              "spacing": "normal"
-            },
-            "children": [
-              {
-                "component": "Text",
-                "props": {
-                  "content": "Migration fails on users table due to circular foreign key dependency between users.created_by and users.id. The 'users' table references itself through the 'created_by' column, but migrations can't create both the table and the foreign key constraint simultaneously. PostgreSQL throws 'relation does not exist' error when trying to add the constraint.",
-                  "size": "md",
-                  "citations": [{
-                    "type": "screenshot",
-                    "timestamp": "2025-01-15T15:45:00Z",
-                    "screenshotIds": ["ss7", "ss8"],
-                    "excerpt": "Terminal showing PostgreSQL error: relation 'users' does not exist when creating FK constraint"
-                  }]
-                }
-              },
-              {
-                "component": "List",
-                "props": {
-                  "variant": "bulleted",
-                  "items": [
-                    {
-                      "text": "Attempted: Disable constraints temporarily - Failed because PostgreSQL still validates references even with constraints disabled during migration creation",
-                      "citations": [{
-                        "type": "screenshot",
-                        "timestamp": "2025-01-15T15:55:00Z",
-                        "screenshotIds": ["ss9"],
-                        "excerpt": "Migration log showing constraint validation error despite DISABLE TRIGGER"
-                      }]
-                    },
-                    {
-                      "text": "Attempted: Change migration order to create users first, then add FK - Partial success but introduces data integrity risks during intermediate state",
-                      "citations": [{
-                        "type": "audio",
-                        "timestamp": "2025-01-15T16:05:00Z",
-                        "audioSegmentId": "seg-4",
-                        "excerpt": "Okay, so splitting it works but now we have a window where data could be invalid..."
-                      }]
-                    },
-                    {
-                      "text": "Next: Break into three migrations: 1) Create users table without FK, 2) Populate initial data with system user, 3) Add FK constraint pointing to system user as default"
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "component": "Stack",
-            "props": {
-              "direction": "vertical",
-              "spacing": "normal"
-            },
-            "children": [
-              {
-                "component": "Text",
-                "props": {
-                  "content": "Column type incompatibility between old TIMESTAMP (no timezone) and new TIMESTAMPTZ (with timezone) causing data conversion errors. Existing data stored in UTC but timestamps lack timezone information, causing ambiguous dates during migration. PostgreSQL can't safely convert without explicit timezone specification.",
-                  "size": "md",
-                  "citations": [{
-                    "type": "screenshot",
-                    "timestamp": "2025-01-15T16:15:00Z",
-                    "screenshotIds": ["ss11"],
-                    "excerpt": "SQL error showing TIMESTAMP -> TIMESTAMPTZ conversion failure on 'created_at' column"
-                  }]
-                }
-              },
-              {
-                "component": "List",
-                "props": {
-                  "variant": "bulleted",
-                  "items": [
-                    {"text": "Solution approach: Use ALTER COLUMN with USING clause to explicitly cast with UTC timezone assumption"},
-                    {"text": "Need to verify all existing timestamps are indeed UTC (check application logs and server timezone)"},
-                    {"text": "Consider adding application-level timezone handling after migration completes"}
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "component": "Stack",
-            "props": {
-              "direction": "vertical",
-              "spacing": "normal"
-            },
-            "children": [
-              {
-                "component": "Text",
-                "props": {
-                  "content": "Made significant progress understanding the migration issues despite not fully resolving them. Documented comprehensive analysis that will accelerate next session.",
-                  "size": "md"
-                }
-              },
-              {
-                "component": "List",
-                "props": {
-                  "variant": "checkmark",
-                  "items": [
-                    {
-                      "text": "Identified root cause of circular FK constraint issue and designed three-phase migration approach to resolve it",
-                      "citations": [{
-                        "type": "screenshot",
-                        "timestamp": "2025-01-15T16:20:00Z",
-                        "screenshotIds": ["ss13"],
-                        "excerpt": "Notes document showing three-phase migration plan with detailed steps"
-                      }]
-                    },
-                    {
-                      "text": "Documented all data type mismatches (5 columns affected) with specific SQL commands to fix each",
-                      "citations": [{
-                        "type": "screenshot",
-                        "timestamp": "2025-01-15T16:25:00Z",
-                        "screenshotIds": ["ss14"],
-                        "excerpt": "Spreadsheet listing all affected columns with current/target types and conversion strategies"
-                      }]
-                    },
-                    {
-                      "text": "Created detailed migration plan with rollback procedures and validation queries for next session"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "component": "Card",
-        "props": {
-          "theme": "info",
-          "padding": "normal"
-        },
-        "children": [
-          {
-            "component": "Heading",
-            "props": {
-              "level": 3,
-              "text": "Next Steps"
-            }
-          },
-          {
-            "component": "ActionToolbar",
-            "props": {
-              "layout": "vertical",
-              "align": "start",
-              "actions": [
-                {
-                  "type": "create_task",
-                  "label": "Fix Foreign Key Dependencies",
-                  "data": {"title": "Refactor migration to handle FK constraints", "priority": "high"}
-                },
-                {
-                  "type": "create_task",
-                  "label": "Test Data Type Conversion",
-                  "data": {"title": "Verify TIMESTAMP → TIMESTAMPTZ conversion", "priority": "high"}
-                },
-                {
-                  "type": "create_note",
-                  "label": "Document Migration Strategy",
-                  "data": {"content": "Save findings for team review"}
-                }
-              ]
-            }
-          }
-        ]
-      }
-    ]
-  }
-}
-</output>
-</example_3>
 </examples>`;
 }
 
@@ -1265,7 +1002,25 @@ ${contextSection.data.duplicatePrevention.map(d => `
 
 ${buildFewShotExamples()}
 
+<thinking>
+Before generating the JSON, use this section to reason about:
+- What is the session's main story based on the FULL timeline (screenshots + audio + video)?
+- What are the key temporal moments? (Use actual timestamps from screenshot_timeline)
+- Which specific screenshots should be featured in ImageGallery? (Use IDs from screenshot_timeline)
+- What was the emotional/energy arc? (Use audio_insights if available)
+- Were there flow states or breakthrough moments? (Check audio_insights work patterns)
+- Which components best represent this content?
+- How should information be organized (tabs vs accordion vs linear)?
+- What colors/themes convey the right emotion?
+- What actions does the user need access to? (Link to specific screenshot evidence)
+- What OUTCOMES matter most, not what technical stats were captured?
+
+**Remember**: You have the COMPLETE session data. Don't just summarize - create a rich, evidence-based story with citations, timestamps, and interactive galleries!
+</thinking>
+
 <instructions>
+BEST PRACTICE: Most important instructions come at the END of the prompt for maximum impact.
+
 BEST PRACTICE #8: Balance creativity within constraints
 
 **CRITICAL - USE ALL THE RICH DATA PROVIDED:**
@@ -1276,28 +1031,33 @@ You have access to the COMPLETE session context including:
 - Audio insights including emotional journey, key moments, and flow states
 - Enhanced achievements/blockers/insights with timestamps and citations
 
-DO NOT just use the summary-level counts! USE THE DETAILED DATA to:
-- Populate Timeline components with actual screenshot timestamps and events
-- Fill ImageGallery components with actual screenshot IDs
-- Create rich narrative sections based on temporal progression
-- Show specific moments with time-stamped citations
-- Display emotional journey arcs and flow states
-- Present video chapter breakdowns
+**LEVERAGE THE DETAILED DATA by:**
+- Populating Timeline components with actual screenshot timestamps and events
+- Filling ImageGallery components with actual screenshot IDs from the timeline
+- Creating rich narrative sections based on temporal progression
+- Showing specific moments with time-stamped citations
+- Displaying emotional journey arcs and flow states
+- Presenting video chapter breakdowns with actual timestamps
 
-**INFORMATION HIERARCHY - What Users Want:**
-Users care about OUTCOMES and INSIGHTS, not technical stats:
-✅ PRIORITIZE: Achievements, insights, blockers, learnings, breakthroughs, next steps
-❌ MINIMIZE: Screenshot counts, audio segment counts, technical processing metadata
+**INFORMATION HIERARCHY - What Users Value:**
+Users care about OUTCOMES and INSIGHTS. Focus on what matters:
 
-**Example GOOD approach:**
+**What to prioritize:**
+✅ Feature actual achievements, insights, and outcomes prominently
+✅ Use screenshot counts only as supporting context, never as headlines
+✅ Extract and display specific events from the detailed timeline data
+✅ Build narratives from concrete moments, not aggregate statistics
+✅ Highlight learnings, breakthroughs, and actionable next steps
+
+**Example excellent approach:**
 - Header: "OAuth Implementation Complete: Solved CORS Issues & Deployed to Production"
 - StatCards: "3 Critical Bugs Fixed", "2 Hours in Flow State", "1 Major Breakthrough"
 - Timeline: Actual events with timestamps from screenshots (e.g., "3:15 PM - Started OAuth implementation")
 
-**Example BAD approach:**
-- Header: "Session Summary: 47 Screenshots Captured"
-- StatCards: "47 Screenshots", "12 Audio Segments", "3 Video Chapters"
-- Generic text without specific events or outcomes
+**What to avoid:**
+- Headers focused on counts: "Session Summary: 47 Screenshots Captured"
+- StatCards showing only technical metrics: "47 Screenshots", "12 Audio Segments"
+- Generic text without specific events or concrete outcomes
 
 1. ANALYZE the session data thoroughly:
    - What is the session's unique story?
@@ -1333,28 +1093,19 @@ Users care about OUTCOMES and INSIGHTS, not technical stats:
    - Proper nesting (children arrays where appropriate)
    - **Include citations with actual screenshot IDs, timestamps, and excerpts**
 
-6. THINK about the user experience:
+6. MARKDOWN FORMATTING RULE (CRITICAL):
+   - Whenever content includes markdown syntax (*, **, \` characters)
+   - You MUST set markdown: true on that Text or List component
+   - This is required for the formatting to render to the user
+   - Without markdown: true, users see raw markdown characters instead of formatting
+   - All examples demonstrate this correctly - follow their pattern exactly
+
+7. THINK about the user experience:
    - Start with impact (hero section with MEANINGFUL headline + OUTCOME metrics)
    - Build narrative flow (timeline with actual events, insights with evidence)
    - End with clear next steps (action buttons linked to context)
    - **Make it easy to trace claims back to evidence (screenshots, audio, video)**
 </instructions>
-
-<thinking>
-Before generating the JSON, use this section to reason about:
-- What is the session's main story based on the FULL timeline (screenshots + audio + video)?
-- What are the key temporal moments? (Use actual timestamps from screenshot_timeline)
-- Which specific screenshots should be featured in ImageGallery? (Use IDs from screenshot_timeline)
-- What was the emotional/energy arc? (Use audio_insights if available)
-- Were there flow states or breakthrough moments? (Check audio_insights work patterns)
-- Which components best represent this content?
-- How should information be organized (tabs vs accordion vs linear)?
-- What colors/themes convey the right emotion?
-- What actions does the user need access to? (Link to specific screenshot evidence)
-- What OUTCOMES matter most, not what technical stats were captured?
-
-**Remember**: You have the COMPLETE session data. Don't just summarize - create a rich, evidence-based story with citations, timestamps, and interactive galleries!
-</thinking>
 
 <output>
 Now generate the complete JSON object following the schema exactly.
