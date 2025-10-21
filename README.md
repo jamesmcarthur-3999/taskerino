@@ -61,6 +61,18 @@ Your organized knowledge base with rich context:
 - Sort by recent, alphabetical, or note count
 - Delete notes or entire topics
 
+### 📹 Sessions - Smart Work Session Recording
+Capture your entire work session with automatic screenshots, audio, and optional video:
+
+- **Adaptive screenshot capture** - AI determines optimal intervals based on activity
+- **Audio recording** - Record your thoughts and meetings
+- **Video recording** - Full screen recording with chaptering (macOS)
+- **AI-powered enrichment** - Automatic summary, insights, and key moments detection
+- **Session timeline** - Interactive timeline with screenshots and key moments
+- **Morphing Canvas** - Dynamic AI-generated review layouts
+- **Cost controls** - Set maximum AI processing costs
+- **Learning dashboard** - Track achievements, blockers, and progress
+
 ### 🤖 Ned - Your AI Assistant
 Meet Ned, your conversational AI that knows everything about your work:
 
@@ -85,14 +97,15 @@ Configure everything AI does:
 
 ## 🎨 Design Highlights
 
-### Five-Zone Navigation
+### Six-Zone Navigation
 Navigate between zones using the floating navigation island:
 
 1. **Capture** - Universal input for quick note capture
 2. **Tasks** - Manage todos with interactive cards
 3. **Library** - Browse notes and knowledge base
-4. **Assistant** - Chat with Ned, your AI assistant
-5. **Profile** - Settings and AI configuration
+4. **Sessions** - Record and review work sessions with AI analysis
+5. **Assistant** - Chat with Ned, your AI assistant
+6. **Profile** - Settings and AI configuration
 
 ### Glass Morphism UI
 - Frosted glass effects with backdrop blur
@@ -108,27 +121,45 @@ Navigate between zones using the floating navigation island:
 ## 📦 Getting Started
 
 ### Prerequisites
-- Node.js 16+
+
+**Required:**
+- Node.js 18+ and npm
 - Claude API key from [console.anthropic.com](https://console.anthropic.com/)
+- Rust toolchain (for Tauri - install via [rustup.rs](https://rustup.rs/))
+
+**Optional (for full session features):**
+- OpenAI API key (for audio review feature)
+- macOS 10.15+ (for video recording via ScreenCaptureKit)
+
+**Platform-specific requirements:**
+- **macOS**: Xcode Command Line Tools
+- **Linux**: webkit2gtk, libappindicator, and other dependencies ([Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
+- **Windows**: Microsoft Visual Studio C++ Build Tools
 
 ### Installation
 
 ```bash
 cd ~/Documents/taskerino
 npm install
-npm run dev
+npm run tauri:dev
 ```
 
-Open `http://localhost:5173`
+This will start the Tauri desktop app in development mode.
+
+**For web-only mode (limited features):**
+```bash
+npm run dev
+# Open http://localhost:5173
+```
 
 ### First-Time Setup
 
 1. App opens to the **Capture Zone**
-2. Scroll down to **Library Zone** → click Settings icon
+2. Navigate to **Profile Zone** (bottom-right icon)
 3. Enter your Claude API key and save
-4. Configure AI behavior (optional)
-5. Close settings and scroll back up to **Capture Zone**
-6. Start capturing!
+4. (Optional) Enter OpenAI API key for session audio review
+5. Configure AI behavior and enrichment settings
+6. Navigate back to **Capture Zone** and start capturing!
 
 ## 💡 Example Workflows
 
@@ -202,39 +233,70 @@ Task
 - Links tasks to relevant topics/notes
 
 ### Tech Stack
-- **React 18** + TypeScript + Vite
+- **Tauri v2** - Desktop app framework (Rust backend)
+- **React 19** + TypeScript + Vite
 - **Tailwind CSS v3** (glass morphism, animations)
-- **Claude AI** (claude-3-5-sonnet-20241022)
-- **localStorage** for persistence (client-side only)
+- **Framer Motion** - Advanced animations and transitions
+- **Claude AI** (Sonnet 4.5 & Haiku 4.5)
+- **OpenAI** (GPT-4o Audio for session enrichment)
+- **Tiptap** - Rich text editor
+- **IndexedDB** (browser) + **Tauri File System** (desktop) for storage
 - **Lucide React** for icons
 
 ### Project Structure
 ```
 src/
 ├── components/
-│   ├── ZoneLayout.tsx          # Main 3-zone container
-│   ├── CaptureZone.tsx         # Frosted capture box
+│   ├── TopNavigation/          # Modern navigation island system
+│   ├── CaptureZone.tsx         # Universal capture interface
+│   ├── TasksZone.tsx           # Task management with views
 │   ├── LibraryZone.tsx         # Notes grid & topics
-│   ├── AssistantZone.tsx       # AI chat interface
-│   └── SettingsModal.tsx       # Configuration
+│   ├── SessionsZone.tsx        # Session recording & review
+│   ├── AssistantZone.tsx       # Ned AI chat interface
+│   ├── ProfileZone.tsx         # Settings & configuration
+│   ├── morphing-canvas/        # Dynamic layout engine
+│   ├── sessions/               # Session-specific components
+│   ├── ned/                    # Ned assistant components
+│   └── ui/                     # Radix UI primitives
 ├── context/
-│   └── AppContext.tsx          # Global state (topics, notes, tasks)
+│   ├── SettingsContext.tsx     # User settings
+│   ├── UIContext.tsx           # UI state
+│   ├── NotesContext.tsx        # Note management
+│   ├── TasksContext.tsx        # Task management
+│   ├── SessionsContext.tsx     # Session lifecycle
+│   ├── EnrichmentContext.tsx   # AI enrichment pipeline
+│   └── [8 other contexts]      # Specialized state management
 ├── services/
-│   └── claudeService.ts        # AI processing & querying
-├── utils/
-│   └── helpers.ts              # Topic matching, note similarity
+│   ├── claudeService.ts        # Core AI processing
+│   ├── sessionEnrichmentService.ts  # Session AI enrichment
+│   ├── videoChapteringService.ts    # Video analysis
+│   ├── contextAgent.ts         # Information retrieval agent
+│   ├── storage/                # IndexedDB + Tauri adapters
+│   └── [15+ other services]    # AI agents & utilities
 ├── types.ts                    # TypeScript definitions
-├── index.css                   # Animations & glass effects
+├── design-system/              # Design tokens & theme
 └── App.tsx                     # Entry point
+
+src-tauri/
+├── src/                        # Rust backend
+│   ├── main.rs                 # Entry point
+│   ├── claude_api.rs           # Streaming API client
+│   ├── openai_api.rs           # OpenAI integration
+│   ├── video_recording.rs      # Screen recording (macOS)
+│   ├── audio_capture.rs        # Audio recording
+│   └── [10+ other modules]     # Native capabilities
+└── Cargo.toml                  # Rust dependencies
 ```
 
 ## 🔐 Privacy & Data
 
-- **100% local** - all data stored in browser localStorage
-- **API calls only to Anthropic Claude** - no other external services
-- **No tracking, no analytics, no servers**
+- **100% local** - Desktop app with native file system storage (or IndexedDB in browser mode)
+- **API calls only to Anthropic Claude & OpenAI** - for AI processing only
+- **No tracking, no analytics, no third-party servers**
+- **Secure API key storage** - Uses Tauri's encrypted storage on desktop
 - Export your data anytime (JSON format)
-- Future: Optional self-hosted backend for sync
+- All recordings and attachments stored locally
+- Optional: Enable session enrichment features (incurs AI API costs)
 
 ## 🎯 What Makes This Different?
 
