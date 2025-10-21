@@ -60,6 +60,7 @@ import { getStorage } from './storage';
 import { generateId } from '../utils/helpers';
 import { generateFlexibleSummary } from '../utils/sessionSynthesis';
 import { invoke } from '@tauri-apps/api/core';
+import { aiCanvasGenerator } from './aiCanvasGenerator';
 
 // ============================================================================
 // Types & Interfaces
@@ -74,6 +75,9 @@ export interface EnrichmentOptions {
 
   /** Whether to regenerate session summary after enrichment */
   includeSummary?: boolean;
+
+  /** Whether to generate canvas after summary (requires includeSummary: true) */
+  includeCanvas?: boolean;
 
   /** Force regeneration even if already completed */
   forceRegenerate?: boolean;
@@ -90,7 +94,7 @@ export interface EnrichmentOptions {
 
 export interface EnrichmentProgress {
   /** Current stage being processed */
-  stage: 'validating' | 'estimating' | 'locking' | 'checkpointing' | 'audio' | 'video' | 'summary' | 'complete' | 'error';
+  stage: 'validating' | 'estimating' | 'locking' | 'checkpointing' | 'audio' | 'video' | 'summary' | 'canvas' | 'complete' | 'error';
 
   /** Human-readable progress message */
   message: string;
@@ -103,6 +107,7 @@ export interface EnrichmentProgress {
     audio?: { status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'; progress: number };
     video?: { status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'; progress: number };
     summary?: { status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'; progress: number };
+    canvas?: { status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'; progress: number };
   };
 }
 
@@ -135,6 +140,14 @@ export interface EnrichmentResult {
   summary?: {
     completed: boolean;
     summary?: any;
+    duration: number;
+    error?: string;
+  };
+
+  /** Canvas generation results */
+  canvas?: {
+    completed: boolean;
+    canvasSpec?: any;
     duration: number;
     error?: string;
   };
@@ -231,6 +244,7 @@ export class SessionEnrichmentService {
       includeAudio: options.includeAudio ?? true,
       includeVideo: options.includeVideo ?? true,
       includeSummary: options.includeSummary ?? true,
+      includeCanvas: options.includeCanvas ?? true,
       forceRegenerate: options.forceRegenerate ?? false,
       maxCost: options.maxCost ?? this.DEFAULT_MAX_COST,
       resumeFromCheckpoint: options.resumeFromCheckpoint ?? true,
@@ -489,7 +503,11 @@ export class SessionEnrichmentService {
             });
 
             try {
-              const summaryResult = await this.enrichSummary(session, opts.onProgress);
+              const summaryResult = await this.enrichSummary(
+                session,
+                { audio: result.audio, video: result.video },
+                opts.onProgress
+              );
               result.summary = summaryResult;
             } catch (error: any) {
               logger.error('Summary regeneration failed', error);
@@ -501,11 +519,86 @@ export class SessionEnrichmentService {
             }
           }
 
+          // Stage 6.5: Canvas Generation (requires summary)
+          if (opts.includeCanvas && opts.includeSummary && result.summary?.completed) {
+            opts.onProgress({
+              stage: 'canvas',
+              message: 'Generating interactive canvas...',
+              progress: 90,
+            });
+
+            try {
+              const canvasStartTime = Date.now();
+
+              // Get latest session data with enriched summary
+              const storage = await getStorage();
+              const sessions = await storage.load<Session[]>('sessions');
+              const latestSession = sessions?.find((s) => s.id === session.id);
+
+              if (!latestSession) {
+                throw new Error('Session not found for canvas generation');
+              }
+
+              // Update session with summary before canvas generation
+              const sessionWithSummary = {
+                ...latestSession,
+                summary: result.summary.summary,
+                audioInsights: result.audio?.insights,
+                video: latestSession.video ? {
+                  ...latestSession.video,
+                  chapters: result.video?.chapters || latestSession.video.chapters,
+                } : undefined,
+              };
+
+              logger.info('Generating canvas for enriched session');
+
+              // Generate canvas with progress tracking
+              const canvasSpec = await aiCanvasGenerator.generate(sessionWithSummary, (progress, stage) => {
+                // Map canvas generation progress (90-95%) within the overall enrichment progress
+                const overallProgress = 90 + (progress * 5);
+                opts.onProgress({
+                  stage: 'canvas',
+                  message: stage || 'Generating interactive canvas...',
+                  progress: overallProgress,
+                });
+              });
+
+              const canvasDuration = (Date.now() - canvasStartTime) / 1000;
+
+              result.canvas = {
+                completed: true,
+                canvasSpec,
+                duration: canvasDuration,
+              };
+
+              logger.info('Canvas generation completed', {
+                duration: canvasDuration,
+                componentCount: canvasSpec.componentTree?.children?.length || 0,
+              });
+            } catch (error: any) {
+              logger.error('Canvas generation failed', error);
+              result.canvas = {
+                completed: false,
+                duration: 0,
+                error: error.message || 'Unknown error',
+              };
+              // Canvas failure is not critical - continue with enrichment
+              result.warnings.push(`Canvas generation failed: ${error.message}`);
+            }
+          } else if (opts.includeCanvas && !opts.includeSummary) {
+            logger.warn('Canvas generation skipped: requires includeSummary to be true');
+            result.warnings.push('Canvas generation skipped because summary regeneration was not enabled');
+          } else if (opts.includeCanvas && !result.summary?.completed) {
+            logger.warn('Canvas generation skipped: summary regeneration failed');
+            result.warnings.push('Canvas generation skipped because summary regeneration failed');
+          }
+
           // Determine overall success BEFORE updating session (FIX: was calculated too late)
           result.success =
             (result.audio?.completed ?? false) ||
             (result.video?.completed ?? false) ||
-            (result.summary?.completed ?? false);
+            (result.summary?.completed ?? false) ||
+            (result.canvas?.completed ?? false);
 
           // Stage 7: Update Session
           await this.updateSessionWithResults(session, result);
@@ -1102,6 +1195,7 @@ export class SessionEnrichmentService {
    */
   private async enrichSummary(
     session: Session,
+    freshEnrichment: Pick<EnrichmentResult, 'audio' | 'video'>,
     onProgress: (progress: EnrichmentProgress) => void
   ): Promise<EnrichmentResult['summary']> {
     const logger = this.createLogger(session.id);
@@ -1138,11 +1232,10 @@ export class SessionEnrichmentService {
         }
       });
 
-      // Collect video chapters if available
-      const videoChapters = latestSession.video?.chapters;
-
-      // Collect audio insights if available
-      const audioInsights = latestSession.audioInsights;
+      // Priority 1: Use fresh enrichment results (just completed in pipeline)
+      // Priority 2: Fallback to storage (for skipped/failed stages or previous enrichments)
+      const videoChapters = freshEnrichment.video?.chapters || latestSession.video?.chapters;
+      const audioInsights = freshEnrichment.audio?.insights || latestSession.audioInsights;
 
       logger.info('Enrichment context collected', {
         existingCategories: existingCategories.size,
@@ -1150,6 +1243,15 @@ export class SessionEnrichmentService {
         existingTags: existingTags.size,
         hasVideoChapters: !!videoChapters && videoChapters.length > 0,
         hasAudioInsights: !!audioInsights,
+        // Verify data source for debugging
+        videoSource: freshEnrichment.video?.chapters
+          ? 'FRESH_PIPELINE'
+          : (latestSession.video?.chapters ? 'STORAGE_FALLBACK' : 'NONE'),
+        audioSource: freshEnrichment.audio?.insights
+          ? 'FRESH_PIPELINE'
+          : (latestSession.audioInsights ? 'STORAGE_FALLBACK' : 'NONE'),
+        videoChapterCount: videoChapters?.length || 0,
+        audioInsightsKeys: audioInsights ? Object.keys(audioInsights) : [],
       });
 
       // Decide whether to use flexible (Phase 2) or legacy summary generation
@@ -1536,6 +1638,12 @@ export class SessionEnrichmentService {
             });
           }
         }
+      }
+
+      // Update canvas
+      if (result.canvas?.completed && result.canvas.canvasSpec) {
+        updatedSession.canvasSpec = result.canvas.canvasSpec;
+        logger.info('✅ Canvas spec updated');
       }
 
       // Update enrichment status

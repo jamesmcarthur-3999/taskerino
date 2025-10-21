@@ -535,6 +535,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
                   includeAudio: capability.audio,
                   includeVideo: capability.video,
                   includeSummary: true,
+                  includeCanvas: true, // Generate canvas as part of enrichment
                   // Force regeneration if video enrichment not completed (handles failed/interrupted enrichments)
                   forceRegenerate: endedSession.enrichmentStatus?.video?.status !== 'completed',
                   onProgress: (progress) => {
@@ -554,28 +555,27 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
                   // Stop tracking enrichment
                   stopTracking(sessionId);
 
-                  // Update React state with enriched session (including chapters)
+                  // Notify user of successful enrichment completion
+                  addNotification({
+                    type: 'success',
+                    title: 'Session Enriched',
+                    message: `"${endedSession.name}" enrichment complete ${result.totalCost ? `(Cost: $${result.totalCost.toFixed(2)})` : ''}`,
+                  });
+
+                  // Update React state with enriched session (including canvas)
                   try {
                     const storage = await getStorage();
                     const sessions = await storage.load<Session[]>('sessions');
 
                     if (sessions) {
-                      // Clear canvas cache for enriched session (summary was updated)
-                      console.log('🧹 [AUTO-ENRICH] Clearing canvas cache (summary updated)');
-                      const updatedSessions = sessions.map(s =>
-                        s.id === sessionId
-                          ? { ...s, canvasSpec: undefined }
-                          : s
-                      );
+                      // Canvas was generated as part of enrichment - no need to clear cache
+                      console.log('✅ [AUTO-ENRICH] React state updated with enriched session (including canvas)');
 
-                      await storage.save('sessions', updatedSessions);
-
-                      // Use LOAD_SESSIONS to avoid duplicate save from dispatch wrapper
+                      // Use LOAD_SESSIONS to reload the enriched session from storage
                       dispatch({
                         type: 'LOAD_SESSIONS',
-                        payload: { sessions: updatedSessions }
+                        payload: { sessions }
                       });
-                      console.log('✅ [AUTO-ENRICH] React state updated with chapters and canvas cache cleared');
                     }
                   } catch (error) {
                     console.error('❌ [AUTO-ENRICH] Failed to update React state:', error);
@@ -585,6 +585,13 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
                   // Stop tracking enrichment on failure
                   stopTracking(sessionId);
+
+                  // Notify user of enrichment failure
+                  addNotification({
+                    type: 'error',
+                    title: 'Enrichment Failed',
+                    message: `Failed to enrich "${endedSession.name}": ${error.message}`,
+                  });
 
                   // CRITICAL FIX: Reload sessions from storage to sync enrichmentStatus
                   // The enrichment service writes enrichmentStatus='failed' directly to storage,
@@ -596,22 +603,15 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
                     const sessions = await storage.load<Session[]>('sessions');
 
                     if (sessions) {
-                      // Clear canvas cache for enriched session (summary was updated)
-                      console.log('🧹 [AUTO-ENRICH] Clearing canvas cache (summary updated)');
-                      const updatedSessions = sessions.map(s =>
-                        s.id === sessionId
-                          ? { ...s, canvasSpec: undefined }
-                          : s
-                      );
+                      // Reload sessions to sync enrichmentStatus (failure state)
+                      // Note: Canvas may have been partially generated before failure - preserve it
+                      console.log('✅ [AUTO-ENRICH] React state synced after enrichment failure');
 
-                      await storage.save('sessions', updatedSessions);
-
-                      // Use LOAD_SESSIONS to avoid duplicate save from dispatch wrapper
+                      // Use LOAD_SESSIONS to reload from storage
                       dispatch({
                         type: 'LOAD_SESSIONS',
-                        payload: { sessions: updatedSessions }
+                        payload: { sessions }
                       });
-                      console.log('✅ [AUTO-ENRICH] React state synced after enrichment failure and canvas cache cleared');
                     }
                   } catch (reloadError) {
                     console.error('❌ [AUTO-ENRICH] CRITICAL: Failed to reload sessions after enrichment failure:', reloadError);
@@ -807,6 +807,17 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
+        // CRITICAL: Skip save if any session has enrichment in progress
+        // This prevents overwriting enrichmentStatus updates made by enrichmentService
+        const hasEnrichmentInProgress = state.sessions.some(
+          s => s.enrichmentStatus?.status === 'in-progress'
+        );
+
+        if (hasEnrichmentInProgress) {
+          console.log('⏸️ Skipping debounced save - enrichment in progress');
+          return;
+        }
+
         const storage = await getStorage();
         await storage.save('sessions', state.sessions);
 

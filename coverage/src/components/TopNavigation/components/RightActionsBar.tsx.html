@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/189</span>
+                <span class='fraction'>0/192</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/189</span>
+                <span class='fraction'>0/192</span>
             </div>
         
             
@@ -325,7 +325,13 @@
 <a name='L260'></a><a href='#L260'>260</a>
 <a name='L261'></a><a href='#L261'>261</a>
 <a name='L262'></a><a href='#L262'>262</a>
-<a name='L263'></a><a href='#L263'>263</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L263'></a><a href='#L263'>263</a>
+<a name='L264'></a><a href='#L264'>264</a>
+<a name='L265'></a><a href='#L265'>265</a>
+<a name='L266'></a><a href='#L266'>266</a>
+<a name='L267'></a><a href='#L267'>267</a>
+<a name='L268'></a><a href='#L268'>268</a>
+<a name='L269'></a><a href='#L269'>269</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -367,6 +373,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -385,6 +394,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -443,6 +453,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -576,6 +587,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -601,6 +613,9 @@ import type { TabType, Notification, NotificationType } from '../../../types';
 <span class="cstat-no" title="statement not covered" >import { getSuccessGradient, getInfoGradient, getWarningGradient, getDangerGradient, getNavButtonClasses } from '../../../design-system/theme';</span>
 &nbsp;
 export interface RightActionsBarProps {
+  // Compact mode
+  isCompact?: boolean;
+&nbsp;
   // Notification state
   notificationData: {
     unreadNotifications: Notification[];
@@ -630,6 +645,7 @@ export interface RightActionsBarProps {
 }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >export function RightActionsBar({</span>
+<span class="cstat-no" title="statement not covered" >  isCompact = false,</span>
 <span class="cstat-no" title="statement not covered" >  notificationData,</span>
 <span class="cstat-no" title="statement not covered" >  showNotifications,</span>
 <span class="cstat-no" title="statement not covered" >  setShowNotifications,</span>
@@ -694,7 +710,7 @@ export interface RightActionsBarProps {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  return (</span>
 <span class="cstat-no" title="statement not covered" >    &lt;div className="fixed top-0 right-0 z-50 pt-4 px-6 pointer-events-none"&gt;</span>
-<span class="cstat-no" title="statement not covered" >      &lt;div className="flex items-center gap-2 pointer-events-auto"&gt;</span>
+<span class="cstat-no" title="statement not covered" >      &lt;div className={`flex items-center ${isCompact ? 'gap-1' : 'gap-2'} pointer-events-auto`}&gt;</span>
         {/* Notifications Button */}
 <span class="cstat-no" title="statement not covered" >        &lt;div className="relative" ref={notificationsRef}&gt;</span>
 <span class="cstat-no" title="statement not covered" >          &lt;NavButton</span>
@@ -705,6 +721,7 @@ export interface RightActionsBarProps {
 <span class="cstat-no" title="statement not covered" >            title="Notifications"</span>
 <span class="cstat-no" title="statement not covered" >            aria-label={`Notifications${hasUnreadNotifications ? ` (${unreadNotifications.length} unread)` : ''}`}</span>
 <span class="cstat-no" title="statement not covered" >            aria-expanded={showNotifications}</span>
+<span class="cstat-no" title="statement not covered" >            isCompact={isCompact}</span>
           &gt;
 <span class="cstat-no" title="statement not covered" >            {hasUnreadNotifications &amp;&amp; (</span>
 <span class="cstat-no" title="statement not covered" >              &lt;span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center border-2 border-white shadow-lg"&gt;</span>
@@ -829,12 +846,12 @@ export interface RightActionsBarProps {
 &nbsp;
         {/* Ask Ned AI Assistant Button */}
 <span class="cstat-no" title="statement not covered" >        &lt;NavButton</span>
-<span class="cstat-no" title="statement not covered" >          variant="action"</span>
+<span class="cstat-no" title="statement not covered" >          variant="icon"</span>
 <span class="cstat-no" title="statement not covered" >          icon={Sparkles}</span>
-<span class="cstat-no" title="statement not covered" >          label="Ask Ned"</span>
 <span class="cstat-no" title="statement not covered" >          isActive={nedOverlayOpen}</span>
 <span class="cstat-no" title="statement not covered" >          onClick={onToggleNedOverlay}</span>
 <span class="cstat-no" title="statement not covered" >          title="Ask Ned - Your AI Assistant (⌘J)"</span>
+<span class="cstat-no" title="statement not covered" >          isCompact={isCompact}</span>
 <span class="cstat-no" title="statement not covered" >        /&gt;</span>
 &nbsp;
         {/* Profile Button */}
@@ -844,6 +861,7 @@ export interface RightActionsBarProps {
 <span class="cstat-no" title="statement not covered" >          isActive={activeTab === 'profile'}</span>
 <span class="cstat-no" title="statement not covered" >          onClick={onProfileClick}</span>
 <span class="cstat-no" title="statement not covered" >          title="Profile &amp; Settings (⌘,)"</span>
+<span class="cstat-no" title="statement not covered" >          isCompact={isCompact}</span>
 <span class="cstat-no" title="statement not covered" >        /&gt;</span>
 <span class="cstat-no" title="statement not covered" >      &lt;/div&gt;</span>
 <span class="cstat-no" title="statement not covered" >    &lt;/div&gt;</span>
@@ -856,7 +874,7 @@ export interface RightActionsBarProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-19T04:28:22.023Z
+                at 2025-10-20T22:29:51.488Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

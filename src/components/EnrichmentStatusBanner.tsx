@@ -51,7 +51,7 @@ export function EnrichmentStatusBanner({
   onSessionUpdate,
 }: EnrichmentStatusBannerProps) {
   const { addNotification } = useUI();
-  const { getActiveEnrichment } = useEnrichmentContext();
+  const { getActiveEnrichment, startTracking, updateProgress, stopTracking } = useEnrichmentContext();
   const [isEnriching, setIsEnriching] = useState(false);
   const [enrichmentProgress, setEnrichmentProgress] = useState<EnrichmentProgress | null>(null);
 
@@ -86,6 +86,9 @@ export function EnrichmentStatusBanner({
     setIsEnriching(true);
     setEnrichmentProgress(null);
 
+    // Start tracking in EnrichmentContext for RainbowBorderProgressIndicator
+    startTracking(session.id, session.name || 'Unnamed Session');
+
     // Notify parent that enrichment is starting
     if (onEnrichmentStart) {
       onEnrichmentStart();
@@ -102,6 +105,7 @@ export function EnrichmentStatusBanner({
         forceRegenerate: false,
         onProgress: (progress) => {
           setEnrichmentProgress(progress);
+          updateProgress(session.id, progress); // Update EnrichmentContext for rainbow border
           console.log(`✨ [ENRICHMENT BANNER] ${progress.stage}: ${progress.message} (${progress.progress}%)`);
         },
       });
@@ -140,6 +144,8 @@ export function EnrichmentStatusBanner({
         message: error.message || 'Failed to enrich session',
       });
     } finally {
+      // Stop tracking in EnrichmentContext (cleans up rainbow border)
+      stopTracking(session.id);
       setIsEnriching(false);
       setEnrichmentProgress(null);
     }

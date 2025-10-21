@@ -139,15 +139,24 @@ export class ContextAgentService {
       // Call Claude Haiku via Tauri
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
-          model: 'claude-3-5-haiku-20241022',
-          maxTokens: 4096,
+          model: 'claude-haiku-4-5-20251001', // Official Haiku 4.5 model (October 2025)
+          maxTokens: 64000, // Claude Haiku 4.5 max output limit (2025)
           system: systemBlocks,
           messages: thread.messages,
         },
       });
 
+      // Check for truncation in response
+      if (response.stopReason === 'max_tokens') {
+        console.error('❌ ContextAgent: Response truncated due to max_tokens limit!');
+        console.error(`   Requested: 64000 tokens`);
+        console.error(`   Used: ${response.usage?.outputTokens || 'unknown'} output tokens`);
+        throw new Error('Context Agent response was truncated. This should not happen with 64K token limit.');
+      }
+
       const content = response.content[0];
       const responseText = content.type === 'text' ? content.text : '';
+      console.log(`📊 ContextAgent: Response length: ${responseText.length} characters, ${response.usage?.outputTokens || 'unknown'} tokens`);
 
       // Log cache usage stats for monitoring
       if (response.usage.cacheCreationInputTokens || response.usage.cacheReadInputTokens) {
@@ -186,8 +195,23 @@ export class ContextAgentService {
    */
   private buildSystemPrompt(): string {
     return `<role>
-You are a Context Agent for Taskerino. Search and filter notes and tasks based on user queries.
+You are a Context Agent for Taskerino. You search and filter notes and tasks based on queries.
 </role>
+
+<critical_output_requirement>
+YOU MUST ALWAYS RESPOND WITH ONLY A JSON CODE BLOCK. NO EXCEPTIONS.
+
+RULES:
+- NEVER respond conversationally
+- NEVER ask clarifying questions
+- NEVER provide explanations outside the JSON structure
+- NEVER say "I'm ready to help" or similar greetings
+- If the query is unclear: return empty arrays with a summary explaining what you need
+- If the query is empty: return empty arrays with a summary listing available data
+- Your ENTIRE response must be ONLY the JSON code block shown in <output_format>
+
+THIS IS NOT A CHAT. THIS IS A SEARCH API. ALWAYS RETURN JSON.
+</critical_output_requirement>
 
 <data_sources>
 - Notes: text, tags, dates, linked to companies/contacts/topics
@@ -204,6 +228,8 @@ You are a Context Agent for Taskerino. Search and filter notes and tasks based o
   "suggestions": ["Want to see notes from Q3 as well?"]
 }
 \`\`\`
+
+IMPORTANT: Your entire response must be ONLY the JSON code block above. No other text before or after.
 </output_format>
 
 <search_strategy>
@@ -294,13 +320,27 @@ Use IDs in your response. You can see ALL ${notes.length} notes and ALL ${tasks.
     tasks: Task[]
   ): Omit<ContextAgentResult, 'thread_id'> {
     try {
-      // Extract JSON from response
-      const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+      // Extract JSON from response - be flexible with formatting
+      // Try with code block first (```json or ``` with whitespace variations)
+      let jsonText = '';
+      const codeBlockMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+
+      if (codeBlockMatch) {
+        jsonText = codeBlockMatch[1];
+      } else {
+        // Try without code blocks - maybe the response is just JSON
+        const directJsonMatch = responseText.match(/(\{[\s\S]*\})/);
+        if (directJsonMatch) {
+          jsonText = directJsonMatch[1];
+        } else {
+          console.error('❌ ContextAgent: Failed to parse response - no JSON found');
+          console.error('Response text (first 500 chars):', responseText.substring(0, 500));
+          console.error('Response text (last 500 chars):', responseText.substring(Math.max(0, responseText.length - 500)));
+          throw new Error('No JSON found in response');
+        }
       }
 
-      const data = JSON.parse(jsonMatch[1]);
+      const data = JSON.parse(jsonText);
 
       // Extract actual objects by IDs
       const matchedNotes = notes.filter(n => data.note_ids?.includes(n.id));

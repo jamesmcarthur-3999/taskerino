@@ -2,6 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   Session,
   SessionSummary,
+  FlexibleSessionSummary,
+  SummarySection,
   SessionScreenshot,
   SessionAudioSegment,
   VideoChapter,
@@ -18,10 +20,16 @@ import type {
   EnrichedSessionCharacteristics,
   Moment,
   Milestone,
-  Learning,
+  SessionInsight,
   StoryType,
 } from '../types';
+import { isFlexibleSummary } from '../types';
 import type { ClaudeChatResponse, ClaudeMessage } from '../types/tauri-ai-commands';
+import {
+  buildComponentCanvasPrompt,
+  buildCanvasSystemPrompt,
+  CANVAS_GENERATION_CONFIG
+} from './aiCanvasPromptV2';
 
 // ============================================================================
 // SERVICE CLASS
@@ -38,29 +46,37 @@ export class AICanvasGenerator {
     console.log('[AICanvasGenerator] Generating canvas for session:', session.id);
 
     // Stage 1: Starting analysis (0%)
-    onProgress?.(0.0, 'Starting analysis');
+    onProgress?.(0.0, 'Initializing canvas generator...');
 
+    // Stage 2: Analyzing temporal patterns (10%)
+    onProgress?.(0.1, 'Analyzing session timeline and rhythm...');
     const characteristics = this.analyzeSession(session);
     const summary = session.summary;
 
-    // Stage 2: Session analyzed (20%)
-    onProgress?.(0.2, 'Session analyzed');
+    // Stage 3: Processing achievements and insights (20%)
+    onProgress?.(0.2, 'Processing achievements and key insights...');
 
-    // Stage 3: Building prompt (40%)
-    onProgress?.(0.4, 'Building design prompt');
+    // Stage 4: Analyzing energy and narrative (30%)
+    onProgress?.(0.3, 'Analyzing energy levels and story arc...');
+
+    // Stage 5: Building comprehensive prompt (40%)
+    onProgress?.(0.4, 'Preparing AI design instructions...');
+
+    // Stage 6: Compiling session data (50%)
+    onProgress?.(0.5, 'Compiling all session data for AI...');
 
     try {
       const spec = await this.designCanvas(characteristics, session, summary, onProgress);
 
-      // Stage 6: Complete (100%)
-      onProgress?.(1.0, 'Canvas ready');
+      // Stage 11: Complete (100%)
+      onProgress?.(1.0, 'Canvas ready!');
 
       return spec;
     } catch (error) {
       console.error('[AICanvasGenerator] AI design failed, using fallback:', error);
-      onProgress?.(0.9, 'Using fallback design');
+      onProgress?.(0.9, 'AI generation failed - using fallback design');
       const fallback = this.createFallbackSpec(characteristics, session);
-      onProgress?.(1.0, 'Canvas ready');
+      onProgress?.(1.0, 'Canvas ready (fallback)');
       return fallback;
     }
   }
@@ -160,472 +176,109 @@ export class AICanvasGenerator {
 
   /**
    * Ask Claude to design canvas layout with enriched context
+   *
+   * BEST PRACTICES IMPLEMENTED:
+   * - System prompt for role definition (#5)
+   * - Prefilling assistant response (#2)
+   * - Explicit temperature setting (#4)
+   * - Max tokens for comprehensive output (#10)
    */
   private async designCanvas(
     characteristics: EnrichedSessionCharacteristics,
     session: Session,
-    summary?: SessionSummary,
+    summary?: SessionSummary | FlexibleSessionSummary,
     onProgress?: (progress: number, stage: string) => void
   ): Promise<CanvasSpec> {
-    const prompt = this.buildDesignPrompt(characteristics, session, summary);
+    // Stage 7: Building system prompt (55%)
+    onProgress?.(0.55, 'Preparing AI expert instructions...');
 
+    // BEST PRACTICE #5: System prompt for role definition
+    const systemPrompt = buildCanvasSystemPrompt();
+
+    // Extract sections if flexible summary (for action generation)
+    const sections: SummarySection[] = summary && isFlexibleSummary(summary) ? summary.sections : [];
+
+    // BEST PRACTICE #1, #3, #6, #7: User prompt with XML structure, examples, schema
+    const userPrompt = buildComponentCanvasPrompt(characteristics, session, summary, sections);
+
+    // BEST PRACTICE #2: Prefill assistant response to force JSON output
     const messages: ClaudeMessage[] = [
-      { role: 'user', content: prompt }
+      { role: 'user', content: userPrompt },
+      { role: 'assistant', content: '{' } // Prefill to start JSON immediately
     ];
 
-    // Stage 4: Requesting AI design (60%)
-    onProgress?.(0.6, 'Requesting AI design');
-
-    const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
-      request: {
-        model: 'claude-sonnet-4-5-20250929',
-        maxTokens: 4000,
-        messages,
-        system: undefined,
-        temperature: undefined,
-      }
-    });
-
-    // Stage 5: Parsing response (80%)
-    onProgress?.(0.8, 'Parsing AI response');
-
-    return this.parseCanvasSpec(response);
-  }
-
-  /**
-   * Build comprehensive design prompt for Claude with rich context
-   */
-  private buildDesignPrompt(
-    c: EnrichedSessionCharacteristics,
-    session: Session,
-    summary?: SessionSummary
-  ): string {
-    // Build peak moments list
-    const peakMomentsList = c.temporal.peakMoments.length > 0
-      ? c.temporal.peakMoments.map(m => `  - ${m.description} (${m.importance})`).join('\n')
-      : '  (none detected)';
-
-    // Build valleys list
-    const valleysList = c.temporal.valleys.length > 0
-      ? c.temporal.valleys.map(v => `  - ${v.description} (${v.importance})`).join('\n')
-      : '  (none detected)';
-
-    // Build milestones list
-    const milestonesList = c.achievements.milestones.length > 0
-      ? c.achievements.milestones.map(m => `  - ${m.title}: ${m.description}`).join('\n')
-      : '  (none detected)';
-
-    // Build breakthroughs list
-    const breakthroughsList = c.achievements.breakthroughs.length > 0
-      ? c.achievements.breakthroughs.map(b => `  - ${b.insight}`).join('\n')
-      : '  (none detected)';
-
-    // Build learnings list
-    const learningsList = c.achievements.learnings.length > 0
-      ? c.achievements.learnings.map(l => `  - ${l.insight}`).join('\n')
-      : '  (none detected)';
-
-    // Build available building blocks
-    const availableHeros = [
-      'timeline-hero: Visual timeline spanning full session with key moments',
-      'achievement-hero: Celebration of major accomplishment with triumphant imagery',
-      'story-hero: Narrative arc with beginning/middle/end structure',
-      'snapshot-hero: Frozen moment in time with rich contextual detail',
-      'journey-hero: Transformation from start to finish with before/after emphasis',
-      'struggle-hero: Honest acknowledgment of challenges faced',
-      'breakthrough-hero: Moment of clarity or major realization',
-    ];
-
-    const availableCards = [
-      'timeline-card: Chronological event list with time markers',
-      'achievement-card: Highlighted accomplishment with celebration tone',
-      'blocker-card: Challenge or obstacle faced with severity indicator',
-      'insight-card: Key learning or realization with context',
-      'gallery-card: Screenshot collection in grid or carousel',
-      'media-card: Audio/video content with playback controls',
-      'metrics-card: Stats and numbers with visual emphasis',
-      'quote-card: Notable quote from audio transcript',
-      'peak-moment-card: Highlight a specific high-impact moment',
-      'valley-card: Acknowledge low points or struggles',
-      'code-snippet-card: Code activity with syntax highlighting',
-      'notes-card: Documentation or written content',
-    ];
-
-    const availableModules = [
-      'split-layout: Side-by-side comparison or parallel threads',
-      'flow-diagram: Sequential process visualization with arrows',
-      'grid-gallery: Multi-image showcase in responsive grid',
-      'rich-timeline: Enhanced timeline with branches and annotations',
-      'stats-panel: Metrics dashboard with charts and graphs',
-      'audio-waveform: Audio visualization with transcript',
-      'video-chapters: Chapter navigation with thumbnails',
-      'energy-graph: Energy/focus visualization over time',
-    ];
-
-    // Session start and end times
-    const startTime = new Date(session.startTime).toLocaleString();
-    const endTime = session.endTime ? new Date(session.endTime).toLocaleString() : 'In progress';
-
-    return `You are a visual designer creating a BESPOKE summary canvas for a work session.
-This canvas MUST tell the unique story of THIS session through thoughtful layout and design.
-
-========================================
-# SESSION PROFILE
-========================================
-
-**Session Name:** ${session.name}
-**Description:** ${session.description || 'No description provided'}
-**Duration:** ${c.duration} minutes (${c.timeOfDay})
-**Status:** ${session.status}
-**Started:** ${startTime}
-**Ended:** ${endTime}
-
-The session took place during **${c.timeOfDay}** hours, which may influence energy levels and work style.
-
-========================================
-# SESSION CHARACTERISTICS
-========================================
-
-**Type & Mood:**
-- **Session Type:** ${c.type} (coding, meeting, learning, research, or mixed)
-- **Mood:** ${c.mood} (productive, challenging, exploratory, or breakthrough)
-- **Overall Intensity:** ${c.intensity} (light, moderate, or heavy)
-
-**Content Counts:**
-- **Screenshots:** ${c.screenshotCount} captured moments
-- **Audio Segments:** ${c.audioSegmentCount} recordings
-- **Video Chapters:** ${c.videoChapterCount} chapters
-- **Achievements:** ${c.achievementCount} wins
-- **Blockers:** ${c.blockerCount} obstacles
-- **Insights:** ${c.insightCount} learnings
-
-**Content Availability:**
-- Has Audio: ${c.hasAudio ? 'YES' : 'NO'}
-- Has Video: ${c.hasVideo ? 'YES' : 'NO'}
-- Has Summary: ${c.hasSummary ? 'YES' : 'NO'}
-- Has Narrative: ${c.hasNarrative ? 'YES' : 'NO'}
-
-========================================
-# TEMPORAL ANALYSIS
-========================================
-
-Understand the session's rhythm and flow over time:
-
-**Session Arc:** ${c.temporal.sessionArc}
-  - This describes the overall shape of the session (e.g., steady-climb, rollercoaster, plateau)
-  - Use this to inform the visual storytelling approach
-
-**Rhythm Pattern:** ${c.temporal.rhythm}
-  - steady-rhythm: Consistent pacing
-  - chaotic-bursts: Irregular activity spikes
-  - varied-pacing: Mix of focused and scattered moments
-
-**Screenshot Density:** ${c.temporal.screenshotDensity.toFixed(1)} screenshots per hour
-  - High density (>10/hr) suggests intense, fast-paced work
-  - Low density (<5/hr) suggests deep focus or slower exploration
-
-**Context Switches:** ${c.temporal.contextSwitches}
-  - Number of times the user changed activities
-  - High switches may indicate multitasking or fragmented work
-
-**Peak Moments (High Activity/Achievement):**
-${peakMomentsList}
-
-**Valley Moments (Low Activity/Struggle):**
-${valleysList}
-
-========================================
-# CONTENT RICHNESS
-========================================
-
-Assess the depth and diversity of session content:
-
-**Audio Content:**
-- Available: ${c.hasAudio ? 'YES' : 'NO'}
-- Word Count: ${c.richness.audioWordCount} words transcribed
-- Rich audio suggests verbal processing, meetings, or narration
-
-**Video Content:**
-- Available: ${c.hasVideo ? 'YES' : 'NO'}
-- Chapter Count: ${c.richness.videoChapterCount} chapters
-- Video chapters provide natural segmentation for timeline layouts
-
-**Activity Detection:**
-- Code Activity: ${c.richness.hasCodeActivity ? 'DETECTED' : 'NOT DETECTED'}
-- Documentation Activity: ${c.richness.hasNotesActivity ? 'DETECTED' : 'NOT DETECTED'}
-- OCR Text Extracted: ${c.richness.ocrTextLength} characters
-- Activity Diversity Score: ${(c.richness.activityDiversity * 100).toFixed(0)}%
-
-**Content Implications:**
-- High diversity (>50%) → Use varied card types to reflect multiple activities
-- Single activity dominance → Focus layout on that primary activity
-- Rich OCR text → Text-heavy screenshots provide context for cards
-- Limited content → Emphasize narrative and insights over raw content
-
-========================================
-# ACHIEVEMENT PROFILE
-========================================
-
-Catalog the session's accomplishments and learnings:
-
-**Major Milestones:**
-${milestonesList}
-
-**Breakthroughs (Eureka Moments):**
-${breakthroughsList}
-
-**Key Learnings:**
-${learningsList}
-
-**Problems Solved:** ${c.achievements.problemsSolved}
-  - Ratio of resolved to total blockers indicates session success
-
-**Blocker Analysis:** ${c.achievements.blockerAnalysis}
-  - Summary of obstacles encountered and their resolution status
-
-**Achievement Implications:**
-- High achievements (>3) → Celebration-focused canvas with achievement-hero
-- No achievements + high blockers → Empathetic canvas acknowledging struggle
-- Balanced achievements/blockers → Problem-solving narrative with journey-hero
-- Many learnings → Insight-focused layout with insight cards prominent
-
-========================================
-# ENERGY & FOCUS
-========================================
-
-Understand the user's mental state and engagement:
-
-**Intensity Level:** ${c.energy.intensity}/100
-  - 0-30: Light, exploratory work
-  - 31-70: Moderate, steady productivity
-  - 71-100: Heavy, intense focus or effort
-
-**Focus Quality:** ${c.energy.focusQuality}/100
-  - 0-30: Scattered, frequent context switches
-  - 31-70: Moderate focus with some interruptions
-  - 71-100: Deep focus, minimal distractions
-
-**Struggle Level:** ${c.energy.struggleLevel}/100
-  - 0-30: Smooth sailing, few obstacles
-  - 31-70: Some challenges, manageable difficulty
-  - 71-100: High difficulty, significant struggle
-
-**Mood Inference:** ${c.energy.mood}
-
-**Breakthrough Moment:**
-${c.energy.breakthroughMoment ? `YES - ${c.energy.breakthroughMoment.description}` : 'None detected'}
-
-**Energy Implications:**
-- High intensity + high focus → Productive flow state, use energetic colors (orange, green)
-- High struggle + low achievements → Challenging session, use empathetic tone (softer blues)
-- Breakthrough moment → Emphasize climax in narrative arc, use breakthrough-hero
-- Low energy session → Calm, reflective design with muted colors
-
-========================================
-# NARRATIVE STRUCTURE
-========================================
-
-Every session tells a story. Understand the narrative arc:
-
-**Story Type:** ${c.narrative.storyType}
-  - hero-journey: Overcame challenges, achieved victory
-  - problem-solving: Encountered issue, debugged, resolved
-  - exploration: Learning and discovering new territory
-  - building: Creating something from scratch
-  - optimization: Improving existing work
-  - collaboration: Working with others
-  - struggle: Facing challenges without clear resolution
-  - mixed: Multiple story threads
-
-**Goal (What They Set Out To Do):**
-${c.narrative.goal || 'Not explicitly stated - infer from session content'}
-
-**Conflict (Main Challenge):**
-${c.narrative.conflict || 'No major conflict detected'}
-
-**Resolution (How It Ended):**
-${c.narrative.resolution || 'Session ended without clear resolution'}
-
-**Transformation (What Changed):**
-${c.narrative.transformation || 'No transformation detected'}
-
-**Narrative Implications:**
-- Clear goal/conflict/resolution → Use story-hero with 3-act structure
-- Multiple conflicts → Split-layout or parallel timelines
-- No clear narrative → Dashboard or grid layout focusing on content
-- Transformation present → Journey-hero showing before/after
-
-========================================
-# FULL NARRATIVE TEXT
-========================================
-
-${summary?.narrative || 'No narrative summary available. Use the data above to infer the session story.'}
-
-${summary?.achievements && summary.achievements.length > 0 ? `
-**Achievements List:**
-${summary.achievements.map((a, i) => `${i + 1}. ${a}`).join('\n')}
-` : ''}
-
-${summary?.blockers && summary.blockers.length > 0 ? `
-**Blockers List:**
-${summary.blockers.map((b, i) => `${i + 1}. ${b}`).join('\n')}
-` : ''}
-
-${summary?.keyInsights && summary.keyInsights.length > 0 ? `
-**Key Insights:**
-${summary.keyInsights.map((ki) => `- ${ki.insight}`).join('\n')}
-` : ''}
-
-========================================
-# AVAILABLE BUILDING BLOCKS
-========================================
-
-Choose components that best tell THIS session's unique story:
-
-**Hero Components (choose ONE for top of canvas):**
-${availableHeros.map(h => '- ' + h).join('\n')}
-
-**Card Components (choose 2-5 for main content):**
-${availableCards.map(c => '- ' + c).join('\n')}
-
-**Module Components (optional, for complex layouts):**
-${availableModules.map(m => '- ' + m).join('\n')}
-
-========================================
-# DESIGN GUIDANCE - 5 PRINCIPLES
-========================================
-
-Apply these principles to create a UNIQUE, BESPOKE canvas:
-
-**1. VISUAL HIERARCHY** - What should dominate the canvas?
-   - High achievement session → Hero celebrates the win, achievements prominent
-   - Struggle session → Hero acknowledges the challenge with empathy
-   - Mixed session → Balance multiple story threads with split layouts
-   - Breakthrough session → Hero emphasizes the eureka moment
-   - Exploration session → Gallery or grid to showcase diverse discoveries
-
-**2. EMOTIONAL RESONANCE** - Match the emotional tone precisely
-   - Celebratory (high achievements): Bright colors, triumphant hero, achievement-hero
-   - Reflective (insights-heavy): Muted tones, thoughtful layout, insight cards
-   - Intense (high energy/struggle): Bold contrasts, dynamic sections, energy-focused
-   - Exploratory (diverse activities): Soft gradients, discovery theme, varied cards
-   - Challenging (high blockers): Supportive tone, acknowledge struggle, empathetic colors
-
-**3. STORY FLOW** - How should the narrative unfold?
-   - Chronological: Timeline-based with clear beginning/middle/end (use timeline-hero)
-   - Thematic: Grouped by topic or activity type (use dashboard layout)
-   - Achievement-focused: Build toward climax/resolution (use story-hero)
-   - Non-linear: Multiple parallel threads (use split-layout)
-   - Comparative: Before/after transformation (use journey-hero)
-
-**4. COLOR PSYCHOLOGY** - Choose colors that enhance the story emotionally
-   - Blue (#3b82f6, #60a5fa): Focus, productivity, calm, trust
-   - Purple (#8b5cf6, #a78bfa): Creativity, learning, insight, wisdom
-   - Green (#10b981, #34d399): Growth, achievement, progress, success
-   - Orange (#f59e0b, #fbbf24): Energy, breakthrough, excitement, warmth
-   - Red (#ef4444, #f87171): Urgency, struggle, intensity, passion
-   - Teal (#14b8a6, #2dd4bf): Balance, clarity, innovation
-   - Indigo (#6366f1, #818cf8): Deep focus, concentration, flow
-   - **Always combine 2 colors** for depth, visual interest, and narrative nuance
-
-**5. CONTENT UTILIZATION** - Leverage what's available intelligently
-   - Rich audio (>500 words) → Include audio insights, quotes, or waveform module
-   - Many screenshots (>10) → Gallery emphasis, grid-gallery, or rich timeline
-   - Video chapters (>3) → Chapter-based navigation with video-chapters module
-   - Few assets (<5 screenshots) → Focus on narrative, insights, and text-heavy cards
-   - Code activity → Include code-snippet-card or terminal visuals
-   - Documentation activity → Notes-card or written content emphasis
-
-========================================
-# OUTPUT FORMAT
-========================================
-
-Return a JSON object with this EXACT structure:
-
-\`\`\`json
-{
-  "theme": {
-    "primary": "#HEX_COLOR",
-    "secondary": "#HEX_COLOR",
-    "mood": "energetic|calm|focused|celebratory",
-    "explanation": "Brief explanation of why these colors fit this session (1-2 sentences)"
-  },
-  "layout": {
-    "type": "timeline|story|dashboard|grid|flow",
-    "emphasis": "chronological|thematic|achievement-focused",
-    "sections": [
-      {
-        "id": "hero",
-        "type": "hero",
-        "emphasis": "high",
-        "position": 1,
-        "content": {
-          "heroType": "timeline-hero|achievement-hero|story-hero|snapshot-hero|journey-hero|struggle-hero|breakthrough-hero",
-          "title": "Hero section title",
-          "subtitle": "Hero section subtitle (optional)"
+    // Stage 8: Sending request to AI (60%)
+    onProgress?.(0.6, '🤖 Claude is analyzing your session...');
+
+    // Stage 9: Waiting for AI (show progress simulation during long wait)
+    // This is the longest step - add simulated progress to show we're not frozen
+    const progressInterval = setInterval(() => {
+      const currentProgress = 0.6 + (Math.random() * 0.05); // Slowly increment from 60-65%
+      onProgress?.(currentProgress, '🤖 AI is designing your canvas (this may take 30-60 seconds)...');
+    }, 3000); // Update every 3 seconds
+
+    try {
+      const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
+        request: {
+          model: CANVAS_GENERATION_CONFIG.model,
+          maxTokens: CANVAS_GENERATION_CONFIG.maxTokens, // BEST PRACTICE #10: No artificial limits
+          messages,
+          system: systemPrompt, // BEST PRACTICE #5
+          temperature: CANVAS_GENERATION_CONFIG.temperature, // BEST PRACTICE #4 & #8
         }
-      },
-      {
-        "id": "section2",
-        "type": "timeline|achievements|blockers|insights|gallery|media",
-        "emphasis": "low|medium|high",
-        "position": 2,
-        "content": {}
-      }
-    ]
-  },
-  "metadata": {
-    "sessionType": "${c.type}",
-    "confidence": 0.8
-  },
-  "narrative": {
-    "hook": "Opening line that captures the session essence (1 sentence)",
-    "arc": "Brief narrative arc summary (2-3 sentences)",
-    "climax": "Peak moment or turning point (1 sentence)",
-    "resolution": "How it ended or what was learned (1 sentence)"
-  }
-}
-\`\`\`
+      });
 
-========================================
-# FINAL INSTRUCTIONS
-========================================
+      clearInterval(progressInterval);
 
-Remember:
-- This is NOT a template - design uniquely for THIS session's story
-- Use the narrative structure (goal/conflict/resolution) to inform visual design
-- Let peak moments and energy levels guide section emphasis
-- Match colors to the emotional journey (not generic defaults)
-- Create a cohesive story from hero to final section
-- Consider time of day, duration, and rhythm when choosing layout type
-- Celebrate achievements, acknowledge struggles, highlight learnings
-- Every design choice should serve the session's unique narrative
+      // Stage 10: Parsing response (80%)
+      onProgress?.(0.8, 'Parsing AI-generated component tree...');
 
-Design the canvas now.`;
+      // Stage 10.5: Validating structure (90%)
+      onProgress?.(0.9, 'Validating component structure...');
+
+      return this.parseCanvasSpec(response);
+    } catch (error) {
+      clearInterval(progressInterval);
+      throw error;
+    }
   }
 
   /**
    * Parse Claude response into CanvasSpec
+   *
+   * BEST PRACTICE #2: Handle prefilled response (starts with '{')
    */
   private parseCanvasSpec(response: ClaudeChatResponse): CanvasSpec {
     let jsonText = response.content[0].text.trim();
+
+    // Remove markdown code fences if present (though prefilling should prevent this)
     const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonMatch) jsonText = jsonMatch[1].trim();
+    if (jsonMatch) {
+      jsonText = jsonMatch[1].trim();
+    }
+
+    // Prepend the prefilled '{' that we sent in the assistant message
+    // The response doesn't include it, so we need to add it back
+    if (!jsonText.startsWith('{')) {
+      jsonText = '{' + jsonText;
+    }
 
     const parsed = JSON.parse(jsonText);
 
     return {
       theme: parsed.theme,
       layout: {
-        type: parsed.layout.type,
-        emphasis: parsed.layout.emphasis || 'chronological',
-        sections: parsed.layout.sections,
+        type: parsed.layout?.type || 'dashboard',
+        emphasis: parsed.layout?.emphasis || 'chronological',
+        sections: parsed.layout?.sections || [],
       },
       metadata: {
         generatedAt: new Date().toISOString(),
         sessionType: parsed.metadata?.sessionType || 'unknown',
         confidence: parsed.metadata?.confidence || 0.5,
       },
+      // New componentTree from AI (BEST PRACTICE #1-10: Complete implementation)
+      componentTree: parsed.componentTree,
     };
   }
 
@@ -934,8 +587,8 @@ Design the canvas now.`;
   /**
    * Extract key learnings from the session
    */
-  private extractLearnings(session: Session): Learning[] {
-    const learnings: Learning[] = [];
+  private extractLearnings(session: Session): SessionInsight[] {
+    const learnings: SessionInsight[] = [];
 
     // Extract from key insights
     const insights = session.summary?.keyInsights || [];

@@ -278,12 +278,20 @@ Return ONLY the JSON array, no other text.`;
 
       // Call Claude Vision API via Tauri
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion_vision', {
-        model: 'claude-haiku-4-5', // 3x cheaper, 2x faster, supports vision
-        maxTokens: 4096,
+        model: 'claude-haiku-4-5-20251001', // Official Haiku 4.5 model (October 2025) - 3x cheaper, 2x faster, supports vision
+        maxTokens: 64000, // Claude Haiku 4.5 max output limit (2025)
         messages,
         system: undefined,
         temperature: undefined,
       });
+
+      // Check for truncation in response
+      if (response.stopReason === 'max_tokens') {
+        console.error('❌ [CHAPTERING] Response truncated due to max_tokens limit!');
+        console.error(`   Requested: 64000 tokens`);
+        console.error(`   Used: ${response.usage?.outputTokens || 'unknown'} output tokens`);
+        throw new Error('Claude response was truncated. This should not happen with 64K token limit. Contact support.');
+      }
 
       // Extract response text
       const content = response.content[0];
@@ -292,6 +300,8 @@ Return ONLY the JSON array, no other text.`;
       }
 
       const responseText = content.text.trim();
+      console.log(`📊 [CHAPTERING] Response length: ${responseText.length} characters, ${response.usage?.outputTokens || 'unknown'} tokens`);
+
       let jsonText = responseText;
 
       // Extract JSON from markdown code block if present
@@ -308,6 +318,13 @@ Return ONLY the JSON array, no other text.`;
 
     } catch (error) {
       console.error('❌ [CHAPTERING] Claude API failed:', error);
+
+      // Log full error details for truncation issues
+      if (error instanceof Error && error.message.includes('truncated')) {
+        console.error('   This is a truncation error - the AI response was cut off mid-generation');
+        console.error('   Check token usage and consider implementing chunking strategy');
+      }
+
       throw new Error(`Failed to analyze chapters: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

@@ -12,6 +12,7 @@ import { useMatrixAnimation } from './useMatrixAnimation';
 
 export interface CanvasMatrixProps {
   progress?: number; // External progress (0-1) - if provided, overrides internal animation
+  stage?: string; // Current stage description
   colorScheme?: ColorScheme;
   onComplete?: () => void;
   className?: string;
@@ -22,6 +23,7 @@ export interface CanvasMatrixProps {
  */
 export function CanvasMatrix({
   progress: externalProgress,
+  stage,
   colorScheme = 'lavender',
   onComplete,
   className = '',
@@ -51,8 +53,9 @@ export function CanvasMatrix({
     ? { rows: 8, cols: 8, cellSize: 10 }
     : { rows: 10, cols: 10, cellSize: 12 };
 
-  // Dynamic message based on progress
+  // Use provided stage or fall back to generic messages
   const getMessage = () => {
+    if (stage) return stage;
     if (progress < 0.3) return "Analyzing session structure...";
     if (progress < 0.7) return "Assembling layout components...";
     if (progress < 0.95) return "Adding final touches...";
@@ -85,8 +88,26 @@ export function CanvasMatrix({
         />
       </div>
 
+      {/* Progress bar */}
+      <div className="mb-3">
+        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-purple-500 to-cyan-500"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress * 100}%` }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+          />
+        </div>
+        <div className="flex justify-between items-center mt-1">
+          <p className="text-xs text-gray-500">{Math.round(progress * 100)}%</p>
+          <p className="text-xs text-gray-500">
+            {progress < 0.3 ? 'Analyzing...' : progress < 0.6 ? 'Building...' : progress < 0.95 ? 'AI Designing...' : 'Almost done!'}
+          </p>
+        </div>
+      </div>
+
       {/* Loading message */}
-      <p className="text-xs text-center text-gray-600 animate-pulse">
+      <p className="text-sm text-center text-gray-700 font-medium">
         {getMessage()}
       </p>
     </motion.div>

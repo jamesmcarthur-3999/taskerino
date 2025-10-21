@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/31</span>
+                <span class='fraction'>0/33</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/31</span>
+                <span class='fraction'>0/33</span>
             </div>
         
             
@@ -117,7 +117,9 @@
 <a name='L52'></a><a href='#L52'>52</a>
 <a name='L53'></a><a href='#L53'>53</a>
 <a name='L54'></a><a href='#L54'>54</a>
-<a name='L55'></a><a href='#L55'>55</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -128,12 +130,14 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -182,6 +186,7 @@
 <span class="cstat-no" title="statement not covered" >import { Menu } from 'lucide-react';</span>
 <span class="cstat-no" title="statement not covered" >import { NAV_CONSTANTS } from '../constants';</span>
 <span class="cstat-no" title="statement not covered" >import { easeOutElasticLight, clamp } from '../../../utils/easing';</span>
+<span class="cstat-no" title="statement not covered" >import { useCompactNavigation } from '../../../hooks/useCompactNavigation';</span>
 &nbsp;
 interface MenuButtonProps {
   scrollY: number;
@@ -190,6 +195,7 @@ interface MenuButtonProps {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >export function MenuButton({ scrollY, onClick }: MenuButtonProps) {</span>
 <span class="cstat-no" title="statement not covered" >  const menuButtonRef = useRef&lt;HTMLButtonElement&gt;(null);</span>
+<span class="cstat-no" title="statement not covered" >  const isCompact = useCompactNavigation();</span>
 &nbsp;
   // Direct DOM manipulation for scroll animations (60fps smooth)
 <span class="cstat-no" title="statement not covered" >  useEffect(() =&gt; {</span>
@@ -212,7 +218,7 @@ interface MenuButtonProps {
 <span class="cstat-no" title="statement not covered" >    &lt;button</span>
 <span class="cstat-no" title="statement not covered" >      ref={menuButtonRef}</span>
 <span class="cstat-no" title="statement not covered" >      onClick={onClick}</span>
-<span class="cstat-no" title="statement not covered" >      className="absolute top-4 left-6 flex items-center gap-3 px-5 py-4 bg-white/40 backdrop-blur-xl rounded-full shadow-xl border-2 border-white/50 ring-1 ring-black/5 pointer-events-auto transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] hover:bg-white/50 active:scale-95 text-gray-800 group"</span>
+<span class="cstat-no" title="statement not covered" >      className={`absolute ${isCompact ? 'top-3 left-3 h-10 w-10 justify-center p-0' : 'top-4 left-6 gap-3 px-5 py-4'} flex items-center bg-white/40 backdrop-blur-xl rounded-full shadow-xl border-2 border-white/50 ring-1 ring-black/5 pointer-events-auto transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] hover:bg-white/50 active:scale-95 text-gray-800 group`}</span>
 <span class="cstat-no" title="statement not covered" >      style={{</span>
 <span class="cstat-no" title="statement not covered" >        opacity: 0,</span>
 <span class="cstat-no" title="statement not covered" >        transitionProperty: 'box-shadow, background, transform',</span>
@@ -220,8 +226,8 @@ interface MenuButtonProps {
 <span class="cstat-no" title="statement not covered" >      }}</span>
 <span class="cstat-no" title="statement not covered" >      aria-label="Open navigation menu"</span>
     &gt;
-<span class="cstat-no" title="statement not covered" >      &lt;Menu className="w-6 h-6 group-hover:rotate-180 transition-transform duration-500" /&gt;</span>
-<span class="cstat-no" title="statement not covered" >      &lt;span className="font-semibold text-base tracking-wide"&gt;Menu&lt;/span&gt;</span>
+<span class="cstat-no" title="statement not covered" >      &lt;Menu className={`${isCompact ? 'w-5 h-5' : 'w-6 h-6'} group-hover:rotate-180 transition-transform duration-500`} /&gt;</span>
+<span class="cstat-no" title="statement not covered" >      {!isCompact &amp;&amp; &lt;span className="font-semibold text-base tracking-wide"&gt;Menu&lt;/span&gt;}</span>
 <span class="cstat-no" title="statement not covered" >    &lt;/button&gt;</span>
   );
 <span class="cstat-no" title="statement not covered" >}</span>
@@ -232,7 +238,7 @@ interface MenuButtonProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-19T04:28:22.023Z
+                at 2025-10-20T22:29:51.488Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

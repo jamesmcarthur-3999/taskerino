@@ -61,7 +61,7 @@ export function SessionDetailView({
   const { addTask } = useTasks();
   const { addNote } = useNotes();
   const { sessions: allSessions, updateSession: updateSessionInContext } = useSessions();
-  const { getActiveEnrichment } = useEnrichmentContext();
+  const { getActiveEnrichment, startTracking, updateProgress, stopTracking } = useEnrichmentContext();
   const { scrollProgress, scrollY, isScrolled, registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
 
   // Delayed progress for SessionDetailView animations (only active after header collapse at 150px)
@@ -79,20 +79,39 @@ export function SessionDetailView({
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
   const [showReEnrichMenu, setShowReEnrichMenu] = useState(false);
   const [isReEnriching, setIsReEnriching] = useState(false);
+  const [pendingSeekTimestamp, setPendingSeekTimestamp] = useState<string | null>(null);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
   const reEnrichMenuRef = React.useRef<HTMLDivElement>(null);
+  const sessionReviewRef = React.useRef<any>(null);
 
   // Get active enrichment for real-time tracking
   const activeEnrichment = getActiveEnrichment(currentSession.id);
 
-  // Sync currentSession only when session ID changes (not on every prop update)
+  // Sync currentSession when session ID changes OR when enrichment status changes
   useEffect(() => {
-    if (session.id !== currentSession.id) {
-      console.log('[SessionDetailView] Session changed, syncing from prop');
+    // Check if enrichment status changed
+    const enrichmentStatusChanged =
+      session.enrichmentStatus?.status !== currentSession.enrichmentStatus?.status ||
+      session.enrichmentStatus?.completedAt !== currentSession.enrichmentStatus?.completedAt;
+
+    if (session.id !== currentSession.id || enrichmentStatusChanged) {
+      console.log('[SessionDetailView] Session or enrichment status changed, syncing from prop', {
+        idChanged: session.id !== currentSession.id,
+        statusChanged: enrichmentStatusChanged,
+        newStatus: session.enrichmentStatus?.status,
+        oldStatus: currentSession.enrichmentStatus?.status,
+      });
       setCurrentSession(session);
     }
-  }, [session.id, session, currentSession.id]);
+  }, [
+    session.id,
+    session.enrichmentStatus?.status,
+    session.enrichmentStatus?.completedAt,
+    currentSession.id,
+    currentSession.enrichmentStatus?.status,
+    currentSession.enrichmentStatus?.completedAt,
+  ]);
 
   const duration = useMemo(() => {
     if (!session.startTime) return 0;
@@ -271,6 +290,33 @@ export function SessionDetailView({
     onClose();
   }, [onClose]);
 
+  /**
+   * Switch to Review tab and seek to a specific timestamp
+   * Used by Canvas citations to navigate to source moments
+   */
+  const switchToReviewAtTime = useCallback((timestamp: string) => {
+    console.log('[SessionDetailView] Switching to Review at timestamp:', timestamp);
+
+    // Switch to review tab
+    setActiveView('review');
+
+    // Store the timestamp to seek to once Review tab is mounted
+    setPendingSeekTimestamp(timestamp);
+  }, []);
+
+  // Handle pending seek when Review tab is active
+  useEffect(() => {
+    if (activeView === 'review' && pendingSeekTimestamp && sessionReviewRef.current) {
+      console.log('[SessionDetailView] Seeking to pending timestamp:', pendingSeekTimestamp);
+
+      // Get the handleTimelineSeek function from SessionReview via ref
+      if (typeof sessionReviewRef.current.seekToTimestamp === 'function') {
+        sessionReviewRef.current.seekToTimestamp(pendingSeekTimestamp);
+        setPendingSeekTimestamp(null); // Clear pending seek
+      }
+    }
+  }, [activeView, pendingSeekTimestamp]);
+
   const handleDelete = () => {
     if (onDelete) {
       onDelete(session.id);
@@ -411,6 +457,9 @@ export function SessionDetailView({
 
       console.log('✨ [SESSION DETAIL] Re-enriching session:', options);
 
+      // Start tracking enrichment progress (shows rainbow border)
+      startTracking(currentSession.id, currentSession.name);
+
       const result = await sessionEnrichmentService.enrichSession(currentSession, {
         includeAudio: options.audio ?? false,
         includeVideo: options.video ?? false,
@@ -418,6 +467,7 @@ export function SessionDetailView({
         forceRegenerate: true,
         onProgress: (progress) => {
           console.log(`✨ [SESSION DETAIL] ${progress.stage}: ${progress.message} (${progress.progress}%)`);
+          updateProgress(currentSession.id, progress); // Update EnrichmentContext for real-time UI updates
         },
       });
 
@@ -450,6 +500,8 @@ export function SessionDetailView({
           message: error.message || 'Failed to re-enrich session',
       });
     } finally {
+      // Stop tracking enrichment (hides rainbow border)
+      stopTracking(currentSession.id);
       setIsReEnriching(false);
     }
   };
@@ -595,8 +647,10 @@ export function SessionDetailView({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Re-Enrich Button - Show if enrichment was completed */}
-            {currentSession.enrichmentStatus?.status === 'completed' && (
+            {/* Re-Enrich Button - Show if enrichment has been attempted (completed, partial, or failed) */}
+            {currentSession.enrichmentStatus &&
+              currentSession.enrichmentStatus.status !== 'idle' &&
+              currentSession.enrichmentStatus.status !== 'in-progress' && (
               <div ref={reEnrichMenuRef} className="relative">
                 <button
                   onClick={() => setShowReEnrichMenu(!showReEnrichMenu)}
@@ -915,13 +969,16 @@ export function SessionDetailView({
               </button>
               <button
                 onClick={() => setActiveView('canvas')}
-                className={`px-8 py-2.5 ${getRadiusClass('element')} font-semibold text-sm transition-all ${
+                className={`px-8 py-2.5 ${getRadiusClass('element')} font-semibold text-sm transition-all relative ${
                   activeView === 'canvas'
                     ? 'bg-white shadow-lg text-gray-900'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
                 }`}
               >
                 Canvas
+                <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded uppercase tracking-wide">
+                  Beta
+                </span>
               </button>
             </div>
           </div>
@@ -1307,7 +1364,7 @@ export function SessionDetailView({
                 <LoadingSpinner size="lg" message="Loading canvas..." />
               </div>
             }>
-              <CanvasView session={currentSession} />
+              <CanvasView session={currentSession} onNavigateToSource={(citation) => switchToReviewAtTime(citation.timestamp)} />
             </Suspense>
           )}
         </div>

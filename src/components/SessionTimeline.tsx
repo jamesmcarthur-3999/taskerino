@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Image as ImageIcon, Clock, CheckCircle2, AlertCircle, Loader2, MessageSquare, Flag, Eye, CheckSquare, FileText, Sparkles, ChevronDown, ChevronUp, Plus, Link as LinkIcon, Edit3 } from 'lucide-react';
 import type { Session, SessionScreenshot, SessionAudioSegment, Task, Note, SessionContextItem } from '../types';
 import { ScreenshotViewer } from './ScreenshotViewer';
@@ -33,6 +34,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLinkType, setSelectedLinkType] = useState<'note' | 'task'>('note');
   const contextInputRef = useRef<HTMLInputElement>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
 
   // Auto-focus context input when shown
   useEffect(() => {
@@ -73,6 +75,14 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
     const timeA = new Date(a.data.timestamp).getTime();
     const timeB = new Date(b.data.timestamp).getTime();
     return timeB - timeA; // Reverse order (newest first)
+  });
+
+  // Virtual scrolling for performance with large sessions (50-100+ screenshots)
+  const rowVirtualizer = useVirtualizer({
+    count: sortedTimelineItems.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 300, // Estimated height per item (will vary)
+    overscan: 5, // Render 5 items above/below viewport for smooth scrolling
   });
 
   const toggleExpanded = (screenshotId: string) => {
@@ -469,20 +479,28 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
         </div>
       )}
 
-      {/* Timeline */}
-      <div className="space-y-4 relative">
+      {/* Timeline - Virtualized for performance */}
+      <div ref={parentRef} className="h-[600px] overflow-auto relative">
         {/* Timeline connector line */}
-        <div className="absolute left-2.5 top-0 bottom-0 w-px bg-gradient-to-b from-cyan-200 via-blue-200 to-cyan-200 opacity-50" />
+        <div className="absolute left-2.5 top-0 w-px bg-gradient-to-b from-cyan-200 via-blue-200 to-cyan-200 opacity-50" style={{ height: `${rowVirtualizer.getTotalSize()}px` }} />
 
-        {sortedTimelineItems.map((item, index) => {
+        {/* Virtual items container */}
+        <div className="relative" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const item = sortedTimelineItems[virtualRow.index];
+            const index = virtualRow.index;
           // Context items - user-added notes/links
           if (item.type === 'context') {
             const contextItem = item.data as SessionContextItem;
             return (
               <div
                 key={contextItem.id}
-                className="flex gap-4 relative animate-in fade-in slide-in-from-top-2 duration-300"
-                style={{ animationDelay: `${index * 50}ms` }}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                className="flex gap-4 absolute top-0 left-0 w-full pb-4"
+                style={{
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
               >
                 {/* Timeline dot for context */}
                 <div className="relative flex-shrink-0 animate-in zoom-in duration-500" style={{ animationDelay: `${index * 50 + 100}ms` }}>
@@ -518,8 +536,12 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
             return (
               <div
                 key={segment.id}
-                className="flex gap-4 relative animate-in fade-in slide-in-from-top-2 duration-300"
-                style={{ animationDelay: `${index * 50}ms` }}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                className="flex gap-4 absolute top-0 left-0 w-full pb-4"
+                style={{
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
               >
                 {/* Timeline dot for audio */}
                 <div className="relative flex-shrink-0 animate-in zoom-in duration-500" style={{ animationDelay: `${index * 50 + 100}ms` }}>
@@ -543,8 +565,12 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
           return (
             <div
               key={screenshot.id}
-              className="flex gap-4 relative animate-in fade-in slide-in-from-top-2 duration-300"
-              style={{ animationDelay: `${index * 50}ms` }}
+              data-index={virtualRow.index}
+              ref={rowVirtualizer.measureElement}
+              className="flex gap-4 absolute top-0 left-0 w-full pb-4"
+              style={{
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
             >
               {/* Timeline dot */}
               <div className="relative flex-shrink-0 animate-in zoom-in duration-500 mt-2" style={{ animationDelay: `${index * 50 + 100}ms` }}>
@@ -566,6 +592,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
             </div>
           );
         })}
+        </div>
       </div>
 
       {/* Screenshot Viewer Modal */}

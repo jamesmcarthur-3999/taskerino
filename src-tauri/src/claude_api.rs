@@ -4,6 +4,7 @@ use serde_json::json;
 use futures_util::StreamExt;
 use tauri::Emitter;
 use tauri_plugin_store::StoreExt;
+use std::time::Duration;
 
 const CLAUDE_API_BASE: &str = "https://api.anthropic.com/v1";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -24,7 +25,12 @@ pub async fn claude_chat_completion(
         None => return Err("Claude API key not set. Please add your API key in Settings.".to_string())
     };
 
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(Duration::from_secs(1200))         // 20 min total timeout (for large canvas generation)
+        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900))     // 15 min to read response (large sessions can take 5-10 min)
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
     let mut request_body = json!({
         "model": request.model,
@@ -117,6 +123,20 @@ pub async fn claude_chat_completion(
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
+        // Check for truncation (stop_reason: "max_tokens")
+        if let Some(stop_reason) = &claude_response.stop_reason {
+            if stop_reason == "max_tokens" {
+                eprintln!("⚠️  WARNING: Claude response truncated due to max_tokens limit!");
+                eprintln!("   Requested: {} tokens", request.max_tokens);
+                eprintln!("   Output tokens used: {}", claude_response.usage.output_tokens);
+                return Err(format!(
+                    "Response truncated: hit max_tokens limit of {}. Output used {} tokens. Increase token limit or implement chunking.",
+                    request.max_tokens,
+                    claude_response.usage.output_tokens
+                ));
+            }
+        }
+
         return Ok(claude_response);
     }
 
@@ -184,7 +204,12 @@ async fn stream_claude_response(
     api_key: String,
     request: ClaudeStreamingRequest,
 ) -> Result<(), String> {
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(Duration::from_secs(1200))         // 20 min total timeout (for large canvas generation)
+        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900))     // 15 min to read response (large sessions can take 5-10 min)
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
     let mut request_body = json!({
         "model": request.model,

@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/344</span>
+                <span class='fraction'>0/353</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/344</span>
+                <span class='fraction'>0/353</span>
             </div>
         
             
@@ -513,7 +513,22 @@
 <a name='L448'></a><a href='#L448'>448</a>
 <a name='L449'></a><a href='#L449'>449</a>
 <a name='L450'></a><a href='#L450'>450</a>
-<a name='L451'></a><a href='#L451'>451</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L451'></a><a href='#L451'>451</a>
+<a name='L452'></a><a href='#L452'>452</a>
+<a name='L453'></a><a href='#L453'>453</a>
+<a name='L454'></a><a href='#L454'>454</a>
+<a name='L455'></a><a href='#L455'>455</a>
+<a name='L456'></a><a href='#L456'>456</a>
+<a name='L457'></a><a href='#L457'>457</a>
+<a name='L458'></a><a href='#L458'>458</a>
+<a name='L459'></a><a href='#L459'>459</a>
+<a name='L460'></a><a href='#L460'>460</a>
+<a name='L461'></a><a href='#L461'>461</a>
+<a name='L462'></a><a href='#L462'>462</a>
+<a name='L463'></a><a href='#L463'>463</a>
+<a name='L464'></a><a href='#L464'>464</a>
+<a name='L465'></a><a href='#L465'>465</a>
+<a name='L466'></a><a href='#L466'>466</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -655,6 +670,9 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -665,6 +683,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -705,9 +725,14 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -807,6 +832,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -823,6 +849,10 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1101,9 +1131,14 @@ type NotesAction =
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    const timestamp = note.timestamp;</span>
 &nbsp;
+    // Create lookup Maps for O(1) access
+<span class="cstat-no" title="statement not covered" >    const companiesMap = new Map(entitiesContext.state.companies.map(c =&gt; [c.id, c]));</span>
+<span class="cstat-no" title="statement not covered" >    const contactsMap = new Map(entitiesContext.state.contacts.map(c =&gt; [c.id, c]));</span>
+<span class="cstat-no" title="statement not covered" >    const topicsMap = new Map(entitiesContext.state.topics.map(t =&gt; [t.id, t]));</span>
+&nbsp;
     // Update companies
 <span class="cstat-no" title="statement not covered" >    linkedCompanyIds.forEach(id =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      const company = entitiesContext.state.companies.find(c =&gt; c.id === id);</span>
+<span class="cstat-no" title="statement not covered" >      const company = companiesMap.get(id);</span>
 <span class="cstat-no" title="statement not covered" >      if (company) {</span>
 <span class="cstat-no" title="statement not covered" >        entitiesContext.dispatch({</span>
 <span class="cstat-no" title="statement not covered" >          type: 'UPDATE_COMPANY',</span>
@@ -1118,7 +1153,7 @@ type NotesAction =
 &nbsp;
     // Update contacts
 <span class="cstat-no" title="statement not covered" >    linkedContactIds.forEach(id =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      const contact = entitiesContext.state.contacts.find(c =&gt; c.id === id);</span>
+<span class="cstat-no" title="statement not covered" >      const contact = contactsMap.get(id);</span>
 <span class="cstat-no" title="statement not covered" >      if (contact) {</span>
 <span class="cstat-no" title="statement not covered" >        entitiesContext.dispatch({</span>
 <span class="cstat-no" title="statement not covered" >          type: 'UPDATE_CONTACT',</span>
@@ -1133,7 +1168,7 @@ type NotesAction =
 &nbsp;
     // Update topics
 <span class="cstat-no" title="statement not covered" >    linkedTopicIds.forEach(id =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      const topic = entitiesContext.state.topics.find(t =&gt; t.id === id);</span>
+<span class="cstat-no" title="statement not covered" >      const topic = topicsMap.get(id);</span>
 <span class="cstat-no" title="statement not covered" >      if (topic) {</span>
 <span class="cstat-no" title="statement not covered" >        entitiesContext.dispatch({</span>
 <span class="cstat-no" title="statement not covered" >          type: 'UPDATE_TOPIC',</span>
@@ -1169,9 +1204,14 @@ type NotesAction =
 <span class="cstat-no" title="statement not covered" >      linkedTopicIds.push(deletedNote.topicId);</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
+    // Create lookup Maps for O(1) access
+<span class="cstat-no" title="statement not covered" >    const companiesMap = new Map(entitiesContext.state.companies.map(c =&gt; [c.id, c]));</span>
+<span class="cstat-no" title="statement not covered" >    const contactsMap = new Map(entitiesContext.state.contacts.map(c =&gt; [c.id, c]));</span>
+<span class="cstat-no" title="statement not covered" >    const topicsMap = new Map(entitiesContext.state.topics.map(t =&gt; [t.id, t]));</span>
+&nbsp;
     // Update companies
 <span class="cstat-no" title="statement not covered" >    linkedCompanyIds.forEach(id =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      const company = entitiesContext.state.companies.find(c =&gt; c.id === id);</span>
+<span class="cstat-no" title="statement not covered" >      const company = companiesMap.get(id);</span>
 <span class="cstat-no" title="statement not covered" >      if (company) {</span>
 <span class="cstat-no" title="statement not covered" >        entitiesContext.dispatch({</span>
 <span class="cstat-no" title="statement not covered" >          type: 'UPDATE_COMPANY',</span>
@@ -1185,7 +1225,7 @@ type NotesAction =
 &nbsp;
     // Update contacts
 <span class="cstat-no" title="statement not covered" >    linkedContactIds.forEach(id =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      const contact = entitiesContext.state.contacts.find(c =&gt; c.id === id);</span>
+<span class="cstat-no" title="statement not covered" >      const contact = contactsMap.get(id);</span>
 <span class="cstat-no" title="statement not covered" >      if (contact) {</span>
 <span class="cstat-no" title="statement not covered" >        entitiesContext.dispatch({</span>
 <span class="cstat-no" title="statement not covered" >          type: 'UPDATE_CONTACT',</span>
@@ -1199,7 +1239,7 @@ type NotesAction =
 &nbsp;
     // Update topics
 <span class="cstat-no" title="statement not covered" >    linkedTopicIds.forEach(id =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      const topic = entitiesContext.state.topics.find(t =&gt; t.id === id);</span>
+<span class="cstat-no" title="statement not covered" >      const topic = topicsMap.get(id);</span>
 <span class="cstat-no" title="statement not covered" >      if (topic) {</span>
 <span class="cstat-no" title="statement not covered" >        entitiesContext.dispatch({</span>
 <span class="cstat-no" title="statement not covered" >          type: 'UPDATE_TOPIC',</span>
@@ -1277,9 +1317,14 @@ type NotesAction =
 <span class="cstat-no" title="statement not covered" >      });</span>
 <span class="cstat-no" title="statement not covered" >    });</span>
 &nbsp;
+    // Create lookup Maps for O(1) access
+<span class="cstat-no" title="statement not covered" >    const companiesMap = new Map(entitiesContext.state.companies.map(c =&gt; [c.id, c]));</span>
+<span class="cstat-no" title="statement not covered" >    const contactsMap = new Map(entitiesContext.state.contacts.map(c =&gt; [c.id, c]));</span>
+<span class="cstat-no" title="statement not covered" >    const topicsMap = new Map(entitiesContext.state.topics.map(t =&gt; [t.id, t]));</span>
+&nbsp;
     // Apply updates to companies
 <span class="cstat-no" title="statement not covered" >    companyUpdates.forEach((update, companyId) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      const company = entitiesContext.state.companies.find(c =&gt; c.id === companyId);</span>
+<span class="cstat-no" title="statement not covered" >      const company = companiesMap.get(companyId);</span>
 <span class="cstat-no" title="statement not covered" >      if (company) {</span>
 <span class="cstat-no" title="statement not covered" >        entitiesContext.dispatch({</span>
 <span class="cstat-no" title="statement not covered" >          type: 'UPDATE_COMPANY',</span>
@@ -1294,7 +1339,7 @@ type NotesAction =
 &nbsp;
     // Apply updates to contacts
 <span class="cstat-no" title="statement not covered" >    contactUpdates.forEach((update, contactId) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      const contact = entitiesContext.state.contacts.find(c =&gt; c.id === contactId);</span>
+<span class="cstat-no" title="statement not covered" >      const contact = contactsMap.get(contactId);</span>
 <span class="cstat-no" title="statement not covered" >      if (contact) {</span>
 <span class="cstat-no" title="statement not covered" >        entitiesContext.dispatch({</span>
 <span class="cstat-no" title="statement not covered" >          type: 'UPDATE_CONTACT',</span>
@@ -1309,7 +1354,7 @@ type NotesAction =
 &nbsp;
     // Apply updates to topics
 <span class="cstat-no" title="statement not covered" >    topicUpdates.forEach((update, topicId) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      const topic = entitiesContext.state.topics.find(t =&gt; t.id === topicId);</span>
+<span class="cstat-no" title="statement not covered" >      const topic = topicsMap.get(topicId);</span>
 <span class="cstat-no" title="statement not covered" >      if (topic) {</span>
 <span class="cstat-no" title="statement not covered" >        entitiesContext.dispatch({</span>
 <span class="cstat-no" title="statement not covered" >          type: 'UPDATE_TOPIC',</span>
@@ -1420,7 +1465,7 @@ type NotesAction =
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-19T04:28:22.023Z
+                at 2025-10-20T22:29:51.488Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

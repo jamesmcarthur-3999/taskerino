@@ -8,8 +8,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import type { Session, SessionSummary } from '../../types';
-import type { CanvasSpec } from '../../services/aiCanvasGenerator';
+import type { Session, SessionSummary, CanvasSpec, CanvasSection } from '../../types';
 import { ArtifactTimelineModule } from './modules/ArtifactTimelineModule';
 import { ArtifactGalleryModule } from './modules/ArtifactGalleryModule';
 import { AchievementCard } from './cards/AchievementCard';
@@ -28,7 +27,7 @@ import { FlowStateCard } from './cards/FlowStateCard';
 import { ContextSwitchCard } from './cards/ContextSwitchCard';
 import { ProblemSolutionCard } from './cards/ProblemSolutionCard';
 import { getRadiusClass, getGlassClasses } from '../../design-system/theme';
-import { Calendar, Clock, Camera, TrendingUp } from 'lucide-react';
+import { Calendar, Clock, Camera, TrendingUp, Mic, Video } from 'lucide-react';
 import { fadeInVariants, createStaggerVariants } from '../../lib/animations';
 
 /**
@@ -106,7 +105,7 @@ function extractLearningMoments(summary: SessionSummary) {
     description: i.description,
     timestamp: i.timestamp,
     confidence: i.confidence,
-    screenshotIds: i.screenshotIds || []
+    screenshotIds: (('screenshotIds' in i && Array.isArray(i.screenshotIds)) ? i.screenshotIds : []) as string[]
   })));
 
   // Extract from key insights tagged as learnings
@@ -522,7 +521,7 @@ function LayoutRenderer({
   if (layout.type === 'grid' || layout.type === 'dashboard') {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {layout.sections.map((section, idx) => (
+        {layout.sections.map((section: CanvasSection, idx: number) => (
           <SectionRenderer
             key={idx}
             section={section}
@@ -536,17 +535,17 @@ function LayoutRenderer({
 
   // Timeline layout (left timeline, right sidebar)
   if (layout.type === 'timeline') {
-    const timelineSections = layout.sections.filter(s =>
+    const timelineSections = layout.sections.filter((s: CanvasSection) =>
       s.type === 'timeline' || s.type === 'gallery' || s.type === 'insights'
     );
-    const sidebarSections = layout.sections.filter(s =>
+    const sidebarSections = layout.sections.filter((s: CanvasSection) =>
       s.type === 'achievements' || s.type === 'blockers'
     );
 
     return (
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-6">
-          {timelineSections.map((section, idx) => (
+          {timelineSections.map((section: CanvasSection, idx: number) => (
             <SectionRenderer
               key={idx}
               section={section}
@@ -556,7 +555,7 @@ function LayoutRenderer({
           ))}
         </div>
         <div className="space-y-6">
-          {sidebarSections.map((section, idx) => (
+          {sidebarSections.map((section: CanvasSection, idx: number) => (
             <SectionRenderer
               key={idx}
               section={section}
@@ -572,7 +571,7 @@ function LayoutRenderer({
   // Flow layout (stacked vertical)
   return (
     <div className="space-y-6">
-      {layout.sections.map((section, idx) => (
+      {layout.sections.map((section: CanvasSection, idx: number) => (
         <SectionRenderer
           key={idx}
           section={section}
@@ -862,7 +861,7 @@ function SectionRenderer({
           <BreakthroughCard
             key={idx}
             moment={breakthrough.achievement}
-            beforeState={'description' in breakthrough ? breakthrough.description : undefined}
+            beforeState={'description' in breakthrough ? (breakthrough.description as string) : undefined}
             impact={breakthrough.impact === 'high' || breakthrough.impact === 'medium' || breakthrough.impact === 'low' ? breakthrough.impact : 'medium'}
             timestamp={breakthrough.timestamp}
             relatedScreenshots={
@@ -955,8 +954,116 @@ function SectionRenderer({
     );
   }
 
+  // Media section (audio/video content)
+  if (section.type === 'media') {
+    const hasAudio = session.audioSegments && session.audioSegments.length > 0;
+    const hasVideo = session.video?.fullVideoAttachmentId;
+
+    if (!hasAudio && !hasVideo) return null;
+
+    return (
+      <CardSection
+        title="Session Media"
+        icon="🎬"
+        gradient="from-purple-500 to-pink-500"
+      >
+        {/* Audio Content */}
+        {hasAudio && (
+          <motion.div
+            className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 border-l-4 border-purple-500`}
+            variants={fadeInVariants}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-600 flex items-center justify-center">
+                <Mic className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-gray-900 mb-1">Audio Recording</div>
+                <p className="text-sm text-gray-700 mb-2">
+                  {session.audioSegments!.length} segment{session.audioSegments!.length !== 1 ? 's' : ''} recorded
+                </p>
+                <div className="text-xs text-gray-600">
+                  Total duration: {formatAudioDuration(session.audioSegments!)}
+                </div>
+                {session.fullTranscription && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-xs text-gray-500 mb-1">Transcription available</p>
+                    <div className="text-sm text-gray-700 line-clamp-3 italic">
+                      "{session.fullTranscription.substring(0, 200)}..."
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Video Content */}
+        {hasVideo && session.video && (
+          <motion.div
+            className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 border-l-4 border-pink-500`}
+            variants={fadeInVariants}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-600 flex items-center justify-center">
+                <Video className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-gray-900 mb-1">Video Recording</div>
+                <p className="text-sm text-gray-700 mb-2">
+                  Full session screen recording available
+                </p>
+                {session.video.duration && (
+                  <div className="text-xs text-gray-600">
+                    Duration: {formatVideoDuration(session.video.duration)}
+                  </div>
+                )}
+                {session.video.chapters && session.video.chapters.length > 0 && (
+                  <div className="mt-2 text-xs text-gray-600">
+                    {session.video.chapters.length} chapter{session.video.chapters.length !== 1 ? 's' : ''} available
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </CardSection>
+    );
+  }
+
   // Unknown section type - skip
   return null;
+}
+
+/**
+ * Format audio duration from segments
+ */
+function formatAudioDuration(segments: { duration: number }[]): string {
+  const totalSeconds = segments.reduce((sum, seg) => sum + seg.duration, 0);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
+/**
+ * Format video duration in seconds
+ */
+function formatVideoDuration(durationInSeconds: number): string {
+  const hours = Math.floor(durationInSeconds / 3600);
+  const minutes = Math.floor((durationInSeconds % 3600) / 60);
+  const seconds = Math.floor(durationInSeconds % 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
 }
 
 /**

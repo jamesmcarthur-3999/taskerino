@@ -69,6 +69,9 @@ interface UIState {
 
   // Sub-menu Overlay
   showSubMenuOverlay: boolean;
+
+  // Zone Menu Toggle (when scrolled)
+  zoneMenuPinned: boolean;
 }
 
 type UIAction =
@@ -147,6 +150,9 @@ type UIAction =
   // Sub-menu Overlay
   | { type: 'TOGGLE_SUBMENU_OVERLAY' }
   | { type: 'SET_SUBMENU_OVERLAY'; payload: boolean }
+
+  // Zone Menu Toggle
+  | { type: 'TOGGLE_ZONE_MENU' }
 
   // Data management
   | { type: 'LOAD_UI_STATE'; payload: Partial<UIState> };
@@ -239,6 +245,7 @@ const defaultState: UIState = {
   },
   searchHistory: [],
   showSubMenuOverlay: false,
+  zoneMenuPinned: false,
 };
 
 // Reducer (logic copied from AppContext)
@@ -692,6 +699,9 @@ function uiReducer(state: UIState, action: UIAction): UIState {
 
     case 'SET_SUBMENU_OVERLAY':
       return { ...state, showSubMenuOverlay: action.payload };
+
+    case 'TOGGLE_ZONE_MENU':
+      return { ...state, zoneMenuPinned: !state.zoneMenuPinned };
 
     // Data management
     case 'LOAD_UI_STATE':

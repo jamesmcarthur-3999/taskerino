@@ -7,8 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Session, FlexibleSessionSummary, SummarySection, RelatedContextSection, Task, Note } from '../../types';
-import type { CanvasSpec } from '../../services/aiCanvasGenerator';
+import type { Session, FlexibleSessionSummary, SummarySection, RelatedContextSection, Task, Note, CanvasSpec } from '../../types';
 import { HeroTimeline } from './heroes/HeroTimeline';
 import { HeroSplit } from './heroes/HeroSplit';
 import { HeroCelebration } from './heroes/HeroCelebration';
@@ -25,6 +24,7 @@ import {
   CreativeSolutionCard,
   CollaborationCard,
 } from './cards';
+import { ScreenshotThumbnail } from './ScreenshotThumbnail';
 import { Link2, Calendar, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { useUI } from '../../context/UIContext';
 import { useTasks } from '../../context/TasksContext';
@@ -273,6 +273,11 @@ function SectionContentRenderer({
             beforeState={moment.context}
             impact="medium"
             timestamp={moment.timestamp}
+            relatedScreenshots={
+              moment.screenshotIds
+                ? session.screenshots?.filter(s => moment.screenshotIds!.includes(s.id))
+                : undefined
+            }
           />
         ))}
       </div>
@@ -298,6 +303,11 @@ function SectionContentRenderer({
             discovery={learning.insight || learning.topic}
             context={learning.topic !== learning.insight ? learning.topic : undefined}
             timestamp={learning.timestamp}
+            relatedScreenshots={
+              learning.screenshotIds
+                ? session.screenshots?.filter(s => learning.screenshotIds!.includes(s.id))
+                : undefined
+            }
           />
         ))}
       </div>
@@ -314,6 +324,11 @@ function SectionContentRenderer({
             technology={discovery.technology}
             finding={discovery.finding}
             timestamp={discovery.timestamp}
+            relatedScreenshots={
+              discovery.screenshotIds
+                ? session.screenshots?.filter(s => discovery.screenshotIds!.includes(s.id))
+                : undefined
+            }
           />
         ))}
       </div>
@@ -331,7 +346,7 @@ function SectionContentRenderer({
     return (
       <div className="space-y-3">
         {section.data.tasks.map((task: any, idx: number) => {
-          const colors = priorityColors[task.priority as keyof typeof priorityColors];
+          const colors = priorityColors[task.priority as keyof typeof priorityColors] || priorityColors.medium;
           return (
             <div
               key={idx}
@@ -355,12 +370,28 @@ function SectionContentRenderer({
                     {task.category}
                   </span>
                 )}
-                {task.relatedScreenshotIds && task.relatedScreenshotIds.length > 0 && (
-                  <span className="text-xs text-gray-500">
-                    📎 {task.relatedScreenshotIds.length} screenshot{task.relatedScreenshotIds.length > 1 ? 's' : ''}
-                  </span>
-                )}
               </div>
+              {/* Screenshot Thumbnails */}
+              {task.relatedScreenshotIds && task.relatedScreenshotIds.length > 0 && (
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="text-xs text-gray-600">Evidence:</span>
+                  <div className="flex gap-1">
+                    {session.screenshots?.filter(s => task.relatedScreenshotIds!.includes(s.id)).slice(0, 3).map((screenshot) => (
+                      <ScreenshotThumbnail
+                        key={screenshot.id}
+                        screenshot={screenshot}
+                        size="sm"
+                        showIcon
+                      />
+                    ))}
+                    {task.relatedScreenshotIds.length > 3 && (
+                      <span className="text-xs text-gray-500 flex items-center">
+                        +{task.relatedScreenshotIds.length - 3}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -495,10 +526,26 @@ function SectionContentRenderer({
                 </span>
               </div>
               <p className="text-sm text-gray-700 mb-2">{insight.context}</p>
+              {/* Screenshot Thumbnails */}
               {insight.relatedScreenshotIds && insight.relatedScreenshotIds.length > 0 && (
-                <span className="text-xs text-gray-500">
-                  📎 {insight.relatedScreenshotIds.length} screenshot{insight.relatedScreenshotIds.length > 1 ? 's' : ''}
-                </span>
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="text-xs text-gray-600">Evidence:</span>
+                  <div className="flex gap-1">
+                    {session.screenshots?.filter(s => insight.relatedScreenshotIds!.includes(s.id)).slice(0, 3).map((screenshot) => (
+                      <ScreenshotThumbnail
+                        key={screenshot.id}
+                        screenshot={screenshot}
+                        size="sm"
+                        showIcon
+                      />
+                    ))}
+                    {insight.relatedScreenshotIds.length > 3 && (
+                      <span className="text-xs text-gray-500 flex items-center">
+                        +{insight.relatedScreenshotIds.length - 3}
+                      </span>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           );
@@ -533,6 +580,27 @@ function SectionContentRenderer({
                   </div>
                 </div>
                 <p className="text-sm text-gray-700">{event.description}</p>
+                {/* Screenshot Thumbnails */}
+                {event.screenshotIds && event.screenshotIds.length > 0 && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="text-xs text-gray-600">Screenshots:</span>
+                    <div className="flex gap-1">
+                      {session.screenshots?.filter(s => event.screenshotIds!.includes(s.id)).slice(0, 3).map((screenshot) => (
+                        <ScreenshotThumbnail
+                          key={screenshot.id}
+                          screenshot={screenshot}
+                          size="sm"
+                          showIcon
+                        />
+                      ))}
+                      {event.screenshotIds.length > 3 && (
+                        <span className="text-xs text-gray-500 flex items-center">
+                          +{event.screenshotIds.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -547,9 +615,9 @@ function SectionContentRenderer({
         {section.data.areas.map((area: any, idx: number) => (
           <FocusAreaCard
             key={idx}
-            name={area.name}
-            timeSpent={area.timeSpent}
-            tasks={area.tasks}
+            name={area.area}
+            timeSpent={area.duration}
+            tasks={area.activities}
           />
         ))}
       </div>
@@ -589,11 +657,15 @@ function SectionContentRenderer({
         {section.data.solutions.map((solution: any, idx: number) => (
           <CreativeSolutionCard
             key={idx}
-            title={solution.title}
-            description={solution.description}
+            title={solution.problem}
+            description={solution.solution}
             approach={solution.approach}
-            outcome={solution.outcome}
             timestamp={solution.timestamp}
+            relatedScreenshots={
+              solution.screenshotIds
+                ? session.screenshots?.filter(s => solution.screenshotIds!.includes(s.id))
+                : undefined
+            }
           />
         ))}
       </div>
@@ -625,7 +697,124 @@ function SectionContentRenderer({
   }
 
   if (section.type === 'related-context') {
-    return <RelatedContextSectionRenderer section={section as RelatedContextSection} />;
+    return <RelatedContextSectionRenderer section={section as RelatedContextSection} session={session} />;
+  }
+
+  if (section.type === 'task-breakdown' && 'mainTask' in section.data) {
+    const { mainTask, description, subtasks, progress, totalEstimatedTime } = section.data;
+
+    // Calculate progress if not provided
+    const completedSubtasks = subtasks.filter(st => st.status === 'done').length;
+    const calculatedProgress = progress ?? (subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 0);
+
+    // Status badge colors
+    const statusColors = {
+      'done': { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-500', icon: '✓' },
+      'in-progress': { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-500', icon: '⟳' },
+      'todo': { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-500', icon: '○' },
+    };
+
+    return (
+      <div className="space-y-4">
+        {/* Main Task Header */}
+        <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-5 border-l-4 border-indigo-500`}>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">{mainTask}</h3>
+          {description && (
+            <p className="text-sm text-gray-700 mb-4">{description}</p>
+          )}
+
+          {/* Progress Bar */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">Overall Progress</span>
+              <span className="font-semibold text-indigo-600">{calculatedProgress}%</span>
+            </div>
+            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out"
+                style={{ width: `${calculatedProgress}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-gray-600">
+              <span>{completedSubtasks} of {subtasks.length} subtasks completed</span>
+              {totalEstimatedTime && (
+                <span className="flex items-center gap-1">
+                  ⏱ ~{totalEstimatedTime} min total
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Subtasks List */}
+        <div className="space-y-2">
+          {subtasks.map((subtask, idx) => {
+            const colors = statusColors[subtask.status];
+            return (
+              <div
+                key={subtask.id || idx}
+                className={`${getGlassClasses('medium')} ${getRadiusClass('field')} p-4 border-l-4 ${colors.border} transition-all hover:scale-[1.02] hover:shadow-md`}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Status Icon/Checkbox */}
+                  <div className={`flex-shrink-0 w-6 h-6 rounded-full ${colors.bg} ${colors.text} flex items-center justify-center font-bold text-sm`}>
+                    {colors.icon}
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className={`font-semibold text-gray-900 ${subtask.status === 'done' ? 'line-through opacity-60' : ''}`}>
+                        {subtask.title}
+                      </div>
+                      <span className={`px-2 py-1 ${colors.bg} ${colors.text} text-xs font-medium rounded-full uppercase flex-shrink-0`}>
+                        {subtask.status.replace('-', ' ')}
+                      </span>
+                    </div>
+
+                    {/* Metadata */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {subtask.estimatedDuration && (
+                        <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                          ~{subtask.estimatedDuration} min
+                        </span>
+                      )}
+                      {subtask.dependencies && subtask.dependencies.length > 0 && (
+                        <span className="text-xs text-amber-700 bg-amber-100 px-2 py-1 rounded">
+                          Depends on: {subtask.dependencies.join(', ')}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Screenshot Thumbnails */}
+                    {subtask.screenshotIds && subtask.screenshotIds.length > 0 && (
+                      <div className="flex items-center gap-2 mt-3">
+                        <span className="text-xs text-gray-600">Evidence:</span>
+                        <div className="flex gap-1">
+                          {session.screenshots?.filter(s => subtask.screenshotIds!.includes(s.id)).slice(0, 3).map((screenshot) => (
+                            <ScreenshotThumbnail
+                              key={screenshot.id}
+                              screenshot={screenshot}
+                              size="sm"
+                              showIcon
+                            />
+                          ))}
+                          {subtask.screenshotIds.length > 3 && (
+                            <span className="text-xs text-gray-500 flex items-center">
+                              +{subtask.screenshotIds.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   // Generic fallback for other section types
@@ -651,9 +840,10 @@ function SectionContentRenderer({
  */
 interface RelatedContextSectionRendererProps {
   section: RelatedContextSection;
+  session: Session;
 }
 
-function RelatedContextSectionRenderer({ section }: RelatedContextSectionRendererProps) {
+function RelatedContextSectionRenderer({ section, session }: RelatedContextSectionRendererProps) {
   const [activeTab, setActiveTab] = useState<'tasks' | 'notes'>('tasks');
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { state: tasksState } = useTasks();
@@ -665,20 +855,20 @@ function RelatedContextSectionRenderer({ section }: RelatedContextSectionRendere
   const hasTasks = relatedTasksData.length > 0;
   const hasNotes = relatedNotesData.length > 0;
 
-  // Get full task and note objects from state
+  // Get full task and note objects from state (preserve screenshotIds from AI data)
   const tasks = relatedTasksData
     .map(rt => {
       const task = tasksState.tasks.find(t => t.id === rt.taskId);
-      return task ? { task, relevance: rt.relevance } : null;
+      return task ? { task, relevance: rt.relevance, screenshotIds: rt.screenshotIds || undefined } : null;
     })
-    .filter((item): item is { task: Task; relevance: string } => item !== null);
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const notes = relatedNotesData
     .map(rn => {
       const note = notesState.notes.find(n => n.id === rn.noteId);
-      return note ? { note, relevance: rn.relevance } : null;
+      return note ? { note, relevance: rn.relevance, screenshotIds: rn.screenshotIds || undefined } : null;
     })
-    .filter((item): item is { note: Note; relevance: string } => item !== null);
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   // Auto-select tab based on what's available
   useEffect(() => {
@@ -787,6 +977,27 @@ function RelatedContextSectionRenderer({ section }: RelatedContextSectionRendere
                         Due: {new Date(item.task.dueDate).toLocaleDateString()}
                       </div>
                     )}
+                    {/* Screenshot Thumbnails */}
+                    {item.screenshotIds && item.screenshotIds.length > 0 && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs text-gray-600">Related:</span>
+                        <div className="flex gap-1">
+                          {session.screenshots?.filter(s => item.screenshotIds!.includes(s.id)).slice(0, 3).map((screenshot) => (
+                            <ScreenshotThumbnail
+                              key={screenshot.id}
+                              screenshot={screenshot}
+                              size="sm"
+                              showIcon
+                            />
+                          ))}
+                          {item.screenshotIds.length > 3 && (
+                            <span className="text-xs text-gray-500 flex items-center">
+                              +{item.screenshotIds.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors flex-shrink-0" />
                 </div>
@@ -817,7 +1028,7 @@ function RelatedContextSectionRenderer({ section }: RelatedContextSectionRendere
                       {item.relevance}
                     </p>
                     {item.note.tags && item.note.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-1.5 mb-2">
                         {item.note.tags.map(tag => (
                           <span
                             key={tag}
@@ -826,6 +1037,27 @@ function RelatedContextSectionRenderer({ section }: RelatedContextSectionRendere
                             {tag}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {/* Screenshot Thumbnails */}
+                    {item.screenshotIds && item.screenshotIds.length > 0 && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs text-gray-600">Related:</span>
+                        <div className="flex gap-1">
+                          {session.screenshots?.filter(s => item.screenshotIds!.includes(s.id)).slice(0, 3).map((screenshot) => (
+                            <ScreenshotThumbnail
+                              key={screenshot.id}
+                              screenshot={screenshot}
+                              size="sm"
+                              showIcon
+                            />
+                          ))}
+                          {item.screenshotIds.length > 3 && (
+                            <span className="text-xs text-gray-500 flex items-center">
+                              +{item.screenshotIds.length - 3}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

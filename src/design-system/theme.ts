@@ -143,10 +143,10 @@ export const GLASS_PATTERNS: Record<GlassStrength, GlassPattern> = {
 // ============================================================================
 
 export const RADIUS = {
-  modal: 32,      // Large modals, overlays
-  card: 24,       // Cards, sections, containers
-  field: 20,      // Inputs, buttons, select boxes
-  element: 16,    // Small interactive elements
+  modal: 24,      // Large modals, overlays (reduced from 32 for professional feel)
+  card: 16,       // Cards, sections, containers (reduced from 24)
+  field: 12,      // Inputs, buttons, select boxes (reduced from 20)
+  element: 12,    // Small interactive elements (reduced from 16)
   pill: 9999,     // Pills, badges, circular elements (rounded-full equivalent)
 } as const;
 
@@ -427,25 +427,7 @@ export function getInputClasses(scheme: ColorScheme = 'ocean'): string {
 // TYPOGRAPHY SCALE
 // ============================================================================
 
-export type TypographyVariant = 'h1' | 'h2' | 'h3' | 'h4' | 'body' | 'bodyLarge' | 'bodySmall' | 'mono';
-
-export const TYPOGRAPHY = {
-  h1: 'text-4xl font-bold',
-  h2: 'text-3xl font-bold',
-  h3: 'text-2xl font-bold',
-  h4: 'text-xl font-semibold',
-  body: 'text-base',
-  bodyLarge: 'text-lg',
-  bodySmall: 'text-sm',
-  mono: 'font-mono text-sm',
-} as const;
-
-/**
- * Get typography classes for the specified variant
- */
-export function getTypography(variant: TypographyVariant): string {
-  return TYPOGRAPHY[variant];
-}
+// Legacy typography removed - see comprehensive TYPOGRAPHY system at end of file
 
 // ============================================================================
 // SPACING SCALE
@@ -1452,4 +1434,196 @@ export function getTaskCardClasses(
   }[state];
 
   return `${KANBAN.card.base} ${priorityBorder} ${stateClasses}`;
+}
+
+// ============================================================================
+// CANVAS COMPONENT SYSTEM
+// ============================================================================
+
+/**
+ * Design tokens for AI-composable Canvas components
+ * Used by the flexible Canvas system to render session summaries
+ */
+export const CANVAS_COMPONENTS = {
+  spacing: {
+    tight: '0.5rem',      // 8px - Minimal spacing for compact layouts
+    normal: '0.75rem',    // 12px - Standard spacing between elements (reduced from 16px)
+    relaxed: '1rem',      // 16px - More breathing room (reduced from 24px)
+    loose: '1.5rem',      // 24px - Maximum spacing for section separation (reduced from 32px)
+  },
+
+  elevation: {
+    flat: 'shadow-none',
+    lifted: 'shadow-md',
+    floating: 'shadow-lg',
+    elevated: 'shadow-xl',
+  },
+
+  emphasis: {
+    subtle: 'opacity-60',           // De-emphasized text
+    normal: 'opacity-100',          // Standard text
+    strong: 'font-semibold',        // Bold text
+    hero: 'text-2xl font-bold',     // Large hero text
+  },
+
+  themes: {
+    default: {
+      bg: 'bg-white/50',
+      border: 'border-gray-200',
+      text: 'text-gray-900',
+      textSecondary: 'text-gray-600',
+    },
+    success: {
+      bg: 'bg-green-50/50',
+      border: 'border-green-200',
+      text: 'text-green-900',
+      textSecondary: 'text-green-700',
+    },
+    warning: {
+      bg: 'bg-amber-50/50',
+      border: 'border-amber-200',
+      text: 'text-amber-900',
+      textSecondary: 'text-amber-700',
+    },
+    danger: {
+      bg: 'bg-red-50/50',
+      border: 'border-red-200',
+      text: 'text-red-900',
+      textSecondary: 'text-red-700',
+    },
+    info: {
+      bg: 'bg-cyan-50/50',
+      border: 'border-cyan-200',
+      text: 'text-cyan-900',
+      textSecondary: 'text-cyan-700',
+    },
+    purple: {
+      bg: 'bg-purple-50/50',
+      border: 'border-purple-200',
+      text: 'text-purple-900',
+      textSecondary: 'text-purple-700',
+    },
+  },
+
+  grid: {
+    columns: {
+      1: 'grid-cols-1',
+      2: 'grid-cols-1 md:grid-cols-2',
+      3: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
+      4: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4',
+      6: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6',
+    },
+    gaps: {
+      tight: 'gap-2',    // 8px
+      normal: 'gap-3',   // 12px (reduced from 16px)
+      relaxed: 'gap-4',  // 16px (reduced from 24px)
+      loose: 'gap-6',    // 24px (reduced from 32px)
+    },
+  },
+
+  buttons: {
+    primary: 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transition-all',
+    secondary: 'bg-white/90 hover:bg-white border-2 border-gray-300 hover:border-gray-400 text-gray-700 shadow-md hover:shadow-lg transition-all',
+    ghost: 'bg-transparent hover:bg-white/50 text-gray-700 transition-all',
+    danger: 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-lg hover:shadow-xl transition-all',
+  },
+
+  badges: {
+    default: 'bg-gray-100 text-gray-700 border-gray-300',
+    success: 'bg-green-100 text-green-700 border-green-300',
+    warning: 'bg-amber-100 text-amber-700 border-amber-300',
+    danger: 'bg-red-100 text-red-700 border-red-300',
+    info: 'bg-cyan-100 text-cyan-700 border-cyan-300',
+    purple: 'bg-purple-100 text-purple-700 border-purple-300',
+  },
+} as const;
+
+/**
+ * Typography Design System
+ *
+ * Comprehensive typography scale based on:
+ * - Minor Third ratio (1.2) for balanced hierarchy
+ * - 4 font weights for clear distinction
+ * - Formalized line heights for readability
+ * - Tabular numbers for data displays
+ *
+ * Usage: Import specific typography classes instead of ad-hoc text sizes
+ */
+export const TYPOGRAPHY = {
+  /**
+   * Display sizes - For hero stats, large KPIs, and headline numbers
+   */
+  display: {
+    large: 'text-5xl font-black leading-tight tracking-tight',      // 48px - Hero metrics
+    medium: 'text-4xl font-bold leading-tight tracking-tight',      // 36px - Large KPIs
+    small: 'text-3xl font-bold leading-tight tracking-tight',       // 30px - Secondary stats
+  },
+
+  /**
+   * Heading sizes - For section titles and card headers
+   */
+  heading: {
+    h1: 'text-3xl font-bold leading-tight',                         // 30px - Main sections
+    h2: 'text-2xl font-semibold leading-tight',                     // 24px - Card headers
+    h3: 'text-xl font-semibold leading-normal',                     // 20px - Subsections
+    h4: 'text-lg font-semibold leading-normal',                     // 18px - Minor headings
+    h5: 'text-base font-semibold leading-normal',                   // 16px - Smallest headings
+    h6: 'text-sm font-semibold uppercase tracking-wide leading-normal', // 14px - Overlines
+  },
+
+  /**
+   * Body text sizes - For paragraphs and content
+   */
+  body: {
+    large: 'text-base font-normal leading-relaxed',                 // 16px - Primary text
+    default: 'text-sm font-normal leading-relaxed',                 // 14px - Secondary text
+    small: 'text-xs font-normal leading-normal',                    // 12px - Tertiary text
+  },
+
+  /**
+   * Label sizes - For form labels and metadata
+   */
+  label: {
+    default: 'text-sm font-medium leading-normal',                  // 14px - Standard labels
+    small: 'text-xs font-medium leading-normal',                    // 12px - Compact labels
+  },
+
+  /**
+   * Special use cases
+   */
+  badge: 'text-xs font-semibold leading-normal uppercase',          // 12px - All badges
+  caption: 'text-xs font-normal leading-normal',                    // 12px - Captions, timestamps
+  overline: 'text-xs font-semibold uppercase tracking-wide leading-normal', // 12px - Section labels
+
+  /**
+   * Interactive elements
+   */
+  button: {
+    large: 'text-base font-medium leading-normal',                  // 16px
+    default: 'text-sm font-medium leading-normal',                  // 14px
+    small: 'text-xs font-medium leading-normal',                    // 12px
+  },
+} as const;
+
+/**
+ * Text color hierarchy for consistent contrast
+ */
+export const TEXT_COLORS = {
+  primary: 'text-gray-900',           // Primary text - highest emphasis
+  secondary: 'text-gray-600',         // Secondary text - medium emphasis
+  tertiary: 'text-gray-500',          // Tertiary text - lower emphasis
+  disabled: 'text-gray-400',          // Disabled/muted text
+  inverse: 'text-white',              // Text on dark backgrounds
+} as const;
+
+/**
+ * Type guard for theme variants
+ */
+export type CanvasThemeVariant = keyof typeof CANVAS_COMPONENTS.themes;
+
+/**
+ * Get theme classes for Canvas components
+ */
+export function getCanvasThemeClasses(theme: CanvasThemeVariant = 'default') {
+  return CANVAS_COMPONENTS.themes[theme];
 }

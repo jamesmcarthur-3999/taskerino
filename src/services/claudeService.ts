@@ -496,7 +496,7 @@ ${attachmentInfo}`;
 
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion_vision', {
         model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5
-        maxTokens: 4096,
+        maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
         messages,
         system: undefined,
         temperature: undefined,
@@ -856,7 +856,7 @@ ${context}
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
           model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5
-          maxTokens: 2048,
+          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
           messages,
           system: undefined,
           temperature: undefined,
@@ -979,7 +979,7 @@ Only include "suggestedSettings" if shouldOptimize is true. Make conservative ad
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
           model: 'claude-sonnet-4-5-20250929',
-          maxTokens: 1024,
+          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
           messages,
           system: undefined,
           temperature: undefined,

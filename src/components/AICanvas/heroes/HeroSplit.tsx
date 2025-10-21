@@ -8,10 +8,12 @@
  * - Responsive (stack on mobile)
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { Loader2, ImageOff } from 'lucide-react';
 import { getRadiusClass, getGlassClasses } from '../../../design-system/theme';
 import { fadeInVariants, slideInLeftVariants, slideInRightVariants } from '../../morphing-canvas/animations/transitions';
+import { attachmentStorage } from '../../../services/attachmentStorage';
 
 export interface ThemeConfig {
   primary: string;
@@ -33,6 +35,47 @@ export interface HeroSplitProps {
 }
 
 export function HeroSplit({ title, narrative, stats, theme, featuredImage }: HeroSplitProps) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  // Load featured image from attachment storage
+  useEffect(() => {
+    if (!featuredImage) {
+      setImageUrl(null);
+      setIsLoading(false);
+      setHasError(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setHasError(false);
+
+    attachmentStorage
+      .getAttachment(featuredImage)
+      .then((attachment) => {
+        if (!attachment || !attachment.base64) {
+          console.warn('[HeroSplit] No attachment data found for:', featuredImage);
+          setHasError(true);
+          setImageUrl(null);
+          return;
+        }
+
+        // Create data URL from base64
+        const mimeType = attachment.mimeType || 'image/png';
+        const dataUrl = `data:${mimeType};base64,${attachment.base64}`;
+        setImageUrl(dataUrl);
+      })
+      .catch((error) => {
+        console.error('[HeroSplit] Failed to load featured image:', error);
+        setHasError(true);
+        setImageUrl(null);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [featuredImage]);
+
   return (
     <motion.div
       variants={fadeInVariants}
@@ -73,11 +116,25 @@ export function HeroSplit({ title, narrative, stats, theme, featuredImage }: Her
           className={`${getGlassClasses('strong')} ${getRadiusClass('field')} p-6 shadow-xl flex flex-col justify-center`}
         >
           {featuredImage ? (
-            <img
-              src={`/api/attachments/${featuredImage}`}
-              alt="Featured"
-              className="w-full h-full object-cover rounded-lg"
-            />
+            <div className="w-full h-full rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+              {isLoading ? (
+                <div className="flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+                </div>
+              ) : hasError ? (
+                <div className="flex flex-col items-center justify-center text-gray-400 gap-2">
+                  <ImageOff className="w-12 h-12" />
+                  <p className="text-sm">Failed to load image</p>
+                </div>
+              ) : imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt="Featured"
+                  className="w-full h-full object-cover"
+                  onError={() => setHasError(true)}
+                />
+              ) : null}
+            </div>
           ) : (
             <div className="space-y-4">
               <div className="text-center">

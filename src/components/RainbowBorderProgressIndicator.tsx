@@ -10,10 +10,11 @@
  * - Rainbow gradient (cyan → blue → purple → pink → magenta)
  * - GPU-accelerated for 60fps performance
  * - Consumes EnrichmentContext for real-time progress
+ * - Smoothed progress animation to prevent hanging at high percentages
  */
 
-import React, { useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence, useSpring, useMotionValue, useTransform, useAnimationFrame } from 'framer-motion';
 import { useEnrichmentContext } from '../context/EnrichmentContext';
 import { useReducedMotion } from '../lib/animations';
 
@@ -58,8 +59,11 @@ export const RainbowBorderProgressIndicator: React.FC = () => {
             }}
           />
 
-          {/* SVG Border */}
-          <RainbowBorderSVG progress={activeEnrichment.progress} prefersReducedMotion={prefersReducedMotion} />
+          {/* SVG Border - with smoothed progress */}
+          <RainbowBorderSVG
+            targetProgress={activeEnrichment.progress}
+            prefersReducedMotion={prefersReducedMotion}
+          />
         </motion.div>
       )}
     </AnimatePresence>
@@ -67,11 +71,59 @@ export const RainbowBorderProgressIndicator: React.FC = () => {
 };
 
 interface RainbowBorderSVGProps {
-  progress: number; // 0-100
+  targetProgress: number; // 0-100 - actual progress from enrichment
   prefersReducedMotion: boolean;
 }
 
-const RainbowBorderSVG: React.FC<RainbowBorderSVGProps> = ({ progress, prefersReducedMotion }) => {
+const RainbowBorderSVG: React.FC<RainbowBorderSVGProps> = ({ targetProgress, prefersReducedMotion }) => {
+  // Track when enrichment started for time-based minimum duration
+  const startTimeRef = useRef<number | null>(null);
+
+  // Minimum duration in seconds - ensures we don't rush through early steps
+  const MIN_DURATION_SECONDS = 8;
+
+  // MotionValue for elapsed time (updates on every frame, no React re-renders!)
+  const elapsedSeconds = useMotionValue(0);
+
+  // MotionValue for target progress (updated when prop changes)
+  const targetProgressMV = useMotionValue(targetProgress);
+
+  // Update target progress motion value when prop changes
+  useEffect(() => {
+    targetProgressMV.set(targetProgress);
+  }, [targetProgress, targetProgressMV]);
+
+  // Use animation frame to update elapsed time at 60fps (GPU-accelerated, no React re-renders)
+  useAnimationFrame((time) => {
+    // Initialize start time on first frame
+    if (startTimeRef.current === null) {
+      startTimeRef.current = time;
+    }
+
+    // Calculate elapsed time in seconds
+    const elapsed = (time - startTimeRef.current) / 1000;
+    elapsedSeconds.set(elapsed);
+  });
+
+  // Calculate time-based maximum progress using useTransform (60fps, no re-renders)
+  const timeBasedMaxProgress = useTransform(
+    elapsedSeconds,
+    (elapsed) => Math.min((elapsed / MIN_DURATION_SECONDS) * 100, 100)
+  );
+
+  // Gate the target progress by time
+  const gatedProgress = useTransform(
+    [targetProgressMV, timeBasedMaxProgress],
+    (latest: number[]) => Math.min(latest[0], latest[1])
+  );
+
+  // Smoothed progress that "catches up" to gated target progress
+  const smoothedProgress = useSpring(gatedProgress, {
+    stiffness: 50,
+    damping: 30,
+    mass: 1,
+  });
+
   // Create rounded rectangle path that matches container's rounded-[24px]
   // Using arc commands (A) for corners
   const path = useMemo(() => {
@@ -93,11 +145,6 @@ const RainbowBorderSVG: React.FC<RainbowBorderSVGProps> = ({ progress, prefersRe
       Z
     `.trim();
   }, []);
-
-  // Calculate dash array for progress
-  const dashArray = useMemo(() => {
-    return `${progress} ${100 - progress}`;
-  }, [progress]);
 
   return (
     <svg
@@ -141,28 +188,11 @@ const RainbowBorderSVG: React.FC<RainbowBorderSVGProps> = ({ progress, prefersRe
           )}
         </linearGradient>
 
-        {/* Subtle glow filter */}
-        <filter id="border-glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="blur1" />
-          <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur2" />
-
-          <feColorMatrix in="blur1" type="matrix"
-            values="1 0 0 0 0
-                    0 1 0 0 0
-                    0 0 1 0 0
-                    0 0 0 1.5 0"
-            result="glow1" />
-
-          <feColorMatrix in="blur2" type="matrix"
-            values="1 0 0 0 0
-                    0 1 0 0 0
-                    0 0 1 0 0
-                    0 0 0 1.2 0"
-            result="glow2" />
-
+        {/* Lighter glow filter - optimized for performance */}
+        <filter id="border-glow">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" result="blur" />
           <feMerge>
-            <feMergeNode in="glow2" />
-            <feMergeNode in="glow1" />
+            <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
@@ -173,46 +203,34 @@ const RainbowBorderSVG: React.FC<RainbowBorderSVGProps> = ({ progress, prefersRe
         d={path}
         fill="none"
         stroke="url(#rainbow-gradient)"
-        strokeWidth={1.0}
+        strokeWidth={prefersReducedMotion ? 1.5 : 1.0}
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeDasharray={dashArray}
-        strokeDashoffset={0}
         pathLength={100}
-        filter="url(#border-glow)"
+        strokeDashoffset={0}
+        filter={prefersReducedMotion ? undefined : "url(#border-glow)"}
         style={{
-          willChange: 'stroke-dasharray',
-        }}
-        initial={{ strokeDasharray: `0 100` }}
-        animate={{ strokeDasharray: dashArray }}
-        transition={{
-          duration: 0.6,
-          ease: [0.4, 0, 0.2, 1],
+          strokeDasharray: useTransform(smoothedProgress, p => `${p} ${100 - p}`),
         }}
       />
 
-      {/* Shimmer overlay - subtle */}
-      <motion.path
-        d={path}
-        fill="none"
-        stroke="url(#shimmer-gradient)"
-        strokeWidth={1.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeDasharray={dashArray}
-        strokeDashoffset={0}
-        pathLength={100}
-        style={{
-          opacity: 0.5,
-          willChange: 'stroke-dasharray',
-        }}
-        initial={{ strokeDasharray: `0 100` }}
-        animate={{ strokeDasharray: dashArray }}
-        transition={{
-          duration: 0.6,
-          ease: [0.4, 0, 0.2, 1],
-        }}
-      />
+      {/* Shimmer overlay - subtle, follows same smoothed progress */}
+      {!prefersReducedMotion && (
+        <motion.path
+          d={path}
+          fill="none"
+          stroke="url(#shimmer-gradient)"
+          strokeWidth={1.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          pathLength={100}
+          strokeDashoffset={0}
+          style={{
+            strokeDasharray: useTransform(smoothedProgress, p => `${p} ${100 - p}`),
+            opacity: 0.5,
+          }}
+        />
+      )}
     </svg>
   );
 };

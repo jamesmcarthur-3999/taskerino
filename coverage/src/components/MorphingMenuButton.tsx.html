@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/250</span>
+                <span class='fraction'>0/255</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/250</span>
+                <span class='fraction'>0/255</span>
             </div>
         
             
@@ -415,7 +415,17 @@
 <a name='L350'></a><a href='#L350'>350</a>
 <a name='L351'></a><a href='#L351'>351</a>
 <a name='L352'></a><a href='#L352'>352</a>
-<a name='L353'></a><a href='#L353'>353</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L353'></a><a href='#L353'>353</a>
+<a name='L354'></a><a href='#L354'>354</a>
+<a name='L355'></a><a href='#L355'>355</a>
+<a name='L356'></a><a href='#L356'>356</a>
+<a name='L357'></a><a href='#L357'>357</a>
+<a name='L358'></a><a href='#L358'>358</a>
+<a name='L359'></a><a href='#L359'>359</a>
+<a name='L360'></a><a href='#L360'>360</a>
+<a name='L361'></a><a href='#L361'>361</a>
+<a name='L362'></a><a href='#L362'>362</a>
+<a name='L363'></a><a href='#L363'>363</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -440,12 +450,14 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -490,9 +502,11 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -747,10 +761,14 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -758,8 +776,10 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -791,6 +811,7 @@
 <span class="cstat-no" title="statement not covered" >import { Menu, X } from 'lucide-react';</span>
 <span class="cstat-no" title="statement not covered" >import { useScrollAnimation } from '../contexts/ScrollAnimationContext';</span>
 <span class="cstat-no" title="statement not covered" >import { useUI } from '../context/UIContext';</span>
+<span class="cstat-no" title="statement not covered" >import { useCompactNavigation } from '../hooks/useCompactNavigation';</span>
 <span class="cstat-no" title="statement not covered" >import { NAVIGATION } from '../design-system/theme';</span>
 &nbsp;
 interface MorphingMenuButtonProps {
@@ -805,6 +826,7 @@ interface MorphingMenuButtonProps {
 <span class="cstat-no" title="statement not covered" >  const { scrollY, scrollYMotionValue } = useScrollAnimation();</span>
 <span class="cstat-no" title="statement not covered" >  const { state, dispatch } = useUI();</span>
 <span class="cstat-no" title="statement not covered" >  const { showSubMenuOverlay } = state;</span>
+<span class="cstat-no" title="statement not covered" >  const isCompact = useCompactNavigation();</span>
 &nbsp;
   // Animation state management
 <span class="cstat-no" title="statement not covered" >  const [isHovered, setIsHovered] = useState(false);</span>
@@ -838,14 +860,16 @@ interface MorphingMenuButtonProps {
   // Position: Morphs from relative (inline) to fixed (at logo position)
 <span class="cstat-no" title="statement not covered" >  const position = (scrollY &gt;= 100 || showSubMenuOverlay) ? 'fixed' : 'relative';</span>
 &nbsp;
-  // Top position: 0 when inline, 16px when scrolled, 80px for overlay
-<span class="cstat-no" title="statement not covered" >  const top = showSubMenuOverlay ? 80 : (scrollY &gt;= 100 ? 16 : 0);</span>
+  // Top position: 0 when inline, adaptive for scrolled state based on compact mode
+<span class="cstat-no" title="statement not covered" >  const top = showSubMenuOverlay ? 80 : (scrollY &gt;= 100 ? (isCompact ? 12 : 16) : 0);</span>
 &nbsp;
-  // Left position: 0 when inline, 24px when scrolled or overlay
-<span class="cstat-no" title="statement not covered" >  const left = scrollY &gt;= 100 || showSubMenuOverlay ? 24 : 0;</span>
+  // Left position: 0 when inline, adaptive for scrolled/overlay based on compact mode
+  // On compact mode, position further right to avoid navigation island overlap
+<span class="cstat-no" title="statement not covered" >  const left = scrollY &gt;= 100 || showSubMenuOverlay ? (isCompact ? 72 : 24) : 0;</span>
 &nbsp;
   // Width: full-width → compact (logo + menu text) → overlay full-width
-<span class="cstat-no" title="statement not covered" >  const widthValue = showSubMenuOverlay ? 'auto' : (scrollY &gt;= 100 ? 'auto' : 'auto');</span>
+  // In compact-compact mode (narrow + scrolled), set fixed width for circular button
+<span class="cstat-no" title="statement not covered" >  const widthValue = showSubMenuOverlay ? 'auto' : (scrollY &gt;= 100 ? (isCompact ? '40px' : 'auto') : 'auto');</span>
 &nbsp;
   // ============================================================================
   // Border Radius Morphing with Spring Physics
@@ -1034,14 +1058,14 @@ interface MorphingMenuButtonProps {
 <span class="cstat-no" title="statement not covered" >          scale: showCompactButton ? scaleSpring : 1,</span>
 <span class="cstat-no" title="statement not covered" >          rotate: rotationSpring,</span>
 <span class="cstat-no" title="statement not covered" >          willChange: willChangeStyle,</span>
-<span class="cstat-no" title="statement not covered" >          zIndex: 95,</span>
+<span class="cstat-no" title="statement not covered" >          zIndex: 100,</span>
 <span class="cstat-no" title="statement not covered" >        }}</span>
 <span class="cstat-no" title="statement not covered" >        onClick={handleClick}</span>
 <span class="cstat-no" title="statement not covered" >        onPointerDown={handlePointerDown}</span>
 <span class="cstat-no" title="statement not covered" >        onPointerUp={handlePointerUp}</span>
 <span class="cstat-no" title="statement not covered" >        onMouseEnter={handleMouseEnter}</span>
 <span class="cstat-no" title="statement not covered" >        onMouseLeave={handleMouseLeave}</span>
-<span class="cstat-no" title="statement not covered" >        className={`flex items-center gap-2.5 px-5 py-4 bg-white/40 backdrop-blur-xl border-2 border-white/50 ring-1 ring-black/5 ${shadowClass} origin-top-left overflow-hidden ${showCompactButton ? 'cursor-pointer' : ''} ${isHovered &amp;&amp; showCompactButton ? 'bg-white/50' : ''} ${className}`}</span>
+<span class="cstat-no" title="statement not covered" >        className={`flex items-center gap-2.5 ${showCompactButton &amp;&amp; isCompact ? 'p-0 h-10 w-10 justify-center' : 'px-5 py-4'} bg-white/40 backdrop-blur-xl border-2 border-white/50 ring-1 ring-black/5 ${shadowClass} origin-top-left overflow-hidden ${showCompactButton ? 'cursor-pointer' : ''} ${isHovered &amp;&amp; showCompactButton ? 'bg-white/50' : ''} ${className}`}</span>
 <span class="cstat-no" title="statement not covered" >        role={showCompactButton ? 'button' : undefined}</span>
 <span class="cstat-no" title="statement not covered" >        aria-label={showCompactButton ? 'Open navigation menu' : undefined}</span>
 <span class="cstat-no" title="statement not covered" >        aria-expanded={showSubMenuOverlay}</span>
@@ -1096,22 +1120,28 @@ interface MorphingMenuButtonProps {
 <span class="cstat-no" title="statement not covered" >              initial="hidden"</span>
 <span class="cstat-no" title="statement not covered" >              animate="visible"</span>
 <span class="cstat-no" title="statement not covered" >              exit="exit"</span>
-<span class="cstat-no" title="statement not covered" >              className="flex items-center gap-3"</span>
+<span class="cstat-no" title="statement not covered" >              className={`flex items-center ${isCompact ? 'justify-center' : 'gap-3'}`}</span>
             &gt;
-              {/* Logo icon only */}
+              {/* Icon - hamburger menu icon in compact-compact mode, logo in normal compact mode */}
 <span class="cstat-no" title="statement not covered" >              &lt;motion.div variants={itemVariants}&gt;</span>
-<span class="cstat-no" title="statement not covered" >                &lt;div className={NAVIGATION.logo.iconBg}&gt;</span>
-<span class="cstat-no" title="statement not covered" >                  &lt;span className="text-white font-bold text-xs"&gt;T&lt;/span&gt;</span>
-<span class="cstat-no" title="statement not covered" >                &lt;/div&gt;</span>
+<span class="cstat-no" title="statement not covered" >                {isCompact ? (</span>
+<span class="cstat-no" title="statement not covered" >                  &lt;Menu className="w-5 h-5 text-gray-800" /&gt;</span>
+                ) : (
+<span class="cstat-no" title="statement not covered" >                  &lt;div className={NAVIGATION.logo.iconBg}&gt;</span>
+<span class="cstat-no" title="statement not covered" >                    &lt;span className="text-white font-bold text-xs"&gt;T&lt;/span&gt;</span>
+<span class="cstat-no" title="statement not covered" >                  &lt;/div&gt;</span>
+                )}
 <span class="cstat-no" title="statement not covered" >              &lt;/motion.div&gt;</span>
 &nbsp;
-              {/* Menu text */}
-<span class="cstat-no" title="statement not covered" >              &lt;motion.span</span>
-<span class="cstat-no" title="statement not covered" >                variants={itemVariants}</span>
-<span class="cstat-no" title="statement not covered" >                className="font-semibold text-base tracking-wide text-gray-800"</span>
-<span class="cstat-no" title="statement not covered" >              &gt;</span>
-                Menu
-<span class="cstat-no" title="statement not covered" >              &lt;/motion.span&gt;</span>
+              {/* Menu text - only show in normal compact mode, hide in compact-compact mode */}
+<span class="cstat-no" title="statement not covered" >              {!isCompact &amp;&amp; (</span>
+<span class="cstat-no" title="statement not covered" >                &lt;motion.span</span>
+<span class="cstat-no" title="statement not covered" >                  variants={itemVariants}</span>
+<span class="cstat-no" title="statement not covered" >                  className="font-semibold text-base tracking-wide text-gray-800"</span>
+<span class="cstat-no" title="statement not covered" >                &gt;</span>
+                  Menu
+<span class="cstat-no" title="statement not covered" >                &lt;/motion.span&gt;</span>
+              )}
 <span class="cstat-no" title="statement not covered" >            &lt;/motion.div&gt;</span>
           )}
 <span class="cstat-no" title="statement not covered" >        &lt;/AnimatePresence&gt;</span>
@@ -1126,7 +1156,7 @@ interface MorphingMenuButtonProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-19T04:28:22.023Z
+                at 2025-10-20T22:29:51.488Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

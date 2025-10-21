@@ -2,6 +2,7 @@ use crate::ai_types::*;
 use reqwest::Client;
 use serde_json::json;
 use tauri_plugin_store::StoreExt;
+use std::time::Duration;
 
 const OPENAI_API_BASE: &str = "https://api.openai.com/v1";
 
@@ -51,7 +52,12 @@ pub async fn openai_transcribe_audio(
 
     let (format, audio_bytes) = detect_audio_format(&audio_base64)?;
 
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(Duration::from_secs(1200))         // 20 min total timeout (audio analysis can be slow)
+        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900))     // 15 min to read response
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
     // Create multipart form for Whisper API
     let form = reqwest::multipart::Form::new()
@@ -122,7 +128,12 @@ pub async fn openai_transcribe_audio_with_timestamps(
 
     let (format, audio_bytes) = detect_audio_format(&audio_base64)?;
 
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(Duration::from_secs(1200))         // 20 min total timeout (audio analysis can be slow)
+        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900))     // 15 min to read response
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
     // Create multipart form for Whisper API with verbose JSON and word timestamps
     let form = reqwest::multipart::Form::new()
@@ -237,12 +248,18 @@ pub async fn openai_analyze_full_audio(
         context_str
     );
 
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(Duration::from_secs(1200))         // 20 min total timeout (audio analysis can be slow)
+        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900))     // 15 min to read response
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
     // Build request for GPT-4o-audio-preview (using latest version)
     let request_body = json!({
         "model": "gpt-4o-audio-preview-2025-06-03",
         "modalities": ["text"],
+        "max_tokens": 16384, // GPT-4o-audio-preview max output limit (2025)
         "messages": [
             {
                 "role": "system",

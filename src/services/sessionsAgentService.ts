@@ -151,9 +151,10 @@ export class SessionsAgentService {
       ];
 
       // Call Claude API with vision via Tauri
+      // Using Haiku 4.5 for faster live screenshot analysis (2-4x faster than Sonnet)
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion_vision', {
-        model: 'claude-sonnet-4-5-20250929',
-        maxTokens: 2048,
+        model: 'claude-haiku-4-5',
+        maxTokens: 64000, // Claude Haiku 4.5 max output limit (2025)
         messages,
         system: undefined,
         temperature: undefined,
@@ -171,7 +172,17 @@ export class SessionsAgentService {
         jsonText = jsonMatch[1];
       }
 
-      const analysis = JSON.parse(jsonText);
+      let analysis: any;
+      try {
+        analysis = JSON.parse(jsonText);
+      } catch (parseError) {
+        throw new Error(`Failed to parse screenshot analysis JSON: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}. Raw text: ${jsonText.substring(0, 200)}`);
+      }
+
+      // Validate required fields
+      if (!analysis || typeof analysis !== 'object') {
+        throw new Error('Parsed JSON is not a valid object');
+      }
 
       console.log('✅ SessionsAgent: Screenshot analysis complete', {
         activity: analysis.detectedActivity,
@@ -469,7 +480,7 @@ Return ONLY valid JSON.`;
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
           model: 'claude-sonnet-4-5-20250929',
-          maxTokens: 3000,
+          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
           messages,
           system: undefined,
           temperature: undefined,
@@ -488,7 +499,17 @@ Return ONLY valid JSON.`;
         jsonText = jsonMatch[1];
       }
 
-      const result = JSON.parse(jsonText);
+      let result: any;
+      try {
+        result = JSON.parse(jsonText);
+      } catch (parseError) {
+        throw new Error(`Failed to parse session summary JSON: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}. Raw text: ${jsonText.substring(0, 200)}`);
+      }
+
+      // Validate required fields
+      if (!result || typeof result !== 'object') {
+        throw new Error('Parsed JSON is not a valid object');
+      }
 
       // CRITICAL: Strip HTML tags from all key insights to ensure clean markdown/plain text
       if (result.keyInsights && Array.isArray(result.keyInsights)) {
@@ -818,7 +839,7 @@ Return ONLY valid JSON (no markdown):
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
           model: 'claude-sonnet-4-5-20250929',
-          maxTokens: 500,
+          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
           messages,
           system: undefined,
           temperature: undefined,

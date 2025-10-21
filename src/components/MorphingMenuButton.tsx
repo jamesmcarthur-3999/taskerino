@@ -92,11 +92,14 @@ export function MorphingMenuButton({
     [0, 100],
     [24, 9999]
   );
-  const borderRadius = useSpring(showSubMenuOverlay ? 24 : borderRadiusRaw, {
-    stiffness: 300,
-    damping: 30,
-    mass: 0.8,
-  });
+  const borderRadius = useSpring(
+    showSubMenuOverlay ? useMotionValue(24) : borderRadiusRaw,
+    {
+      stiffness: 300,
+      damping: 30,
+      mass: 0.8,
+    }
+  );
 
   // ============================================================================
   // Scale Bounce on Interactions
@@ -215,7 +218,7 @@ export function MorphingMenuButton({
       x: 0,
       scale: 1,
       transition: {
-        type: 'spring',
+        type: 'spring' as const,
         stiffness: 400,
         damping: 35,
       },

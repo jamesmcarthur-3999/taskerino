@@ -12,6 +12,8 @@ export interface CanvasSpec {
     sessionType: string;
     confidence: number;
   };
+  // New flexible component tree (v2 Canvas System)
+  componentTree?: import('./components/canvas').ComponentTree;
 }
 
 export interface CanvasTheme {
@@ -35,6 +37,26 @@ export interface CanvasSection {
   content?: any;
   left?: CanvasSection;
   right?: CanvasSection;
+}
+
+/**
+ * Source citation for tracing Canvas claims back to original session data
+ */
+export interface SourceCitation {
+  type: 'screenshot' | 'audio' | 'video' | 'agent_analysis';
+  timestamp: string; // ISO timestamp of when this source occurred
+
+  // Reference IDs for different media types
+  screenshotIds?: string[];
+  audioSegmentId?: string;
+  videoChapterId?: string;
+
+  // Context excerpts
+  excerpt?: string; // Quote from audio transcript or OCR text from screenshot
+  confidence?: number; // 0-1, how relevant this source is to the claim
+
+  // Display hint
+  label?: string; // Optional label like "From design discussion" or "Debugging session"
 }
 
 export interface AICanvasSessionCharacteristics {
@@ -109,10 +131,10 @@ export interface AchievementProfile {
   milestones: Milestone[];
 
   /** Breakthrough moments */
-  breakthroughs: Learning[];
+  breakthroughs: SessionInsight[];
 
   /** Key learnings extracted */
-  learnings: Learning[];
+  learnings: SessionInsight[];
 
   /** Problems solved count */
   problemsSolved: number;
@@ -193,9 +215,9 @@ export interface Milestone {
 }
 
 /**
- * A learning or insight
+ * A learning or insight from a session
  */
-export interface Learning {
+export interface SessionInsight {
   insight: string;
   timestamp: string;
   context?: string;
@@ -1072,6 +1094,7 @@ export type SummarySection =
   | RecommendedTasksSection
   | KeyInsightsSection
   | RelatedContextSection
+  | TaskBreakdownSection
   | CustomSection;
 
 /** Base section interface */
@@ -1329,6 +1352,24 @@ export interface RelatedContextSection extends BaseSummarySection {
     hasTaskLinks: boolean;
     hasNoteLinks: boolean;
     hasDuplicatePrevention: boolean;
+  };
+}
+
+export interface TaskBreakdownSection extends BaseSummarySection {
+  type: 'task-breakdown';
+  data: {
+    mainTask: string;
+    description?: string;
+    subtasks: Array<{
+      id?: string;
+      title: string;
+      status: 'todo' | 'in-progress' | 'done';
+      estimatedDuration?: number;
+      dependencies?: string[];
+      screenshotIds?: string[];
+    }>;
+    progress?: number; // percentage complete (0-100)
+    totalEstimatedTime?: number; // sum of all subtask durations
   };
 }
 

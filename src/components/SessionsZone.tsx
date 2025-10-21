@@ -1634,6 +1634,48 @@ export default function SessionsZone() {
           <SessionsStatsBar ref={statsPillRef} sessions={sessions} />
         </motion.div>
 
+        {/* Dropdown Menu - Shows when MenuButton is toggled while scrolled */}
+        {scrollY >= 100 && uiState.zoneMenuPinned && (
+          <motion.div
+            className="fixed top-20 left-24 z-50 bg-white/40 backdrop-blur-2xl rounded-[40px] border-2 border-white/50 shadow-2xl ring-1 ring-black/5 px-6 py-3"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            <SessionsTopBar
+                activeSession={activeSession}
+                sessions={sessions}
+                allPastSessions={allPastSessions}
+                isStarting={isStarting}
+                isEnding={isEnding}
+                countdown={countdown}
+                handleQuickStart={handleQuickStart}
+                handleEndSession={handleEndSession}
+                pauseSession={pauseSession}
+                resumeSession={resumeSession}
+                currentSettings={currentSettings}
+                updateScreenshots={updateScreenshots}
+                updateAudio={updateAudio}
+                updateVideo={updateVideo}
+                updateInterval={updateInterval}
+                sortBy={sortBy}
+                onSortChange={setSortBy}
+                selectedCategories={selectedCategories}
+                selectedSubCategories={selectedSubCategories}
+                selectedTags={selectedTags}
+                onCategoriesChange={setSelectedCategories}
+                onSubCategoriesChange={setSelectedSubCategories}
+                onTagsChange={setSelectedTags}
+                bulkSelectMode={bulkSelectMode}
+                selectedSessionIds={selectedSessionIds}
+                onBulkSelectModeChange={setBulkSelectMode}
+                onSelectedSessionIdsChange={setSelectedSessionIds}
+                compactMode={compactMode}
+              />
+          </motion.div>
+        )}
+
         {/* Two-Panel Layout */}
         <div ref={contentRef} className="flex-1 flex gap-4 min-h-0 relative mt-4">
           {/* LEFT PANEL - Past Sessions List */}

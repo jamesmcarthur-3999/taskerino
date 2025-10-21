@@ -294,10 +294,13 @@ function NavButtonComponent({
     const { type, onClick: onQuickActionClick, onPause, onResume, onStop, isSessionActive } = quickAction;
 
     // Session controls (dual buttons)
+    // Using div with role="button" to avoid nested button error
     if (type === 'session-controls') {
       return (
         <div key="session-controls" className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-2 transition-all duration-200 opacity-100 scale-100">
-          <motion.button
+          <motion.div
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
@@ -330,8 +333,10 @@ function NavButtonComponent({
             ) : (
               <Play className="w-3.5 h-3.5" />
             )}
-          </motion.button>
-          <motion.button
+          </motion.div>
+          <motion.div
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
@@ -352,15 +357,18 @@ function NavButtonComponent({
             transition={prefersReducedMotion ? { duration: 0 } : contentSpring}
           >
             <Square className="w-3.5 h-3.5" />
-          </motion.button>
+          </motion.div>
         </div>
       );
     }
 
     // Default quick action (Plus button)
+    // Using div with role="button" to avoid nested button error
     return (
-      <motion.button
+      <motion.div
         key="quick-action"
+        role="button"
+        tabIndex={0}
         onClick={(e) => {
           e.stopPropagation();
           e.preventDefault();
@@ -388,7 +396,7 @@ function NavButtonComponent({
         style={{ pointerEvents: showQuickAction ? 'auto' : 'none' }}
       >
         <Plus className="w-3.5 h-3.5" />
-      </motion.button>
+      </motion.div>
     );
   };
 

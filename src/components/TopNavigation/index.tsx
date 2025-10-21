@@ -154,7 +154,10 @@ export function TopNavigation() {
               animate={{ opacity: 1 }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
             >
-              <MenuButton />
+              <MenuButton
+                onClick={() => uiDispatch({ type: 'TOGGLE_ZONE_MENU' })}
+                isActive={uiState.zoneMenuPinned}
+              />
             </motion.div>
           )}
 
@@ -185,7 +188,7 @@ export function TopNavigation() {
 
         {/* Navigation Island - Absolutely centered, independent of grid */}
         <div
-          className="absolute left-1/2 top-0 -translate-x-1/2 pointer-events-none"
+          className="absolute left-1/2 top-4 -translate-x-1/2 pointer-events-none"
           style={{ width: 'fit-content' }}
         >
           <NavigationIsland

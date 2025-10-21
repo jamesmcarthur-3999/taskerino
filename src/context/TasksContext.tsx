@@ -177,13 +177,23 @@ export function useTasks() {
     throw new Error('useTasks must be used within TasksProvider');
   }
 
-  // Helper method
+  // Helper methods
   const addTask = (task: Task) => {
     context.dispatch({ type: 'ADD_TASK', payload: task });
+  };
+
+  const updateTask = (task: Task) => {
+    context.dispatch({ type: 'UPDATE_TASK', payload: task });
+  };
+
+  const createManualTask = (data: ManualTaskData) => {
+    context.dispatch({ type: 'CREATE_MANUAL_TASK', payload: data });
   };
 
   return {
     ...context,
     addTask,
+    updateTask,
+    createManualTask,
   };
 }

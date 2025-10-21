@@ -136,6 +136,15 @@ Synthesize the timeline data into a cohesive session summary. ${isLiveSession ? 
 5. **Key Insights**: Important discoveries, learnings, or observations worth preserving
 6. **Focus Areas**: What activities took the most time?
 
+**CRITICAL - Information Hierarchy & User Value:**
+The user wants to understand WHAT HAPPENED and WHY IT MATTERS.
+- Prioritize OUTCOMES (what got done), INSIGHTS (what was learned), and BLOCKERS (what's stuck)
+- Focus on SUBSTANCE over PROCESS - the user doesn't care that ${screenshotCount} screenshots were captured
+- The narrative should tell a STORY about the work, not a technical report about the recording
+- Example GOOD narrative: "Spent the morning implementing OAuth authentication. Hit a critical CORS issue that blocked progress for an hour, but identified the root cause in the proxy configuration. Successfully deployed the fix and verified the auth flow works end-to-end."
+- Example BAD narrative: "Session captured ${screenshotCount} screenshots and ${audioCount} audio segments across ${duration} minutes. Screenshots show various activities including coding and debugging."
+- Make it ACTIONABLE - what should the user know? What should they do next?
+
 **Guidelines:**
 - Write the narrative in flowing PARAGRAPHS (not bullet points) that tells a coherent chronological story
 - Use concise, specific text for achievements/blockers arrays
@@ -396,11 +405,19 @@ Return ONLY valid JSON (no markdown):
     const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
       request: {
         model: 'claude-sonnet-4-5-20250929',
-        maxTokens: 4096,
+        maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
         temperature: 0.7, // Balanced for analytical + creative work
         messages: [{ role: 'user', content: prompt }],
       }
     });
+
+    // Check for truncation in response
+    if (response.stopReason === 'max_tokens') {
+      console.error('❌ SessionSynthesis: Response truncated due to max_tokens limit!');
+      console.error(`   Requested: 64000 tokens`);
+      console.error(`   Used: ${response.usage?.outputTokens || 'unknown'} output tokens`);
+      throw new Error('Claude response was truncated. This should not happen with 64K token limit. Contact support.');
+    }
 
     const content = response.content[0];
     if (content.type !== 'text') {
@@ -408,6 +425,8 @@ Return ONLY valid JSON (no markdown):
     }
 
     const responseText = content.text.trim();
+    console.log(`📊 SessionSynthesis: Response length: ${responseText.length} characters, ${response.usage?.outputTokens || 'unknown'} tokens`);
+
     let jsonText = responseText;
     const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
     if (jsonMatch) {
@@ -426,6 +445,13 @@ Return ONLY valid JSON (no markdown):
     return summary;
   } catch (error) {
     console.error('❌ SessionSynthesis: Failed to synthesize summary:', error);
+
+    // Log full error details for truncation issues
+    if (error instanceof Error && error.message.includes('truncated')) {
+      console.error('   This is a truncation error - the AI response was cut off mid-generation');
+      console.error('   Check token usage and consider implementing chunking strategy');
+    }
+
     throw error;
   }
 }
@@ -576,29 +602,32 @@ async function discoverRelatedContext(
     });
 
     // ========================================================================
-    // 3. SEARCH WITH CONTEXT AGENT (WITH TIMEOUT PROTECTION)
+    // 3. SEARCH WITH CONTEXT AGENT (NO TIMEOUT - ALLOW FULL COMPLETION)
     // ========================================================================
 
-    const TIMEOUT_MS = 30000; // 30 seconds max
+    let relatedTasks: typeof tasks = [];
+    let relatedNotes: typeof notes = [];
+    let searchSummary = '';
 
-    const searchPromise = contextAgent.search(
-      searchQuery,
-      notes,
-      tasks,
-      companies,
-      contacts,
-      topics
-    );
+    try {
+      // No timeout - allow context discovery to complete regardless of duration
+      const searchResult = await contextAgent.search(
+        searchQuery,
+        notes,
+        tasks,
+        companies,
+        contacts,
+        topics
+      );
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Context discovery timeout')), TIMEOUT_MS)
-    );
-
-    const searchResult = await Promise.race([searchPromise, timeoutPromise]);
-
-    // Limit results to top 10 tasks and top 10 notes
-    const relatedTasks = searchResult.tasks.slice(0, 10);
-    const relatedNotes = searchResult.notes.slice(0, 10);
+      // Limit results to top 10 tasks and top 10 notes
+      relatedTasks = searchResult.tasks.slice(0, 10);
+      relatedNotes = searchResult.notes.slice(0, 10);
+      searchSummary = searchResult.summary || '';
+    } catch (error) {
+      // If context discovery fails, continue without it
+      console.warn('Context discovery failed, continuing without related context:', error);
+    }
 
     const duration = Date.now() - startTime;
 
@@ -606,14 +635,14 @@ async function discoverRelatedContext(
       tasksFound: relatedTasks.length,
       notesFound: relatedNotes.length,
       durationMs: duration,
-      summary: searchResult.summary,
+      summary: searchSummary,
     });
 
     return {
       tasks: relatedTasks,
       notes: relatedNotes,
       searchQuery,
-      searchSummary: searchResult.summary || `Found ${relatedTasks.length} tasks and ${relatedNotes.length} notes`,
+      searchSummary: searchSummary || `Found ${relatedTasks.length} tasks and ${relatedNotes.length} notes`,
     };
 
   } catch (error) {
@@ -665,11 +694,19 @@ export async function generateFlexibleSummary(
     const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
       request: {
         model: 'claude-sonnet-4-5-20250929',
-        maxTokens: 4096,
+        maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
         temperature: 0.8, // Higher for creativity in section selection
         messages: [{ role: 'user', content: prompt }],
       }
     });
+
+    // Check for truncation in response
+    if (response.stopReason === 'max_tokens') {
+      console.error('❌ SessionSynthesis (Flexible): Response truncated due to max_tokens limit!');
+      console.error(`   Requested: 64000 tokens`);
+      console.error(`   Used: ${response.usage?.outputTokens || 'unknown'} output tokens`);
+      throw new Error('Claude response was truncated. This should not happen with 64K token limit. Contact support.');
+    }
 
     const content = response.content[0];
     if (content.type !== 'text') {
@@ -677,6 +714,8 @@ export async function generateFlexibleSummary(
     }
 
     const responseText = content.text.trim();
+    console.log(`📊 SessionSynthesis (Flexible): Response length: ${responseText.length} characters, ${response.usage?.outputTokens || 'unknown'} tokens`);
+
     let jsonText = responseText;
     const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
     if (jsonMatch) {
@@ -695,8 +734,24 @@ export async function generateFlexibleSummary(
 
   } catch (error) {
     console.error('❌ SessionSynthesis: Flexible summary generation failed:', error);
-    // Fallback to standard structure
-    return createFallbackFlexibleSummary(session, screenshots, audioSegments);
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    // Log additional details for truncation issues
+    if (error instanceof Error && error.message.includes('truncated')) {
+      console.error('   This is a truncation error - the AI response was cut off mid-generation');
+      console.error('   Check token usage and consider implementing chunking strategy');
+    }
+
+    // Fallback to standard structure with error details
+    return createFallbackFlexibleSummary(
+      session,
+      screenshots,
+      audioSegments,
+      error instanceof Error ? error.message : String(error)
+    );
   }
 }
 
@@ -839,17 +894,26 @@ ${analysis?.progressIndicators?.insights?.length ? `- Insights: ${analysis.progr
 **Enrichment Data:**
 ${videoChaptersSection}${audioInsightsSection}${relatedItemsSection}
 
+**CRITICAL - Information Hierarchy & User Value:**
+The user wants to understand WHAT HAPPENED, WHAT WAS LEARNED, and WHAT TO DO NEXT.
+- Focus on OUTCOMES and INSIGHTS, not technical stats
+- The user does NOT care about screenshot counts, audio segment counts, or processing metrics
+- They DO care about: achievements, breakthroughs, blockers, insights, next steps
+- Your narrative and section selection should prioritize SUBSTANCE over PROCESS
+- Example GOOD approach: Highlight "Solved critical authentication bug" not "Captured 23 screenshots during debugging"
+
 **Analysis Process:**
 Before generating the summary, follow this thinking process:
 1. Review all timeline data chronologically - screenshots, video chapters (if available), and audio insights (if available)
 2. Identify patterns: flow states, context switches, breakthrough moments, emotional arcs
 3. Determine the primary session type based on activity patterns
 4. Select 2-5 sections that BEST represent the unique aspects of THIS specific session
-5. Construct a narrative that emphasizes what makes this session notable
+5. Construct a narrative that emphasizes what makes this session notable and VALUABLE to the user
 6. Provide clear reasoning for your design choices
 
 **Your Task:**
 Generate a FLEXIBLE session summary by choosing relevant sections based on what actually happened.
+Focus on creating VALUE for the user - not just reporting what was recorded.
 
 **IMPORTANT:** You have ${hasVideoChapters ? 'detailed video chapter breakdowns' : 'no video chapters'} and ${hasAudioInsights ? 'comprehensive audio insights with emotional journey data' : 'no audio insights'}. ${hasVideoChapters || hasAudioInsights ? 'This is RICH data - use it heavily to inform your analysis. Video chapters provide narrative structure, and audio insights reveal emotional context and flow states.' : 'Base your analysis primarily on screenshot data.'} Use ALL available data sources to inform your section choices.
 
@@ -930,7 +994,7 @@ Generate a FLEXIBLE session summary by choosing relevant sections based on what 
       "type": "related-context",
       "title": "Related Work",
       "emphasis": "medium",
-      "position": 2,
+      "position": 4,
       "icon": "link",
       "colorTheme": "info",
       "data": {
@@ -968,19 +1032,35 @@ Generate a FLEXIBLE session summary by choosing relevant sections based on what 
   ]
 }
 
-**Important:**
-- PRESERVE timestamps from screenshots
-- Create sections that tell a story
-- Be creative - this is YOUR canvas design
-- Explain your reasoning clearly
-- Return ONLY valid JSON`;
+**Analysis Guidelines:**
+- Choose 2-5 sections that best tell THIS session's unique story
+- Don't force every session into the same template
+- Each section type has specific data fields (see examples above)
+- Preserve timestamps from screenshots
+- Be creative with section selection and narrative
+- Explain your reasoning for the sections chosen`;
 }
 
 function parseFlexibleSummary(
   jsonText: string,
   session: Session
 ): FlexibleSessionSummary {
-  const result = JSON.parse(jsonText);
+  let result: any;
+
+  try {
+    result = JSON.parse(jsonText);
+  } catch (parseError) {
+    throw new Error(`Failed to parse JSON response: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}. Raw text: ${jsonText.substring(0, 200)}`);
+  }
+
+  // Validate required fields
+  if (!result || typeof result !== 'object') {
+    throw new Error('Parsed JSON is not a valid object');
+  }
+
+  if (!result.sections || !Array.isArray(result.sections)) {
+    throw new Error('Missing or invalid "sections" array in response');
+  }
 
   return {
     schemaVersion: '2.0',
@@ -1042,9 +1122,18 @@ function computeQuickAccess(sections: SummarySection[]) {
 function createFallbackFlexibleSummary(
   session: Session,
   screenshots: SessionScreenshot[],
-  audioSegments: SessionAudioSegment[]
+  audioSegments: SessionAudioSegment[],
+  errorMessage?: string
 ): FlexibleSessionSummary {
   // Fallback if AI generation fails
+  const warnings = [
+    'Summary generation failed - using fallback timeline',
+  ];
+
+  if (errorMessage) {
+    warnings.push(`Error: ${errorMessage}`);
+  }
+
   return {
     schemaVersion: '2.0',
     id: generateId(),
@@ -1088,7 +1177,7 @@ function createFallbackFlexibleSummary(
         audioInsights: false,
         videoChapters: false,
       },
-      warnings: ['Summary generation failed - using fallback timeline'],
+      warnings,
     },
   };
 }

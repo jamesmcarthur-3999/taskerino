@@ -438,6 +438,85 @@ export default function LibraryZone() {
           </div>
         </motion.div>
 
+        {/* Dropdown Menu - Shows when MenuButton is toggled while scrolled */}
+        {scrollY >= 100 && uiState.zoneMenuPinned && (
+          <motion.div
+            className="fixed top-20 left-24 z-50 bg-white/40 backdrop-blur-2xl rounded-[40px] border-2 border-white/50 shadow-2xl ring-1 ring-black/5 px-6 py-3"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            <SpaceMenuBar
+                primaryAction={{
+                  label: 'New Note',
+                  icon: <Plus size={16} />,
+                  onClick: handleCreateNewNote,
+                  gradient: 'purple',
+                }}
+                dropdowns={[
+                  {
+                    label: 'Sort',
+                    value: noteSortBy,
+                    options: [
+                      { value: 'recent', label: 'Recent' },
+                      { value: 'oldest', label: 'Oldest' },
+                      { value: 'alphabetical', label: 'A-Z' },
+                    ],
+                    onChange: (value) => setNoteSortBy(value as typeof noteSortBy),
+                  },
+                ]}
+                filters={{
+                  active: showFilters,
+                  count: [
+                    selectedCompanyId ? 1 : 0,
+                    selectedContactId ? 1 : 0,
+                    selectedTopicId ? 1 : 0,
+                    selectedTags.length,
+                  ].reduce((a, b) => a + b, 0),
+                  onToggle: () => setShowFilters(!showFilters),
+                  panel: showFilters ? (
+                    <StandardFilterPanel
+                      title="Filter Notes"
+                      sections={[
+                        {
+                          title: 'COMPANIES',
+                          items: sortedCompanies.map(c => ({ id: c.id, label: c.name })),
+                          selectedIds: selectedCompanyId ? [selectedCompanyId] : [],
+                          onToggle: (id) => setSelectedCompanyId(id === selectedCompanyId ? undefined : id),
+                          multiSelect: false,
+                        },
+                        {
+                          title: 'CONTACTS',
+                          items: sortedContacts.map(c => ({ id: c.id, label: c.name })),
+                          selectedIds: selectedContactId ? [selectedContactId] : [],
+                          onToggle: (id) => setSelectedContactId(id === selectedContactId ? undefined : id),
+                          multiSelect: false,
+                        },
+                        {
+                          title: 'TOPICS',
+                          items: sortedTopics.map(t => ({ id: t.id, label: t.name })),
+                          selectedIds: selectedTopicId ? [selectedTopicId] : [],
+                          onToggle: (id) => setSelectedTopicId(id === selectedTopicId ? undefined : id),
+                          multiSelect: false,
+                        },
+                        {
+                          title: 'TAGS',
+                          items: allTags.slice(0, 8).map(({ tag }) => ({ id: tag, label: `#${tag}` })),
+                          selectedIds: selectedTags,
+                          onToggle: toggleTag,
+                          multiSelect: true,
+                        },
+                      ]}
+                    />
+                  ) : undefined,
+                }}
+                stats={undefined}
+                className=""
+              />
+          </motion.div>
+        )}
+
         {/* Split-screen Layout */}
         <div ref={contentRef} className="flex-1 min-h-0 flex gap-4 relative items-stretch">
         {/* LEFT PANEL - Clean Glass Card */}
