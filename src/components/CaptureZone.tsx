@@ -411,8 +411,12 @@ export default function CaptureZone() {
             action: {
               label: 'Review Now',
               onClick: () => {
-                uiDispatch({ type: 'SET_PENDING_REVIEW_JOB', payload: job.id });
-                uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'capture'  });
+                // Use job data directly from closure to avoid race condition
+                // with async state updates (fixes stuck loading issue)
+                setResults(job.result!);
+                setCurrentJobId(job.id);
+                setCaptureState('review');
+                uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'capture' });
               },
             },
           }
@@ -472,8 +476,10 @@ export default function CaptureZone() {
     // Store auto-save preference in the job
     (job as ExtendedJob)._autoSave = autoSave;
 
-    // Add to state using the SAME job from processor
+    // Add to state using the SAME job from processor (must include ID for progress tracking)
     addProcessingJob({
+        id: job.id,
+        createdAt: job.createdAt,
         type: job.type,
         input: job.input,
         status: job.status,

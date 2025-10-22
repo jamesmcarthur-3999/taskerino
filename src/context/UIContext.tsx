@@ -332,8 +332,8 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     // Background Processing
     case 'ADD_PROCESSING_JOB': {
       const job: ProcessingJob = {
-        id: generateId(),
-        createdAt: new Date().toISOString(),
+        id: action.payload.id || generateId(),
+        createdAt: action.payload.createdAt || new Date().toISOString(),
         ...action.payload,
       };
       return {
@@ -817,7 +817,7 @@ export function useUI() {
     context.dispatch({ type: 'ADD_NOTIFICATION', payload: notification });
   };
 
-  const addProcessingJob = (job: Omit<ProcessingJob, 'id' | 'createdAt'>) => {
+  const addProcessingJob = (job: Omit<ProcessingJob, 'id' | 'createdAt'> & Partial<Pick<ProcessingJob, 'id' | 'createdAt'>>) => {
     context.dispatch({ type: 'ADD_PROCESSING_JOB', payload: job });
   };
 
