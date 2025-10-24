@@ -1,15 +1,15 @@
 fn main() {
-  tauri_build::build();
+    tauri_build::build();
 
-  // Compile Swift module on macOS
-  #[cfg(target_os = "macos")]
-  compile_swift_module();
+    // Compile Swift module on macOS
+    #[cfg(target_os = "macos")]
+    compile_swift_module();
 }
 
 #[cfg(target_os = "macos")]
 fn compile_swift_module() {
-    use std::process::Command;
     use std::env;
+    use std::process::Command;
 
     println!("cargo:rerun-if-changed=ScreenRecorder/ScreenRecorder.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/PiPCompositor.swift");
@@ -25,7 +25,10 @@ fn compile_swift_module() {
         "x86_64"
     };
 
-    println!("cargo:warning=Compiling Swift ScreenRecorder module for {}", arch);
+    println!(
+        "cargo:warning=Compiling Swift ScreenRecorder module for {}",
+        arch
+    );
 
     // Compile Swift to dynamic library (including both Swift files)
     let output = Command::new("swiftc")
@@ -33,12 +36,16 @@ fn compile_swift_module() {
             "-emit-library",
             "-emit-objc-header",
             "-emit-module",
-            "-module-name", "ScreenRecorder",
-            "-o", &format!("{}/libScreenRecorder.dylib", out_dir),
-            "-emit-objc-header-path", &format!("{}/ScreenRecorder-Swift.h", out_dir),
+            "-module-name",
+            "ScreenRecorder",
+            "-o",
+            &format!("{}/libScreenRecorder.dylib", out_dir),
+            "-emit-objc-header-path",
+            &format!("{}/ScreenRecorder-Swift.h", out_dir),
             "ScreenRecorder/ScreenRecorder.swift",
             "ScreenRecorder/PiPCompositor.swift",
-            "-target", &format!("{}-apple-macosx12.3", arch),
+            "-target",
+            &format!("{}-apple-macosx12.3", arch),
             "-O", // Optimization
         ])
         .output()

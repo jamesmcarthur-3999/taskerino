@@ -25,9 +25,13 @@
   - [x] 2.2 Per-Entity File Storage
   - [x] 2.3 SHA-256 Checksums
   - [x] 2.4 Transaction System
+- [ ] Phase 2 Critical Fixes (0/2 tasks) - IN PROGRESS
+  - [ ] 2.5 Optimistic Locking for Race Condition (IN PROGRESS)
+  - [ ] 2.6 Integration Tests for Phase 2 (IN PROGRESS)
 - [ ] Phase 3: Scale & Performance (0/5 tasks)
 
-**Total Progress:** 9/14 major tasks complete (64%)
+**Total Progress:** 9/16 major tasks complete (56%)
+**Current Focus:** Phase 2 critical fixes and validation
 
 ---
 
@@ -681,21 +685,164 @@ if (hasEnrichmentInProgress) {
 
 ---
 
-## Phase 2 Validation ❌ NOT STARTED
+## Phase 2 Critical Fixes (Discovered During Validation)
+
+### 2.5 Optimistic Locking for Race Condition ⏳ IN PROGRESS
+
+**File:** Multiple files
 
 **Tasks:**
-- [ ] Integration test: App crash → WAL recovery → data intact
-- [ ] Integration test: Concurrent writes → no conflicts (transactions)
-- [ ] Integration test: Migration → all data preserved
-- [ ] Load test: 1000 concurrent writes (transactions)
-- [ ] Load test: WAL with 10K entries
-- [ ] Chaos test: Crash during write → recovery works
-- [ ] Chaos test: Corrupted file → checksum detects, backup restores
+- [x] Add version field to Session type
+- [ ] Implement saveEntityWithVersion() in TauriFileSystemAdapter
+- [ ] Update sessionEnrichmentService (3 locations: in-progress, failed, updateSessionWithResults)
+- [ ] Enhance commitPhase24Transaction to support version checks
+- [ ] Add version field migration for existing sessions
+- [ ] Test optimistic lock detects concurrent modifications
+- [ ] Test version increments correctly
+- [ ] Test enrichment + SessionsContext concurrent writes resolved
 
-**Dependencies:** ALL Phase 2 tasks
-**Agent Assignment:** TBD
-**Status:** NOT STARTED
-**Completion Date:** TBD
+**Dependencies:** Phase 2.4 (transactions) ✅
+**Blocks:** Phase 3 (must resolve before proceeding)
+**Agent Assignment:** Claude (Phase 2.5 Fix Agent)
+**Status:** IN PROGRESS
+**Started:** 2025-10-23
+
+**Issue Description:**
+Phase 2.4 transactions protect the final save operation, but the read-modify-write cycle in sessionEnrichmentService is still vulnerable to race conditions. Between loading the session and committing the transaction, SessionsContext's debounced save (1 second) could fire and overwrite the enrichment status update.
+
+**Solution:**
+Implement optimistic locking using version numbers:
+- Add `version?: number` field to Session type
+- Increment version on every update
+- Check expected version matches current version before save
+- Throw error if version mismatch detected (concurrent modification)
+
+**Critical Locations in sessionEnrichmentService.ts:**
+1. Setting 'in-progress' status (lines 367-407)
+2. Setting 'failed' status (lines 665-701)
+3. updateSessionWithResults() (lines 1567-1747) - **ALSO NEEDS TRANSACTION**
+
+---
+
+### 2.6 Integration Tests for Phase 2 ⏳ IN PROGRESS
+
+**File:** `/src/services/storage/__tests__/Phase2Integration.test.ts` (NEW FILE)
+
+**Tasks:**
+- [ ] Create Phase2Integration.test.ts test file
+- [ ] Test Suite 1: WAL Recovery (4+ tests)
+  - [ ] Test WAL replays uncommitted writes after crash
+  - [ ] Test rolled-back transactions not replayed
+  - [ ] Test committed transactions replayed
+  - [ ] Test checkpoint works correctly
+- [ ] Test Suite 2: Per-Entity Storage (6+ tests)
+  - [ ] Test saveEntity creates individual file
+  - [ ] Test loadEntity reads from individual file
+  - [ ] Test updateIndex maintains correct metadata
+  - [ ] Test loadAll uses index
+  - [ ] Test migration from monolithic to per-entity
+  - [ ] Test data preserved during migration
+- [ ] Test Suite 3: SHA-256 Checksums (4+ tests)
+  - [ ] Test checksum calculation correct
+  - [ ] Test checksum verification on load
+  - [ ] Test corrupted data detected
+  - [ ] Test missing checksum handled gracefully
+- [ ] Test Suite 4: Transactions (6+ tests)
+  - [ ] Test transaction begin returns ID
+  - [ ] Test operations queued without executing
+  - [ ] Test commit executes all operations atomically
+  - [ ] Test rollback discards all operations
+  - [ ] Test transaction boundaries in WAL
+  - [ ] Test enrichment race condition prevention
+
+**Dependencies:** Phase 2.1-2.4 complete ✅
+**Blocks:** Phase 3 (must validate before proceeding)
+**Agent Assignment:** Claude (Phase 2 Testing Agent)
+**Status:** IN PROGRESS
+**Started:** 2025-10-23
+
+**Issue Description:**
+All Phase 2 features were implemented based on code review only. Zero runtime validation has been performed. No integration tests exist to verify WAL recovery, per-entity migration, checksum verification, or transaction atomicity actually work end-to-end.
+
+**Solution:**
+Create comprehensive integration test suite covering all Phase 2 features with realistic scenarios and edge cases.
+
+**Target Coverage:**
+- 20+ integration tests
+- 80%+ code coverage for Phase 2 features
+- All critical paths tested
+
+---
+
+## Phase 2 Validation ⏳ IN PROGRESS
+
+**Validation Report Completed:** 2025-10-23
+
+**Overall Phase 2 Quality Score:** 3.5/5
+
+**Status:** FIX CRITICAL ISSUES BEFORE PROCEEDING TO PHASE 3
+
+**Critical Issues Identified:**
+
+1. **HIGH: Enrichment Race Condition Not Fully Resolved**
+   - Location: sessionEnrichmentService.ts (3 locations)
+   - Impact: Enrichment status updates could be lost
+   - Fix: Optimistic locking with version numbers (Phase 2.5) - IN PROGRESS
+
+2. **MEDIUM: updateSessionWithResults Not Transactional**
+   - Location: sessionEnrichmentService.ts:1567-1747
+   - Impact: Final enrichment results could be lost
+   - Fix: Wrap in transaction (included in Phase 2.5) - IN PROGRESS
+
+3. **HIGH: Zero Runtime Validation**
+   - All Phase 2 features implemented but never tested
+   - No integration tests exist
+   - Fix: Comprehensive integration test suite (Phase 2.6) - IN PROGRESS
+
+**Implementation Verification (Code Review):**
+
+✅ **2.1 WAL System (90% Complete):**
+- WALEntry interface complete
+- appendToWAL(), recoverFromWAL(), checkpoint() implemented
+- WAL recovery integrated into App.tsx startup
+- save() writes to WAL before data
+- Minor issues: No WAL compression, no size management
+
+✅ **2.2 Per-Entity Files (85% Complete):**
+- saveEntity(), loadEntity(), updateIndex(), loadAll() implemented
+- Migration script complete (splitCollections.ts)
+- Directory structure correct: db/{collection}/{entity-id}.json
+- Issues: No deleteEntity(), migration only runs once
+
+✅ **2.3 SHA-256 Checksums (95% Complete):**
+- calculateSHA256() uses @noble/hashes
+- Checksum files created alongside entities
+- loadEntity() verifies checksums
+- Excellent error messages
+
+⚠️ **2.4 ACID Transactions (80% Complete):**
+- Transaction interfaces defined
+- beginPhase24Transaction(), addOperation(), commitPhase24Transaction(), rollbackPhase24Transaction() implemented
+- sessionEnrichmentService uses transactions (2 locations)
+- WAL integration for transaction boundaries
+- **CRITICAL GAP**: Read-modify-write race condition not resolved
+- **MISSING**: updateSessionWithResults not transactional
+
+**Tasks:**
+- [x] Code review and analysis (validation report completed)
+- [ ] Fix critical race condition with optimistic locking (Phase 2.5) - IN PROGRESS
+- [ ] Create integration tests (Phase 2.6) - IN PROGRESS
+- [ ] Run integration tests and verify all pass
+- [ ] Manual testing of WAL recovery, checksum verification, transactions
+- [ ] Performance benchmarking
+- [ ] Update this tracking document with results
+- [ ] DECISION: Proceed to Phase 3 or fix additional issues
+
+**Dependencies:** Phase 2.1-2.4 complete ✅, Phase 2.5-2.6 fixes IN PROGRESS
+**Agent Assignment:** Multiple agents (validation, fixes, testing)
+**Status:** IN PROGRESS
+**Started:** 2025-10-23
+**Expected Completion:** TBD (awaiting fix completion and test results)
 
 ---
 
@@ -1029,5 +1176,37 @@ if (hasEnrichmentInProgress) {
 
 ---
 
-**Last Updated:** 2025-10-23 (branch creation)
-**Next Update:** After Phase 1.1 completion
+## Validation Notes
+
+### Phase 2 Validation Report (2025-10-23)
+
+**Summary:**
+Phase 2 implementation is substantially complete with all 4 major components implemented (WAL, per-entity files, SHA-256 checksums, transactions). However, critical integration gaps and missing test validation prevent proceeding to Phase 3.
+
+**Recommendation:** FIX CRITICAL ISSUES BEFORE PROCEEDING TO PHASE 3
+
+**Quality Score:** 3.5/5
+- Code Completeness: 4.5/5
+- Code Quality: 4/5
+- Integration: 3/5
+- Testing: 1/5
+- Documentation: 4/5
+
+**Critical Blockers:**
+1. Enrichment race condition not fully resolved (optimistic locking needed)
+2. updateSessionWithResults not transactional
+3. Zero runtime validation (no integration tests)
+
+**Next Steps:**
+1. Complete Phase 2.5 (optimistic locking fix)
+2. Complete Phase 2.6 (integration tests)
+3. Run all tests and validate
+4. If all pass → Proceed to Phase 3
+5. If failures → Fix and re-validate
+
+**User Directive:** "BUILD TO PERFECTION - Quality over speed. FULL production quality job - this is critical work."
+
+---
+
+**Last Updated:** 2025-10-23 (Phase 2 validation, critical fixes in progress)
+**Next Update:** After Phase 2.5 and 2.6 completion

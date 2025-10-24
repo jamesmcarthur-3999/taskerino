@@ -1582,6 +1582,9 @@ export interface Session {
 
   /** Video recording configuration (optional, defaults to main display) */
   videoConfig?: VideoRecordingConfig;
+
+  /** Version number for optimistic locking (incremented on every update) */
+  version?: number;
 }
 
 // Video Frame - Extracted frame from video for AI analysis

@@ -363,40 +363,52 @@ export class SessionEnrichmentService {
           progress: 25,
         });
 
-        // Update session in storage with 'in-progress' status using transaction
+        // Update session in storage with 'in-progress' status using transaction + optimistic locking
         try {
           const storage = await getStorage();
           const txId = storage.beginPhase24Transaction();
 
           try {
-            const sessions = await storage.load<Session[]>('sessions');
+            // Load current session with version (use any cast for TauriFileSystemAdapter-specific method)
+            const loadEntity = (storage as any).loadEntity as <T>(collection: string, id: string) => Promise<T | null>;
+            const currentSession = await loadEntity<Session>('sessions', session.id);
 
-            if (sessions) {
-              const sessionIndex = sessions.findIndex((s) => s.id === session.id);
-              if (sessionIndex !== -1) {
-                sessions[sessionIndex].enrichmentStatus = {
-                  status: 'in-progress',
-                  progress: 25,
-                  currentStage: 'audio',
-                  audio: { status: opts.includeAudio ? 'pending' : 'skipped' },
-                  video: { status: opts.includeVideo ? 'pending' : 'skipped' },
-                  summary: { status: opts.includeSummary ? 'pending' : 'skipped' },
-                  totalCost: 0,
-                  errors: [],
-                  warnings: result.warnings,
-                  canResume: true,
-                };
-
-                storage.addOperation(txId, {
-                  type: 'write',
-                  collection: 'sessions',
-                  data: sessions,
-                });
-
-                await storage.commitPhase24Transaction(txId);
-                logger.info('Enrichment status set to in-progress (transaction committed)');
-              }
+            if (!currentSession) {
+              throw new Error(`Session ${session.id} not found`);
             }
+
+            const expectedVersion = currentSession.version || 0;
+
+            // Update enrichment status
+            const updatedSession = {
+              ...currentSession,
+              enrichmentStatus: {
+                status: 'in-progress' as const,
+                progress: 25,
+                currentStage: 'audio' as const,
+                audio: { status: opts.includeAudio ? 'pending' as const : 'skipped' as const },
+                video: { status: opts.includeVideo ? 'pending' as const : 'skipped' as const },
+                summary: { status: opts.includeSummary ? 'pending' as const : 'skipped' as const },
+                totalCost: 0,
+                errors: [],
+                warnings: result.warnings,
+                canResume: true,
+              },
+              version: expectedVersion, // Keep current version for optimistic lock check
+            };
+
+            // Add operation to transaction
+            storage.addOperation(txId, {
+              type: 'write',
+              collection: 'sessions',
+              entityId: session.id,
+              data: updatedSession,
+            });
+
+            // Commit with version check
+            await storage.commitPhase24Transaction(txId);
+
+            logger.info(`[Enrichment] ✓ Set in-progress status (version ${expectedVersion} → ${expectedVersion + 1})`);
           } catch (error) {
             await storage.rollbackPhase24Transaction(txId);
             throw error;
@@ -661,40 +673,53 @@ export class SessionEnrichmentService {
         progress: 0,
       });
 
-      // FIX: Update session enrichmentStatus to 'failed' in storage using transaction
+      // FIX: Update session enrichmentStatus to 'failed' in storage using transaction + optimistic locking
       try {
         const storage = await getStorage();
         const txId = storage.beginPhase24Transaction();
 
         try {
-          const sessions = await storage.load<Session[]>('sessions');
-          if (sessions) {
-            const sessionIndex = sessions.findIndex((s) => s.id === session.id);
-            if (sessionIndex !== -1) {
-              sessions[sessionIndex].enrichmentStatus = {
-                status: 'failed',
-                completedAt: new Date().toISOString(),
-                progress: 0,
-                currentStage: 'complete',
-                audio: { status: 'failed', error: error.message },
-                video: { status: 'skipped' },
-                summary: { status: 'skipped' },
-                totalCost: result.totalCost,
-                errors: [error.message],
-                warnings: result.warnings,
-                canResume: false,
-              };
+          // Load current session with version (use any cast for TauriFileSystemAdapter-specific method)
+          const loadEntity = (storage as any).loadEntity as <T>(collection: string, id: string) => Promise<T | null>;
+          const currentSession = await loadEntity<Session>('sessions', session.id);
 
-              storage.addOperation(txId, {
-                type: 'write',
-                collection: 'sessions',
-                data: sessions,
-              });
-
-              await storage.commitPhase24Transaction(txId);
-              logger.info('Session enrichmentStatus updated to failed (transaction committed)');
-            }
+          if (!currentSession) {
+            throw new Error(`Session ${session.id} not found`);
           }
+
+          const expectedVersion = currentSession.version || 0;
+
+          // Update enrichment status to failed
+          const updatedSession = {
+            ...currentSession,
+            enrichmentStatus: {
+              status: 'failed' as const,
+              completedAt: new Date().toISOString(),
+              progress: 0,
+              currentStage: 'complete' as const,
+              audio: { status: 'failed' as const, error: error.message },
+              video: { status: 'skipped' as const },
+              summary: { status: 'skipped' as const },
+              totalCost: result.totalCost,
+              errors: [error.message],
+              warnings: result.warnings,
+              canResume: false,
+            },
+            version: expectedVersion, // Keep current version for optimistic lock check
+          };
+
+          // Add operation to transaction
+          storage.addOperation(txId, {
+            type: 'write',
+            collection: 'sessions',
+            entityId: session.id,
+            data: updatedSession,
+          });
+
+          // Commit with version check
+          await storage.commitPhase24Transaction(txId);
+
+          logger.info(`[Enrichment] ✓ Set failed status (version ${expectedVersion} → ${expectedVersion + 1})`);
         } catch (txError) {
           await storage.rollbackPhase24Transaction(txId);
           throw txError;
@@ -1563,6 +1588,8 @@ export class SessionEnrichmentService {
 
   /**
    * Update session with enrichment results
+   *
+   * Uses optimistic locking to prevent concurrent writes from overwriting enrichment results.
    */
   private async updateSessionWithResults(
     session: Session,
@@ -1573,18 +1600,19 @@ export class SessionEnrichmentService {
 
     try {
       const storage = await getStorage();
-      const sessions = await storage.load<Session[]>('sessions');
+      const txId = storage.beginPhase24Transaction();
 
-      if (!sessions) {
-        throw new Error('Sessions not found in storage');
-      }
+      try {
+        // Load current session with version (use any cast for TauriFileSystemAdapter-specific method)
+        const loadEntity = (storage as any).loadEntity as <T>(collection: string, id: string) => Promise<T | null>;
+        const currentSession = await loadEntity<Session>('sessions', session.id);
 
-      const sessionIndex = sessions.findIndex((s) => s.id === session.id);
-      if (sessionIndex === -1) {
-        throw new Error('Session not found');
-      }
+        if (!currentSession) {
+          throw new Error(`Session ${session.id} not found`);
+        }
 
-      const updatedSession = sessions[sessionIndex];
+        const expectedVersion = currentSession.version || 0;
+        const updatedSession = currentSession;
 
       // Update audio results
       if (result.audio?.completed) {
@@ -1674,71 +1702,86 @@ export class SessionEnrichmentService {
         logger.info('✅ Canvas spec updated');
       }
 
-      // Update enrichment status
-      updatedSession.enrichmentStatus = {
-        status: result.success ? 'completed' : 'failed',
-        completedAt: new Date().toISOString(),
-        progress: 100,
-        currentStage: 'complete',
-        audio: {
-          status: result.audio?.completed ? 'completed' : result.audio?.error ? 'failed' : 'skipped',
-          completedAt: result.audio?.completed ? new Date().toISOString() : undefined,
-          error: result.audio?.error,
-          cost: result.audio?.cost,
-        },
-        video: {
-          status: result.video?.completed ? 'completed' : result.video?.error ? 'failed' : 'skipped',
-          completedAt: result.video?.completed ? new Date().toISOString() : undefined,
-          error: result.video?.error,
-          cost: result.video?.cost,
-        },
-        summary: {
-          status: result.summary?.completed ? 'completed' : result.summary?.error ? 'failed' : 'skipped',
-          error: result.summary?.error,
-        },
-        totalCost: result.totalCost,
-        errors: [
-          ...(result.audio?.error ? [result.audio.error] : []),
-          ...(result.video?.error ? [result.video.error] : []),
-          ...(result.summary?.error ? [result.summary.error] : []),
-        ],
-        warnings: result.warnings,
-        canResume: false,
-      };
+        // Update enrichment status
+        updatedSession.enrichmentStatus = {
+          status: result.success ? 'completed' : 'failed',
+          completedAt: new Date().toISOString(),
+          progress: 100,
+          currentStage: 'complete',
+          audio: {
+            status: result.audio?.completed ? 'completed' : result.audio?.error ? 'failed' : 'skipped',
+            completedAt: result.audio?.completed ? new Date().toISOString() : undefined,
+            error: result.audio?.error,
+            cost: result.audio?.cost,
+          },
+          video: {
+            status: result.video?.completed ? 'completed' : result.video?.error ? 'failed' : 'skipped',
+            completedAt: result.video?.completed ? new Date().toISOString() : undefined,
+            error: result.video?.error,
+            cost: result.video?.cost,
+          },
+          summary: {
+            status: result.summary?.completed ? 'completed' : result.summary?.error ? 'failed' : 'skipped',
+            error: result.summary?.error,
+          },
+          totalCost: result.totalCost,
+          errors: [
+            ...(result.audio?.error ? [result.audio.error] : []),
+            ...(result.video?.error ? [result.video.error] : []),
+            ...(result.summary?.error ? [result.summary.error] : []),
+          ],
+          warnings: result.warnings,
+          canResume: false,
+        };
 
-      // Save updated sessions
-      await storage.save('sessions', sessions);
+        // Keep current version for optimistic lock check
+        updatedSession.version = expectedVersion;
 
-      logger.info('Session updated successfully', {
-        audioCompleted: result.audio?.completed,
-        videoCompleted: result.video?.completed,
-        chaptersCount: result.video?.chapters?.length || 0,
-        summaryCompleted: result.summary?.completed,
-      });
+        // Add operation to transaction
+        storage.addOperation(txId, {
+          type: 'write',
+          collection: 'sessions',
+          entityId: session.id,
+          data: updatedSession,
+        });
 
-      // Verification: Reload and confirm chapters were saved (non-fatal)
-      if (result.video?.completed && result.video.chapters && result.video.chapters.length > 0) {
-        try {
-          const verificationSessions = await storage.load<Session[]>('sessions');
-          const verifiedSession = verificationSessions?.find(s => s.id === session.id);
+        // Commit with version check
+        await storage.commitPhase24Transaction(txId);
 
-          if (!verifiedSession?.video?.chapters || verifiedSession.video.chapters.length === 0) {
-            logger.warn('⚠️ WARNING: Chapters not immediately visible in storage (may be timing)', {
-              expectedChapters: result.video.chapters.length,
-              actualChapters: verifiedSession?.video?.chapters?.length || 0,
-            });
-            // Don't throw - just log warning and add to warnings array
-            result.warnings.push('Chapter verification failed (timing issue - chapters may appear after reload)');
-          } else {
-            logger.info('✅ Verification: Chapters confirmed in storage', {
-              chapterCount: verifiedSession.video.chapters.length,
-            });
+        logger.info(`[Enrichment] ✓ Updated session with results (version ${expectedVersion} → ${expectedVersion + 1})`, {
+          audioCompleted: result.audio?.completed,
+          videoCompleted: result.video?.completed,
+          chaptersCount: result.video?.chapters?.length || 0,
+          summaryCompleted: result.summary?.completed,
+        });
+
+        // Verification: Reload and confirm chapters were saved (non-fatal)
+        if (result.video?.completed && result.video.chapters && result.video.chapters.length > 0) {
+          try {
+            const loadEntity = (storage as any).loadEntity as <T>(collection: string, id: string) => Promise<T | null>;
+            const verifiedSession = await loadEntity<Session>('sessions', session.id);
+
+            if (!verifiedSession?.video?.chapters || verifiedSession.video.chapters.length === 0) {
+              logger.warn('⚠️ WARNING: Chapters not immediately visible in storage (may be timing)', {
+                expectedChapters: result.video.chapters.length,
+                actualChapters: verifiedSession?.video?.chapters?.length || 0,
+              });
+              // Don't throw - just log warning and add to warnings array
+              result.warnings.push('Chapter verification failed (timing issue - chapters may appear after reload)');
+            } else {
+              logger.info('✅ Verification: Chapters confirmed in storage', {
+                chapterCount: verifiedSession.video.chapters.length,
+              });
+            }
+          } catch (verifyError: any) {
+            // Verification failure should never crash enrichment
+            logger.warn('⚠️ Chapter verification failed (non-fatal)', verifyError);
+            result.warnings.push('Chapter verification failed - chapters may still be saved correctly');
           }
-        } catch (verifyError: any) {
-          // Verification failure should never crash enrichment
-          logger.warn('⚠️ Chapter verification failed (non-fatal)', verifyError);
-          result.warnings.push('Chapter verification failed - chapters may still be saved correctly');
         }
+      } catch (error) {
+        await storage.rollbackPhase24Transaction(txId);
+        throw error;
       }
     } catch (error: any) {
       logger.error('Failed to update session', error);

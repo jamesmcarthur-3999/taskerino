@@ -4,7 +4,6 @@
  * Defines lightweight data structures for parallel session processing
  * Used by session_storage and attachment_loader modules
  */
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,10 +57,15 @@ impl From<Session> for SessionSummary {
             duration: session.duration,
             category: session.category,
             screenshot_count: session.screenshots.as_ref().map(|s| s.len()).unwrap_or(0),
-            audio_segment_count: session.audio_segments.as_ref().map(|a| a.len()).unwrap_or(0),
+            audio_segment_count: session
+                .audio_segments
+                .as_ref()
+                .map(|a| a.len())
+                .unwrap_or(0),
             has_video: session.video.is_some(),
             has_notes: session.notes.is_some() && !session.notes.as_ref().unwrap().is_empty(),
-            has_transcript: session.transcript.is_some() && !session.transcript.as_ref().unwrap().is_empty(),
+            has_transcript: session.transcript.is_some()
+                && !session.transcript.as_ref().unwrap().is_empty(),
         }
     }
 }

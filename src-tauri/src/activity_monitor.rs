@@ -10,7 +10,6 @@
  * Phase 1: Stub implementation with manual event tracking
  * Phase 2 TODO: Integrate macOS NSWorkspace and CGEvent taps for automatic monitoring
  */
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -159,7 +158,10 @@ impl ActivityMonitor {
 
     /// Create a new activity monitor with custom time window
     pub fn with_window(window_seconds: u64) -> Self {
-        println!("📊 [ACTIVITY MONITOR] Creating monitor with {}s window", window_seconds);
+        println!(
+            "📊 [ACTIVITY MONITOR] Creating monitor with {}s window",
+            window_seconds
+        );
         Self {
             state: Arc::new(Mutex::new(MonitorState::new(window_seconds))),
         }
@@ -167,7 +169,9 @@ impl ActivityMonitor {
 
     /// Start monitoring user activity
     pub fn start_monitoring(&self) -> Result<(), String> {
-        let mut state = self.state.lock()
+        let mut state = self
+            .state
+            .lock()
             .map_err(|e| format!("Failed to lock state: {}", e))?;
 
         if state.state == MonitoringState::Running {
@@ -194,7 +198,9 @@ impl ActivityMonitor {
 
     /// Stop monitoring user activity
     pub fn stop_monitoring(&self) -> Result<(), String> {
-        let mut state = self.state.lock()
+        let mut state = self
+            .state
+            .lock()
             .map_err(|e| format!("Failed to lock state: {}", e))?;
 
         if state.state == MonitoringState::Stopped {
@@ -223,8 +229,11 @@ impl ActivityMonitor {
         };
         let recent_events = state.get_recent_events(window_seconds);
 
-        println!("📊 [ACTIVITY MONITOR] Getting metrics for last {}s: {} events",
-            window_seconds, recent_events.len());
+        println!(
+            "📊 [ACTIVITY MONITOR] Getting metrics for last {}s: {} events",
+            window_seconds,
+            recent_events.len()
+        );
 
         ActivityMetrics::from_events(&recent_events)
     }
@@ -301,7 +310,8 @@ impl ActivityMonitor {
 
     /// Get current monitoring state
     pub fn get_state(&self) -> MonitoringState {
-        self.state.lock()
+        self.state
+            .lock()
             .map(|s| s.state)
             .unwrap_or(MonitoringState::Stopped)
     }
@@ -315,23 +325,22 @@ impl ActivityMonitor {
     pub fn set_window(&self, window_seconds: u64) {
         if let Ok(mut state) = self.state.lock() {
             state.window_seconds = window_seconds;
-            println!("📊 [ACTIVITY MONITOR] Window updated to {}s", window_seconds);
+            println!(
+                "📊 [ACTIVITY MONITOR] Window updated to {}s",
+                window_seconds
+            );
         }
     }
 
     /// Get the current time window setting
     pub fn get_window(&self) -> u64 {
-        self.state.lock()
-            .map(|s| s.window_seconds)
-            .unwrap_or(60) // Default to 60 seconds on error
+        self.state.lock().map(|s| s.window_seconds).unwrap_or(60) // Default to 60 seconds on error
     }
 
     /// Get total event count (for debugging/testing)
     #[allow(dead_code)]
     pub fn get_event_count(&self) -> usize {
-        self.state.lock()
-            .map(|s| s.events.len())
-            .unwrap_or(0)
+        self.state.lock().map(|s| s.events.len()).unwrap_or(0)
     }
 }
 

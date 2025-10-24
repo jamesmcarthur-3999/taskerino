@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Session } from '../types';
 import { getStorage } from '../services/storage';
 import { attachmentStorage } from '../services/attachmentStorage';
+import { perfMonitor } from '../utils/performance';
 
 /**
  * SessionListContext - Manages the list of completed sessions
@@ -151,6 +152,7 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
 
   // Load sessions from storage
   const loadSessions = useCallback(async () => {
+    const end = perfMonitor.start('session-list-load');
     console.log('[SessionListContext] Loading sessions from storage...');
     dispatch({ type: 'LOAD_SESSIONS_START' });
 
@@ -196,95 +198,112 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
         type: 'LOAD_SESSIONS_ERROR',
         payload: error instanceof Error ? error.message : 'Failed to load sessions'
       });
+    } finally {
+      end();
     }
   }, []);
 
   // Add session to list
   const addSession = useCallback(async (session: Session) => {
+    const end = perfMonitor.start('session-add');
     console.log('[SessionListContext] Adding session:', session.id);
 
-    const storage = await getStorage();
-    const currentSessions = await storage.load<Session[]>('sessions') || [];
-    await storage.save('sessions', [...currentSessions, session]);
+    try {
+      const storage = await getStorage();
+      const currentSessions = await storage.load<Session[]>('sessions') || [];
+      await storage.save('sessions', [...currentSessions, session]);
 
-    dispatch({ type: 'ADD_SESSION', payload: session });
+      dispatch({ type: 'ADD_SESSION', payload: session });
+    } finally {
+      end();
+    }
   }, []);
 
   // Update session
   const updateSession = useCallback(async (id: string, updates: Partial<Session>) => {
+    const end = perfMonitor.start('session-update');
     console.log('[SessionListContext] Updating session:', id);
 
-    const storage = await getStorage();
-    const sessions = await storage.load<Session[]>('sessions') || [];
-    const updated = sessions.map(s => s.id === id ? { ...s, ...updates } : s);
-    await storage.save('sessions', updated);
+    try {
+      const storage = await getStorage();
+      const sessions = await storage.load<Session[]>('sessions') || [];
+      const updated = sessions.map(s => s.id === id ? { ...s, ...updates } : s);
+      await storage.save('sessions', updated);
 
-    dispatch({ type: 'UPDATE_SESSION', payload: { id, updates } });
+      dispatch({ type: 'UPDATE_SESSION', payload: { id, updates } });
+    } finally {
+      end();
+    }
   }, []);
 
   // Delete session (with cleanup)
   const deleteSession = useCallback(async (id: string) => {
+    const end = perfMonitor.start('session-delete');
     console.log('[SessionListContext] Deleting session:', id);
 
-    // Find session for cleanup
-    const session = state.sessions.find(s => s.id === id);
-    if (!session) {
-      console.warn('[SessionListContext] Session not found for deletion:', id);
-      return;
-    }
-
-    // Check if enrichment is in progress
-    if (session.enrichmentStatus?.status === 'in-progress') {
-      throw new Error('Cannot delete session while enrichment is in progress');
-    }
-
-    // Collect all attachment IDs for cleanup
-    const attachmentIds: string[] = [];
-
-    // Screenshots
-    session.screenshots?.forEach(screenshot => {
-      if (screenshot.attachmentId) {
-        attachmentIds.push(screenshot.attachmentId);
+    try {
+      // Find session for cleanup
+      const session = state.sessions.find(s => s.id === id);
+      if (!session) {
+        console.warn('[SessionListContext] Session not found for deletion:', id);
+        return;
       }
-    });
 
-    // Audio segments
-    session.audioSegments?.forEach(segment => {
-      if (segment.attachmentId) {
-        attachmentIds.push(segment.attachmentId);
+      // Check if enrichment is in progress
+      if (session.enrichmentStatus?.status === 'in-progress') {
+        throw new Error('Cannot delete session while enrichment is in progress');
       }
-    });
 
-    // Video
-    if (session.video?.fullVideoAttachmentId) {
-      attachmentIds.push(session.video.fullVideoAttachmentId);
-    }
-    if (session.video?.chapterVideos) {
-      session.video.chapterVideos.forEach(chapter => {
-        if (chapter.attachmentId) {
-          attachmentIds.push(chapter.attachmentId);
+      // Collect all attachment IDs for cleanup
+      const attachmentIds: string[] = [];
+
+      // Screenshots
+      session.screenshots?.forEach(screenshot => {
+        if (screenshot.attachmentId) {
+          attachmentIds.push(screenshot.attachmentId);
         }
       });
-    }
 
-    // Delete attachments
-    if (attachmentIds.length > 0) {
-      console.log(`[SessionListContext] Cleaning up ${attachmentIds.length} attachments`);
-      try {
-        await attachmentStorage.deleteAttachments(attachmentIds);
-      } catch (error) {
-        console.error('[SessionListContext] Failed to clean up attachments:', error);
-        // Continue with session deletion even if attachment cleanup fails
+      // Audio segments
+      session.audioSegments?.forEach(segment => {
+        if (segment.attachmentId) {
+          attachmentIds.push(segment.attachmentId);
+        }
+      });
+
+      // Video
+      if (session.video?.fullVideoAttachmentId) {
+        attachmentIds.push(session.video.fullVideoAttachmentId);
       }
+      if (session.video?.chapterVideos) {
+        session.video.chapterVideos.forEach(chapter => {
+          if (chapter.attachmentId) {
+            attachmentIds.push(chapter.attachmentId);
+          }
+        });
+      }
+
+      // Delete attachments
+      if (attachmentIds.length > 0) {
+        console.log(`[SessionListContext] Cleaning up ${attachmentIds.length} attachments`);
+        try {
+          await attachmentStorage.deleteAttachments(attachmentIds);
+        } catch (error) {
+          console.error('[SessionListContext] Failed to clean up attachments:', error);
+          // Continue with session deletion even if attachment cleanup fails
+        }
+      }
+
+      // Delete from storage
+      const storage = await getStorage();
+      const sessions = await storage.load<Session[]>('sessions') || [];
+      await storage.save('sessions', sessions.filter(s => s.id !== id));
+
+      // Update state
+      dispatch({ type: 'DELETE_SESSION', payload: id });
+    } finally {
+      end();
     }
-
-    // Delete from storage
-    const storage = await getStorage();
-    const sessions = await storage.load<Session[]>('sessions') || [];
-    await storage.save('sessions', sessions.filter(s => s.id !== id));
-
-    // Update state
-    dispatch({ type: 'DELETE_SESSION', payload: id });
   }, [state.sessions]);
 
   // Filter and sort sessions
@@ -402,6 +421,7 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
 // Hook
 // ============================================================================
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useSessionList() {
   const context = useContext(SessionListContext);
   if (context === undefined) {

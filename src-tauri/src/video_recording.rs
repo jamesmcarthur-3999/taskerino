@@ -6,7 +6,6 @@
  * **Implementation Status**: Functional via Swift ScreenRecorder module
  * **Platform**: macOS 12.3+ only
  */
-
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::path::PathBuf;
@@ -67,9 +66,7 @@ extern "C" {
         output_path: *const c_char,
     ) -> i32;
 
-    fn screen_recorder_update_pip_config(
-        config_json: *const c_char,
-    ) -> i32;
+    fn screen_recorder_update_pip_config(config_json: *const c_char) -> i32;
 
     // PiP Compositor FFI
     fn pip_compositor_create() -> *mut std::ffi::c_void;
@@ -93,9 +90,9 @@ pub struct VideoQuality {
 impl Default for VideoQuality {
     fn default() -> Self {
         VideoQuality {
-            width: 1280,  // 720p
+            width: 1280, // 720p
             height: 720,
-            fps: 15,      // Good balance for filesize/quality
+            fps: 15, // Good balance for filesize/quality
         }
     }
 }
@@ -156,15 +153,16 @@ impl VideoRecorder {
             }
 
             // Convert path to C string
-            let path_str = output_path
-                .to_str()
-                .ok_or("Invalid output path")?;
-            let c_path = CString::new(path_str)
-                .map_err(|_| "Failed to convert path to C string")?;
+            let path_str = output_path.to_str().ok_or("Invalid output path")?;
+            let c_path =
+                CString::new(path_str).map_err(|_| "Failed to convert path to C string")?;
 
             println!("🎬 Starting screen recording for session: {}", session_id);
             println!("   Output: {:?}", output_path);
-            println!("   Quality: {}x{} @ {}fps", quality.width, quality.height, quality.fps);
+            println!(
+                "   Quality: {}x{} @ {}fps",
+                quality.width, quality.height, quality.fps
+            );
 
             // Start recording
             let success = unsafe {
@@ -179,14 +177,22 @@ impl VideoRecorder {
 
             if !success {
                 unsafe { screen_recorder_destroy(recorder) };
-                return Err("Failed to start screen recording. Check console for details.".to_string());
+                return Err(
+                    "Failed to start screen recording. Check console for details.".to_string(),
+                );
             }
 
             self.swift_recorder = Some(recorder);
-            *self.current_session_id.lock()
-                .map_err(|e| format!("Failed to lock session_id: {}", e))? = Some(session_id.clone());
-            *self.output_path.lock()
-                .map_err(|e| format!("Failed to lock output_path: {}", e))? = Some(output_path.clone());
+            *self
+                .current_session_id
+                .lock()
+                .map_err(|e| format!("Failed to lock session_id: {}", e))? =
+                Some(session_id.clone());
+            *self
+                .output_path
+                .lock()
+                .map_err(|e| format!("Failed to lock output_path: {}", e))? =
+                Some(output_path.clone());
 
             println!("✅ Screen recording started successfully");
             Ok(())
@@ -202,9 +208,7 @@ impl VideoRecorder {
     pub fn stop_recording(&mut self) -> Result<PathBuf, String> {
         #[cfg(target_os = "macos")]
         {
-            let recorder = self.swift_recorder
-                .take()
-                .ok_or("No active recording")?;
+            let recorder = self.swift_recorder.take().ok_or("No active recording")?;
 
             println!("⏹️  Stopping screen recording...");
 
@@ -214,14 +218,18 @@ impl VideoRecorder {
                 println!("⚠️  Failed to stop recording gracefully, but continuing cleanup");
             }
 
-            let path = self.output_path.lock()
+            let path = self
+                .output_path
+                .lock()
                 .map_err(|e| format!("Failed to lock output_path: {}", e))?
                 .take()
                 .ok_or("No output path set")?;
 
             // Clean up Swift recorder
             unsafe { screen_recorder_destroy(recorder) };
-            *self.current_session_id.lock()
+            *self
+                .current_session_id
+                .lock()
                 .map_err(|e| format!("Failed to lock session_id: {}", e))? = None;
 
             println!("✅ Screen recording stopped, video saved to: {:?}", path);
@@ -274,9 +282,7 @@ impl VideoRecorder {
 
     /// Get current session ID if recording
     pub fn current_session_id(&self) -> Option<String> {
-        self.current_session_id.lock()
-            .ok()
-            .and_then(|s| s.clone())
+        self.current_session_id.lock().ok().and_then(|s| s.clone())
     }
 
     /// Start recording with advanced configuration
@@ -298,7 +304,10 @@ impl VideoRecorder {
                 return Err("Screen recording permission not granted".to_string());
             }
 
-            println!("[VIDEO] Starting advanced recording - mode: {:?}", config.source_type);
+            println!(
+                "[VIDEO] Starting advanced recording - mode: {:?}",
+                config.source_type
+            );
 
             // Convert quality preset to dimensions
             let quality = match config.quality {
@@ -340,11 +349,13 @@ impl VideoRecorder {
             };
 
             let path_str = output_path.to_str().ok_or("Invalid output path")?;
-            let c_output_path = CString::new(path_str)
-                .map_err(|e| format!("Invalid output path string: {}", e))?;
+            let c_output_path =
+                CString::new(path_str).map_err(|e| format!("Invalid output path string: {}", e))?;
 
             // Store configuration before starting
-            *self.recording_config.lock()
+            *self
+                .recording_config
+                .lock()
                 .map_err(|e| format!("Failed to lock config: {}", e))? = Some(config.clone());
 
             // Route to appropriate recording mode via FFI
@@ -353,9 +364,9 @@ impl VideoRecorder {
                     crate::types::VideoSourceType::Display => {
                         println!("[VIDEO] Starting display-only recording");
 
-                        let display_ids_json = serde_json::to_string(
-                            &config.display_ids.unwrap_or_else(|| vec![])
-                        ).map_err(|e| format!("Failed to serialize display IDs: {}", e))?;
+                        let display_ids_json =
+                            serde_json::to_string(&config.display_ids.unwrap_or_else(|| vec![]))
+                                .map_err(|e| format!("Failed to serialize display IDs: {}", e))?;
 
                         let c_display_ids = CString::new(display_ids_json)
                             .map_err(|e| format!("Invalid display IDs string: {}", e))?;
@@ -367,13 +378,14 @@ impl VideoRecorder {
                             final_quality.width as i32,
                             final_quality.height as i32,
                         )
-                    },
+                    }
 
                     crate::types::VideoSourceType::Window => {
                         println!("[VIDEO] Starting window-only recording");
 
                         // Get first window ID from array (Swift layer currently supports single window)
-                        let window_id = config.window_ids
+                        let window_id = config
+                            .window_ids
                             .as_ref()
                             .and_then(|ids| ids.first())
                             .ok_or("At least one window ID required for window recording")?;
@@ -388,12 +400,13 @@ impl VideoRecorder {
                             final_quality.width as i32,
                             final_quality.height as i32,
                         )
-                    },
+                    }
 
                     crate::types::VideoSourceType::Webcam => {
                         println!("[VIDEO] Starting webcam-only recording");
 
-                        let webcam_id = config.webcam_device_id
+                        let webcam_id = config
+                            .webcam_device_id
                             .ok_or("Webcam device ID required for webcam recording")?;
 
                         let c_webcam_id = CString::new(webcam_id)
@@ -406,7 +419,7 @@ impl VideoRecorder {
                             final_quality.width as i32,
                             final_quality.height as i32,
                         )
-                    },
+                    }
 
                     crate::types::VideoSourceType::DisplayWithWebcam => {
                         println!("[VIDEO] Starting display + PiP recording");
@@ -422,12 +435,15 @@ impl VideoRecorder {
                             c_config.as_ptr(),
                             c_output_path.as_ptr(),
                         )
-                    },
+                    }
                 }
             };
 
             if result != 0 {
-                return Err(format!("Failed to start recording (error code: {})", result));
+                return Err(format!(
+                    "Failed to start recording (error code: {})",
+                    result
+                ));
             }
 
             // NOTE: For advanced recording modes (display/window/webcam/PiP), the Swift
@@ -435,10 +451,16 @@ impl VideoRecorder {
             // We do NOT create a separate handle here to avoid double-creation bugs.
             // The swift_recorder field remains None for these modes.
 
-            *self.current_session_id.lock()
-                .map_err(|e| format!("Failed to lock session_id: {}", e))? = Some(session_id.clone());
-            *self.output_path.lock()
-                .map_err(|e| format!("Failed to lock output_path: {}", e))? = Some(output_path.clone());
+            *self
+                .current_session_id
+                .lock()
+                .map_err(|e| format!("Failed to lock session_id: {}", e))? =
+                Some(session_id.clone());
+            *self
+                .output_path
+                .lock()
+                .map_err(|e| format!("Failed to lock output_path: {}", e))? =
+                Some(output_path.clone());
 
             println!("✅ [VIDEO] Advanced recording started successfully");
             Ok(())
@@ -464,19 +486,20 @@ impl VideoRecorder {
             let config_json = serde_json::to_string(&pip_config)
                 .map_err(|e| format!("Failed to serialize PiP config: {}", e))?;
 
-            let c_config = CString::new(config_json)
-                .map_err(|e| format!("Invalid config JSON: {}", e))?;
+            let c_config =
+                CString::new(config_json).map_err(|e| format!("Invalid config JSON: {}", e))?;
 
             // Call FFI to update
-            let result = unsafe {
-                screen_recorder_update_pip_config(c_config.as_ptr())
-            };
+            let result = unsafe { screen_recorder_update_pip_config(c_config.as_ptr()) };
 
             if result == 0 {
                 println!("✅ [VIDEO] PiP configuration updated successfully");
                 Ok(())
             } else {
-                Err(format!("Failed to update PiP configuration (error code: {})", result))
+                Err(format!(
+                    "Failed to update PiP configuration (error code: {})",
+                    result
+                ))
             }
         }
 
@@ -618,7 +641,8 @@ pub async fn start_video_recording(
     quality: Option<VideoQuality>,
     recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
 ) -> Result<(), String> {
-    let mut recorder = recorder.lock()
+    let mut recorder = recorder
+        .lock()
         .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
     let quality = quality.unwrap_or_default();
     let path = PathBuf::from(output_path);
@@ -631,7 +655,8 @@ pub async fn start_video_recording(
 pub async fn stop_video_recording(
     recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
 ) -> Result<String, String> {
-    let mut recorder = recorder.lock()
+    let mut recorder = recorder
+        .lock()
         .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
     let path = recorder.stop_recording()?;
     Ok(path.to_string_lossy().to_string())
@@ -639,10 +664,9 @@ pub async fn stop_video_recording(
 
 /// Tauri command to check if currently recording
 #[tauri::command]
-pub async fn is_recording(
-    recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
-) -> Result<bool, String> {
-    let recorder = recorder.lock()
+pub async fn is_recording(recorder: State<'_, Arc<Mutex<VideoRecorder>>>) -> Result<bool, String> {
+    let recorder = recorder
+        .lock()
         .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
     Ok(recorder.is_recording())
 }
@@ -652,7 +676,8 @@ pub async fn is_recording(
 pub async fn get_current_recording_session(
     recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
 ) -> Result<Option<String>, String> {
-    let recorder = recorder.lock()
+    let recorder = recorder
+        .lock()
         .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
     Ok(recorder.current_session_id())
 }
@@ -662,8 +687,7 @@ pub async fn get_current_recording_session(
 pub async fn get_video_duration(video_path: String) -> Result<f64, String> {
     #[cfg(target_os = "macos")]
     {
-        let c_path = CString::new(video_path)
-            .map_err(|_| "Invalid video path")?;
+        let c_path = CString::new(video_path).map_err(|_| "Invalid video path")?;
 
         let duration = unsafe { screen_recorder_get_duration(c_path.as_ptr()) };
         Ok(duration)
@@ -677,13 +701,15 @@ pub async fn get_video_duration(video_path: String) -> Result<f64, String> {
 
 /// Tauri command to generate video thumbnail
 #[tauri::command]
-pub async fn generate_video_thumbnail(video_path: String, time: Option<f64>) -> Result<String, String> {
+pub async fn generate_video_thumbnail(
+    video_path: String,
+    time: Option<f64>,
+) -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
         use std::ffi::CStr;
 
-        let c_path = CString::new(video_path)
-            .map_err(|_| "Invalid video path")?;
+        let c_path = CString::new(video_path).map_err(|_| "Invalid video path")?;
 
         let time = time.unwrap_or(1.0); // Default to 1 second into video
 
@@ -694,11 +720,7 @@ pub async fn generate_video_thumbnail(video_path: String, time: Option<f64>) -> 
         }
 
         // Convert C string to Rust String
-        let thumbnail = unsafe {
-            CStr::from_ptr(thumbnail_ptr)
-                .to_string_lossy()
-                .into_owned()
-        };
+        let thumbnail = unsafe { CStr::from_ptr(thumbnail_ptr).to_string_lossy().into_owned() };
 
         // Free the C string (allocated by Swift's strdup)
         unsafe {
@@ -722,7 +744,8 @@ pub async fn start_video_recording_advanced(
     config: crate::types::VideoRecordingConfig,
     recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
 ) -> Result<(), String> {
-    let mut recorder = recorder.lock()
+    let mut recorder = recorder
+        .lock()
         .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
     let path = PathBuf::from(output_path);
 
@@ -756,7 +779,8 @@ pub async fn enumerate_displays() -> Result<Vec<crate::types::DisplayInfo>, Stri
                 let display_id_cstr = std::ffi::CString::new(display.display_id.clone())
                     .map_err(|e| format!("Invalid display ID: {}", e))?;
 
-                let thumbnail_ptr = screen_recorder_capture_display_thumbnail(display_id_cstr.as_ptr());
+                let thumbnail_ptr =
+                    screen_recorder_capture_display_thumbnail(display_id_cstr.as_ptr());
                 if !thumbnail_ptr.is_null() {
                     if let Ok(thumbnail_str) = std::ffi::CStr::from_ptr(thumbnail_ptr).to_str() {
                         display.thumbnail_data_uri = Some(thumbnail_str.to_string());
@@ -802,7 +826,8 @@ pub async fn enumerate_windows() -> Result<Vec<crate::types::WindowInfo>, String
                 let window_id_cstr = std::ffi::CString::new(window.window_id.clone())
                     .map_err(|e| format!("Invalid window ID: {}", e))?;
 
-                let thumbnail_ptr = screen_recorder_capture_window_thumbnail(window_id_cstr.as_ptr());
+                let thumbnail_ptr =
+                    screen_recorder_capture_window_thumbnail(window_id_cstr.as_ptr());
                 if !thumbnail_ptr.is_null() {
                     if let Ok(thumbnail_str) = std::ffi::CStr::from_ptr(thumbnail_ptr).to_str() {
                         window.thumbnail_data_uri = Some(thumbnail_str.to_string());
@@ -838,11 +863,7 @@ pub async fn enumerate_webcams() -> Result<Vec<crate::types::WebcamInfo>, String
         }
 
         // Convert C string to Rust String
-        let json_string = unsafe {
-            CStr::from_ptr(json_ptr)
-                .to_string_lossy()
-                .into_owned()
-        };
+        let json_string = unsafe { CStr::from_ptr(json_ptr).to_string_lossy().into_owned() };
 
         // Free the C string allocated by Swift
         unsafe {
@@ -871,7 +892,8 @@ pub async fn switch_display(
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let recorder = recorder.lock()
+        let recorder = recorder
+            .lock()
             .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
 
         if !recorder.is_recording() {
@@ -879,7 +901,9 @@ pub async fn switch_display(
         }
 
         // Get current config to ensure we're in display mode
-        let config = recorder.recording_config.lock()
+        let config = recorder
+            .recording_config
+            .lock()
             .map_err(|e| format!("Failed to lock config: {}", e))?;
 
         if let Some(cfg) = config.as_ref() {
@@ -909,7 +933,8 @@ pub async fn update_webcam_mode(
     pip_config: crate::types::PiPConfig,
     recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
 ) -> Result<(), String> {
-    let mut recorder = recorder.lock()
+    let mut recorder = recorder
+        .lock()
         .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
 
     recorder.update_pip_config(pip_config)

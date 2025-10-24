@@ -31,7 +31,7 @@ export interface QueueItem {
   id: string;
   priority: QueuePriority;
   key: string;
-  value: any;
+  value: unknown;
   retries: number;
   timestamp: number;
   error?: string;
@@ -82,7 +82,7 @@ export class PersistenceQueue extends EventEmitter {
   /**
    * Enqueue an item for persistence
    */
-  enqueue(key: string, value: any, priority: QueuePriority = 'normal'): string {
+  enqueue(key: string, value: unknown, priority: QueuePriority = 'normal'): string {
     const id = crypto.randomUUID();
     const item: QueueItem = {
       id,
@@ -167,7 +167,7 @@ export class PersistenceQueue extends EventEmitter {
       this.idleCallbackId = setTimeout(() => {
         this.idleCallbackId = null;
         this.processLowBatch();
-      }, 500) as any;
+      }, 500) as unknown as number;
     }
   }
 
@@ -211,7 +211,7 @@ export class PersistenceQueue extends EventEmitter {
   /**
    * Handle processing error with retry
    */
-  private handleError(item: QueueItem, error: any) {
+  private handleError(item: QueueItem, error: unknown) {
     item.retries++;
     item.error = String(error);
 
@@ -333,7 +333,7 @@ export class PersistenceQueue extends EventEmitter {
       if (typeof cancelIdleCallback !== 'undefined') {
         cancelIdleCallback(this.idleCallbackId);
       } else {
-        clearTimeout(this.idleCallbackId as any);
+        clearTimeout(this.idleCallbackId as unknown as NodeJS.Timeout);
       }
     }
 

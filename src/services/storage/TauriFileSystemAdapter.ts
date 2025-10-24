@@ -1417,8 +1417,23 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
         // Execute operation
         if (op.type === 'write') {
-          // Use regular save() which already handles backups and WAL
-          await this.save(op.collection, op.data);
+          // Check if this is an entity operation with optimistic locking
+          if (op.entityId) {
+            const entity = op.data;
+            const hasVersion = entity && 'version' in entity;
+
+            if (hasVersion) {
+              // Save with optimistic lock check
+              const expectedVersion = entity.version || 0;
+              await this.saveEntityWithVersion(op.collection, entity, expectedVersion);
+            } else {
+              // Regular entity save (no version check)
+              await this.saveEntity(op.collection, { ...op.data, id: op.entityId });
+            }
+          } else {
+            // Collection-level save
+            await this.save(op.collection, op.data);
+          }
         } else if (op.type === 'delete') {
           // Delete collection
           await this.delete(op.collection);
@@ -1469,6 +1484,66 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     this.phase24Transactions.delete(txId);
 
     console.log(`[Transaction] ✗ Rolled back ${txId}`);
+  }
+
+  /**
+   * Save entity with optimistic locking
+   * Throws error if version mismatch detected
+   *
+   * @param collection - Collection name (e.g., 'sessions')
+   * @param entity - Entity object with id and version fields
+   * @param expectedVersion - Expected current version (undefined = skip check)
+   */
+  async saveEntityWithVersion<T extends { id: string; version?: number }>(
+    collection: string,
+    entity: T,
+    expectedVersion?: number
+  ): Promise<void> {
+    await this.ensureInitialized();
+
+    // Load current entity to check version
+    const current = await this.loadEntity<T>(collection, entity.id);
+
+    if (current && expectedVersion !== undefined) {
+      const currentVersion = current.version || 0;
+
+      if (currentVersion !== expectedVersion) {
+        throw new Error(
+          `Optimistic lock failed: expected version ${expectedVersion}, found ${currentVersion}`
+        );
+      }
+    }
+
+    // Increment version
+    const newEntity = {
+      ...entity,
+      version: (entity.version || 0) + 1
+    };
+
+    // Save with new version
+    await this.saveEntity(collection, newEntity);
+
+    console.log(`[Storage] Saved ${collection}/${entity.id} with version ${newEntity.version}`);
+  }
+
+  /**
+   * Add version field to all entities in collection (migration helper)
+   *
+   * @param collection - Collection name to migrate (e.g., 'sessions')
+   */
+  async addVersionField(collection: string): Promise<void> {
+    console.log(`[Migration] Adding version field to ${collection}...`);
+
+    const entities = await this.loadAll<any>(collection);
+
+    for (const entity of entities) {
+      if (!('version' in entity) || entity.version === undefined) {
+        entity.version = 1; // Initialize to 1
+        await this.saveEntity(collection, entity);
+      }
+    }
+
+    console.log(`[Migration] ✓ Added version field to ${entities.length} ${collection}`);
   }
 
   /**

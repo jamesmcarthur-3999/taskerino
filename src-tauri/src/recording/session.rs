@@ -6,7 +6,6 @@
  * - Type-safe state tracking
  * - Automatic cleanup
  */
-
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;

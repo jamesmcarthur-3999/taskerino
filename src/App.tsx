@@ -305,6 +305,20 @@ function AppContent() {
           }
         }
 
+        // Add version field to sessions for optimistic locking
+        const hasVersionMigration = await storage.load<boolean>('__migration_version_field');
+        if (!hasVersionMigration) {
+          console.log('[APP] Running version field migration...');
+          try {
+            await (storage as any).addVersionField?.('sessions');
+            await storage.save('__migration_version_field', true);
+            console.log('[APP] Version field migration complete');
+          } catch (error) {
+            console.error('[APP] Version field migration failed:', error);
+            // Continue anyway - migration failure shouldn't block app startup
+          }
+        }
+
         // Load API keys with error handling
         try {
           const savedClaudeKey = await invoke<string | null>('get_claude_api_key');

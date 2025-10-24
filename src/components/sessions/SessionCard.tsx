@@ -1,7 +1,7 @@
 import React from 'react';
 import { Trash2, Sparkles } from 'lucide-react';
 import type { Session } from '../../types';
-import { useSessions } from '../../context/SessionsContext';
+import { useSessionList } from '../../context/SessionListContext';
 import { useUI } from '../../context/UIContext';
 import { useTasks } from '../../context/TasksContext';
 import { InlineTagManager } from '../InlineTagManager';
@@ -29,7 +29,7 @@ export function SessionCard({
   isNewlyCompleted = false,
   isViewing = false,
 }: SessionCardProps) {
-  const { sessions, updateSession, deleteSession, addExtractedTask } = useSessions();
+  const { sessions, updateSession, deleteSession } = useSessionList();
   const { addNotification } = useUI();
   const { dispatch: tasksDispatch } = useTasks();
   const startDate = new Date(session.startTime);
@@ -49,6 +49,8 @@ export function SessionCard({
     }
 
     // Create tasks from all recommendations
+    const extractedTaskIds: string[] = [];
+
     session.summary.recommendedTasks.forEach(taskRec => {
       const newTask = {
         id: `task-${Date.now()}-${Math.random().toString(36).substring(7)}`,
@@ -68,7 +70,12 @@ export function SessionCard({
       };
 
       tasksDispatch({ type: 'ADD_TASK', payload: newTask });
-      addExtractedTask(session.id, newTask.id);
+      extractedTaskIds.push(newTask.id);
+    });
+
+    // Update session with all extracted task IDs
+    updateSession(session.id, {
+      extractedTaskIds: [...session.extractedTaskIds, ...extractedTaskIds]
     });
 
     addNotification({
@@ -79,18 +86,25 @@ export function SessionCard({
   };
 
   // Handler to delete session
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent opening detail view
 
     if (window.confirm(`Delete session "${session.name}"? This action cannot be undone.`)) {
-      deleteSession(session.id,
-      );
+      try {
+        await deleteSession(session.id);
 
-      addNotification({
-        type: 'success',
-        title: 'Session Deleted',
-        message: `"${session.name}" has been deleted.`,
-      });
+        addNotification({
+          type: 'success',
+          title: 'Session Deleted',
+          message: `"${session.name}" has been deleted.`,
+        });
+      } catch (error) {
+        addNotification({
+          type: 'error',
+          title: 'Delete Failed',
+          message: error instanceof Error ? error.message : 'Failed to delete session',
+        });
+      }
     }
   };
 
@@ -213,7 +227,7 @@ export function SessionCard({
             <InlineTagManager
               tags={session.tags}
               onTagsChange={(newTags) => {
-                updateSession({ ...session, tags: newTags });
+                updateSession(session.id, { tags: newTags });
               }}
               allTags={tagUtils.getTopTags(sessions, (s) => s.tags || [], 20)}
               onTagClick={onTagClick ? (tag) => onTagClick(tag) : undefined}

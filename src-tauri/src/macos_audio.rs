@@ -5,9 +5,9 @@
 //!
 //! Requirements: macOS 13.0+ (audio capture APIs introduced in Ventura)
 
+use std::collections::VecDeque;
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
-use std::collections::VecDeque;
 
 /// System audio capture handle (opaque pointer to Swift object)
 pub struct SystemAudioCapture {
@@ -118,9 +118,8 @@ impl SystemAudioCapture {
         // Create raw pointer to buffer for callback context
         let buffer_ptr = &self.buffer as *const Arc<Mutex<SystemAudioBuffer>> as *mut c_void;
 
-        let success = unsafe {
-            system_audio_capture_start(self.handle, audio_sample_callback, buffer_ptr)
-        };
+        let success =
+            unsafe { system_audio_capture_start(self.handle, audio_sample_callback, buffer_ptr) };
 
         if success {
             println!("✅ [MACOS AUDIO] System audio capture started");

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import type { Session, SessionScreenshot, SessionAudioSegment, AudioConfig, VideoConfig } from '../types';
+import type { Session, SessionScreenshot, SessionAudioSegment } from '../types';
 import { screenshotCaptureService } from '../services/screenshotCaptureService';
 import { audioRecordingService } from '../services/audioRecordingService';
 import { videoRecordingService } from '../services/videoRecordingService';
@@ -297,6 +297,7 @@ export function RecordingProvider({ children }: RecordingProviderProps) {
 // Hook
 // ============================================================================
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useRecording() {
   const context = useContext(RecordingContext);
   if (context === undefined) {

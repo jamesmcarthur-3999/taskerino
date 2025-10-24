@@ -103,24 +103,75 @@ Scroll-driven morphing menus within each zone:
 5. **Assistant Zone** (`AssistantZone.tsx`) - Chat with Ned, the AI assistant
 6. **Profile Zone** (`ProfileZone.tsx`) - Settings, API configuration, and user preferences
 
-### Context Architecture (Split Pattern)
+### Context Architecture (Updated - Phase 1 Complete)
 
-The app is **currently migrating** from monolithic `AppContext` to specialized contexts:
+The app uses **specialized contexts** with a clear separation of concerns:
 
-#### New Context Providers (Preferred)
+#### Core Context Providers (Preferred)
 - `SettingsContext` - User settings and AI configuration
 - `UIContext` - UI state, preferences, onboarding
 - `EntitiesContext` - Companies, contacts, topics (entities)
 - `NotesContext` - Note CRUD and filtering
 - `TasksContext` - Task CRUD, subtasks, filtering
-- `SessionsContext` - Session lifecycle and recordings
 - `EnrichmentContext` - Post-session AI enrichment pipeline
 - `ThemeContext` - Dark/light theme management
 
-#### Legacy Context (Being Deprecated)
-- `AppContext` - **13 components remaining to migrate** - avoid extending this
+#### Session Management Contexts (Phase 1 - New)
+- `SessionListContext` - Session CRUD, filtering, sorting (read-only operations)
+- `ActiveSessionContext` - Active session lifecycle and state management
+- `RecordingContext` - Recording service management (screenshots, audio, video)
 
-**When adding new features**: Use the specialized contexts. Do NOT add new functionality to `AppContext`.
+#### Deprecated Context (Being Removed)
+- `SessionsContext` - **DEPRECATED** - See migration guide in `/docs/sessions-rewrite/`
+  - Use `useSessionList()`, `useActiveSession()`, or `useRecording()` instead
+  - Will be removed in Phase 7
+- `AppContext` - **DEPRECATED** - Migrating to specialized contexts
+
+**When adding new features**: Use the specialized contexts. Do NOT extend deprecated contexts.
+
+### State Management (Phase 1 - New)
+
+#### XState State Machines
+The app uses **XState v5** for complex state management with type-safe state machines:
+
+- `sessionMachine` - Session lifecycle state machine
+  - Location: `src/machines/sessionMachine.ts`
+  - Hook: `useSessionMachine()` from `src/hooks/useSessionMachine.ts`
+  - States: `idle` → `validating` → `checking_permissions` → `starting` → `active` → `pausing`/`paused` → `resuming` → `ending` → `completed`
+  - Guards: Permission checks, validation, device availability
+  - Actions: Service start/stop, persistence, event emission
+
+**Usage**:
+```typescript
+import { useSessionMachine } from '@/hooks/useSessionMachine';
+
+function MyComponent() {
+  const {
+    state,           // Current state ('idle', 'active', etc.)
+    context,         // Machine context (sessionId, config, etc.)
+    isActive,        // Boolean helpers
+    isIdle,
+    startSession,    // Type-safe action functions
+    pauseSession,
+    endSession
+  } = useSessionMachine();
+
+  return (
+    <div>
+      {isActive && <p>Session {context.sessionId} is active</p>}
+      <button onClick={() => startSession({ name: 'My Session' })}>
+        Start Session
+      </button>
+    </div>
+  );
+}
+```
+
+**Benefits**:
+- Type-safe transitions and actions
+- Impossible states prevented at compile time
+- Visual state diagram (`sessionMachine.ts` exports for XState inspector)
+- Comprehensive testing (21 tests covering all transitions)
 
 ### Data Model Hierarchy
 
@@ -164,6 +215,61 @@ The app uses a **dual-adapter storage system** for cross-platform compatibility:
 All storage operations should go through:
 - `getStorage()` - For JSON data (sessions, notes, tasks, etc.)
 - `attachmentStorage` - For binary attachments (images, audio, video)
+
+#### Transaction Support (Phase 1 - New)
+
+Both storage adapters now support **atomic multi-key transactions**:
+
+```typescript
+import { getStorage } from '@/services/storage';
+
+const storage = getStorage();
+const tx = await storage.beginTransaction();
+
+try {
+  tx.save('sessions', updatedSessions);
+  tx.save('activeSessionId', sessionId);
+  tx.save('settings', newSettings);
+  await tx.commit();  // All writes succeed or all fail
+} catch (error) {
+  await tx.rollback();  // Restore previous state
+}
+```
+
+**Implementation**:
+- **IndexedDB**: Uses native `IDBTransaction` for atomicity
+- **Tauri FS**: Staging directory pattern with atomic rename
+- **Rollback**: Full state restoration on failure
+- **Tests**: 25 comprehensive tests covering all scenarios
+
+#### Persistence Queue (Phase 1 - New)
+
+The **PersistenceQueue** provides background persistence with zero UI blocking:
+
+```typescript
+import { getPersistenceQueue } from '@/services/storage/PersistenceQueue';
+
+const queue = getPersistenceQueue();
+
+// Critical update (immediate - 0ms delay)
+queue.enqueue('activeSession', session, 'critical');
+
+// Normal update (batched - 100ms delay)
+queue.enqueue('sessions', allSessions, 'normal');
+
+// Low priority (idle time)
+queue.enqueue('ui-preferences', prefs, 'low');
+```
+
+**Features**:
+- **3 Priority Levels**: critical (immediate), normal (batched 100ms), low (idle time)
+- **Zero UI Blocking**: Was 200-500ms, now 0ms
+- **Automatic Retry**: Exponential backoff with priority-based limits
+- **Event System**: Track enqueue, processing, completion, failure
+- **Queue Size Limit**: 1000 items max (drops oldest low-priority items)
+- **Statistics API**: Monitor pending, processing, completed, failed counts
+
+**Design Doc**: See `/docs/sessions-rewrite/STORAGE_QUEUE_DESIGN.md` for full details.
 
 ### AI Processing Pipeline
 
@@ -278,18 +384,67 @@ dispatch({ type: 'END_SESSION', payload: sessionId });
 // Enrichment runs automatically based on session's enrichmentConfig
 ```
 
-### 3. Context Usage
+### 3. Context Usage (Updated - Phase 1)
 ```typescript
-// Prefer specialized contexts
-import { useNotes } from './context/NotesContext';
-import { useTasks } from './context/TasksContext';
+// ❌ OLD (deprecated):
+import { useSessions } from './context/SessionsContext';
+const { sessions, activeSessionId, startSession } = useSessions();
 
-// Avoid extending AppContext
-// ❌ Don't add new features here
-import { useApp } from './context/AppContext';
+// ✅ NEW (Phase 1):
+import { useSessionList } from './context/SessionListContext';
+import { useActiveSession } from './context/ActiveSessionContext';
+import { useRecording } from './context/RecordingContext';
+
+const { sessions, filteredSessions } = useSessionList();
+const { activeSession, startSession, endSession } = useActiveSession();
+const { recordingState, startScreenshots, stopAll } = useRecording();
 ```
 
-### 4. AI Service Error Handling
+**Migration Guide**: See `/docs/sessions-rewrite/CONTEXT_MIGRATION_GUIDE.md` for complete API mapping.
+
+### 4. State Machine Usage (New - Phase 1)
+```typescript
+import { useSessionMachine } from '@/hooks/useSessionMachine';
+
+const { state, context, isActive, startSession } = useSessionMachine();
+
+// Type-safe state checks
+if (state.matches('active')) {
+  // Session is active
+}
+
+// Access machine context
+console.log(context.sessionId);  // Current session ID
+console.log(context.config);     // Session configuration
+```
+
+### 5. Refs Pattern (Updated - Phase 1)
+```typescript
+// ❌ AVOID: Using refs for state management (causes stale closures)
+const activeSessionIdRef = useRef(activeSessionId);
+const callback = useCallback(() => {
+  const id = activeSessionIdRef.current;  // Stale closure risk
+}, []);
+
+// ✅ CORRECT: Use proper state/context dependencies
+const { activeSession } = useActiveSession();
+const callback = useCallback(() => {
+  if (activeSession) {
+    // activeSession is always fresh from context
+  }
+}, [activeSession]);  // Proper dependency
+
+// ✅ OK: Using refs for DOM elements
+const scrollRef = useRef<HTMLDivElement>(null);
+
+// ✅ OK: Using refs for timers/async guards
+const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+const listenerActiveRef = useRef<boolean>(false);  // Prevent duplicate async listeners
+```
+
+**Fixed**: SessionsZone now uses proper state management (Phase 1) - all state refs eliminated.
+
+### 6. AI Service Error Handling
 ```typescript
 // All AI services throw on missing API keys
 try {
@@ -423,12 +578,15 @@ src-tauri/
 1. **API Keys**: Always check `hasApiKey` before calling AI services
 2. **Attachment Lifecycle**: Delete attachments when deleting sessions/notes/tasks
 3. **Enrichment Locks**: Prevent concurrent enrichment with `enrichmentLock`
-4. **Storage Shutdown**: Call `storage.shutdown()` on app close to flush pending writes
-5. **Context Migration**: Check if component uses `AppContext` - consider migrating to specialized contexts
+4. **Storage Shutdown**: Call `storage.shutdown()` and `queue.shutdown()` on app close to flush pending writes
+5. **Context Migration**: Use new session contexts (`useSessionList`, `useActiveSession`, `useRecording`) instead of deprecated `useSessions`
 6. **Screenshot Paths**: Legacy `path` field is deprecated - use `attachmentId` instead
 7. **Navigation vs Space Menus**: Don't confuse NavigationIsland (top tabs) with MenuMorphPill (zone sub-menus)
 8. **Scroll Container Registration**: Always register/unregister scroll containers in useEffect cleanup
 9. **MenuMorphPill resetKey**: Change `resetKey` prop when layout changes (e.g., sidebar toggle, item selection) to recalculate positions
+10. **State Refs**: Never use refs for state management - use proper context/state with dependencies (causes stale closures)
+11. **Persistence Queue**: Use queue for background saves - don't debounce manually (causes UI blocking)
+12. **XState Machine**: Check machine state with `state.matches()`, not string equality
 
 ## Performance Considerations
 

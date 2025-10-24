@@ -14,13 +14,13 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, Stream, StreamConfig};
 use hound::{WavSpec, WavWriter};
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
-use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "macos")]
-use crate::macos_audio::{SystemAudioCapture, is_system_audio_available};
+use crate::macos_audio::{is_system_audio_available, SystemAudioCapture};
 
 /// Audio recording state
 #[derive(Debug, Clone, PartialEq)]
@@ -127,7 +127,9 @@ impl AudioMixBuffer {
 
     /// Update mix balance (0-100)
     pub fn set_balance(&self, balance: u8) -> Result<(), String> {
-        *self.balance.lock()
+        *self
+            .balance
+            .lock()
             .map_err(|e| format!("[AUDIO] Failed to lock balance: {}", e))? = balance.min(100);
         println!("[AUDIO] Updated mix balance to {}", balance);
         Ok(())
@@ -234,7 +236,10 @@ fn calculate_audio_level(samples: &[f32]) -> (f32, f32) {
     let rms = (sum_squares / samples.len() as f32).sqrt();
 
     // Calculate peak
-    let peak = samples.iter().map(|&s| s.abs()).fold(0.0f32, |a, b| a.max(b));
+    let peak = samples
+        .iter()
+        .map(|&s| s.abs())
+        .fold(0.0f32, |a, b| a.max(b));
 
     (rms, peak)
 }
@@ -364,14 +369,24 @@ impl AudioRecorder {
 
     /// Initialize the audio recorder with app handle
     pub fn init(&self, app_handle: AppHandle) -> Result<(), String> {
-        *self.app_handle.lock()
+        *self
+            .app_handle
+            .lock()
             .map_err(|e| format!("Failed to lock app_handle: {}", e))? = Some(app_handle);
         Ok(())
     }
 
     /// Start recording audio with dual-source support
-    pub fn start_recording(&self, session_id: String, chunk_duration_secs: u64) -> Result<(), String> {
-        self.start_recording_with_config(session_id, chunk_duration_secs, AudioDeviceConfig::default())
+    pub fn start_recording(
+        &self,
+        session_id: String,
+        chunk_duration_secs: u64,
+    ) -> Result<(), String> {
+        self.start_recording_with_config(
+            session_id,
+            chunk_duration_secs,
+            AudioDeviceConfig::default(),
+        )
     }
 
     /// Start recording audio with device configuration
@@ -390,28 +405,45 @@ impl AudioRecorder {
         }
 
         // Check if already recording
-        let current_state = self.state.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock state: {}", e))?.clone();
+        let current_state = self
+            .state
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock state: {}", e))?
+            .clone();
         if current_state == RecordingState::Recording {
             println!("[AUDIO] Already recording, switching configuration");
             return self.switch_recording_config(config);
         }
 
         // Store session ID and config
-        *self.session_id.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock session_id: {}", e))? = Some(session_id.clone());
-        *self.device_config.lock()
+        *self
+            .session_id
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock session_id: {}", e))? =
+            Some(session_id.clone());
+        *self
+            .device_config
+            .lock()
             .map_err(|e| format!("[AUDIO] Failed to lock device_config: {}", e))? = config.clone();
 
         // Recreate buffers with the specified chunk duration
-        *self.mic_buffer.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock mic_buffer: {}", e))? = AudioBuffer::new(chunk_duration_secs);
-        *self.system_buffer.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock system_buffer: {}", e))? = AudioBuffer::new(chunk_duration_secs);
+        *self
+            .mic_buffer
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock mic_buffer: {}", e))? =
+            AudioBuffer::new(chunk_duration_secs);
+        *self
+            .system_buffer
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock system_buffer: {}", e))? =
+            AudioBuffer::new(chunk_duration_secs);
 
         // Create mix buffer
-        *self.mix_buffer.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock mix_buffer: {}", e))? = Some(AudioMixBuffer::new(config.balance));
+        *self
+            .mix_buffer
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock mix_buffer: {}", e))? =
+            Some(AudioMixBuffer::new(config.balance));
 
         let mut mic_sample_rate = 44100;
 
@@ -422,36 +454,56 @@ impl AudioRecorder {
                 host.input_devices()
                     .map_err(|e| format!("[AUDIO] Failed to enumerate input devices: {}", e))?
                     .find(|d| d.name().map(|n| n == *device_name).unwrap_or(false))
-                    .ok_or_else(|| format!("[AUDIO] Microphone device '{}' not found", device_name))?
+                    .ok_or_else(|| {
+                        format!("[AUDIO] Microphone device '{}' not found", device_name)
+                    })?
             } else {
                 host.default_input_device()
                     .ok_or_else(|| "[AUDIO] No input device available".to_string())?
             };
 
-            println!("[AUDIO] Using microphone: {}", device.name().unwrap_or_else(|_| "Unknown".to_string()));
+            println!(
+                "[AUDIO] Using microphone: {}",
+                device.name().unwrap_or_else(|_| "Unknown".to_string())
+            );
 
             let device_config = device
                 .default_input_config()
                 .map_err(|e| format!("[AUDIO] Failed to get default input config: {}", e))?;
 
-            println!("[AUDIO] Mic - Format: {:?}, Rate: {}, Channels: {}",
-                device_config.sample_format(), device_config.sample_rate().0, device_config.channels());
+            println!(
+                "[AUDIO] Mic - Format: {:?}, Rate: {}, Channels: {}",
+                device_config.sample_format(),
+                device_config.sample_rate().0,
+                device_config.channels()
+            );
 
             mic_sample_rate = device_config.sample_rate().0;
-            *self.mic_sample_rate.lock()
-                .map_err(|e| format!("[AUDIO] Failed to lock mic_sample_rate: {}", e))? = mic_sample_rate;
+            *self
+                .mic_sample_rate
+                .lock()
+                .map_err(|e| format!("[AUDIO] Failed to lock mic_sample_rate: {}", e))? =
+                mic_sample_rate;
 
             let stream = match device_config.sample_format() {
                 SampleFormat::F32 => self.build_mic_stream_f32(&device, device_config.into())?,
                 SampleFormat::I16 => self.build_mic_stream_i16(&device, device_config.into())?,
                 SampleFormat::U16 => self.build_mic_stream_u16(&device, device_config.into())?,
-                _ => return Err(format!("[AUDIO] Unsupported sample format: {:?}", device_config.sample_format())),
+                _ => {
+                    return Err(format!(
+                        "[AUDIO] Unsupported sample format: {:?}",
+                        device_config.sample_format()
+                    ))
+                }
             };
 
-            stream.play()
+            stream
+                .play()
                 .map_err(|e| format!("[AUDIO] Failed to start microphone stream: {}", e))?;
 
-            *self.mic_stream.lock()
+            *self
+                .mic_stream
+                .lock()
                 .map_err(|e| format!("[AUDIO] Failed to lock mic_stream: {}", e))? = Some(stream);
 
             println!("[AUDIO] Microphone capture started");
@@ -465,11 +517,13 @@ impl AudioRecorder {
             } else {
                 match SystemAudioCapture::new() {
                     Ok(capture) => {
-                        capture.start()
+                        capture
+                            .start()
                             .map_err(|e| format!("[AUDIO] Failed to start system audio: {}", e))?;
 
-                        *self.system_capture.lock()
-                            .map_err(|e| format!("[AUDIO] Failed to lock system_capture: {}", e))? = Some(capture);
+                        *self.system_capture.lock().map_err(|e| {
+                            format!("[AUDIO] Failed to lock system_capture: {}", e)
+                        })? = Some(capture);
 
                         println!("[AUDIO] System audio capture started");
                     }
@@ -481,14 +535,21 @@ impl AudioRecorder {
         }
 
         // Update state
-        *self.state.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock state: {}", e))? = RecordingState::Recording;
+        *self
+            .state
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock state: {}", e))? =
+            RecordingState::Recording;
 
         // Clear buffers
-        self.mic_buffer.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock mic_buffer: {}", e))?.clear();
-        self.system_buffer.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock system_buffer: {}", e))?.clear();
+        self.mic_buffer
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock mic_buffer: {}", e))?
+            .clear();
+        self.system_buffer
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock system_buffer: {}", e))?
+            .clear();
 
         // Start background thread to check for completed chunks
         self.start_chunk_processor();
@@ -501,23 +562,31 @@ impl AudioRecorder {
     fn switch_recording_config(&self, new_config: AudioDeviceConfig) -> Result<(), String> {
         println!("[AUDIO] Hot-swapping recording configuration");
 
-        let old_config = self.device_config.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock device_config: {}", e))?.clone();
+        let old_config = self
+            .device_config
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock device_config: {}", e))?
+            .clone();
 
         // Update mix balance if changed
         if new_config.balance != old_config.balance {
-            if let Some(ref mix_buffer) = *self.mix_buffer.lock()
-                .map_err(|e| format!("[AUDIO] Failed to lock mix_buffer: {}", e))? {
+            if let Some(ref mix_buffer) = *self
+                .mix_buffer
+                .lock()
+                .map_err(|e| format!("[AUDIO] Failed to lock mix_buffer: {}", e))?
+            {
                 mix_buffer.set_balance(new_config.balance)?;
             }
         }
 
         // Handle microphone device change
-        if new_config.enable_microphone != old_config.enable_microphone ||
-           new_config.microphone_device_name != old_config.microphone_device_name {
-
+        if new_config.enable_microphone != old_config.enable_microphone
+            || new_config.microphone_device_name != old_config.microphone_device_name
+        {
             // Stop old mic stream
-            *self.mic_stream.lock()
+            *self
+                .mic_stream
+                .lock()
                 .map_err(|e| format!("[AUDIO] Failed to lock mic_stream: {}", e))? = None;
 
             // Start new mic stream if enabled
@@ -527,34 +596,57 @@ impl AudioRecorder {
                     host.input_devices()
                         .map_err(|e| format!("[AUDIO] Failed to enumerate input devices: {}", e))?
                         .find(|d| d.name().map(|n| n == *device_name).unwrap_or(false))
-                        .ok_or_else(|| format!("[AUDIO] Microphone device '{}' not found", device_name))?
+                        .ok_or_else(|| {
+                            format!("[AUDIO] Microphone device '{}' not found", device_name)
+                        })?
                 } else {
                     host.default_input_device()
                         .ok_or_else(|| "[AUDIO] No input device available".to_string())?
                 };
 
-                println!("[AUDIO] Switching to microphone: {}", device.name().unwrap_or_else(|_| "Unknown".to_string()));
+                println!(
+                    "[AUDIO] Switching to microphone: {}",
+                    device.name().unwrap_or_else(|_| "Unknown".to_string())
+                );
 
                 let device_config = device
                     .default_input_config()
                     .map_err(|e| format!("[AUDIO] Failed to get default input config: {}", e))?;
 
                 let mic_sample_rate = device_config.sample_rate().0;
-                *self.mic_sample_rate.lock()
-                    .map_err(|e| format!("[AUDIO] Failed to lock mic_sample_rate: {}", e))? = mic_sample_rate;
+                *self
+                    .mic_sample_rate
+                    .lock()
+                    .map_err(|e| format!("[AUDIO] Failed to lock mic_sample_rate: {}", e))? =
+                    mic_sample_rate;
 
                 let stream = match device_config.sample_format() {
-                    SampleFormat::F32 => self.build_mic_stream_f32(&device, device_config.into())?,
-                    SampleFormat::I16 => self.build_mic_stream_i16(&device, device_config.into())?,
-                    SampleFormat::U16 => self.build_mic_stream_u16(&device, device_config.into())?,
-                    _ => return Err(format!("[AUDIO] Unsupported sample format: {:?}", device_config.sample_format())),
+                    SampleFormat::F32 => {
+                        self.build_mic_stream_f32(&device, device_config.into())?
+                    }
+                    SampleFormat::I16 => {
+                        self.build_mic_stream_i16(&device, device_config.into())?
+                    }
+                    SampleFormat::U16 => {
+                        self.build_mic_stream_u16(&device, device_config.into())?
+                    }
+                    _ => {
+                        return Err(format!(
+                            "[AUDIO] Unsupported sample format: {:?}",
+                            device_config.sample_format()
+                        ))
+                    }
                 };
 
-                stream.play()
+                stream
+                    .play()
                     .map_err(|e| format!("[AUDIO] Failed to start microphone stream: {}", e))?;
 
-                *self.mic_stream.lock()
-                    .map_err(|e| format!("[AUDIO] Failed to lock mic_stream: {}", e))? = Some(stream);
+                *self
+                    .mic_stream
+                    .lock()
+                    .map_err(|e| format!("[AUDIO] Failed to lock mic_stream: {}", e))? =
+                    Some(stream);
 
                 println!("[AUDIO] Microphone switched successfully");
             }
@@ -567,11 +659,13 @@ impl AudioRecorder {
                 if is_system_audio_available() {
                     match SystemAudioCapture::new() {
                         Ok(capture) => {
-                            capture.start()
-                                .map_err(|e| format!("[AUDIO] Failed to start system audio: {}", e))?;
+                            capture.start().map_err(|e| {
+                                format!("[AUDIO] Failed to start system audio: {}", e)
+                            })?;
 
-                            *self.system_capture.lock()
-                                .map_err(|e| format!("[AUDIO] Failed to lock system_capture: {}", e))? = Some(capture);
+                            *self.system_capture.lock().map_err(|e| {
+                                format!("[AUDIO] Failed to lock system_capture: {}", e)
+                            })? = Some(capture);
 
                             println!("[AUDIO] System audio enabled");
                         }
@@ -581,14 +675,18 @@ impl AudioRecorder {
                     }
                 }
             } else {
-                *self.system_capture.lock()
+                *self
+                    .system_capture
+                    .lock()
                     .map_err(|e| format!("[AUDIO] Failed to lock system_capture: {}", e))? = None;
                 println!("[AUDIO] System audio disabled");
             }
         }
 
         // Update config
-        *self.device_config.lock()
+        *self
+            .device_config
+            .lock()
             .map_err(|e| format!("[AUDIO] Failed to lock device_config: {}", e))? = new_config;
 
         println!("[AUDIO] Configuration switched successfully");
@@ -596,7 +694,11 @@ impl AudioRecorder {
     }
 
     /// Build microphone audio stream for f32 samples
-    fn build_mic_stream_f32(&self, device: &Device, config: StreamConfig) -> Result<Stream, String> {
+    fn build_mic_stream_f32(
+        &self,
+        device: &Device,
+        config: StreamConfig,
+    ) -> Result<Stream, String> {
         let buffer = self.mic_buffer.clone();
         let state = self.state.clone();
         let app_handle = self.app_handle.clone();
@@ -633,7 +735,10 @@ impl AudioRecorder {
 
                                             if let Err(e) = app.emit("audio-level", level_data) {
                                                 // Silently ignore emission errors to avoid log spam
-                                                eprintln!("[AUDIO] Failed to emit mic level: {}", e);
+                                                eprintln!(
+                                                    "[AUDIO] Failed to emit mic level: {}",
+                                                    e
+                                                );
                                             }
                                         }
                                     }
@@ -653,7 +758,11 @@ impl AudioRecorder {
     }
 
     /// Build microphone audio stream for i16 samples (convert to f32)
-    fn build_mic_stream_i16(&self, device: &Device, config: StreamConfig) -> Result<Stream, String> {
+    fn build_mic_stream_i16(
+        &self,
+        device: &Device,
+        config: StreamConfig,
+    ) -> Result<Stream, String> {
         let buffer = self.mic_buffer.clone();
         let state = self.state.clone();
         let app_handle = self.app_handle.clone();
@@ -692,7 +801,10 @@ impl AudioRecorder {
                                             };
 
                                             if let Err(e) = app.emit("audio-level", level_data) {
-                                                eprintln!("[AUDIO] Failed to emit mic level: {}", e);
+                                                eprintln!(
+                                                    "[AUDIO] Failed to emit mic level: {}",
+                                                    e
+                                                );
                                             }
                                         }
                                     }
@@ -712,7 +824,11 @@ impl AudioRecorder {
     }
 
     /// Build microphone audio stream for u16 samples (convert to f32)
-    fn build_mic_stream_u16(&self, device: &Device, config: StreamConfig) -> Result<Stream, String> {
+    fn build_mic_stream_u16(
+        &self,
+        device: &Device,
+        config: StreamConfig,
+    ) -> Result<Stream, String> {
         let buffer = self.mic_buffer.clone();
         let state = self.state.clone();
         let app_handle = self.app_handle.clone();
@@ -751,7 +867,10 @@ impl AudioRecorder {
                                             };
 
                                             if let Err(e) = app.emit("audio-level", level_data) {
-                                                eprintln!("[AUDIO] Failed to emit mic level: {}", e);
+                                                eprintln!(
+                                                    "[AUDIO] Failed to emit mic level: {}",
+                                                    e
+                                                );
                                             }
                                         }
                                     }
@@ -822,7 +941,10 @@ impl AudioRecorder {
                 }
 
                 if system_usage >= 90 {
-                    println!("⚠️ [AUDIO] System audio buffer near capacity: {}%", system_usage);
+                    println!(
+                        "⚠️ [AUDIO] System audio buffer near capacity: {}%",
+                        system_usage
+                    );
                     if let Ok(app_lock) = app_handle.lock() {
                         if let Some(ref app) = *app_lock {
                             let warning = serde_json::json!({
@@ -839,8 +961,14 @@ impl AudioRecorder {
                 if let Ok(mut last_emit) = last_health_emit.lock() {
                     if last_emit.elapsed() >= Duration::from_secs(10) {
                         // Get overflow counts
-                        let mic_overflow = mic_buffer.lock().map(|b| b.get_overflow_count()).unwrap_or(0);
-                        let system_overflow = system_buffer.lock().map(|b| b.get_overflow_count()).unwrap_or(0);
+                        let mic_overflow = mic_buffer
+                            .lock()
+                            .map(|b| b.get_overflow_count())
+                            .unwrap_or(0);
+                        let system_overflow = system_buffer
+                            .lock()
+                            .map(|b| b.get_overflow_count())
+                            .unwrap_or(0);
                         let total_overrun = mic_overflow + system_overflow;
 
                         let dropped = dropped_chunks.lock().map(|d| *d).unwrap_or(0);
@@ -855,7 +983,8 @@ impl AudioRecorder {
                                     last_activity_ms: std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()
-                                        .as_millis() as u64,
+                                        .as_millis()
+                                        as u64,
                                     state: "recording".to_string(),
                                 };
 
@@ -901,7 +1030,10 @@ impl AudioRecorder {
                                 match capture.take_samples() {
                                     Ok(samples) => samples,
                                     Err(e) => {
-                                        eprintln!("[AUDIO] Failed to take system audio samples: {}", e);
+                                        eprintln!(
+                                            "[AUDIO] Failed to take system audio samples: {}",
+                                            e
+                                        );
                                         Vec::new()
                                     }
                                 }
@@ -923,8 +1055,11 @@ impl AudioRecorder {
                     continue;
                 }
 
-                println!("[AUDIO] Processing chunk: {} mic samples, {} system samples",
-                    mic_samples.len(), system_samples.len());
+                println!(
+                    "[AUDIO] Processing chunk: {} mic samples, {} system samples",
+                    mic_samples.len(),
+                    system_samples.len()
+                );
 
                 // Get mic sample rate
                 let mic_rate = match mic_sample_rate.lock() {
@@ -1044,7 +1179,11 @@ impl AudioRecorder {
     }
 
     /// Convert audio samples to WAV format and encode as base64
-    fn samples_to_wav_base64(samples: &[f32], sample_rate: u32, channels: u16) -> Result<String, String> {
+    fn samples_to_wav_base64(
+        samples: &[f32],
+        sample_rate: u32,
+        channels: u16,
+    ) -> Result<String, String> {
         let mut wav_buffer = Vec::new();
 
         // Resample to 16kHz for optimal speech recognition
@@ -1063,7 +1202,8 @@ impl AudioRecorder {
                 .map_err(|e| format!("Failed to create WAV writer: {}", e))?;
 
             // Convert f32 samples to i16 and write
-            for &sample in &resampled { // Use resampled data
+            for &sample in &resampled {
+                // Use resampled data
                 let amplitude = i16::MAX as f32;
                 let sample_i16 = (sample * amplitude) as i16;
                 writer
@@ -1077,14 +1217,17 @@ impl AudioRecorder {
         }
 
         // Encode to base64
-        let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &wav_buffer);
+        let base64_data =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &wav_buffer);
         Ok(format!("data:audio/wav;base64,{}", base64_data))
     }
 
     /// Pause recording
     pub fn pause_recording(&self) -> Result<(), String> {
         println!("⏸️  [AUDIO CAPTURE] Pausing recording");
-        *self.state.lock()
+        *self
+            .state
+            .lock()
             .map_err(|e| format!("Failed to lock state: {}", e))? = RecordingState::Paused;
         Ok(())
     }
@@ -1093,14 +1236,19 @@ impl AudioRecorder {
     #[allow(dead_code)]
     pub fn resume_recording(&self) -> Result<(), String> {
         println!("▶️  [AUDIO CAPTURE] Resuming recording");
-        let current_state = self.state.lock()
-            .map_err(|e| format!("Failed to lock state: {}", e))?.clone();
+        let current_state = self
+            .state
+            .lock()
+            .map_err(|e| format!("Failed to lock state: {}", e))?
+            .clone();
 
         if current_state == RecordingState::Stopped {
             return Err("Cannot resume - recording is stopped".to_string());
         }
 
-        *self.state.lock()
+        *self
+            .state
+            .lock()
             .map_err(|e| format!("Failed to lock state: {}", e))? = RecordingState::Recording;
         Ok(())
     }
@@ -1110,11 +1258,15 @@ impl AudioRecorder {
         println!("[AUDIO] Stopping recording");
 
         // Update state first to signal threads to stop
-        *self.state.lock()
+        *self
+            .state
+            .lock()
             .map_err(|e| format!("[AUDIO] Failed to lock state: {}", e))? = RecordingState::Stopped;
 
         // Stop microphone stream
-        *self.mic_stream.lock()
+        *self
+            .mic_stream
+            .lock()
             .map_err(|e| format!("[AUDIO] Failed to lock mic_stream: {}", e))? = None;
 
         // Stop system audio capture
@@ -1131,17 +1283,25 @@ impl AudioRecorder {
         }
 
         // Clear buffers
-        self.mic_buffer.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock mic_buffer: {}", e))?.clear();
-        self.system_buffer.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock system_buffer: {}", e))?.clear();
+        self.mic_buffer
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock mic_buffer: {}", e))?
+            .clear();
+        self.system_buffer
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock system_buffer: {}", e))?
+            .clear();
 
         // Clear mix buffer
-        *self.mix_buffer.lock()
+        *self
+            .mix_buffer
+            .lock()
             .map_err(|e| format!("[AUDIO] Failed to lock mix_buffer: {}", e))? = None;
 
         // Clear session ID
-        *self.session_id.lock()
+        *self
+            .session_id
+            .lock()
             .map_err(|e| format!("[AUDIO] Failed to lock session_id: {}", e))? = None;
 
         println!("[AUDIO] Recording stopped successfully");
@@ -1151,7 +1311,8 @@ impl AudioRecorder {
     /// Get current recording state
     #[allow(dead_code)]
     pub fn get_state(&self) -> RecordingState {
-        self.state.lock()
+        self.state
+            .lock()
             .map(|s| s.clone())
             .unwrap_or(RecordingState::Stopped)
     }
@@ -1159,7 +1320,8 @@ impl AudioRecorder {
     /// Check if currently recording
     #[allow(dead_code)]
     pub fn is_recording(&self) -> bool {
-        self.state.lock()
+        self.state
+            .lock()
             .map(|s| *s == RecordingState::Recording)
             .unwrap_or(false)
     }
@@ -1179,7 +1341,9 @@ impl AudioRecorder {
             if let Some(ref mix_buf) = **mix_buf_opt {
                 mix_buf.set_balance(balance)?;
             } else {
-                return Err("[AUDIO] Mix buffer not initialized - not currently recording".to_string());
+                return Err(
+                    "[AUDIO] Mix buffer not initialized - not currently recording".to_string(),
+                );
             }
         } else {
             return Err("[AUDIO] Failed to lock mix buffer".to_string());
@@ -1193,8 +1357,11 @@ impl AudioRecorder {
     pub fn switch_audio_input_device(&self, device_name: Option<String>) -> Result<(), String> {
         println!("[AUDIO] Switching audio input device");
 
-        let mut config = self.device_config.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock device_config: {}", e))?.clone();
+        let mut config = self
+            .device_config
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock device_config: {}", e))?
+            .clone();
 
         config.microphone_device_name = device_name;
         self.switch_recording_config(config)
@@ -1204,8 +1371,11 @@ impl AudioRecorder {
     pub fn switch_audio_output_device(&self, device_name: Option<String>) -> Result<(), String> {
         println!("[AUDIO] Switching audio output device");
 
-        let mut config = self.device_config.lock()
-            .map_err(|e| format!("[AUDIO] Failed to lock device_config: {}", e))?.clone();
+        let mut config = self
+            .device_config
+            .lock()
+            .map_err(|e| format!("[AUDIO] Failed to lock device_config: {}", e))?
+            .clone();
 
         config.system_audio_device_name = device_name;
         self.switch_recording_config(config)
@@ -1214,37 +1384,51 @@ impl AudioRecorder {
     /// Get current audio health status
     pub fn get_health_status(&self) -> Result<AudioHealthStatus, String> {
         // Get current buffer usage
-        let mic_usage = self.mic_buffer.lock()
+        let mic_usage = self
+            .mic_buffer
+            .lock()
             .map(|b| b.usage_percent())
             .unwrap_or(0);
 
-        let system_usage = self.system_buffer.lock()
+        let system_usage = self
+            .system_buffer
+            .lock()
             .map(|b| b.usage_percent())
             .unwrap_or(0);
 
         // Get overflow counts
-        let mic_overflow = self.mic_buffer.lock()
+        let mic_overflow = self
+            .mic_buffer
+            .lock()
             .map(|b| b.get_overflow_count())
             .unwrap_or(0);
 
-        let system_overflow = self.system_buffer.lock()
+        let system_overflow = self
+            .system_buffer
+            .lock()
             .map(|b| b.get_overflow_count())
             .unwrap_or(0);
 
         let total_overrun = mic_overflow + system_overflow;
 
         // Get dropped chunks
-        let dropped = *self.dropped_chunks.lock()
+        let dropped = *self
+            .dropped_chunks
+            .lock()
             .map_err(|e| format!("[AUDIO] Failed to lock dropped_chunks: {}", e))?;
 
         // Get current state
-        let state_str = match self.state.lock()
+        let state_str = match self
+            .state
+            .lock()
             .map(|s| s.clone())
-            .unwrap_or(RecordingState::Stopped) {
+            .unwrap_or(RecordingState::Stopped)
+        {
             RecordingState::Recording => "recording",
             RecordingState::Paused => "paused",
             RecordingState::Stopped => "stopped",
-        }.to_string();
+        }
+        .to_string();
 
         Ok(AudioHealthStatus {
             mic_buffer_usage_percent: mic_usage,
@@ -1289,11 +1473,14 @@ pub fn get_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
     let default_output = host.default_output_device();
 
     // Enumerate input devices
-    let input_devices = host.input_devices()
+    let input_devices = host
+        .input_devices()
         .map_err(|e| format!("[AUDIO] Failed to enumerate input devices: {}", e))?;
 
     for device in input_devices {
-        let name = device.name().unwrap_or_else(|_| "Unknown Device".to_string());
+        let name = device
+            .name()
+            .unwrap_or_else(|_| "Unknown Device".to_string());
 
         // Check if this is the default input device
         let is_default = default_input
@@ -1315,7 +1502,10 @@ pub fn get_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
                 });
             }
             Err(e) => {
-                eprintln!("[AUDIO] Failed to get config for input device '{}': {}", name, e);
+                eprintln!(
+                    "[AUDIO] Failed to get config for input device '{}': {}",
+                    name, e
+                );
                 // Add device with default values
                 devices.push(AudioDeviceInfo {
                     id: name.clone(),
@@ -1330,11 +1520,14 @@ pub fn get_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
     }
 
     // Enumerate output devices
-    let output_devices = host.output_devices()
+    let output_devices = host
+        .output_devices()
         .map_err(|e| format!("[AUDIO] Failed to enumerate output devices: {}", e))?;
 
     for device in output_devices {
-        let name = device.name().unwrap_or_else(|_| "Unknown Device".to_string());
+        let name = device
+            .name()
+            .unwrap_or_else(|_| "Unknown Device".to_string());
 
         // Check if this is the default output device
         let is_default = default_output
@@ -1356,7 +1549,10 @@ pub fn get_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
                 });
             }
             Err(e) => {
-                eprintln!("[AUDIO] Failed to get config for output device '{}': {}", name, e);
+                eprintln!(
+                    "[AUDIO] Failed to get config for output device '{}': {}",
+                    name, e
+                );
                 // Add device with default values
                 devices.push(AudioDeviceInfo {
                     id: name.clone(),
@@ -1370,7 +1566,8 @@ pub fn get_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
         }
     }
 
-    println!("[AUDIO] Enumerated {} devices ({} inputs, {} outputs)",
+    println!(
+        "[AUDIO] Enumerated {} devices ({} inputs, {} outputs)",
         devices.len(),
         devices.iter().filter(|d| d.device_type == "Input").count(),
         devices.iter().filter(|d| d.device_type == "Output").count()
@@ -1388,7 +1585,7 @@ mod tests {
     #[test]
     fn test_audio_buffer_capacity() {
         let buffer = AudioBuffer::new(10); // 10 seconds
-        // Max capacity should be 16kHz * 10s * 2 (safety margin) = 320,000 samples
+                                           // Max capacity should be 16kHz * 10s * 2 (safety margin) = 320,000 samples
         assert_eq!(buffer.max_capacity, 320000);
     }
 

@@ -4,7 +4,6 @@
  * These tests verify the safety and correctness of the FFI wrappers
  * without requiring the full Swift runtime.
  */
-
 use super::*;
 
 #[cfg(test)]

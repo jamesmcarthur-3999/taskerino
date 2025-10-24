@@ -4,7 +4,6 @@
  * Provides type-safe error handling for Swift FFI interactions,
  * replacing generic string errors with structured error types.
  */
-
 use std::fmt;
 
 /// Errors that can occur during FFI operations with Swift ScreenRecorder
@@ -103,10 +102,7 @@ mod tests {
             FFIError::NullPointer.to_string(),
             "Swift recorder returned null pointer"
         );
-        assert_eq!(
-            FFIError::Timeout.to_string(),
-            "FFI operation timed out"
-        );
+        assert_eq!(FFIError::Timeout.to_string(), "FFI operation timed out");
         assert_eq!(
             FFIError::InvalidState("test".to_string()).to_string(),
             "Invalid state: test"

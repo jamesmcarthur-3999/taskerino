@@ -125,10 +125,10 @@ pub struct ClaudeImageSource {
     #[serde(rename = "type")]
     pub source_type: String, // "base64"
 
-    #[serde(alias = "mediaType")]  // Accept camelCase from TypeScript
-    pub media_type: String,         // "image/jpeg", "image/png", etc. - serializes as snake_case for Claude API
+    #[serde(alias = "mediaType")] // Accept camelCase from TypeScript
+    pub media_type: String, // "image/jpeg", "image/png", etc. - serializes as snake_case for Claude API
 
-    pub data: String,        // base64 encoded image
+    pub data: String, // base64 encoded image
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -137,7 +137,7 @@ pub struct ClaudeChatRequest {
     pub model: String,
     pub max_tokens: u32,
     pub messages: Vec<ClaudeMessage>,
-    pub system: Option<serde_json::Value>,  // Accepts both String and Array with cache_control
+    pub system: Option<serde_json::Value>, // Accepts both String and Array with cache_control
     pub temperature: Option<f32>,
 }
 
@@ -178,7 +178,7 @@ pub struct ClaudeStreamingRequest {
     pub model: String,
     pub max_tokens: u32,
     pub messages: Vec<ClaudeMessage>,
-    pub system: Option<serde_json::Value>,  // Accepts both String and Array with cache_control
+    pub system: Option<serde_json::Value>, // Accepts both String and Array with cache_control
     pub temperature: Option<f32>,
     pub tools: Option<Vec<ClaudeTool>>,
     pub stream: bool,
@@ -202,9 +202,15 @@ pub enum ClaudeStreamChunk {
     #[serde(rename = "message_start")]
     MessageStart { message: ClaudeStreamMessage },
     #[serde(rename = "content_block_start")]
-    ContentBlockStart { index: usize, content_block: ClaudeStreamContentBlock },
+    ContentBlockStart {
+        index: usize,
+        content_block: ClaudeStreamContentBlock,
+    },
     #[serde(rename = "content_block_delta")]
-    ContentBlockDelta { index: usize, delta: ClaudeStreamDelta },
+    ContentBlockDelta {
+        index: usize,
+        delta: ClaudeStreamDelta,
+    },
     #[serde(rename = "content_block_stop")]
     ContentBlockStop { index: usize },
     #[serde(rename = "message_delta")]

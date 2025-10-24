@@ -1,33 +1,24 @@
 use crate::ai_types::*;
 use reqwest::Client;
 use serde_json::json;
-use tauri_plugin_store::StoreExt;
 use std::time::Duration;
+use tauri_plugin_store::StoreExt;
 
 const OPENAI_API_BASE: &str = "https://api.openai.com/v1";
 
 /// Helper function to detect audio format from base64 data URL
 fn detect_audio_format(base64_data: &str) -> Result<(&str, Vec<u8>), String> {
     if let Some(data_part) = base64_data.strip_prefix("data:audio/wav;base64,") {
-        let bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            data_part,
-        )
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data_part)
+            .map_err(|e| format!("Failed to decode base64: {}", e))?;
         Ok(("wav", bytes))
     } else if let Some(data_part) = base64_data.strip_prefix("data:audio/mp3;base64,") {
-        let bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            data_part,
-        )
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data_part)
+            .map_err(|e| format!("Failed to decode base64: {}", e))?;
         Ok(("mp3", bytes))
     } else if let Some(data_part) = base64_data.strip_prefix("data:audio/mpeg;base64,") {
-        let bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            data_part,
-        )
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data_part)
+            .map_err(|e| format!("Failed to decode base64: {}", e))?;
         Ok(("mp3", bytes))
     } else {
         Err("Unsupported audio format. Only WAV and MP3 are supported.".to_string())
@@ -40,22 +31,26 @@ pub async fn openai_transcribe_audio(
     app: tauri::AppHandle,
     audio_base64: String,
 ) -> Result<String, String> {
-    let store = app.store("api_keys.json")
+    let store = app
+        .store("api_keys.json")
         .map_err(|e| format!("Failed to access store: {}", e))?;
 
     let api_key = match store.get("openai_api_key") {
-        Some(value) => value.as_str()
+        Some(value) => value
+            .as_str()
             .ok_or("OpenAI API key not set. Please add your API key in Settings.")?
             .to_string(),
-        None => return Err("OpenAI API key not set. Please add your API key in Settings.".to_string())
+        None => {
+            return Err("OpenAI API key not set. Please add your API key in Settings.".to_string())
+        }
     };
 
     let (format, audio_bytes) = detect_audio_format(&audio_base64)?;
 
     let client = Client::builder()
-        .timeout(Duration::from_secs(1200))         // 20 min total timeout (audio analysis can be slow)
-        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
-        .read_timeout(Duration::from_secs(900))     // 15 min to read response
+        .timeout(Duration::from_secs(1200)) // 20 min total timeout (audio analysis can be slow)
+        .connect_timeout(Duration::from_secs(30)) // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900)) // 15 min to read response
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
@@ -65,7 +60,10 @@ pub async fn openai_transcribe_audio(
             "file",
             reqwest::multipart::Part::bytes(audio_bytes)
                 .file_name(format!("audio.{}", format))
-                .mime_str(&format!("audio/{}", if format == "mp3" { "mpeg" } else { format }))
+                .mime_str(&format!(
+                    "audio/{}",
+                    if format == "mp3" { "mpeg" } else { format }
+                ))
                 .map_err(|e| format!("Failed to set mime type: {}", e))?,
         )
         .text("model", "whisper-1")
@@ -116,22 +114,26 @@ pub async fn openai_transcribe_audio_with_timestamps(
     app: tauri::AppHandle,
     audio_base64: String,
 ) -> Result<WhisperTranscriptionResponse, String> {
-    let store = app.store("api_keys.json")
+    let store = app
+        .store("api_keys.json")
         .map_err(|e| format!("Failed to access store: {}", e))?;
 
     let api_key = match store.get("openai_api_key") {
-        Some(value) => value.as_str()
+        Some(value) => value
+            .as_str()
             .ok_or("OpenAI API key not set. Please add your API key in Settings.")?
             .to_string(),
-        None => return Err("OpenAI API key not set. Please add your API key in Settings.".to_string())
+        None => {
+            return Err("OpenAI API key not set. Please add your API key in Settings.".to_string())
+        }
     };
 
     let (format, audio_bytes) = detect_audio_format(&audio_base64)?;
 
     let client = Client::builder()
-        .timeout(Duration::from_secs(1200))         // 20 min total timeout (audio analysis can be slow)
-        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
-        .read_timeout(Duration::from_secs(900))     // 15 min to read response
+        .timeout(Duration::from_secs(1200)) // 20 min total timeout (audio analysis can be slow)
+        .connect_timeout(Duration::from_secs(30)) // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900)) // 15 min to read response
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
@@ -141,7 +143,10 @@ pub async fn openai_transcribe_audio_with_timestamps(
             "file",
             reqwest::multipart::Part::bytes(audio_bytes)
                 .file_name(format!("audio.{}", format))
-                .mime_str(&format!("audio/{}", if format == "mp3" { "mpeg" } else { format }))
+                .mime_str(&format!(
+                    "audio/{}",
+                    if format == "mp3" { "mpeg" } else { format }
+                ))
                 .map_err(|e| format!("Failed to set mime type: {}", e))?,
         )
         .text("model", "whisper-1")
@@ -208,22 +213,30 @@ pub async fn openai_analyze_full_audio(
     audio_base64: String,
     context: AudioAnalysisContext,
 ) -> Result<AudioAnalysisResponse, String> {
-    let store = app.store("api_keys.json")
+    let store = app
+        .store("api_keys.json")
         .map_err(|e| format!("Failed to access store: {}", e))?;
 
     let api_key = match store.get("openai_api_key") {
-        Some(value) => value.as_str()
+        Some(value) => value
+            .as_str()
             .ok_or("OpenAI API key not set. Please add your API key in Settings.")?
             .to_string(),
-        None => return Err("OpenAI API key not set. Please add your API key in Settings.".to_string())
+        None => {
+            return Err("OpenAI API key not set. Please add your API key in Settings.".to_string())
+        }
     };
 
     let (format, _audio_bytes) = detect_audio_format(&audio_base64)?;
 
     // Extract base64 data without the data URL prefix
-    let base64_data = if let Some(data) = audio_base64.strip_prefix(&format!("data:audio/{};base64,", if format == "mp3" { "mpeg" } else { format })) {
+    let base64_data = if let Some(data) = audio_base64.strip_prefix(&format!(
+        "data:audio/{};base64,",
+        if format == "mp3" { "mpeg" } else { format }
+    )) {
         data
-    } else if let Some(data) = audio_base64.strip_prefix(&format!("data:audio/{};base64,", format)) {
+    } else if let Some(data) = audio_base64.strip_prefix(&format!("data:audio/{};base64,", format))
+    {
         data
     } else {
         return Err("Invalid base64 audio data format".to_string());
@@ -249,9 +262,9 @@ pub async fn openai_analyze_full_audio(
     );
 
     let client = Client::builder()
-        .timeout(Duration::from_secs(1200))         // 20 min total timeout (audio analysis can be slow)
-        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
-        .read_timeout(Duration::from_secs(900))     // 15 min to read response
+        .timeout(Duration::from_secs(1200)) // 20 min total timeout (audio analysis can be slow)
+        .connect_timeout(Duration::from_secs(30)) // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900)) // 15 min to read response
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
@@ -317,8 +330,12 @@ pub async fn openai_analyze_full_audio(
         .ok_or("No content in response")?;
 
     // Parse the JSON response from the model
-    let parsed: AudioAnalysisResponse = serde_json::from_str(content_text)
-        .map_err(|e| format!("Failed to parse AI response as JSON: {}. Content: {}", e, content_text))?;
+    let parsed: AudioAnalysisResponse = serde_json::from_str(content_text).map_err(|e| {
+        format!(
+            "Failed to parse AI response as JSON: {}. Content: {}",
+            e, content_text
+        )
+    })?;
 
     Ok(parsed)
 }

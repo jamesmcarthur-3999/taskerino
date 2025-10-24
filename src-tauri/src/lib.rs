@@ -1,32 +1,35 @@
-mod types;
-mod audio_capture;
 mod activity_monitor;
-mod macos_events;
-mod macos_audio;
-mod video_recording;
-mod recording; // Safe FFI wrappers for video recording
-mod api_keys;
 mod ai_types;
-mod openai_api;
+mod api_keys;
+mod audio_capture;
 mod claude_api;
+mod macos_audio;
+mod macos_events;
+mod openai_api;
+mod recording; // Safe FFI wrappers for video recording
+mod types;
+mod video_recording;
 // Performance optimization modules (Task 3A)
+mod attachment_loader;
 mod session_models;
 mod session_storage;
-mod attachment_loader;
 
+use activity_monitor::{ActivityMetrics, ActivityMonitor};
+use audio_capture::AudioRecorder;
+use macos_events::MacOSEventMonitor;
+use screenshots::{
+    image::{imageops, DynamicImage, ImageFormat, RgbaImage},
+    Screen,
+};
+use std::io::Cursor;
+use std::process::Command;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIcon, TrayIconBuilder},
     Emitter, Manager,
 };
-use std::process::Command;
-use screenshots::{Screen, image::{ImageFormat, DynamicImage, RgbaImage, imageops}};
-use std::io::Cursor;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use audio_capture::AudioRecorder;
-use activity_monitor::{ActivityMonitor, ActivityMetrics};
-use macos_events::MacOSEventMonitor;
 use video_recording::VideoRecorder;
 
 /// Request screen recording permission on macOS
@@ -63,9 +66,7 @@ fn check_screen_recording_permission() -> Result<bool, String> {
         fn CGPreflightScreenCaptureAccess() -> u8;
     }
 
-    unsafe {
-        Ok(CGPreflightScreenCaptureAccess() != 0)
-    }
+    unsafe { Ok(CGPreflightScreenCaptureAccess() != 0) }
 }
 
 /// Stub for non-macOS platforms
@@ -84,10 +85,7 @@ fn check_screen_recording_permission() -> Result<bool, String> {
 
 /// Helper function for retry with exponential backoff
 /// Retries an operation up to max_retries times with exponential backoff
-fn capture_with_retry<F, T>(
-    operation: F,
-    max_retries: u32,
-) -> Result<T, String>
+fn capture_with_retry<F, T>(operation: F, max_retries: u32) -> Result<T, String>
 where
     F: Fn() -> Result<T, String>,
 {
@@ -100,57 +98,40 @@ where
                 last_error = e.clone();
                 if attempt < max_retries - 1 {
                     let delay_ms = 100 * 2_u64.pow(attempt);
-                    eprintln!("Screenshot capture failed (attempt {}), retrying in {}ms: {}", attempt + 1, delay_ms, e);
+                    eprintln!(
+                        "Screenshot capture failed (attempt {}), retrying in {}ms: {}",
+                        attempt + 1,
+                        delay_ms,
+                        e
+                    );
                     std::thread::sleep(std::time::Duration::from_millis(delay_ms));
                 }
             }
         }
     }
 
-    Err(format!("Screenshot capture failed after {} attempts: {}", max_retries, last_error))
+    Err(format!(
+        "Screenshot capture failed after {} attempts: {}",
+        max_retries, last_error
+    ))
 }
 
 /// Captures the primary screen and returns base64-encoded PNG data
 #[tauri::command]
 fn capture_primary_screen() -> Result<String, String> {
-    capture_with_retry(|| {
-        let screens = Screen::all().map_err(|e| format!("Failed to get screens: {}", e))?;
+    capture_with_retry(
+        || {
+            let screens = Screen::all().map_err(|e| format!("Failed to get screens: {}", e))?;
 
-        if screens.is_empty() {
-            return Err("No screens found".to_string());
-        }
+            if screens.is_empty() {
+                return Err("No screens found".to_string());
+            }
 
-        // Capture the primary screen (first screen)
-        let screen = &screens[0];
-        let image = screen.capture().map_err(|e| format!("Failed to capture screen: {}", e))?;
-
-        // Convert to PNG bytes
-        let mut bytes: Vec<u8> = Vec::new();
-        let mut cursor = Cursor::new(&mut bytes);
-        image
-            .write_to(&mut cursor, ImageFormat::Png)
-            .map_err(|e| format!("Failed to encode PNG: {}", e))?;
-
-        // Encode to base64
-        let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
-        Ok(format!("data:image/png;base64,{}", base64_data))
-    }, 3)
-}
-
-/// Captures all screens and returns an array of base64-encoded PNG data
-#[tauri::command]
-fn capture_all_screens() -> Result<Vec<String>, String> {
-    capture_with_retry(|| {
-        let screens = Screen::all().map_err(|e| format!("Failed to get screens: {}", e))?;
-
-        if screens.is_empty() {
-            return Err("No screens found".to_string());
-        }
-
-        let mut results = Vec::new();
-
-        for screen in screens {
-            let image = screen.capture().map_err(|e| format!("Failed to capture screen: {}", e))?;
+            // Capture the primary screen (first screen)
+            let screen = &screens[0];
+            let image = screen
+                .capture()
+                .map_err(|e| format!("Failed to capture screen: {}", e))?;
 
             // Convert to PNG bytes
             let mut bytes: Vec<u8> = Vec::new();
@@ -160,12 +141,49 @@ fn capture_all_screens() -> Result<Vec<String>, String> {
                 .map_err(|e| format!("Failed to encode PNG: {}", e))?;
 
             // Encode to base64
-            let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
-            results.push(format!("data:image/png;base64,{}", base64_data));
-        }
+            let base64_data =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
+            Ok(format!("data:image/png;base64,{}", base64_data))
+        },
+        3,
+    )
+}
 
-        Ok(results)
-    }, 3)
+/// Captures all screens and returns an array of base64-encoded PNG data
+#[tauri::command]
+fn capture_all_screens() -> Result<Vec<String>, String> {
+    capture_with_retry(
+        || {
+            let screens = Screen::all().map_err(|e| format!("Failed to get screens: {}", e))?;
+
+            if screens.is_empty() {
+                return Err("No screens found".to_string());
+            }
+
+            let mut results = Vec::new();
+
+            for screen in screens {
+                let image = screen
+                    .capture()
+                    .map_err(|e| format!("Failed to capture screen: {}", e))?;
+
+                // Convert to PNG bytes
+                let mut bytes: Vec<u8> = Vec::new();
+                let mut cursor = Cursor::new(&mut bytes);
+                image
+                    .write_to(&mut cursor, ImageFormat::Png)
+                    .map_err(|e| format!("Failed to encode PNG: {}", e))?;
+
+                // Encode to base64
+                let base64_data =
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
+                results.push(format!("data:image/png;base64,{}", base64_data));
+            }
+
+            Ok(results)
+        },
+        3,
+    )
 }
 
 /// Get information about available screens
@@ -225,8 +243,10 @@ fn start_menubar_countdown(
     last_screenshot_time: String,
     session_id: String,
 ) -> Result<(), String> {
-    println!("🚀 start_menubar_countdown called: interval={}, time={}, session={}",
-        interval_minutes, last_screenshot_time, session_id);
+    println!(
+        "🚀 start_menubar_countdown called: interval={}, time={}, session={}",
+        interval_minutes, last_screenshot_time, session_id
+    );
 
     let mut countdown = state.lock().map_err(|e| format!("Lock error: {}", e))?;
     countdown.active = true;
@@ -235,7 +255,10 @@ fn start_menubar_countdown(
     countdown.session_status = "active".to_string();
     countdown.session_id = session_id;
 
-    println!("✅ Countdown state set: active={}, status={}", countdown.active, countdown.session_status);
+    println!(
+        "✅ Countdown state set: active={}, status={}",
+        countdown.active, countdown.session_status
+    );
     Ok(())
 }
 
@@ -248,8 +271,10 @@ fn update_menubar_countdown(
     session_status: String,
 ) -> Result<(), String> {
     let mut countdown = state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    println!("🔄 update_menubar_countdown called: active={}, interval={}, status={}, time={}",
-        countdown.active, interval_minutes, session_status, last_screenshot_time);
+    println!(
+        "🔄 update_menubar_countdown called: active={}, interval={}, status={}, time={}",
+        countdown.active, interval_minutes, session_status, last_screenshot_time
+    );
     if countdown.active {
         countdown.interval_minutes = interval_minutes;
         countdown.last_screenshot_time = last_screenshot_time;
@@ -373,7 +398,7 @@ fn stop_activity_monitoring(
 #[tauri::command]
 fn get_activity_metrics(
     monitor: tauri::State<Arc<ActivityMonitor>>,
-    window_seconds: u64
+    window_seconds: u64,
 ) -> Result<ActivityMetrics, String> {
     Ok(monitor.get_metrics(window_seconds))
 }
@@ -403,83 +428,106 @@ fn record_window_focus(monitor: tauri::State<Arc<ActivityMonitor>>) {
 fn capture_all_screens_composite() -> Result<String, String> {
     use image::codecs::jpeg::JpegEncoder;
 
-    capture_with_retry(|| {
-        let screens = Screen::all().map_err(|e| format!("Failed to get screens: {}", e))?;
+    capture_with_retry(
+        || {
+            let screens = Screen::all().map_err(|e| format!("Failed to get screens: {}", e))?;
 
-        if screens.is_empty() {
-            return Err("No screens found".to_string());
-        }
-
-        // Capture composite (handles single or multiple screens)
-        let composite = if screens.len() == 1 {
-            // Single screen - just capture it
-            screens[0].capture().map_err(|e| format!("Failed to capture screen: {}", e))?
-        } else {
-            // Multiple screens - find bounding box
-            let mut min_x = i32::MAX;
-            let mut min_y = i32::MAX;
-            let mut max_x = i32::MIN;
-            let mut max_y = i32::MIN;
-
-            for screen in &screens {
-                let info = screen.display_info;
-                min_x = min_x.min(info.x);
-                min_y = min_y.min(info.y);
-                max_x = max_x.max(info.x + info.width as i32);
-                max_y = max_y.max(info.y + info.height as i32);
+            if screens.is_empty() {
+                return Err("No screens found".to_string());
             }
 
-            let composite_width = (max_x - min_x) as u32;
-            let composite_height = (max_y - min_y) as u32;
+            // Capture composite (handles single or multiple screens)
+            let composite = if screens.len() == 1 {
+                // Single screen - just capture it
+                screens[0]
+                    .capture()
+                    .map_err(|e| format!("Failed to capture screen: {}", e))?
+            } else {
+                // Multiple screens - find bounding box
+                let mut min_x = i32::MAX;
+                let mut min_y = i32::MAX;
+                let mut max_x = i32::MIN;
+                let mut max_y = i32::MIN;
 
-            // Create composite image
-            let mut composite = RgbaImage::new(composite_width, composite_height);
+                for screen in &screens {
+                    let info = screen.display_info;
+                    min_x = min_x.min(info.x);
+                    min_y = min_y.min(info.y);
+                    max_x = max_x.max(info.x + info.width as i32);
+                    max_y = max_y.max(info.y + info.height as i32);
+                }
 
-            // Capture and place each screen
-            for screen in screens {
-                let image = screen.capture().map_err(|e| format!("Failed to capture screen: {}", e))?;
-                let info = screen.display_info;
+                let composite_width = (max_x - min_x) as u32;
+                let composite_height = (max_y - min_y) as u32;
 
-                // Calculate position in composite
-                let x_offset = (info.x - min_x) as u32;
-                let y_offset = (info.y - min_y) as u32;
+                // Create composite image
+                let mut composite = RgbaImage::new(composite_width, composite_height);
 
-                // Convert to RgbaImage and overlay
-                let rgba_image = DynamicImage::ImageRgba8(image).to_rgba8();
-                imageops::overlay(&mut composite, &rgba_image, x_offset as i64, y_offset as i64);
-            }
+                // Capture and place each screen
+                for screen in screens {
+                    let image = screen
+                        .capture()
+                        .map_err(|e| format!("Failed to capture screen: {}", e))?;
+                    let info = screen.display_info;
 
-            composite
-        };
+                    // Calculate position in composite
+                    let x_offset = (info.x - min_x) as u32;
+                    let y_offset = (info.y - min_y) as u32;
 
-        // Resize if too large (max 1920x1080 to keep file size reasonable)
-        let resized = if composite.width() > 1920 || composite.height() > 1080 {
-            let scale = f32::min(1920.0 / composite.width() as f32, 1080.0 / composite.height() as f32);
-            let new_width = (composite.width() as f32 * scale) as u32;
-            let new_height = (composite.height() as f32 * scale) as u32;
+                    // Convert to RgbaImage and overlay
+                    let rgba_image = DynamicImage::ImageRgba8(image).to_rgba8();
+                    imageops::overlay(
+                        &mut composite,
+                        &rgba_image,
+                        x_offset as i64,
+                        y_offset as i64,
+                    );
+                }
 
-            imageops::resize(&composite, new_width, new_height, imageops::FilterType::Lanczos3)
-        } else {
-            composite
-        };
+                composite
+            };
 
-        // Convert RGBA to RGB (JPEG doesn't support alpha channel)
-        let rgb_image = DynamicImage::ImageRgba8(resized).to_rgb8();
+            // Resize if too large (max 1920x1080 to keep file size reasonable)
+            let resized = if composite.width() > 1920 || composite.height() > 1080 {
+                let scale = f32::min(
+                    1920.0 / composite.width() as f32,
+                    1080.0 / composite.height() as f32,
+                );
+                let new_width = (composite.width() as f32 * scale) as u32;
+                let new_height = (composite.height() as f32 * scale) as u32;
 
-        // Compress to JPEG with quality 70 (optimized for 17% file size reduction)
-        let mut bytes: Vec<u8> = Vec::new();
-        let mut encoder = JpegEncoder::new_with_quality(&mut bytes, 70);
-        encoder.encode(
-            &rgb_image,
-            rgb_image.width(),
-            rgb_image.height(),
-            image::ColorType::Rgb8.into(),
-        ).map_err(|e| format!("Failed to encode JPEG: {}", e))?;
+                imageops::resize(
+                    &composite,
+                    new_width,
+                    new_height,
+                    imageops::FilterType::Lanczos3,
+                )
+            } else {
+                composite
+            };
 
-        // Encode to base64
-        let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
-        Ok(format!("data:image/jpeg;base64,{}", base64_data))
-    }, 3)
+            // Convert RGBA to RGB (JPEG doesn't support alpha channel)
+            let rgb_image = DynamicImage::ImageRgba8(resized).to_rgb8();
+
+            // Compress to JPEG with quality 70 (optimized for 17% file size reduction)
+            let mut bytes: Vec<u8> = Vec::new();
+            let mut encoder = JpegEncoder::new_with_quality(&mut bytes, 70);
+            encoder
+                .encode(
+                    &rgb_image,
+                    rgb_image.width(),
+                    rgb_image.height(),
+                    image::ColorType::Rgb8.into(),
+                )
+                .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
+
+            // Encode to base64
+            let base64_data =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
+            Ok(format!("data:image/jpeg;base64,{}", base64_data))
+        },
+        3,
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

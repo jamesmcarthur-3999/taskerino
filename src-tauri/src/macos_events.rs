@@ -10,7 +10,6 @@
  * A future Phase 3 could add CGEvent taps for more precise event capture,
  * but that requires more complex unsafe code and accessibility permissions.
  */
-
 use crate::activity_monitor::ActivityMonitor;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -88,15 +87,19 @@ impl MacOSEventMonitor {
                     if bundle_id != nil {
                         let bundle_str: *const i8 = msg_send![bundle_id, UTF8String];
                         if !bundle_str.is_null() {
-                            let current_app =
-                                std::ffi::CStr::from_ptr(bundle_str).to_string_lossy().into_owned();
+                            let current_app = std::ffi::CStr::from_ptr(bundle_str)
+                                .to_string_lossy()
+                                .into_owned();
 
                             // Detect app switch
                             if let Some(ref last) = last_app {
                                 if *last != current_app {
                                     monitor.increment_app_switch();
                                     monitor.increment_window_focus(); // App switch implies focus change
-                                    println!("🔄 [MACOS EVENTS] App switched: {} → {}", last, current_app);
+                                    println!(
+                                        "🔄 [MACOS EVENTS] App switched: {} → {}",
+                                        last, current_app
+                                    );
                                 }
                             }
 

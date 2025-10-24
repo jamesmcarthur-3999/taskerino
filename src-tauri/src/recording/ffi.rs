@@ -7,7 +7,6 @@
  * - Double-free errors
  * - Null pointer dereferences
  */
-
 use std::ffi::{c_void, CString};
 use std::ptr::NonNull;
 use std::time::Duration;
@@ -112,7 +111,9 @@ impl SwiftRecorderHandle {
             }
             Ok(Err(_)) => {
                 // Task join error (very unlikely)
-                Err(FFIError::SwiftError("Failed to join creation task".to_string()))
+                Err(FFIError::SwiftError(
+                    "Failed to join creation task".to_string(),
+                ))
             }
             Err(_) => {
                 // Timeout
@@ -154,9 +155,8 @@ impl SwiftRecorderHandle {
         fps: i32,
         duration: Duration,
     ) -> Result<(), FFIError> {
-        let c_path = CString::new(path).map_err(|_| {
-            FFIError::SwiftError("Path contains null byte".to_string())
-        })?;
+        let c_path = CString::new(path)
+            .map_err(|_| FFIError::SwiftError("Path contains null byte".to_string()))?;
 
         let ptr_addr = self.as_ptr() as usize;
 
@@ -172,12 +172,12 @@ impl SwiftRecorderHandle {
 
         match result {
             Ok(Ok(true)) => Ok(()),
-            Ok(Ok(false)) => {
-                Err(FFIError::SwiftError("Swift start returned false".to_string()))
-            }
-            Ok(Err(_)) => {
-                Err(FFIError::SwiftError("Failed to join start task".to_string()))
-            }
+            Ok(Ok(false)) => Err(FFIError::SwiftError(
+                "Swift start returned false".to_string(),
+            )),
+            Ok(Err(_)) => Err(FFIError::SwiftError(
+                "Failed to join start task".to_string(),
+            )),
             Err(_) => Err(FFIError::Timeout),
         }
     }
@@ -215,12 +215,10 @@ impl SwiftRecorderHandle {
 
         match result {
             Ok(Ok(true)) => Ok(()),
-            Ok(Ok(false)) => {
-                Err(FFIError::SwiftError("Swift stop returned false".to_string()))
-            }
-            Ok(Err(_)) => {
-                Err(FFIError::SwiftError("Failed to join stop task".to_string()))
-            }
+            Ok(Ok(false)) => Err(FFIError::SwiftError(
+                "Swift stop returned false".to_string(),
+            )),
+            Ok(Err(_)) => Err(FFIError::SwiftError("Failed to join stop task".to_string())),
             Err(_) => Err(FFIError::Timeout),
         }
     }

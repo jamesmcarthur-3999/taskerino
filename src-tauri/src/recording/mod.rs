@@ -43,7 +43,6 @@
  * # }
  * ```
  */
-
 mod error;
 mod ffi;
 mod session;

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import type { Session, SessionScreenshot, SessionAudioSegment, SessionContextItem } from '../types';
+import type { Session, SessionScreenshot, SessionAudioSegment, SessionContextItem, ScreenshotAnalysis } from '../types';
 import { generateId } from '../utils/helpers';
 import { validateAudioConfig, validateVideoConfig, validateSession } from '../utils/sessionValidation';
 import { useSessionList } from './SessionListContext';
@@ -39,7 +39,7 @@ interface ActiveSessionContextValue {
   addScreenshot: (screenshot: SessionScreenshot) => void;
   addAudioSegment: (segment: SessionAudioSegment) => void;
   deleteAudioSegmentFile: (segmentId: string) => void;
-  updateScreenshotAnalysis: (screenshotId: string, analysis: any, status: SessionScreenshot['analysisStatus'], error?: string) => void;
+  updateScreenshotAnalysis: (screenshotId: string, analysis: ScreenshotAnalysis | undefined, status: SessionScreenshot['analysisStatus'], error?: string) => void;
   addScreenshotComment: (screenshotId: string, comment: string) => void;
   toggleScreenshotFlag: (screenshotId: string) => void;
 
@@ -276,7 +276,7 @@ export function ActiveSessionProvider({ children }: ActiveSessionProviderProps) 
   }, [activeSession]);
 
   // Update screenshot analysis
-  const updateScreenshotAnalysis = useCallback((screenshotId: string, analysis: any, analysisStatus: SessionScreenshot['analysisStatus'], analysisError?: string) => {
+  const updateScreenshotAnalysis = useCallback((screenshotId: string, analysis: ScreenshotAnalysis | undefined, analysisStatus: SessionScreenshot['analysisStatus'], analysisError?: string) => {
     if (!activeSession) {
       console.warn('[ActiveSessionContext] Cannot update screenshot analysis: no active session');
       return;
@@ -412,6 +412,7 @@ export function ActiveSessionProvider({ children }: ActiveSessionProviderProps) 
 // Hook
 // ============================================================================
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useActiveSession() {
   const context = useContext(ActiveSessionContext);
   if (context === undefined) {
