@@ -241,6 +241,20 @@ export type StoryType =
 // ============================================================================
 export type AttachmentType = 'image' | 'video' | 'file' | 'link' | 'screenshot' | 'audio';
 
+/**
+ * Tracks references to physical attachment files
+ * Used for deduplication and reference counting
+ */
+export interface AttachmentRef {
+  hash: string; // SHA-256 hash of file content
+  physicalPath: string; // Actual file location on disk
+  refCount: number; // Number of Attachment records pointing to this file
+  size: number; // File size in bytes
+  attachmentIds: string[]; // IDs of Attachment records using this file
+  createdAt: number;
+  lastAccessedAt: number;
+}
+
 export interface Attachment {
   id: string;
   type: AttachmentType;
@@ -253,6 +267,9 @@ export interface Attachment {
   path?: string;                   // Local file path (Tauri)
   base64?: string;                 // Inline data for smaller files
   url?: string;                    // For link attachments
+
+  // Deduplication
+  hash?: string;                   // SHA-256 hash for deduplication
 
   // Metadata
   thumbnail?: string;              // Base64 thumbnail for videos/large images

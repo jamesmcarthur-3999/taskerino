@@ -5,7 +5,7 @@
  * Files are stored in the app's data directory.
  */
 
-import { BaseDirectory, exists, readTextFile, writeTextFile, mkdir, remove, readDir } from '@tauri-apps/plugin-fs';
+import { BaseDirectory, exists, readTextFile, writeTextFile, writeBinaryFile, readBinaryFile, mkdir, remove, readDir } from '@tauri-apps/plugin-fs';
 import { StorageAdapter, formatBytes, validateJSON, calculateChecksum } from './StorageAdapter';
 import type { StorageInfo, BackupInfo } from './StorageAdapter';
 import type { StorageTransaction } from './types';
@@ -13,6 +13,7 @@ import JSZip from 'jszip';
 import { compressData, decompressData, isCompressed } from './compressionUtils';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import pako from 'pako';
 
 /**
  * Write-Ahead Log Entry
@@ -1544,6 +1545,174 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     }
 
     console.log(`[Migration] ✓ Added version field to ${entities.length} ${collection}`);
+  }
+
+  /**
+   * Compress data using gzip
+   */
+  private async compress(data: string): Promise<Uint8Array> {
+    const encoder = new TextEncoder();
+    const uint8Array = encoder.encode(data);
+    const compressed = pako.gzip(uint8Array);
+    return compressed;
+  }
+
+  /**
+   * Decompress gzip data
+   */
+  private async decompress(compressed: Uint8Array): Promise<string> {
+    const decompressed = pako.ungzip(compressed);
+    const decoder = new TextDecoder();
+    return decoder.decode(decompressed);
+  }
+
+  /**
+   * Save entity with compression
+   */
+  async saveEntityCompressed<T extends { id: string }>(
+    collection: string,
+    entity: T
+  ): Promise<void> {
+    await this.ensureInitialized();
+
+    const dir = `${this.DB_DIR}/${collection}`;
+    await this.ensureDir(dir);
+
+    // Use .json.gz extension for compressed files
+    const filePath = `${dir}/${collection.slice(0, -1)}-${entity.id}.json.gz`;
+
+    // Serialize to JSON
+    const jsonData = JSON.stringify(entity);
+
+    // Calculate checksum BEFORE compression (for data integrity)
+    const checksum = await this.calculateSHA256(jsonData);
+
+    // Compress
+    const compressed = await this.compress(jsonData);
+
+    // Write to WAL
+    await this.appendToWAL({
+      id: `wal-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      timestamp: Date.now(),
+      operation: 'write',
+      collection: filePath,
+      data: entity,
+      checksum,
+    });
+
+    // Write compressed binary file
+    await writeBinaryFile(filePath, compressed, { baseDir: BaseDirectory.AppData });
+
+    // Write checksum file (same as before)
+    await writeTextFile(`${filePath}.checksum`, checksum, { baseDir: BaseDirectory.AppData });
+
+    // Update index
+    await this.updateIndex(collection, entity);
+
+    // Log with compression ratio
+    const originalSize = jsonData.length;
+    const compressedSize = compressed.length;
+    const ratio = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+
+    console.log(`[Storage] Saved compressed entity ${collection}/${entity.id} (${ratio}% reduction, ${(compressedSize / 1024).toFixed(2)} KB)`);
+  }
+
+  /**
+   * Load entity with decompression
+   */
+  async loadEntityCompressed<T extends { id: string }>(
+    collection: string,
+    id: string
+  ): Promise<T | null> {
+    const filePath = `${this.DB_DIR}/${collection}/${collection.slice(0, -1)}-${id}.json.gz`;
+
+    try {
+      // Read compressed binary file
+      const compressed = await readBinaryFile(filePath, { baseDir: BaseDirectory.AppData });
+
+      // Decompress
+      const jsonData = await this.decompress(compressed);
+
+      // Verify checksum (checksum file is plain text)
+      const checksumPath = `${filePath}.checksum`;
+      try {
+        const storedChecksum = await readTextFile(checksumPath, { baseDir: BaseDirectory.AppData });
+        const actualChecksum = await this.calculateSHA256(jsonData);
+
+        if (storedChecksum !== actualChecksum) {
+          console.error(`[Storage] ❌ Checksum mismatch for ${collection}/${id}! Data may be corrupted.`);
+          return null;
+        }
+
+        console.log(`[Storage] Checksum verified for ${collection}/${id}`);
+      } catch (error) {
+        // Checksum file missing (legacy data) - continue without verification
+        console.warn(`[Storage] No checksum found for ${collection}/${id}`);
+      }
+
+      // Parse JSON
+      const entity = JSON.parse(jsonData) as T;
+      return entity;
+
+    } catch (error) {
+      console.log(`[Storage] Entity ${collection}/${id} not found (compressed)`);
+      return null;
+    }
+  }
+
+  /**
+   * Save an index to storage
+   * @param collection - Collection name (e.g., 'sessions', 'notes', 'tasks')
+   * @param indexType - Type of index ('date', 'tag', 'status', 'fulltext')
+   * @param index - Index data structure
+   * @param metadata - Index metadata (lastBuilt, entityCount, etc.)
+   */
+  async saveIndex(
+    collection: string,
+    indexType: string,
+    index: any,
+    metadata: import('./IndexingEngine').IndexMetadata
+  ): Promise<void> {
+    const indexPath = `db/${collection}/indexes/${indexType}.json`;
+    const indexData = { index, metadata };
+
+    await this.ensureDir(`db/${collection}/indexes`);
+    await writeTextFile(indexPath, JSON.stringify(indexData), { baseDir: BaseDirectory.AppData });
+
+    console.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
+  }
+
+  /**
+   * Load an index from storage
+   * @param collection - Collection name
+   * @param indexType - Type of index
+   * @returns Index data and metadata, or null if not found
+   */
+  async loadIndex<T>(
+    collection: string,
+    indexType: string
+  ): Promise<{ index: T; metadata: import('./IndexingEngine').IndexMetadata } | null> {
+    const indexPath = `db/${collection}/indexes/${indexType}.json`;
+
+    try {
+      const content = await readTextFile(indexPath, { baseDir: BaseDirectory.AppData });
+      const data = JSON.parse(content);
+      return { index: data.index as T, metadata: data.metadata };
+    } catch (error) {
+      console.log(`[Index] No ${indexType} index found for ${collection}`);
+      return null;
+    }
+  }
+
+  /**
+   * Ensure directory exists (helper method)
+   */
+  private async ensureDir(dir: string): Promise<void> {
+    try {
+      await mkdir(dir, { baseDir: BaseDirectory.AppData, recursive: true });
+    } catch (error) {
+      // Directory might already exist, ignore
+    }
   }
 
   /**

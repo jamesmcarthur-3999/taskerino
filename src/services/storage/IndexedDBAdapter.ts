@@ -874,6 +874,170 @@ export class IndexedDBAdapter extends StorageAdapter {
   }
 
   /**
+   * Save an index to storage (IndexedDB implementation)
+   * Uses a dedicated 'indexes' object store
+   * @param collection - Collection name (e.g., 'sessions', 'notes', 'tasks')
+   * @param indexType - Type of index ('date', 'tag', 'status', 'fulltext')
+   * @param index - Index data structure
+   * @param metadata - Index metadata (lastBuilt, entityCount, etc.)
+   */
+  async saveIndex(
+    collection: string,
+    indexType: string,
+    index: any,
+    metadata: import('./IndexingEngine').IndexMetadata
+  ): Promise<void> {
+    await this.ensureInitialized();
+
+    return new Promise<void>((resolve, reject) => {
+      // Check if 'indexes' object store exists
+      if (!this.db!.objectStoreNames.contains('indexes')) {
+        // Fallback: Store in collections store with special key
+        const transaction = this.db!.transaction([this.COLLECTIONS_STORE], 'readwrite');
+        const store = transaction.objectStore(this.COLLECTIONS_STORE);
+
+        const key = `__index__${collection}__${indexType}`;
+        const record = {
+          name: key,
+          data: { index, metadata },
+          timestamp: Date.now()
+        };
+
+        const request = store.put(record);
+
+        request.onsuccess = () => {
+          console.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
+          resolve();
+        };
+
+        request.onerror = () => {
+          console.error(`Failed to save ${indexType} index for ${collection}:`, request.error);
+          reject(new Error(`Failed to save index: ${request.error}`));
+        };
+      } else {
+        // Use dedicated 'indexes' object store
+        const transaction = this.db!.transaction(['indexes'], 'readwrite');
+        const store = transaction.objectStore('indexes');
+
+        const key = `${collection}__${indexType}`;
+        const record = {
+          key,
+          collection,
+          indexType,
+          index,
+          metadata,
+          timestamp: Date.now()
+        };
+
+        const request = store.put(record);
+
+        request.onsuccess = () => {
+          console.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
+          resolve();
+        };
+
+        request.onerror = () => {
+          console.error(`Failed to save ${indexType} index for ${collection}:`, request.error);
+          reject(new Error(`Failed to save index: ${request.error}`));
+        };
+      }
+    });
+  }
+
+  /**
+   * Load an index from storage (IndexedDB implementation)
+   * @param collection - Collection name
+   * @param indexType - Type of index
+   * @returns Index data and metadata, or null if not found
+   */
+  async loadIndex<T>(
+    collection: string,
+    indexType: string
+  ): Promise<{ index: T; metadata: import('./IndexingEngine').IndexMetadata } | null> {
+    await this.ensureInitialized();
+
+    return new Promise((resolve, reject) => {
+      // Check if 'indexes' object store exists
+      if (!this.db!.objectStoreNames.contains('indexes')) {
+        // Fallback: Load from collections store with special key
+        const transaction = this.db!.transaction([this.COLLECTIONS_STORE], 'readonly');
+        const store = transaction.objectStore(this.COLLECTIONS_STORE);
+
+        const key = `__index__${collection}__${indexType}`;
+        const request = store.get(key);
+
+        request.onsuccess = () => {
+          const result = request.result;
+          if (result && result.data) {
+            resolve({ index: result.data.index as T, metadata: result.data.metadata });
+          } else {
+            console.log(`[Index] No ${indexType} index found for ${collection}`);
+            resolve(null);
+          }
+        };
+
+        request.onerror = () => {
+          console.error(`Failed to load ${indexType} index for ${collection}:`, request.error);
+          reject(new Error(`Failed to load index: ${request.error}`));
+        };
+      } else {
+        // Use dedicated 'indexes' object store
+        const transaction = this.db!.transaction(['indexes'], 'readonly');
+        const store = transaction.objectStore('indexes');
+
+        const key = `${collection}__${indexType}`;
+        const request = store.get(key);
+
+        request.onsuccess = () => {
+          const result = request.result;
+          if (result) {
+            resolve({ index: result.index as T, metadata: result.metadata });
+          } else {
+            console.log(`[Index] No ${indexType} index found for ${collection}`);
+            resolve(null);
+          }
+        };
+
+        request.onerror = () => {
+          console.error(`Failed to load ${indexType} index for ${collection}:`, request.error);
+          reject(new Error(`Failed to load index: ${request.error}`));
+        };
+      }
+    });
+  }
+
+  /**
+   * Save entity with compression (stub - not implemented for IndexedDB)
+   * @param collection - Collection name (e.g., 'sessions', 'notes', 'tasks')
+   * @param entity - Entity object with an 'id' field
+   */
+  async saveEntityCompressed<T extends { id: string }>(
+    collection: string,
+    entity: T
+  ): Promise<void> {
+    // IndexedDB handles compression internally via browser
+    // For now, just use regular save
+    console.warn('[IndexedDB] saveEntityCompressed not implemented, using regular save');
+    await this.save(collection, entity);
+  }
+
+  /**
+   * Load entity with decompression (stub - not implemented for IndexedDB)
+   * @param collection - Collection name
+   * @param id - Entity ID
+   * @returns The entity or null if not found
+   */
+  async loadEntityCompressed<T extends { id: string }>(
+    collection: string,
+    id: string
+  ): Promise<T | null> {
+    // IndexedDB handles compression internally via browser
+    // For now, just use regular load
+    console.warn('[IndexedDB] loadEntityCompressed not implemented, using regular load');
+    return await this.load<T>(collection);
+  }
+
+  /**
    * Ensure storage is initialized
    */
   private async ensureInitialized(): Promise<void> {

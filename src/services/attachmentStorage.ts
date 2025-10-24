@@ -12,7 +12,10 @@
  */
 
 import { BaseDirectory, exists, readTextFile, writeTextFile, mkdir, remove, readDir } from '@tauri-apps/plugin-fs';
-import type { Attachment } from '../types';
+import { sha256 } from '@noble/hashes/sha2';
+import { bytesToHex } from '@noble/hashes/utils';
+import type { Attachment, AttachmentRef } from '../types';
+import { getStorage } from './storage';
 
 interface CacheEntry {
   attachment: Attachment;
@@ -50,6 +53,136 @@ class AttachmentStorageService {
     }, 5 * 60 * 1000);
 
     console.log('💾 AttachmentStorageService initialized with LRU cache (100MB limit)');
+  }
+
+  /**
+   * Calculate SHA-256 hash from base64 data
+   */
+  private async calculateSHA256(base64: string): Promise<string> {
+    try {
+      // Decode base64 to Uint8Array
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Calculate hash
+      const hash = sha256(bytes);
+      return bytesToHex(hash);
+    } catch (error) {
+      console.error('Failed to calculate hash:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get file extension from MIME type
+   */
+  private getExtension(mimeType: string): string {
+    const mimeMap: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'audio/mpeg': 'mp3',
+      'audio/wav': 'wav',
+      'audio/webm': 'webm',
+      'application/pdf': 'pdf',
+      'text/plain': 'txt',
+    };
+    return mimeMap[mimeType] || 'bin';
+  }
+
+  /**
+   * Load attachment reference by hash
+   */
+  private async loadAttachmentRef(hash: string): Promise<AttachmentRef | null> {
+    const storage = await getStorage();
+    const refs = await storage.load<AttachmentRef[]>('attachment_refs') || [];
+    return refs.find(ref => ref.hash === hash) || null;
+  }
+
+  /**
+   * Create new attachment reference
+   */
+  private async createAttachmentRef(ref: AttachmentRef): Promise<void> {
+    const storage = await getStorage();
+    const refs = await storage.load<AttachmentRef[]>('attachment_refs') || [];
+    refs.push(ref);
+    await storage.save('attachment_refs', refs);
+  }
+
+  /**
+   * Increment reference count when attachment reused
+   */
+  private async incrementRefCount(hash: string, attachmentId: string): Promise<void> {
+    const storage = await getStorage();
+    const refs = await storage.load<AttachmentRef[]>('attachment_refs') || [];
+
+    const refIndex = refs.findIndex(r => r.hash === hash);
+    if (refIndex !== -1) {
+      refs[refIndex].refCount++;
+      refs[refIndex].attachmentIds.push(attachmentId);
+      refs[refIndex].lastAccessedAt = Date.now();
+      await storage.save('attachment_refs', refs);
+
+      console.log(`✅ Incremented ref count for hash ${hash.slice(0, 8)}... (refCount: ${refs[refIndex].refCount})`);
+    }
+  }
+
+  /**
+   * Decrement reference count when attachment deleted
+   * Returns true if physical file was deleted
+   */
+  private async decrementRefCount(hash: string, attachmentId: string): Promise<boolean> {
+    const storage = await getStorage();
+    const refs = await storage.load<AttachmentRef[]>('attachment_refs') || [];
+
+    const refIndex = refs.findIndex(r => r.hash === hash);
+    if (refIndex !== -1) {
+      refs[refIndex].refCount--;
+      refs[refIndex].attachmentIds = refs[refIndex].attachmentIds.filter(id => id !== attachmentId);
+
+      // If refCount reaches 0, delete physical file
+      if (refs[refIndex].refCount <= 0) {
+        const physicalPath = refs[refIndex].physicalPath;
+
+        // Delete physical file
+        try {
+          const metaPath = `${this.ATTACHMENTS_DIR}/${hash}.meta.json`;
+          const dataPath = `${this.ATTACHMENTS_DIR}/${hash}.dat`;
+
+          if (await exists(metaPath, { baseDir: BaseDirectory.AppData })) {
+            await remove(metaPath, { baseDir: BaseDirectory.AppData });
+          }
+
+          if (await exists(dataPath, { baseDir: BaseDirectory.AppData })) {
+            await remove(dataPath, { baseDir: BaseDirectory.AppData });
+          }
+
+          console.log(`🗑️  Deleted physical file for hash ${hash.slice(0, 8)}... (no more references)`);
+        } catch (error) {
+          console.error(`Failed to delete physical file for ${hash}:`, error);
+        }
+
+        // Remove ref entry
+        refs.splice(refIndex, 1);
+        await storage.save('attachment_refs', refs);
+
+        return true; // Physical file deleted
+      } else {
+        // Still has references, just update count
+        await storage.save('attachment_refs', refs);
+        console.log(`✅ Decremented ref count for hash ${hash.slice(0, 8)}... (refCount: ${refs[refIndex].refCount}, retained)`);
+        return false; // Physical file retained
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -202,6 +335,134 @@ class AttachmentStorageService {
       maxSize: this.CACHE_MAX_SIZE,
       entryCount: this.cache.size,
     };
+  }
+
+  /**
+   * Create attachment with deduplication
+   * Checks for duplicate files by hash and reuses existing physical files
+   */
+  async createAttachment(params: {
+    type: 'image' | 'video' | 'audio' | 'document' | 'other';
+    name: string;
+    mimeType: string;
+    size: number;
+    base64: string;
+  }): Promise<Attachment> {
+    const attachmentId = `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    // Calculate SHA-256 hash of file content
+    const hash = await this.calculateSHA256(params.base64);
+
+    // Check if file with this hash already exists
+    const existingRef = await this.loadAttachmentRef(hash);
+
+    let physicalPath: string;
+
+    if (existingRef) {
+      // Deduplicate: Use existing physical file
+      physicalPath = existingRef.physicalPath;
+
+      // Update reference count
+      await this.incrementRefCount(hash, attachmentId);
+
+      console.log(`[Attachment] ✓ Deduplicated ${params.name} (hash: ${hash.slice(0, 8)}..., saved ${(params.size / 1024).toFixed(2)} KB)`);
+
+    } else {
+      // New file: Save to disk
+      // Store in subdirectory based on hash prefix for better organization
+      const hashPrefix = hash.slice(0, 2);
+      const hashSubdir = `${this.ATTACHMENTS_DIR}/${hashPrefix}`;
+
+      // Ensure subdirectory exists
+      const subdirExists = await exists(hashSubdir, { baseDir: BaseDirectory.AppData });
+      if (!subdirExists) {
+        await mkdir(hashSubdir, { baseDir: BaseDirectory.AppData, recursive: true });
+      }
+
+      const extension = this.getExtension(params.mimeType);
+      physicalPath = `${hashSubdir}/${hash}.${extension}`;
+
+      // Save metadata
+      const metadata = {
+        hash,
+        mimeType: params.mimeType,
+        size: params.size,
+        createdAt: Date.now(),
+      };
+
+      const metaPath = `${hashSubdir}/${hash}.meta.json`;
+      await writeTextFile(metaPath, JSON.stringify(metadata), { baseDir: BaseDirectory.AppData });
+
+      // Save base64 data
+      const dataPath = `${hashSubdir}/${hash}.dat`;
+      await writeTextFile(dataPath, params.base64, { baseDir: BaseDirectory.AppData });
+
+      // Create reference entry
+      await this.createAttachmentRef({
+        hash,
+        physicalPath,
+        refCount: 1,
+        size: params.size,
+        attachmentIds: [attachmentId],
+        createdAt: Date.now(),
+        lastAccessedAt: Date.now(),
+      });
+
+      console.log(`[Attachment] ✓ Created ${params.name} (hash: ${hash.slice(0, 8)}..., ${(params.size / 1024).toFixed(2)} KB)`);
+    }
+
+    const attachment: Attachment = {
+      id: attachmentId,
+      type: params.type as any,
+      name: params.name,
+      path: physicalPath, // All attachments with same hash share same physical path
+      size: params.size,
+      mimeType: params.mimeType,
+      createdAt: new Date().toISOString(),
+      hash,
+      base64: params.base64, // Keep in memory for immediate use
+    };
+
+    // Save attachment metadata (separate from physical file)
+    await this.saveAttachmentMetadata(attachment);
+
+    // Add to cache
+    this.addToCache(attachment);
+
+    return attachment;
+  }
+
+  /**
+   * Save attachment metadata to storage
+   */
+  private async saveAttachmentMetadata(attachment: Attachment): Promise<void> {
+    const storage = await getStorage();
+    const attachments = await storage.load<Attachment[]>('attachments') || [];
+
+    // Remove existing entry if present
+    const filtered = attachments.filter(a => a.id !== attachment.id);
+    filtered.push(attachment);
+
+    await storage.save('attachments', filtered);
+  }
+
+  /**
+   * Load attachment metadata from storage
+   */
+  private async loadAttachmentMetadata(attachmentId: string): Promise<Attachment | null> {
+    const storage = await getStorage();
+    const attachments = await storage.load<Attachment[]>('attachments') || [];
+    return attachments.find(a => a.id === attachmentId) || null;
+  }
+
+  /**
+   * Delete attachment metadata from storage
+   */
+  private async deleteAttachmentMetadata(attachmentId: string): Promise<void> {
+    const storage = await getStorage();
+    const attachments = await storage.load<Attachment[]>('attachments') || [];
+    const filtered = attachments.filter(a => a.id !== attachmentId);
+    await storage.save('attachments', filtered);
   }
 
   /**

@@ -5,6 +5,20 @@
  * Exposes C-compatible functions for Rust FFI integration.
  *
  * Requirements: macOS 12.3+
+ *
+ * NOTE: This file contains DEPRECATED legacy classes for backward compatibility.
+ *
+ * NEW MODULAR ARCHITECTURE (Task 2.1 - Phase 2):
+ * - Core/VideoEncoder.swift - Standalone video encoding
+ * - Core/RecordingSource.swift - Protocol for all sources
+ * - Core/FrameSynchronizer.swift - Multi-source frame sync (actor-based)
+ * - Core/FrameCompositor.swift - Protocol for frame composition
+ * - Sources/DisplaySource.swift - Display capture
+ * - Sources/WindowSource.swift - Window capture
+ * - Sources/WebcamSource.swift - Webcam capture
+ *
+ * For new code, use the modular components above instead of the legacy classes below.
+ * The FFI functions below remain for backward compatibility with existing Rust code.
  */
 
 import Foundation
@@ -193,7 +207,15 @@ public func screen_recorder_generate_thumbnail(
 
 // MARK: - ScreenRecorder Class
 
+/// Legacy ScreenRecorder class - DEPRECATED
+/// Use the new modular components instead:
+/// - VideoEncoder (Core/VideoEncoder.swift) for encoding
+/// - DisplaySource (Sources/DisplaySource.swift) for display capture
+/// - WindowSource (Sources/WindowSource.swift) for window capture
+/// - WebcamSource (Sources/WebcamSource.swift) for webcam capture
+/// - FrameSynchronizer (Core/FrameSynchronizer.swift) for multi-source sync
 @available(macOS 12.3, *)
+@available(*, deprecated, message: "Use VideoEncoder, DisplaySource, WindowSource, WebcamSource instead. See Core/ and Sources/ directories.")
 public class ScreenRecorder: NSObject {
     private var stream: SCStream?
     private var assetWriter: AVAssetWriter?
@@ -542,8 +564,11 @@ enum ScreenRecorderError: Error {
 
 // MARK: - GlobalScreenRecorder Singleton
 
-/// Thread-safe singleton for managing advanced recording modes
+/// Legacy GlobalScreenRecorder singleton - DEPRECATED
+/// Use the new modular components instead for more flexibility and testability.
+/// For multi-source recording, use FrameSynchronizer with multiple sources.
 @available(macOS 12.3, *)
+@available(*, deprecated, message: "Use modular recording sources (DisplaySource, WindowSource, WebcamSource) with FrameSynchronizer for multi-source recording.")
 public class GlobalScreenRecorder: NSObject {
     // Singleton instance
     public static let shared = GlobalScreenRecorder()

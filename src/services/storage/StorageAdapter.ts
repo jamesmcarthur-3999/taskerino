@@ -191,6 +191,52 @@ export abstract class StorageAdapter {
    * @param txId - Transaction ID to rollback
    */
   abstract rollbackPhase24Transaction(txId: string): Promise<void>;
+
+  /**
+   * Save an index to storage
+   * @param collection - Collection name (e.g., 'sessions', 'notes', 'tasks')
+   * @param indexType - Type of index ('date', 'tag', 'status', 'fulltext')
+   * @param index - Index data structure
+   * @param metadata - Index metadata (lastBuilt, entityCount, etc.)
+   */
+  abstract saveIndex(
+    collection: string,
+    indexType: 'date' | 'tag' | 'status' | 'fulltext',
+    index: any,
+    metadata: import('./IndexingEngine').IndexMetadata
+  ): Promise<void>;
+
+  /**
+   * Load an index from storage
+   * @param collection - Collection name
+   * @param indexType - Type of index
+   * @returns Index data and metadata, or null if not found
+   */
+  abstract loadIndex<T>(
+    collection: string,
+    indexType: 'date' | 'tag' | 'status' | 'fulltext'
+  ): Promise<{ index: T; metadata: import('./IndexingEngine').IndexMetadata } | null>;
+
+  /**
+   * Save entity with compression (Phase 3.4)
+   * @param collection - Collection name (e.g., 'sessions', 'notes', 'tasks')
+   * @param entity - Entity object with an 'id' field
+   */
+  abstract saveEntityCompressed<T extends { id: string }>(
+    collection: string,
+    entity: T
+  ): Promise<void>;
+
+  /**
+   * Load entity with decompression (Phase 3.4)
+   * @param collection - Collection name
+   * @param id - Entity ID
+   * @returns The entity or null if not found
+   */
+  abstract loadEntityCompressed<T extends { id: string }>(
+    collection: string,
+    id: string
+  ): Promise<T | null>;
 }
 
 /**

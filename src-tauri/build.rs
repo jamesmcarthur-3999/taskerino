@@ -14,6 +14,10 @@ fn compile_swift_module() {
     println!("cargo:rerun-if-changed=ScreenRecorder/ScreenRecorder.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/PiPCompositor.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/ScreenRecorder.h");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Core/FrameSynchronizer.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Core/FrameCompositor.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Core/RecordingSource.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Core/VideoEncoder.swift");
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let target = env::var("TARGET").unwrap();
@@ -30,7 +34,7 @@ fn compile_swift_module() {
         arch
     );
 
-    // Compile Swift to dynamic library (including both Swift files)
+    // Compile Swift to dynamic library (including all Swift files)
     let output = Command::new("swiftc")
         .args([
             "-emit-library",
@@ -44,6 +48,10 @@ fn compile_swift_module() {
             &format!("{}/ScreenRecorder-Swift.h", out_dir),
             "ScreenRecorder/ScreenRecorder.swift",
             "ScreenRecorder/PiPCompositor.swift",
+            "ScreenRecorder/Core/FrameSynchronizer.swift",
+            "ScreenRecorder/Core/FrameCompositor.swift",
+            "ScreenRecorder/Core/RecordingSource.swift",
+            "ScreenRecorder/Core/VideoEncoder.swift",
             "-target",
             &format!("{}-apple-macosx12.3", arch),
             "-O", // Optimization

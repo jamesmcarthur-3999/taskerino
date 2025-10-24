@@ -319,6 +319,50 @@ function AppContent() {
           }
         }
 
+        // Migrate to compressed storage
+        const hasCompressionMigration = await storage.load<boolean>('__migration_compressed_storage');
+        if (!hasCompressionMigration) {
+          console.log('[APP] Running compression migration...');
+          try {
+            const { migrateToCompressed } = await import('./migrations/migrateToCompressed');
+            await migrateToCompressed();
+            await storage.save('__migration_compressed_storage', true);
+            console.log('[APP] Compression migration complete');
+          } catch (error) {
+            console.error('[APP] Compression migration failed:', error);
+            // Continue anyway - app can still work with uncompressed files
+          }
+        }
+
+        // Build indexes if not present or stale (> 7 days)
+        const shouldRebuildIndexes = async () => {
+          const dateIndex = await storage.loadIndex('sessions', 'date');
+
+          if (!dateIndex) return true;
+
+          const age = Date.now() - dateIndex.metadata.lastBuilt;
+          const sevenDays = 7 * 24 * 60 * 60 * 1000;
+
+          return age > sevenDays;
+        };
+
+        if (await shouldRebuildIndexes()) {
+          console.log('[APP] Building indexes...');
+          try {
+            const { IndexingEngine } = await import('./services/storage/IndexingEngine');
+            const indexingEngine = new IndexingEngine(storage);
+
+            await indexingEngine.rebuildAllIndexes('sessions');
+            await indexingEngine.rebuildAllIndexes('notes');
+            await indexingEngine.rebuildAllIndexes('tasks');
+
+            console.log('[APP] Indexes built successfully');
+          } catch (error) {
+            console.error('[APP] Index building failed:', error);
+            // Continue anyway - indexes are for performance optimization
+          }
+        }
+
         // Load API keys with error handling
         try {
           const savedClaudeKey = await invoke<string | null>('get_claude_api_key');

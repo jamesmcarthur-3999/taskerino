@@ -11,13 +11,13 @@
 | Phase | Tasks | Complete | In Progress | Not Started | % Complete |
 |-------|-------|----------|-------------|-------------|------------|
 | Phase 1: Critical Fixes | 12 | 12 | 0 | 0 | 100% |
-| Phase 2: Swift Rewrite | 15 | 0 | 0 | 15 | 0% |
+| Phase 2: Swift Rewrite | 15 | 3 | 0 | 12 | 20% |
 | Phase 3: Audio Architecture | 10 | 0 | 0 | 10 | 0% |
 | Phase 4: Storage Rewrite | 12 | 0 | 0 | 12 | 0% |
 | Phase 5: Enrichment Optimization | 14 | 0 | 0 | 14 | 0% |
 | Phase 6: Review & Playback | 10 | 0 | 0 | 10 | 0% |
 | Phase 7: Testing & Launch | 12 | 0 | 0 | 12 | 0% |
-| **TOTAL** | **85** | **12** | **0** | **73** | **14.1%** |
+| **TOTAL** | **85** | **15** | **0** | **70** | **17.6%** |
 
 ---
 
