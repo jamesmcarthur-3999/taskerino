@@ -9,8 +9,10 @@
 import { StorageAdapter } from './StorageAdapter';
 import { TauriFileSystemAdapter } from './TauriFileSystemAdapter';
 import { IndexedDBAdapter } from './IndexedDBAdapter';
+import type { StorageTransaction } from './types';
 
 export * from './StorageAdapter';
+export * from './types';
 export { TauriFileSystemAdapter } from './TauriFileSystemAdapter';
 export { IndexedDBAdapter } from './IndexedDBAdapter';
 
@@ -109,4 +111,26 @@ export function getStorageType(): 'filesystem' | 'indexeddb' | 'unknown' {
   }
 
   return 'unknown';
+}
+
+/**
+ * Get a storage transaction for atomic multi-key operations
+ *
+ * @example
+ * ```typescript
+ * const tx = await getStorageTransaction();
+ * try {
+ *   tx.save('sessions', updatedSessions);
+ *   tx.save('settings', updatedSettings);
+ *   tx.save('cache', updatedCache);
+ *   await tx.commit();
+ * } catch (error) {
+ *   await tx.rollback();
+ *   throw error;
+ * }
+ * ```
+ */
+export async function getStorageTransaction(): Promise<StorageTransaction> {
+  const storage = await getStorage();
+  return storage.beginTransaction();
 }

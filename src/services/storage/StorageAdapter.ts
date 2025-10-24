@@ -6,6 +6,8 @@
  * - Web Browser: IndexedDB storage with 100s of MB
  */
 
+import type { StorageTransaction } from './types';
+
 export interface StorageInfo {
   used: number;           // Bytes used
   available: number;      // Bytes available (Infinity for file system)
@@ -137,6 +139,12 @@ export abstract class StorageAdapter {
    * Flushes all pending writes before app closes
    */
   abstract shutdown(): Promise<void>;
+
+  /**
+   * Begin a new storage transaction for atomic multi-key operations
+   * @returns A new transaction instance
+   */
+  abstract beginTransaction(): Promise<StorageTransaction>;
 }
 
 /**

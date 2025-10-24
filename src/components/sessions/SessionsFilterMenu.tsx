@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, Search } from 'lucide-react';
 import type { Session } from '../../types';
 import { DropdownTrigger } from '../DropdownTrigger';
+import { getGlassmorphism, getRadiusClass, SHADOWS } from '../../design-system/theme';
 
 interface SessionsFilterMenuProps {
   sessions: Session[];
@@ -23,6 +24,7 @@ export const SessionsFilterMenu: React.FC<SessionsFilterMenuProps> = ({
   onTagsChange,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Extract unique tags
   const uniqueTags = useMemo(() => {
@@ -55,6 +57,25 @@ export const SessionsFilterMenu: React.FC<SessionsFilterMenuProps> = ({
 
   // Calculate active filter count
   const activeFilterCount = selectedCategories.length + selectedSubCategories.length + selectedTags.length;
+
+  // Filter options based on search query
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery.trim()) return uniqueCategories;
+    const query = searchQuery.toLowerCase();
+    return uniqueCategories.filter(cat => cat.toLowerCase().includes(query));
+  }, [uniqueCategories, searchQuery]);
+
+  const filteredSubCategories = useMemo(() => {
+    if (!searchQuery.trim()) return uniqueSubCategories;
+    const query = searchQuery.toLowerCase();
+    return uniqueSubCategories.filter(subCat => subCat.toLowerCase().includes(query));
+  }, [uniqueSubCategories, searchQuery]);
+
+  const filteredTags = useMemo(() => {
+    if (!searchQuery.trim()) return uniqueTags;
+    const query = searchQuery.toLowerCase();
+    return uniqueTags.filter(tag => tag.toLowerCase().includes(query));
+  }, [uniqueTags, searchQuery]);
 
   // Handle clear all
   const handleClearAll = () => {
@@ -102,7 +123,7 @@ export const SessionsFilterMenu: React.FC<SessionsFilterMenuProps> = ({
 
       {/* Filter Dropdown Panel */}
       {showDropdown && (
-        <div className="absolute top-full left-0 mt-2 w-80 bg-white backdrop-blur-xl rounded-[20px] border-2 border-cyan-400/80 shadow-2xl z-[9999] max-h-96 overflow-y-auto">
+        <div className={`absolute top-full left-0 mt-2 w-80 bg-white/80 backdrop-blur-2xl ${getRadiusClass('modal')} border-2 border-cyan-400/80 ${SHADOWS.modal} z-[9999] max-h-96 overflow-y-auto`}>
           <div className="p-5 space-y-5">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b-2 border-gray-200">
@@ -117,12 +138,26 @@ export const SessionsFilterMenu: React.FC<SessionsFilterMenuProps> = ({
               )}
             </div>
 
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search filters..."
+                className={`w-full pl-10 pr-3 py-2 text-sm bg-white/50 backdrop-blur-md border border-white/50 ${getRadiusClass('field')} focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 transition-all`}
+              />
+            </div>
+
             {/* Categories Section */}
             {uniqueCategories.length > 0 && (
               <div>
-                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Categories</h4>
+                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">
+                  Categories {searchQuery && `(${filteredCategories.length})`}
+                </h4>
                 <div className="space-y-2">
-                  {uniqueCategories.map(category => (
+                  {filteredCategories.map(category => (
                     <label key={category} className="flex items-center gap-3 cursor-pointer group py-1 px-2 -mx-2 rounded-lg hover:bg-cyan-50 transition-colors">
                       <input
                         type="checkbox"
@@ -142,9 +177,11 @@ export const SessionsFilterMenu: React.FC<SessionsFilterMenuProps> = ({
             {/* Sub-Categories Section */}
             {uniqueSubCategories.length > 0 && (
               <div>
-                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Sub-Categories</h4>
+                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">
+                  Sub-Categories {searchQuery && `(${filteredSubCategories.length})`}
+                </h4>
                 <div className="space-y-2">
-                  {uniqueSubCategories.map(subCategory => (
+                  {filteredSubCategories.map(subCategory => (
                     <label key={subCategory} className="flex items-center gap-3 cursor-pointer group py-1 px-2 -mx-2 rounded-lg hover:bg-cyan-50 transition-colors">
                       <input
                         type="checkbox"
@@ -164,9 +201,11 @@ export const SessionsFilterMenu: React.FC<SessionsFilterMenuProps> = ({
             {/* Tags Section */}
             {uniqueTags.length > 0 && (
               <div>
-                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">Tags</h4>
+                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">
+                  Tags {searchQuery && `(${filteredTags.length})`}
+                </h4>
                 <div className="space-y-2">
-                  {uniqueTags.map(tag => (
+                  {filteredTags.map(tag => (
                     <label key={tag} className="flex items-center gap-3 cursor-pointer group py-1 px-2 -mx-2 rounded-lg hover:bg-purple-50 transition-colors">
                       <input
                         type="checkbox"

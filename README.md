@@ -62,12 +62,27 @@ Your organized knowledge base with rich context:
 - Delete notes or entire topics
 
 ### 📹 Sessions - Smart Work Session Recording
-Capture your entire work session with automatic screenshots, audio, and optional video:
+Capture your entire work session with comprehensive media controls:
 
+**Recording Capabilities:**
 - **Adaptive screenshot capture** - AI determines optimal intervals based on activity
-- **Audio recording** - Record your thoughts and meetings
-- **Video recording** - Full screen recording with chaptering (macOS)
-- **AI-powered enrichment** - Automatic summary, insights, and key moments detection
+- **Dual-source audio** - Record microphone and system audio simultaneously with real-time mixing
+- **Multi-display video** - Capture one or multiple displays at once (macOS)
+- **Picture-in-Picture** - Overlay your webcam on screen recordings with customizable position and size
+- **Hot-swapping** - Change devices mid-recording without stopping your session
+- **Quality presets** - From 720p/15fps to 4K/30fps with file size estimates
+
+**Media Controls:**
+- **Device selection** - Choose from all available microphones, displays, and webcams
+- **Audio balance slider** - Mix microphone and system audio (0-100%)
+- **Audio level meters** - Real-time visual feedback of input levels
+- **PiP configuration** - 4 corner positions × 3 size presets (Small/Medium/Large)
+- **Window-specific recording** - Capture individual application windows
+
+**AI-Powered Features:**
+- **Automatic enrichment** - Summary, insights, and key moments detection
+- **Audio transcription** - Automatic speech-to-text with OpenAI Whisper
+- **Video chaptering** - AI-generated chapter markers for easy navigation
 - **Session timeline** - Interactive timeline with screenshots and key moments
 - **Morphing Canvas** - Dynamic AI-generated review layouts
 - **Cost controls** - Set maximum AI processing costs

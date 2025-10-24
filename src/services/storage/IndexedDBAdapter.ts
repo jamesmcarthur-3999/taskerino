@@ -7,6 +7,7 @@
 
 import { StorageAdapter, validateJSON } from './StorageAdapter';
 import type { StorageInfo, BackupInfo } from './StorageAdapter';
+import type { StorageTransaction } from './types';
 import JSZip from 'jszip';
 import { compressData, decompressData, isCompressed } from './compressionUtils';
 
@@ -74,6 +75,147 @@ class WriteQueue {
       }
       await new Promise(resolve => setTimeout(resolve, 100));
     }
+  }
+}
+
+/**
+ * IndexedDB Transaction Implementation
+ *
+ * Uses native IDBTransaction for atomicity - all operations succeed or all fail.
+ * Operations are queued and executed only on commit().
+ */
+class IndexedDBTransaction implements StorageTransaction {
+  private operations: Array<{
+    type: 'save' | 'delete';
+    key: string;
+    value?: any;
+  }> = [];
+
+  private committed = false;
+  private db: IDBDatabase;
+  private storeName: string;
+  private adapter: IndexedDBAdapter;
+
+  constructor(db: IDBDatabase, storeName: string, adapter: IndexedDBAdapter) {
+    this.db = db;
+    this.storeName = storeName;
+    this.adapter = adapter;
+  }
+
+  /**
+   * Queue a save operation
+   */
+  save(key: string, value: any): void {
+    if (this.committed) {
+      throw new Error('Transaction already committed or rolled back');
+    }
+    this.operations.push({ type: 'save', key, value });
+  }
+
+  /**
+   * Queue a delete operation
+   */
+  delete(key: string): void {
+    if (this.committed) {
+      throw new Error('Transaction already committed or rolled back');
+    }
+    this.operations.push({ type: 'delete', key });
+  }
+
+  /**
+   * Execute all operations atomically using IDBTransaction
+   */
+  async commit(): Promise<void> {
+    if (this.committed) {
+      throw new Error('Transaction already committed or rolled back');
+    }
+
+    // Mark as committed early to prevent new operations
+    this.committed = true;
+
+    if (this.operations.length === 0) {
+      return; // Nothing to commit
+    }
+
+    // Prepare all data first (compress, serialize, etc.)
+    const preparedOps: Array<{
+      type: 'save' | 'delete';
+      key: string;
+      record?: StoredCollection;
+    }> = [];
+
+    for (const op of this.operations) {
+      if (op.type === 'save') {
+        // Serialize and compress
+        const jsonString = JSON.stringify(op.value);
+        let storedData: any;
+
+        try {
+          const compressed = await compressData(jsonString);
+          storedData = compressed;
+        } catch (compressionError) {
+          console.warn(`⚠️  Compression failed for ${op.key}, storing uncompressed:`, compressionError);
+          storedData = op.value;
+        }
+
+        const record: StoredCollection = {
+          name: op.key,
+          data: storedData,
+          timestamp: Date.now()
+        };
+
+        preparedOps.push({ type: 'save', key: op.key, record });
+      } else {
+        preparedOps.push({ type: 'delete', key: op.key });
+      }
+    }
+
+    // Execute all operations in a single IDBTransaction
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction([this.storeName], 'readwrite');
+      const store = tx.objectStore(this.storeName);
+
+      // Queue all operations
+      for (const op of preparedOps) {
+        if (op.type === 'save' && op.record) {
+          store.put(op.record);
+        } else if (op.type === 'delete') {
+          store.delete(op.key);
+        }
+      }
+
+      // Wait for transaction to complete
+      tx.oncomplete = () => {
+        console.log(`💾 Transaction committed: ${this.operations.length} operations`);
+        resolve();
+      };
+
+      tx.onerror = () => {
+        console.error('Transaction failed:', tx.error);
+        reject(new Error(`Transaction failed: ${tx.error}`));
+      };
+
+      tx.onabort = () => {
+        console.error('Transaction aborted');
+        reject(new Error('Transaction aborted'));
+      };
+    });
+  }
+
+  /**
+   * Cancel all queued operations
+   */
+  async rollback(): Promise<void> {
+    this.operations = [];
+    this.committed = true;
+    console.log('🔄 Transaction rolled back');
+  }
+
+  /**
+   * Get number of pending operations
+   */
+  getPendingOperations(): number {
+    return this.operations.length;
   }
 }
 
@@ -655,6 +797,15 @@ export class IndexedDBAdapter extends StorageAdapter {
       console.warn('Failed to cleanup old backups:', error);
       // Non-critical, continue
     }
+  }
+
+  /**
+   * Begin a new storage transaction
+   * @returns A new transaction instance
+   */
+  async beginTransaction(): Promise<StorageTransaction> {
+    await this.ensureInitialized();
+    return new IndexedDBTransaction(this.db!, this.COLLECTIONS_STORE, this);
   }
 
   /**

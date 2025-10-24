@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>26/26</span>
+                <span class='fraction'>0/26</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>16/16</span>
+                <span class='fraction'>1/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>2/2</span>
+                <span class='fraction'>1/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>26/26</span>
+                <span class='fraction'>0/26</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -104,73 +104,73 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">16x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">25x</span>
-<span class="cline-any cline-yes">25x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">25x</span>
-<span class="cline-any cline-yes">25x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { Session } from '../types';
 &nbsp;
 /**
  * Helper function to group sessions by date ranges
  */
-export function groupSessionsByDate(sessions: Session[]) {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
-  const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+<span class="cstat-no" title="statement not covered" >export function groupSessionsByDate(sessions: Session[]) {</span>
+<span class="cstat-no" title="statement not covered" >  const now = new Date();</span>
+<span class="cstat-no" title="statement not covered" >  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());</span>
+<span class="cstat-no" title="statement not covered" >  const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);</span>
+<span class="cstat-no" title="statement not covered" >  const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);</span>
 &nbsp;
-  return {
-    today: sessions.filter(s =&gt; new Date(s.startTime) &gt;= todayStart),
-    yesterday: sessions.filter(s =&gt; {
-      const date = new Date(s.startTime);
-      return date &gt;= yesterdayStart &amp;&amp; date &lt; todayStart;
-    }),
-    thisWeek: sessions.filter(s =&gt; {
-      const date = new Date(s.startTime);
-      return date &gt;= weekStart &amp;&amp; date &lt; yesterdayStart;
-    }),
-    earlier: sessions.filter(s =&gt; new Date(s.startTime) &lt; weekStart),
-  };
-}
+<span class="cstat-no" title="statement not covered" >  return {</span>
+<span class="cstat-no" title="statement not covered" >    today: sessions.filter(s =&gt; new Date(s.startTime) &gt;= todayStart),</span>
+<span class="cstat-no" title="statement not covered" >    yesterday: sessions.filter(s =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      const date = new Date(s.startTime);</span>
+<span class="cstat-no" title="statement not covered" >      return date &gt;= yesterdayStart &amp;&amp; date &lt; todayStart;</span>
+<span class="cstat-no" title="statement not covered" >    }),</span>
+<span class="cstat-no" title="statement not covered" >    thisWeek: sessions.filter(s =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      const date = new Date(s.startTime);</span>
+<span class="cstat-no" title="statement not covered" >      return date &gt;= weekStart &amp;&amp; date &lt; yesterdayStart;</span>
+<span class="cstat-no" title="statement not covered" >    }),</span>
+<span class="cstat-no" title="statement not covered" >    earlier: sessions.filter(s =&gt; new Date(s.startTime) &lt; weekStart),</span>
+<span class="cstat-no" title="statement not covered" >  };</span>
+<span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
 /**
  * Helper function to calculate total stats across all sessions
  */
-export function calculateTotalStats(sessions: Session[]) {
-  return {
-    totalSessions: sessions.length,
-    totalMinutes: sessions.reduce((sum, s) =&gt; sum + (s.totalDuration || 0), 0),
-    totalTasks: sessions.reduce((sum, s) =&gt; sum + (s.extractedTaskIds?.length || 0), 0),
-    totalScreenshots: sessions.reduce((sum, s) =&gt; sum + (s.screenshots?.length || 0), 0),
-  };
-}
+<span class="cstat-no" title="statement not covered" >export function calculateTotalStats(sessions: Session[]) {</span>
+<span class="cstat-no" title="statement not covered" >  return {</span>
+<span class="cstat-no" title="statement not covered" >    totalSessions: sessions.length,</span>
+<span class="cstat-no" title="statement not covered" >    totalMinutes: sessions.reduce((sum, s) =&gt; sum + (s.totalDuration || 0), 0),</span>
+<span class="cstat-no" title="statement not covered" >    totalTasks: sessions.reduce((sum, s) =&gt; sum + (s.extractedTaskIds?.length || 0), 0),</span>
+<span class="cstat-no" title="statement not covered" >    totalScreenshots: sessions.reduce((sum, s) =&gt; sum + (s.screenshots?.length || 0), 0),</span>
+<span class="cstat-no" title="statement not covered" >  };</span>
+<span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -178,7 +178,7 @@ export function calculateTotalStats(sessions: Session[]) {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-10-24T03:16:46.657Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/35</span>
+                <span class='fraction'>0/21</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/35</span>
+                <span class='fraction'>0/21</span>
             </div>
         
             
@@ -94,20 +94,7 @@
 <a name='L29'></a><a href='#L29'>29</a>
 <a name='L30'></a><a href='#L30'>30</a>
 <a name='L31'></a><a href='#L31'>31</a>
-<a name='L32'></a><a href='#L32'>32</a>
-<a name='L33'></a><a href='#L33'>33</a>
-<a name='L34'></a><a href='#L34'>34</a>
-<a name='L35'></a><a href='#L35'>35</a>
-<a name='L36'></a><a href='#L36'>36</a>
-<a name='L37'></a><a href='#L37'>37</a>
-<a name='L38'></a><a href='#L38'>38</a>
-<a name='L39'></a><a href='#L39'>39</a>
-<a name='L40'></a><a href='#L40'>40</a>
-<a name='L41'></a><a href='#L41'>41</a>
-<a name='L42'></a><a href='#L42'>42</a>
-<a name='L43'></a><a href='#L43'>43</a>
-<a name='L44'></a><a href='#L44'>44</a>
-<a name='L45'></a><a href='#L45'>45</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L32'></a><a href='#L32'>32</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -136,21 +123,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import { StrictMode } from 'react'<span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" ></span></span></span>
 <span class="cstat-no" title="statement not covered" >import { createRoot } from 'react-dom/client'</span>
 <span class="cstat-no" title="statement not covered" >import './index.css'</span>
@@ -179,22 +153,9 @@
 <span class="cstat-no" title="statement not covered" >const renderTime = performance.now() - startTime;</span>
 <span class="cstat-no" title="statement not covered" >console.log(`⚡ Time to first render: ${renderTime.toFixed(1)}ms`);</span>
 &nbsp;
-// Run video repair in background after app is interactive (5 second delay)
-<span class="cstat-no" title="statement not covered" >setTimeout(() =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >  import('./utils/fixVideoAttachments').then(({ fixCorruptedVideoAttachments }) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    console.log('🔧 [BACKGROUND] Starting video repair utility...');</span>
-<span class="cstat-no" title="statement not covered" >    const repairStartTime = performance.now();</span>
-&nbsp;
-<span class="cstat-no" title="statement not covered" >    fixCorruptedVideoAttachments()</span>
-<span class="cstat-no" title="statement not covered" >      .then((result) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >        const repairTime = performance.now() - repairStartTime;</span>
-<span class="cstat-no" title="statement not covered" >        console.log(`✅ [BACKGROUND] Video repair complete in ${repairTime.toFixed(1)}ms:`, result);</span>
-<span class="cstat-no" title="statement not covered" >      })</span>
-<span class="cstat-no" title="statement not covered" >      .catch((error) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >        console.error('❌ [BACKGROUND] Video repair failed:', error);</span>
-<span class="cstat-no" title="statement not covered" >      });</span>
-<span class="cstat-no" title="statement not covered" >  });</span>
-<span class="cstat-no" title="statement not covered" >}, 5000); // Run 5 seconds after app startup</span>
+// REMOVED: Legacy video repair utility (no longer needed - corruption bug fixed)
+// Previously ran fixCorruptedVideoAttachments() to repair video attachment paths
+// that were incorrectly set to attachment IDs instead of file paths
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -202,7 +163,7 @@
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-10-24T03:16:46.657Z
             </div>
         <script src="../prettify.js"></script>
         <script>

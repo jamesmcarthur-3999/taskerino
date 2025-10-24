@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LucideProps } from 'lucide-react';
 
@@ -13,21 +13,26 @@ interface DropdownTriggerProps {
   showLabel?: boolean;
 }
 
-export function DropdownTrigger({
-  icon: Icon,
-  label,
-  active,
-  onClick,
-  badge,
-  disabled = false,
-  className = '',
-  showLabel = true,
-}: DropdownTriggerProps) {
-  return (
-    <motion.button
-      layout
-      onClick={onClick}
-      disabled={disabled}
+export const DropdownTrigger = forwardRef<HTMLButtonElement, DropdownTriggerProps>(
+  function DropdownTrigger(
+    {
+      icon: Icon,
+      label,
+      active,
+      onClick,
+      badge,
+      disabled = false,
+      className = '',
+      showLabel = true,
+    },
+    ref
+  ) {
+    return (
+      <motion.button
+        ref={ref}
+        layout
+        onClick={onClick}
+        disabled={disabled}
       className={`
         backdrop-blur-sm border-2 rounded-full text-sm font-semibold
         transition-all flex items-center
@@ -120,4 +125,4 @@ export function DropdownTrigger({
       </AnimatePresence>
     </motion.button>
   );
-}
+});

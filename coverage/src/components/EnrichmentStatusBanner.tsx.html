@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/222</span>
+                <span class='fraction'>0/225</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/222</span>
+                <span class='fraction'>0/225</span>
             </div>
         
             
@@ -402,7 +402,13 @@
 <a name='L337'></a><a href='#L337'>337</a>
 <a name='L338'></a><a href='#L338'>338</a>
 <a name='L339'></a><a href='#L339'>339</a>
-<a name='L340'></a><a href='#L340'>340</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L340'></a><a href='#L340'>340</a>
+<a name='L341'></a><a href='#L341'>341</a>
+<a name='L342'></a><a href='#L342'>342</a>
+<a name='L343'></a><a href='#L343'>343</a>
+<a name='L344'></a><a href='#L344'>344</a>
+<a name='L345'></a><a href='#L345'>345</a>
+<a name='L346'></a><a href='#L346'>346</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -492,6 +498,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -509,6 +518,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -543,6 +553,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -794,7 +806,7 @@ interface EnrichmentStatusBannerProps {
 <span class="cstat-no" title="statement not covered" >  onSessionUpdate,</span>
 <span class="cstat-no" title="statement not covered" >}: EnrichmentStatusBannerProps) {</span>
 <span class="cstat-no" title="statement not covered" >  const { addNotification } = useUI();</span>
-<span class="cstat-no" title="statement not covered" >  const { getActiveEnrichment } = useEnrichmentContext();</span>
+<span class="cstat-no" title="statement not covered" >  const { getActiveEnrichment, startTracking, updateProgress, stopTracking } = useEnrichmentContext();</span>
 <span class="cstat-no" title="statement not covered" >  const [isEnriching, setIsEnriching] = useState(false);</span>
 <span class="cstat-no" title="statement not covered" >  const [enrichmentProgress, setEnrichmentProgress] = useState&lt;EnrichmentProgress | null&gt;(null);</span>
 &nbsp;
@@ -829,6 +841,9 @@ interface EnrichmentStatusBannerProps {
 <span class="cstat-no" title="statement not covered" >    setIsEnriching(true);</span>
 <span class="cstat-no" title="statement not covered" >    setEnrichmentProgress(null);</span>
 &nbsp;
+    // Start tracking in EnrichmentContext for RainbowBorderProgressIndicator
+<span class="cstat-no" title="statement not covered" >    startTracking(session.id, session.name || 'Unnamed Session');</span>
+&nbsp;
     // Notify parent that enrichment is starting
 <span class="cstat-no" title="statement not covered" >    if (onEnrichmentStart) {</span>
 <span class="cstat-no" title="statement not covered" >      onEnrichmentStart();</span>
@@ -845,6 +860,7 @@ interface EnrichmentStatusBannerProps {
 <span class="cstat-no" title="statement not covered" >        forceRegenerate: false,</span>
 <span class="cstat-no" title="statement not covered" >        onProgress: (progress) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >          setEnrichmentProgress(progress);</span>
+<span class="cstat-no" title="statement not covered" >          updateProgress(session.id, progress); // Update EnrichmentContext for rainbow border</span>
 <span class="cstat-no" title="statement not covered" >          console.log(`✨ [ENRICHMENT BANNER] ${progress.stage}: ${progress.message} (${progress.progress}%)`);</span>
 <span class="cstat-no" title="statement not covered" >        },</span>
 <span class="cstat-no" title="statement not covered" >      });</span>
@@ -883,6 +899,8 @@ interface EnrichmentStatusBannerProps {
 <span class="cstat-no" title="statement not covered" >        message: error.message || 'Failed to enrich session',</span>
 <span class="cstat-no" title="statement not covered" >      });</span>
 <span class="cstat-no" title="statement not covered" >    } finally {</span>
+      // Stop tracking in EnrichmentContext (cleans up rainbow border)
+<span class="cstat-no" title="statement not covered" >      stopTracking(session.id);</span>
 <span class="cstat-no" title="statement not covered" >      setIsEnriching(false);</span>
 <span class="cstat-no" title="statement not covered" >      setEnrichmentProgress(null);</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
@@ -1087,7 +1105,7 @@ interface EnrichmentStatusBannerProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-10-24T03:16:46.657Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

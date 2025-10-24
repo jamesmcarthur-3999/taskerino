@@ -6,7 +6,8 @@ import { useUI } from '../context/UIContext';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
 import { clamp, easeOutQuart } from '../utils/easing';
 import { sortTopics, formatRelativeTime, truncateText, generateNoteTitle, generateId } from '../utils/helpers';
-import { Clock, FileText, Search, X, SlidersHorizontal, CheckSquare, Plus } from 'lucide-react';
+import { Clock, FileText, Search, X, SlidersHorizontal, CheckSquare, Plus, TrendingDown, TrendingUp, SortAsc, CheckCheck } from 'lucide-react';
+import { GlassSelect } from './GlassSelect';
 import { NoteDetailInline } from './NoteDetailInline';
 import { Input } from './Input';
 import { SpaceMenuBar } from './SpaceMenuBar';
@@ -14,6 +15,7 @@ import { motion } from 'framer-motion';
 import { StandardFilterPanel } from './StandardFilterPanel';
 import { InlineTagManager } from './InlineTagManager';
 import { CollapsibleSidebar } from './CollapsibleSidebar';
+import { NoteBulkOperationsBar } from './notes/NoteBulkOperationsBar';
 import type { Note } from '../types';
 import { BACKGROUND_GRADIENT, getGlassClasses, getNoteCardClasses, PANEL_FOOTER } from '../design-system/theme';
 
@@ -34,6 +36,10 @@ export default function LibraryZone() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedNoteIdForInline, setSelectedNoteIdForInline] = useState<string | undefined>();
+
+  // Bulk selection state
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
 
   // Ref for scrollable notes list container
   const notesListScrollRef = useRef<HTMLDivElement>(null);
@@ -353,18 +359,20 @@ export default function LibraryZone() {
                   onClick: handleCreateNewNote,
                   gradient: 'purple',
                 }}
-                dropdowns={[
-                  {
-                    label: 'Sort',
-                    value: noteSortBy,
-                    options: [
-                      { value: 'recent', label: 'Recent' },
-                      { value: 'oldest', label: 'Oldest' },
-                      { value: 'alphabetical', label: 'A-Z' },
-                    ],
-                    onChange: (value) => setNoteSortBy(value as typeof noteSortBy),
-                  },
-                ]}
+                glassDropdowns={
+                  <GlassSelect
+                    value={noteSortBy}
+                    onChange={(value) => setNoteSortBy(value as typeof noteSortBy)}
+                    options={[
+                      { value: 'recent', label: 'Recent First', icon: TrendingDown },
+                      { value: 'oldest', label: 'Oldest First', icon: TrendingUp },
+                      { value: 'alphabetical', label: 'A-Z', icon: SortAsc },
+                    ]}
+                    variant="primary"
+                    triggerIcon={SortAsc}
+                    placeholder="Sort by..."
+                  />
+                }
                 filters={{
                   active: showFilters,
                   count: [
@@ -420,7 +428,40 @@ export default function LibraryZone() {
                 }}
                 stats={undefined}
                 className=""
-              />
+              >
+                {/* Select Button */}
+                <motion.button
+                  layout
+                  onClick={() => {
+                    setBulkSelectMode(!bulkSelectMode);
+                    if (bulkSelectMode) {
+                      setSelectedNoteIds(new Set());
+                    }
+                  }}
+                  className={`backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center ${
+                    bulkSelectMode
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md border-transparent'
+                      : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-purple-300'
+                  } focus:ring-2 focus:ring-purple-400 focus:border-purple-300 outline-none`}
+                  style={{
+                    paddingLeft: '16px',
+                    paddingRight: '16px',
+                    paddingTop: '8px',
+                    paddingBottom: '8px',
+                  }}
+                  transition={{
+                    layout: {
+                      type: "spring",
+                      stiffness: 400,
+                      damping: 30,
+                    }
+                  }}
+                  title="Select multiple notes"
+                >
+                  <CheckCheck size={16} />
+                  <span className="ml-2">Select</span>
+                </motion.button>
+              </SpaceMenuBar>
           </div>
 
           {/* Stats pill - side-by-side with menu */}
@@ -454,18 +495,20 @@ export default function LibraryZone() {
                   onClick: handleCreateNewNote,
                   gradient: 'purple',
                 }}
-                dropdowns={[
-                  {
-                    label: 'Sort',
-                    value: noteSortBy,
-                    options: [
-                      { value: 'recent', label: 'Recent' },
-                      { value: 'oldest', label: 'Oldest' },
-                      { value: 'alphabetical', label: 'A-Z' },
-                    ],
-                    onChange: (value) => setNoteSortBy(value as typeof noteSortBy),
-                  },
-                ]}
+                glassDropdowns={
+                  <GlassSelect
+                    value={noteSortBy}
+                    onChange={(value) => setNoteSortBy(value as typeof noteSortBy)}
+                    options={[
+                      { value: 'recent', label: 'Recent First', icon: TrendingDown },
+                      { value: 'oldest', label: 'Oldest First', icon: TrendingUp },
+                      { value: 'alphabetical', label: 'A-Z', icon: SortAsc },
+                    ]}
+                    variant="primary"
+                    triggerIcon={SortAsc}
+                    placeholder="Sort by..."
+                  />
+                }
                 filters={{
                   active: showFilters,
                   count: [
@@ -513,7 +556,40 @@ export default function LibraryZone() {
                 }}
                 stats={undefined}
                 className=""
-              />
+              >
+                {/* Select Button */}
+                <motion.button
+                  layout
+                  onClick={() => {
+                    setBulkSelectMode(!bulkSelectMode);
+                    if (bulkSelectMode) {
+                      setSelectedNoteIds(new Set());
+                    }
+                  }}
+                  className={`backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center ${
+                    bulkSelectMode
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md border-transparent'
+                      : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-purple-300'
+                  } focus:ring-2 focus:ring-purple-400 focus:border-purple-300 outline-none`}
+                  style={{
+                    paddingLeft: '16px',
+                    paddingRight: '16px',
+                    paddingTop: '8px',
+                    paddingBottom: '8px',
+                  }}
+                  transition={{
+                    layout: {
+                      type: "spring",
+                      stiffness: 400,
+                      damping: 30,
+                    }
+                  }}
+                  title="Select multiple notes"
+                >
+                  <CheckCheck size={16} />
+                  <span className="ml-2">Select</span>
+                </motion.button>
+              </SpaceMenuBar>
           </motion.div>
         )}
 
@@ -541,6 +617,42 @@ export default function LibraryZone() {
             />
           </div>
 
+          {/* Bulk Operations Bar */}
+          {bulkSelectMode && selectedNoteIds.size > 0 && (
+            <div className="px-4">
+              <NoteBulkOperationsBar
+                selectedCount={selectedNoteIds.size}
+                totalFilteredCount={displayedNotes.length}
+                onSelectAll={() => {
+                  const newSet = new Set<string>();
+                  displayedNotes.forEach(n => newSet.add(n.id));
+                  setSelectedNoteIds(newSet);
+                }}
+                onDelete={() => {
+                  if (window.confirm(`Delete ${selectedNoteIds.size} note${selectedNoteIds.size !== 1 ? 's' : ''}? This action cannot be undone.`)) {
+                    selectedNoteIds.forEach(id => {
+                      notesDispatch({ type: 'DELETE_NOTE', payload: id });
+                    });
+                    setSelectedNoteIds(new Set());
+                    setBulkSelectMode(false);
+                  }
+                }}
+                onAddToTopic={() => {
+                  // TODO: Implement topic selector modal
+                  alert('Topic selector coming soon!');
+                }}
+                onAddTags={() => {
+                  // TODO: Implement tag selector modal
+                  alert('Tag selector coming soon!');
+                }}
+                onArchive={() => {
+                  // TODO: Implement archive functionality
+                  alert('Archive functionality coming soon!');
+                }}
+              />
+            </div>
+          )}
+
           {/* Scrollable Note List */}
           <div ref={notesListScrollRef} className="flex-1 overflow-y-auto">
             {displayedNotes.length > 0 ? (
@@ -564,14 +676,47 @@ export default function LibraryZone() {
                   const sentiment = note.metadata?.sentiment;
                   const noteTasks = tasksState.tasks.filter(t => t.noteId === note.id);
                   const isSelected = note.id === selectedNoteIdForInline;
+                  const isChecked = selectedNoteIds.has(note.id);
 
                   return (
                     <div
                       key={note.id}
-                      className={getNoteCardClasses(isSelected)}
-                      onClick={(e) => handleNoteClick(note.id, e)}
+                      className={`${getNoteCardClasses(isSelected)} ${isChecked ? 'ring-2 ring-purple-500 bg-purple-50/20' : ''}`}
+                      onClick={(e) => {
+                        if (bulkSelectMode) {
+                          const newSet = new Set(selectedNoteIds);
+                          if (newSet.has(note.id)) {
+                            newSet.delete(note.id);
+                          } else {
+                            newSet.add(note.id);
+                          }
+                          setSelectedNoteIds(newSet);
+                        } else {
+                          handleNoteClick(note.id, e);
+                        }
+                      }}
                       style={{ transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
                     >
+                      {bulkSelectMode && (
+                        <div className="absolute top-2 left-2 z-10">
+                          <input
+                            type="checkbox"
+                            className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              const newSet = new Set(selectedNoteIds);
+                              if (newSet.has(note.id)) {
+                                newSet.delete(note.id);
+                              } else {
+                                newSet.add(note.id);
+                              }
+                              setSelectedNoteIds(newSet);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      )}
                       {/* Compact header */}
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">

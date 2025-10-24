@@ -1181,8 +1181,7 @@
 <a name='L1116'></a><a href='#L1116'>1116</a>
 <a name='L1117'></a><a href='#L1117'>1117</a>
 <a name='L1118'></a><a href='#L1118'>1118</a>
-<a name='L1119'></a><a href='#L1119'>1119</a>
-<a name='L1120'></a><a href='#L1120'>1120</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L1119'></a><a href='#L1119'>1119</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1192,7 +1191,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -2311,8 +2309,7 @@
 &nbsp;
 <span class="cstat-no" title="statement not covered" >import React from 'react';</span>
 <span class="cstat-no" title="statement not covered" >import { motion } from 'framer-motion';</span>
-import type { Session, SessionSummary } from '../../types';
-import type { CanvasSpec } from '../../services/aiCanvasGenerator';
+import type { Session, SessionSummary, CanvasSpec, CanvasSection } from '../../types';
 <span class="cstat-no" title="statement not covered" >import { ArtifactTimelineModule } from './modules/ArtifactTimelineModule';</span>
 <span class="cstat-no" title="statement not covered" >import { ArtifactGalleryModule } from './modules/ArtifactGalleryModule';</span>
 <span class="cstat-no" title="statement not covered" >import { AchievementCard } from './cards/AchievementCard';</span>
@@ -2409,7 +2406,7 @@ import type { CanvasSpec } from '../../services/aiCanvasGenerator';
 <span class="cstat-no" title="statement not covered" >    description: i.description,</span>
 <span class="cstat-no" title="statement not covered" >    timestamp: i.timestamp,</span>
 <span class="cstat-no" title="statement not covered" >    confidence: i.confidence,</span>
-<span class="cstat-no" title="statement not covered" >    screenshotIds: i.screenshotIds || []</span>
+<span class="cstat-no" title="statement not covered" >    screenshotIds: (('screenshotIds' in i &amp;&amp; Array.isArray(i.screenshotIds)) ? i.screenshotIds : []) as string[]</span>
 <span class="cstat-no" title="statement not covered" >  })));</span>
 &nbsp;
   // Extract from key insights tagged as learnings
@@ -2825,7 +2822,7 @@ interface AICanvasRendererProps {
 <span class="cstat-no" title="statement not covered" >  if (layout.type === 'grid' || layout.type === 'dashboard') {</span>
 <span class="cstat-no" title="statement not covered" >    return (</span>
 <span class="cstat-no" title="statement not covered" >      &lt;div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"&gt;</span>
-<span class="cstat-no" title="statement not covered" >        {layout.sections.map((section, idx) =&gt; (</span>
+<span class="cstat-no" title="statement not covered" >        {layout.sections.map((section: CanvasSection, idx: number) =&gt; (</span>
 <span class="cstat-no" title="statement not covered" >          &lt;SectionRenderer</span>
 <span class="cstat-no" title="statement not covered" >            key={idx}</span>
 <span class="cstat-no" title="statement not covered" >            section={section}</span>
@@ -2839,17 +2836,17 @@ interface AICanvasRendererProps {
 &nbsp;
   // Timeline layout (left timeline, right sidebar)
 <span class="cstat-no" title="statement not covered" >  if (layout.type === 'timeline') {</span>
-<span class="cstat-no" title="statement not covered" >    const timelineSections = layout.sections.filter(s =&gt;</span>
+<span class="cstat-no" title="statement not covered" >    const timelineSections = layout.sections.filter((s: CanvasSection) =&gt;</span>
 <span class="cstat-no" title="statement not covered" >      s.type === 'timeline' || s.type === 'gallery' || s.type === 'insights'</span>
 <span class="cstat-no" title="statement not covered" >    );</span>
-<span class="cstat-no" title="statement not covered" >    const sidebarSections = layout.sections.filter(s =&gt;</span>
+<span class="cstat-no" title="statement not covered" >    const sidebarSections = layout.sections.filter((s: CanvasSection) =&gt;</span>
 <span class="cstat-no" title="statement not covered" >      s.type === 'achievements' || s.type === 'blockers'</span>
 <span class="cstat-no" title="statement not covered" >    );</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    return (</span>
 <span class="cstat-no" title="statement not covered" >      &lt;div className="grid grid-cols-3 gap-6"&gt;</span>
 <span class="cstat-no" title="statement not covered" >        &lt;div className="col-span-2 space-y-6"&gt;</span>
-<span class="cstat-no" title="statement not covered" >          {timelineSections.map((section, idx) =&gt; (</span>
+<span class="cstat-no" title="statement not covered" >          {timelineSections.map((section: CanvasSection, idx: number) =&gt; (</span>
 <span class="cstat-no" title="statement not covered" >            &lt;SectionRenderer</span>
 <span class="cstat-no" title="statement not covered" >              key={idx}</span>
 <span class="cstat-no" title="statement not covered" >              section={section}</span>
@@ -2859,7 +2856,7 @@ interface AICanvasRendererProps {
 <span class="cstat-no" title="statement not covered" >          ))}</span>
 <span class="cstat-no" title="statement not covered" >        &lt;/div&gt;</span>
 <span class="cstat-no" title="statement not covered" >        &lt;div className="space-y-6"&gt;</span>
-<span class="cstat-no" title="statement not covered" >          {sidebarSections.map((section, idx) =&gt; (</span>
+<span class="cstat-no" title="statement not covered" >          {sidebarSections.map((section: CanvasSection, idx: number) =&gt; (</span>
 <span class="cstat-no" title="statement not covered" >            &lt;SectionRenderer</span>
 <span class="cstat-no" title="statement not covered" >              key={idx}</span>
 <span class="cstat-no" title="statement not covered" >              section={section}</span>
@@ -2875,7 +2872,7 @@ interface AICanvasRendererProps {
   // Flow layout (stacked vertical)
 <span class="cstat-no" title="statement not covered" >  return (</span>
 <span class="cstat-no" title="statement not covered" >    &lt;div className="space-y-6"&gt;</span>
-<span class="cstat-no" title="statement not covered" >      {layout.sections.map((section, idx) =&gt; (</span>
+<span class="cstat-no" title="statement not covered" >      {layout.sections.map((section: CanvasSection, idx: number) =&gt; (</span>
 <span class="cstat-no" title="statement not covered" >        &lt;SectionRenderer</span>
 <span class="cstat-no" title="statement not covered" >          key={idx}</span>
 <span class="cstat-no" title="statement not covered" >          section={section}</span>
@@ -3165,7 +3162,7 @@ interface AICanvasRendererProps {
 <span class="cstat-no" title="statement not covered" >          &lt;BreakthroughCard</span>
 <span class="cstat-no" title="statement not covered" >            key={idx}</span>
 <span class="cstat-no" title="statement not covered" >            moment={breakthrough.achievement}</span>
-<span class="cstat-no" title="statement not covered" >            beforeState={'description' in breakthrough ? breakthrough.description : undefined}</span>
+<span class="cstat-no" title="statement not covered" >            beforeState={'description' in breakthrough ? (breakthrough.description as string) : undefined}</span>
 <span class="cstat-no" title="statement not covered" >            impact={breakthrough.impact === 'high' || breakthrough.impact === 'medium' || breakthrough.impact === 'low' ? breakthrough.impact : 'medium'}</span>
 <span class="cstat-no" title="statement not covered" >            timestamp={breakthrough.timestamp}</span>
 <span class="cstat-no" title="statement not covered" >            relatedScreenshots={</span>
@@ -3427,7 +3424,7 @@ interface AICanvasRendererProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-10-24T03:16:46.657Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

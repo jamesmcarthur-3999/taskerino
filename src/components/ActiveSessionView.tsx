@@ -1,20 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Mic, CheckSquare, CheckCircle2, Clock } from 'lucide-react';
-import type { Session, SessionContextItem } from '../types';
+import type { Session, SessionContextItem, AudioDeviceConfig, VideoRecordingConfig } from '../types';
 import { SessionTimeline } from './SessionTimeline';
 import { adaptiveScreenshotScheduler } from '../services/adaptiveScreenshotScheduler';
 import { AdaptiveSchedulerDebug } from './sessions/AdaptiveSchedulerDebug';
+import { ActiveSessionMediaControls } from './sessions/ActiveSessionMediaControls';
 import { Sparkles } from 'lucide-react';
 import { useSessions } from '../context/SessionsContext';
+import { useUI } from '../context/UIContext';
 import { getGlassClasses, getRadiusClass, getStatusBadgeClasses, getActivityGradient } from '../design-system/theme';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
+import { audioRecordingService } from '../services/audioRecordingService';
+import { videoRecordingService } from '../services/videoRecordingService';
 
 interface ActiveSessionViewProps {
   session: Session;
 }
 
 export function ActiveSessionView({ session }: ActiveSessionViewProps) {
-  const { addScreenshotComment, toggleScreenshotFlag, addContextItem } = useSessions();
+  const { addScreenshotComment, toggleScreenshotFlag, addContextItem, updateSession } = useSessions();
+  const { addNotification } = useUI();
   const { registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
   const [liveElapsed, setLiveElapsed] = useState(0);
   const [countdown, setCountdown] = useState(0);
@@ -99,6 +104,52 @@ export function ActiveSessionView({ session }: ActiveSessionViewProps) {
 
   const handleAddContext = (contextItem: SessionContextItem) => {
     addContextItem(session.id, contextItem);
+  };
+
+  // Handle audio configuration changes during active session
+  const handleAudioConfigChange = async (config: AudioDeviceConfig) => {
+    // Update session in context
+    updateSession({ ...session, audioConfig: config });
+
+    // Hot-swap devices if recording is active
+    if (session.audioRecording) {
+      try {
+        // Set mix configuration (includes device IDs, balance, volumes)
+        await audioRecordingService.setMixConfig(config);
+
+        // Show success notification
+        addNotification({
+          type: 'success',
+          title: 'Audio Settings Updated',
+          message: 'Audio device configuration changed successfully',
+        });
+      } catch (error) {
+        console.error('Failed to update audio config:', error);
+        addNotification({
+          type: 'error',
+          title: 'Failed to Update Audio',
+          message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
+      }
+    }
+  };
+
+  // Handle video configuration changes during active session
+  const handleVideoConfigChange = async (config: VideoRecordingConfig) => {
+    // Update session in context
+    updateSession({ ...session, videoConfig: config });
+
+    // Note: Video device hot-swapping is not yet supported by backend
+    // The new config will be saved but won't take effect until next session
+    // TODO: Implement hot-swap support in videoRecordingService
+
+    if (session.videoRecording) {
+      addNotification({
+        type: 'info',
+        title: 'Video Settings Saved',
+        message: 'Video configuration updated. Changes will take effect in the next session.',
+      });
+    }
   };
 
   return (
@@ -192,10 +243,19 @@ export function ActiveSessionView({ session }: ActiveSessionViewProps) {
         {session.screenshotInterval === -1 && session.enableScreenshots && !isPaused && (
           <AdaptiveSchedulerDebug isActive={true} />
         )}
+      </div>
 
-        {/* AI Summary */}
-        {session.summary?.liveSnapshot && (
-          <div className={`mt-4 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 ${getGlassClasses('subtle')} ${getRadiusClass('field')} p-4`}>
+      {/* Device Settings Panel - Collapsible mid-session controls */}
+      <ActiveSessionMediaControls
+        session={session}
+        onAudioConfigChange={handleAudioConfigChange}
+        onVideoConfigChange={handleVideoConfigChange}
+      />
+
+      {/* AI Summary Section */}
+      {session.summary?.liveSnapshot && (
+        <div className="px-6 pt-4 pb-6 border-b-2 border-white/40">
+          <div className={`bg-gradient-to-br from-cyan-500/10 to-blue-500/10 ${getGlassClasses('subtle')} ${getRadiusClass('field')} p-4`}>
             <div className="flex items-start gap-2 mb-3">
               <Sparkles className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
@@ -245,8 +305,8 @@ export function ActiveSessionView({ session }: ActiveSessionViewProps) {
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Timeline - Scrollable */}
       <div ref={timelineScrollRef} className="flex-1 overflow-y-auto p-6">

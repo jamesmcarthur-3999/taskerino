@@ -17,7 +17,12 @@ import {
   Flag,
   Columns3,
   GripVertical,
+  List,
+  Tag,
+  Layers,
+  CheckCheck,
 } from 'lucide-react';
+import { GlassSelect } from './GlassSelect';
 import type { Task } from '../types';
 import {
   formatRelativeTime,
@@ -32,6 +37,7 @@ import { InlineTagManager } from './InlineTagManager';
 import { tagUtils } from '../utils/tagUtils';
 import { Button } from './Button';
 import { FeatureTooltip } from './FeatureTooltip';
+import { TaskBulkOperationsBar } from './tasks/TaskBulkOperationsBar';
 import { getTaskCardClasses, KANBAN } from '../design-system/theme';
 
 export default function TasksZone() {
@@ -67,6 +73,10 @@ export default function TasksZone() {
   const [filterPriority, setFilterPriority] = useState<'all' | 'urgent' | 'high' | 'medium' | 'low'>('all');
   const [filterDueDate, setFilterDueDate] = useState<'all' | 'overdue' | 'today' | 'week'>('all');
   const [filterTags, setFilterTags] = useState<string[]>([]);
+
+  // Bulk selection state
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
 
   // Apply filters with useMemo for performance
   const displayedTasks = useMemo(() => {
@@ -289,7 +299,6 @@ export default function TasksZone() {
 
     const handleDragOver = (e: React.DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
       setIsDragOver(true);
     };
@@ -309,7 +318,6 @@ export default function TasksZone() {
 
     const handleDrop = (e: React.DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
       setIsDragOver(false);
 
       const taskId = e.dataTransfer.getData('text/plain');
@@ -387,6 +395,7 @@ export default function TasksZone() {
           ref={scrollRef}
           className="flex-1 overflow-y-auto p-2 space-y-2"
           onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
         >
           {tasks.map(task => {
             const taskTopic = topic(task);
@@ -410,15 +419,11 @@ export default function TasksZone() {
                     e.preventDefault();
                     return;
                   }
-                  e.stopPropagation();
                   e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('text/plain', task.id);
                 }}
-                onDragOver={(e) => {
-                  e.preventDefault(); // Allow dropping over cards
-                }}
                 onClick={() => !isEditing && onSelect(task.id)}
-                className={`${cardClasses} select-none ${isEditing ? 'ring-2 ring-cyan-400 !cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
+                className={`${cardClasses} select-none ${isEditing ? 'ring-2 ring-cyan-400 !cursor-default' : ''}`}
                 style={{
                   transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
                 }}
@@ -616,21 +621,23 @@ export default function TasksZone() {
                 activeView: 'table',
                 onViewChange: (id) => id === 'kanban' && setViewMode('kanban'),
               }}
-              dropdowns={[
-                {
-                  label: 'Group',
-                  value: groupBy,
-                  options: [
-                    { value: 'due-date', label: 'Due Date' },
-                    { value: 'status', label: 'Status' },
-                    { value: 'priority', label: 'Priority' },
-                    { value: 'topic', label: 'Topic' },
-                    { value: 'tag', label: 'Tag' },
-                    { value: 'none', label: 'None' },
-                  ],
-                  onChange: (value) => setGroupBy(value as typeof groupBy),
-                },
-              ]}
+              glassDropdowns={
+                <GlassSelect
+                  value={groupBy}
+                  onChange={(value) => setGroupBy(value as typeof groupBy)}
+                  options={[
+                    { value: 'due-date', label: 'Due Date', icon: Calendar },
+                    { value: 'status', label: 'Status', icon: CheckCircle2 },
+                    { value: 'priority', label: 'Priority', icon: Flag },
+                    { value: 'topic', label: 'Topic', icon: Layers },
+                    { value: 'tag', label: 'Tag', icon: Tag },
+                    { value: 'none', label: 'None', icon: List },
+                  ]}
+                  variant="primary"
+                  triggerIcon={Layers}
+                  placeholder="Group by..."
+                />
+              }
               filters={{
                 active: showFilters,
                 count: [!showCompleted, filterPriority !== 'all', filterDueDate !== 'all', filterTags.length > 0].filter(Boolean).length,
@@ -694,7 +701,40 @@ export default function TasksZone() {
                   />
                 ) : undefined,
               }}
-            />
+            >
+              {/* Select Button */}
+              <motion.button
+                layout
+                onClick={() => {
+                  setBulkSelectMode(!bulkSelectMode);
+                  if (bulkSelectMode) {
+                    setSelectedTaskIds(new Set());
+                  }
+                }}
+                className={`backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center ${
+                  bulkSelectMode
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md border-transparent'
+                    : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-cyan-300'
+                } focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none`}
+                style={{
+                  paddingLeft: '16px',
+                  paddingRight: '16px',
+                  paddingTop: '8px',
+                  paddingBottom: '8px',
+                }}
+                transition={{
+                  layout: {
+                    type: "spring",
+                    stiffness: 400,
+                    damping: 30,
+                  }
+                }}
+                title="Select multiple tasks"
+              >
+                <CheckCheck size={16} />
+                <span className="ml-2">Select</span>
+              </motion.button>
+            </SpaceMenuBar>
             </div>
 
             {/* Stats pill - side-by-side with menu */}
@@ -808,7 +848,40 @@ export default function TasksZone() {
                       />
                     ) : undefined,
                   }}
-                />
+                >
+                  {/* Select Button */}
+                  <motion.button
+                    layout
+                    onClick={() => {
+                      setBulkSelectMode(!bulkSelectMode);
+                      if (bulkSelectMode) {
+                        setSelectedTaskIds(new Set());
+                      }
+                    }}
+                    className={`backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center ${
+                      bulkSelectMode
+                        ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md border-transparent'
+                        : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-cyan-300'
+                    } focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none`}
+                    style={{
+                      paddingLeft: '16px',
+                      paddingRight: '16px',
+                      paddingTop: '8px',
+                      paddingBottom: '8px',
+                    }}
+                    transition={{
+                      layout: {
+                        type: "spring",
+                        stiffness: 400,
+                        damping: 30,
+                      }
+                    }}
+                    title="Select multiple tasks"
+                  >
+                    <CheckCheck size={16} />
+                    <span className="ml-2">Select</span>
+                  </motion.button>
+                </SpaceMenuBar>
               </motion.div>
 
               {/* Stats pill */}
@@ -867,6 +940,50 @@ export default function TasksZone() {
             />
           )}
 
+          {/* Bulk Operations Bar */}
+          {bulkSelectMode && selectedTaskIds.size > 0 && (
+            <TaskBulkOperationsBar
+              selectedCount={selectedTaskIds.size}
+              totalFilteredCount={displayedTasks.length}
+              onSelectAll={() => {
+                const newSet = new Set<string>();
+                displayedTasks.forEach(t => newSet.add(t.id));
+                setSelectedTaskIds(newSet);
+              }}
+              onMarkComplete={() => {
+                selectedTaskIds.forEach(id => {
+                  tasksDispatch({ type: 'UPDATE_TASK', payload: { id, done: true } });
+                });
+                setSelectedTaskIds(new Set());
+                setBulkSelectMode(false);
+              }}
+              onMarkIncomplete={() => {
+                selectedTaskIds.forEach(id => {
+                  tasksDispatch({ type: 'UPDATE_TASK', payload: { id, done: false } });
+                });
+                setSelectedTaskIds(new Set());
+                setBulkSelectMode(false);
+              }}
+              onDelete={() => {
+                if (window.confirm(`Delete ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''}? This action cannot be undone.`)) {
+                  selectedTaskIds.forEach(id => {
+                    tasksDispatch({ type: 'DELETE_TASK', payload: id });
+                  });
+                  setSelectedTaskIds(new Set());
+                  setBulkSelectMode(false);
+                }
+              }}
+              onSetPriority={() => {
+                // TODO: Implement priority selector modal
+                alert('Priority selector coming soon!');
+              }}
+              onAddTags={() => {
+                // TODO: Implement tag selector modal
+                alert('Tag selector coming soon!');
+              }}
+            />
+          )}
+
           {/* Table View Component */}
           <div ref={tableContentRef} className="flex-1 min-h-0 flex">
             <TaskTableView
@@ -875,6 +992,17 @@ export default function TasksZone() {
               selectedTaskId={selectedTaskIdForInline}
               groupBy={groupBy}
               scrollRef={setTableScrollContainer}
+              bulkSelectMode={bulkSelectMode}
+              selectedTaskIds={selectedTaskIds}
+              onToggleTaskSelection={(taskId) => {
+                const newSet = new Set(selectedTaskIds);
+                if (newSet.has(taskId)) {
+                  newSet.delete(taskId);
+                } else {
+                  newSet.add(taskId);
+                }
+                setSelectedTaskIds(newSet);
+              }}
             />
           </div>
         </div>
@@ -990,7 +1118,40 @@ export default function TasksZone() {
                   />
                 ) : undefined,
               }}
-            />
+            >
+              {/* Select Button */}
+              <motion.button
+                layout
+                onClick={() => {
+                  setBulkSelectMode(!bulkSelectMode);
+                  if (bulkSelectMode) {
+                    setSelectedTaskIds(new Set());
+                  }
+                }}
+                className={`backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center ${
+                  bulkSelectMode
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md border-transparent'
+                    : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-cyan-300'
+                } focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none`}
+                style={{
+                  paddingLeft: '16px',
+                  paddingRight: '16px',
+                  paddingTop: '8px',
+                  paddingBottom: '8px',
+                }}
+                transition={{
+                  layout: {
+                    type: "spring",
+                    stiffness: 400,
+                    damping: 30,
+                  }
+                }}
+                title="Select multiple tasks"
+              >
+                <CheckCheck size={16} />
+                <span className="ml-2">Select</span>
+              </motion.button>
+            </SpaceMenuBar>
             </div>
 
             {/* Stats pill - side-by-side with menu */}
@@ -1104,7 +1265,40 @@ export default function TasksZone() {
                     />
                   ) : undefined,
                 }}
-              />
+              >
+                {/* Select Button */}
+                <motion.button
+                  layout
+                  onClick={() => {
+                    setBulkSelectMode(!bulkSelectMode);
+                    if (bulkSelectMode) {
+                      setSelectedTaskIds(new Set());
+                    }
+                  }}
+                  className={`backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center ${
+                    bulkSelectMode
+                      ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md border-transparent'
+                      : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-cyan-300'
+                  } focus:ring-2 focus:ring-cyan-400 focus:border-cyan-300 outline-none`}
+                  style={{
+                    paddingLeft: '16px',
+                    paddingRight: '16px',
+                    paddingTop: '8px',
+                    paddingBottom: '8px',
+                  }}
+                  transition={{
+                    layout: {
+                      type: "spring",
+                      stiffness: 400,
+                      damping: 30,
+                    }
+                  }}
+                  title="Select multiple tasks"
+                >
+                  <CheckCheck size={16} />
+                  <span className="ml-2">Select</span>
+                </motion.button>
+              </SpaceMenuBar>
               </motion.div>
 
               {/* Stats pill */}
@@ -1169,7 +1363,7 @@ export default function TasksZone() {
             className="flex gap-4 flex-1 overflow-x-auto overflow-y-hidden"
             onDragOver={(e) => e.preventDefault()}
           >
-            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full" onDragOver={(e) => e.preventDefault()}>
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
               <KanbanColumn
                 title="To Do"
                 status="todo"
@@ -1179,7 +1373,7 @@ export default function TasksZone() {
                 scrollRef={(ref) => kanbanColumnRefs.current[0] = ref}
               />
             </div>
-            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full" onDragOver={(e) => e.preventDefault()}>
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
               <KanbanColumn
                 title="In Progress"
                 status="in-progress"
@@ -1189,7 +1383,7 @@ export default function TasksZone() {
                 scrollRef={(ref) => kanbanColumnRefs.current[1] = ref}
               />
             </div>
-            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full" onDragOver={(e) => e.preventDefault()}>
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
               <KanbanColumn
                 title="Blocked"
                 status="blocked"
@@ -1199,7 +1393,7 @@ export default function TasksZone() {
                 scrollRef={(ref) => kanbanColumnRefs.current[2] = ref}
               />
             </div>
-            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full" onDragOver={(e) => e.preventDefault()}>
+            <div className="flex-shrink-0 w-full sm:w-80 min-w-[300px] h-full">
               <KanbanColumn
                 title="Done"
                 status="done"

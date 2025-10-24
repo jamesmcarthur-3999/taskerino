@@ -7,6 +7,7 @@ import { attachmentStorage } from '../services/attachmentStorage';
 import { audioConcatenationService } from '../services/audioConcatenationService';
 import { keyMomentsDetectionService } from '../services/keyMomentsDetectionService';
 import { sessionEnrichmentService } from '../services/sessionEnrichmentService';
+import { validateAudioConfig, validateVideoConfig, validateSession } from '../utils/sessionValidation';
 import { useUI } from './UIContext';
 import { useEnrichmentContext } from './EnrichmentContext';
 
@@ -65,6 +66,31 @@ const initialState: SessionsState = {
 function sessionsReducer(state: SessionsState, action: SessionsAction): SessionsState {
   switch (action.type) {
     case 'START_SESSION': {
+      // Validate required fields
+      if (!action.payload.name || action.payload.name.trim() === '') {
+        console.error('[START_SESSION] Validation failed: Session name is required');
+        return state;
+      }
+
+      // Validate audioConfig if provided
+      if (action.payload.audioConfig) {
+        const audioValidation = validateAudioConfig(action.payload.audioConfig);
+        if (!audioValidation.valid) {
+          console.error('[START_SESSION] Audio config validation failed:', audioValidation.errors);
+          return state;
+        }
+      }
+
+      // Validate videoConfig if provided
+      if (action.payload.videoConfig) {
+        const videoValidation = validateVideoConfig(action.payload.videoConfig);
+        if (!videoValidation.valid) {
+          console.error('[START_SESSION] Video config validation failed:', videoValidation.errors);
+          return state;
+        }
+      }
+
+      // Create the session
       const newSession: Session = {
         ...action.payload,
         id: generateId(),
@@ -74,6 +100,15 @@ function sessionsReducer(state: SessionsState, action: SessionsAction): Sessions
         extractedNoteIds: [],
         status: 'active',
       };
+
+      // Validate the complete session object
+      const sessionValidation = validateSession(newSession);
+      if (!sessionValidation.valid) {
+        console.error('[START_SESSION] Complete session validation failed:', sessionValidation.errors);
+        return state;
+      }
+
+      console.log('[START_SESSION] Validation passed, creating session:', newSession.id);
       return {
         ...state,
         sessions: [...state.sessions, newSession],
@@ -659,10 +694,54 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
           storage.load<any>('settings')
         ]);
 
+        // Migrate old sessions to ensure backward compatibility
+        const rawSessionCount = Array.isArray(sessions) ? sessions.length : 0;
+        const migratedSessions = Array.isArray(sessions)
+          ? sessions.map(session => {
+              const migrated = { ...session };
+
+              // Validate required fields exist (defensive check for corrupted data)
+              if (!migrated.id || !migrated.name || !migrated.startTime) {
+                console.warn('⚠️ [MIGRATION] Skipping corrupted session:', migrated.id, 'missing required fields');
+                return null;
+              }
+
+              // Validate startTime is parseable
+              const startDate = new Date(migrated.startTime);
+              if (isNaN(startDate.getTime())) {
+                console.warn('⚠️ [MIGRATION] Skipping session with invalid date:', migrated.id, migrated.startTime);
+                return null;
+              }
+
+              // Ensure backwards compatibility for optional fields
+              // Old sessions don't have audioConfig/videoConfig, which is fine (they're optional)
+              // Clean up null values (should be undefined for optional fields)
+              if (migrated.audioConfig === null) {
+                delete migrated.audioConfig;
+              }
+              if (migrated.videoConfig === null) {
+                delete migrated.videoConfig;
+              }
+
+              return migrated;
+            })
+            .filter((s): s is Session => s !== null) // Remove null entries from corrupted sessions
+          : [];
+
+        console.log(`📊 [LOAD_SESSIONS] Loaded ${migratedSessions.length} sessions (${rawSessionCount} raw, ${rawSessionCount - migratedSessions.length} filtered out)`);
+        if (rawSessionCount > 0) {
+          console.log('Session statuses:', {
+            active: migratedSessions.filter(s => s.status === 'active').length,
+            paused: migratedSessions.filter(s => s.status === 'paused').length,
+            completed: migratedSessions.filter(s => s.status === 'completed').length,
+            interrupted: migratedSessions.filter(s => s.status === 'interrupted').length,
+          });
+        }
+
         dispatch({
           type: 'LOAD_SESSIONS',
           payload: {
-            sessions: Array.isArray(sessions) ? sessions : [],
+            sessions: migratedSessions,
             activeSessionId: settings?.activeSessionId,
           },
         });
@@ -807,16 +886,10 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        // CRITICAL: Skip save if any session has enrichment in progress
-        // This prevents overwriting enrichmentStatus updates made by enrichmentService
-        const hasEnrichmentInProgress = state.sessions.some(
-          s => s.enrichmentStatus?.status === 'in-progress'
-        );
-
-        if (hasEnrichmentInProgress) {
-          console.log('⏸️ Skipping debounced save - enrichment in progress');
-          return;
-        }
+        // Phase 1.2: Removed enrichment skip logic that blocked ALL saves during enrichment
+        // This eliminates data loss windows. Phase 2.4 will add proper transactions
+        // to prevent enrichment conflicts, but the skip logic created a LARGER risk
+        // by blocking all saves for the entire enrichment duration (~30 seconds).
 
         const storage = await getStorage();
         await storage.save('sessions', state.sessions);
@@ -832,7 +905,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error('Failed to save sessions:', error);
       }
-    }, 5000);
+    }, 1000); // Reduced from 5000ms to 1000ms - faster saves with smaller data loss window
 
     return () => {
       if (saveTimeoutRef.current) {

@@ -1,7 +1,10 @@
+mod types;
 mod audio_capture;
 mod activity_monitor;
 mod macos_events;
+mod macos_audio;
 mod video_recording;
+mod recording; // Safe FFI wrappers for video recording
 mod api_keys;
 mod ai_types;
 mod openai_api;
@@ -269,7 +272,14 @@ fn stop_menubar_countdown(state: tauri::State<CountdownStateHandle>) -> Result<(
     Ok(())
 }
 
-/// Audio recording commands - Real implementation
+/// Audio recording commands - Dual-source implementation
+
+/// Get list of available audio devices (inputs and outputs)
+#[tauri::command]
+fn get_audio_devices() -> Result<Vec<audio_capture::AudioDeviceInfo>, String> {
+    audio_capture::get_audio_devices()
+}
+
 #[tauri::command]
 fn start_audio_recording(
     audio_recorder: tauri::State<Arc<AudioRecorder>>,
@@ -280,6 +290,16 @@ fn start_audio_recording(
 }
 
 #[tauri::command]
+fn start_audio_recording_with_config(
+    audio_recorder: tauri::State<Arc<AudioRecorder>>,
+    session_id: String,
+    chunk_duration_secs: u64,
+    config: audio_capture::AudioDeviceConfig,
+) -> Result<(), String> {
+    audio_recorder.start_recording_with_config(session_id, chunk_duration_secs, config)
+}
+
+#[tauri::command]
 fn stop_audio_recording(audio_recorder: tauri::State<Arc<AudioRecorder>>) -> Result<(), String> {
     audio_recorder.stop_recording()
 }
@@ -287,6 +307,38 @@ fn stop_audio_recording(audio_recorder: tauri::State<Arc<AudioRecorder>>) -> Res
 #[tauri::command]
 fn pause_audio_recording(audio_recorder: tauri::State<Arc<AudioRecorder>>) -> Result<(), String> {
     audio_recorder.pause_recording()
+}
+
+#[tauri::command]
+fn update_audio_balance(
+    audio_recorder: tauri::State<Arc<AudioRecorder>>,
+    balance: u8,
+) -> Result<(), String> {
+    audio_recorder.update_audio_balance(balance)
+}
+
+/// Get current audio health status
+#[tauri::command]
+fn get_audio_health_status(
+    audio_recorder: tauri::State<Arc<AudioRecorder>>,
+) -> Result<audio_capture::AudioHealthStatus, String> {
+    audio_recorder.get_health_status()
+}
+
+#[tauri::command]
+fn switch_audio_input_device(
+    audio_recorder: tauri::State<Arc<AudioRecorder>>,
+    device_name: Option<String>,
+) -> Result<(), String> {
+    audio_recorder.switch_audio_input_device(device_name)
+}
+
+#[tauri::command]
+fn switch_audio_output_device(
+    audio_recorder: tauri::State<Arc<AudioRecorder>>,
+    device_name: Option<String>,
+) -> Result<(), String> {
+    audio_recorder.switch_audio_output_device(device_name)
 }
 
 /// Activity monitoring commands
@@ -470,9 +522,15 @@ pub fn run() {
             start_menubar_countdown,
             update_menubar_countdown,
             stop_menubar_countdown,
+            get_audio_devices,
             start_audio_recording,
+            start_audio_recording_with_config,
             stop_audio_recording,
             pause_audio_recording,
+            update_audio_balance,
+            get_audio_health_status,
+            switch_audio_input_device,
+            switch_audio_output_device,
             start_activity_monitoring,
             stop_activity_monitoring,
             get_activity_metrics,
@@ -481,11 +539,17 @@ pub fn run() {
             record_keyboard_event,
             record_window_focus,
             video_recording::start_video_recording,
+            video_recording::start_video_recording_advanced,
             video_recording::stop_video_recording,
             video_recording::is_recording,
             video_recording::get_current_recording_session,
             video_recording::get_video_duration,
             video_recording::generate_video_thumbnail,
+            video_recording::enumerate_displays,
+            video_recording::enumerate_windows,
+            video_recording::enumerate_webcams,
+            video_recording::switch_display,
+            video_recording::update_webcam_mode,
             // API key management
             api_keys::set_openai_api_key,
             api_keys::get_openai_api_key,

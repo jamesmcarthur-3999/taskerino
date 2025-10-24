@@ -305,16 +305,47 @@ function AppContent() {
     initializeApp();
   }, []);
 
-  // Graceful shutdown: flush pending writes on app close
+  // Automatic backup on startup
+  useEffect(() => {
+    const createStartupBackup = async () => {
+      try {
+        console.log('[APP] Creating startup backup...');
+        const storage = await getStorage();
+        const backupId = await storage.createBackup();
+        console.log(`[APP] ✓ Startup backup created: ${backupId}`);
+      } catch (error) {
+        console.error('[APP] Failed to create startup backup:', error);
+        // Show user notification about backup failure
+        dispatch({
+          type: 'ADD_NOTIFICATION',
+          payload: {
+            type: 'warning',
+            title: 'Backup Warning',
+            message: 'Failed to create startup backup. Your data may be at risk.',
+            autoDismiss: false,
+          },
+        });
+      }
+    };
+
+    createStartupBackup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps = run once on mount (dispatch is stable)
+
+  // Graceful shutdown: create backup and flush pending writes on app close
   useEffect(() => {
     const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
       try {
-        console.log('[APP] Flushing pending writes before shutdown...');
+        console.log('[APP] Creating shutdown backup...');
         const storage = await getStorage();
+        await storage.createBackup();
+        console.log('[APP] ✓ Shutdown backup created');
+
+        console.log('[APP] Flushing pending writes before shutdown...');
         await storage.shutdown();
         console.log('[APP] Graceful shutdown complete');
       } catch (error) {
-        console.error('[APP] Failed to flush writes on shutdown:', error);
+        console.error('[APP] Failed during shutdown:', error);
       }
     };
 
@@ -323,6 +354,26 @@ function AppContent() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
+  }, []);
+
+  // Hourly automatic backups
+  useEffect(() => {
+    const createHourlyBackup = async () => {
+      try {
+        console.log('[APP] Creating hourly backup...');
+        const storage = await getStorage();
+        const backupId = await storage.createBackup();
+        console.log(`[APP] ✓ Hourly backup created: ${backupId}`);
+      } catch (error) {
+        console.error('[APP] Failed to create hourly backup:', error);
+      }
+    };
+
+    // Create backup immediately, then every hour
+    createHourlyBackup();
+    const interval = setInterval(createHourlyBackup, 60 * 60 * 1000); // 1 hour
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleWelcomeComplete = async (name: string, anthropicKey: string, openAIKey: string) => {

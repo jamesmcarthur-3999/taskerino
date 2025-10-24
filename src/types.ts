@@ -1576,6 +1576,12 @@ export interface Session {
     /** When the lock will expire if not released (ISO 8601) */
     expiresAt: string;
   };
+
+  /** Audio device configuration (optional, defaults to system default mic) */
+  audioConfig?: AudioDeviceConfig;
+
+  /** Video recording configuration (optional, defaults to main display) */
+  videoConfig?: VideoRecordingConfig;
 }
 
 // Video Frame - Extracted frame from video for AI analysis
@@ -1675,6 +1681,192 @@ export interface SessionScreenshot {
 
 // Audio Recording Types
 export type AudioMode = 'off' | 'transcription' | 'description'; // DEPRECATED: Will be removed
+
+// ============================================================================
+// Media Device Configuration
+// ============================================================================
+
+/**
+ * Audio source types for recording
+ */
+export type AudioSourceType = 'microphone' | 'system-audio' | 'both';
+
+/**
+ * Audio device information returned from backend
+ */
+export interface AudioDevice {
+  /** Unique device identifier from cpal/CoreAudio */
+  id: string;
+
+  /** Human-readable device name */
+  name: string;
+
+  /** Device type (input for mics, output for system audio loopback) */
+  deviceType: 'Input' | 'Output';
+
+  /** Whether this is the system default device */
+  isDefault: boolean;
+
+  /** Native sample rate in Hz */
+  sampleRate: number;
+
+  /** Number of audio channels */
+  channels: number;
+}
+
+/**
+ * Audio device configuration for a session
+ */
+export interface AudioDeviceConfig {
+  /** Selected microphone device ID */
+  micDeviceId?: string;
+
+  /** Selected system audio device ID (for computer audio capture) */
+  systemAudioDeviceId?: string;
+
+  /** Audio source type */
+  sourceType: AudioSourceType;
+
+  /** Balance between mic and system audio (0-100)
+   * 0 = all microphone, 100 = all system audio, 50 = equal mix
+   * Only applicable when sourceType is 'both'
+   */
+  balance?: number;
+
+  /** Individual volume for microphone (0.0-1.0) */
+  micVolume?: number;
+
+  /** Individual volume for system audio (0.0-1.0) */
+  systemVolume?: number;
+}
+
+/**
+ * Video source types for recording
+ */
+export type VideoSourceType = 'display' | 'window' | 'webcam' | 'display-with-webcam';
+
+/**
+ * Display information returned from backend
+ */
+export interface DisplayInfo {
+  /** Display ID from ScreenCaptureKit */
+  displayId: string;
+
+  /** Display name (e.g., "Built-in Retina Display") */
+  displayName: string;
+
+  /** Display width in pixels */
+  width: number;
+
+  /** Display height in pixels */
+  height: number;
+
+  /** Whether this is the primary/main display */
+  isPrimary: boolean;
+
+  /** Optional thumbnail preview (base64 PNG) */
+  thumbnail?: string;
+
+  /** Thumbnail data URI (base64 PNG with data:image/png;base64, prefix) */
+  thumbnailDataUri?: string;
+}
+
+/**
+ * Window information returned from backend
+ */
+export interface WindowInfo {
+  /** Window ID from ScreenCaptureKit */
+  windowId: string;
+
+  /** Window title */
+  title: string;
+
+  /** Owning application name */
+  owningApp: string;
+
+  /** Application bundle identifier */
+  bundleId: string;
+
+  /** Window bounds */
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+
+  /** Window layer (z-order) */
+  layer: number;
+
+  /** Thumbnail data URI (base64 PNG with data:image/png;base64, prefix) */
+  thumbnailDataUri?: string;
+}
+
+/**
+ * Webcam device information returned from backend
+ */
+export interface WebcamInfo {
+  /** Camera device ID from AVFoundation */
+  deviceId: string;
+
+  /** Camera name (e.g., "FaceTime HD Camera") */
+  deviceName: string;
+
+  /** Camera position */
+  position: 'front' | 'back' | 'unspecified';
+
+  /** Device manufacturer */
+  manufacturer: string;
+}
+
+/**
+ * Picture-in-Picture configuration
+ */
+export interface PiPConfig {
+  /** Whether PiP is enabled */
+  enabled: boolean;
+
+  /** Position of webcam overlay */
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+  /** Size of webcam overlay */
+  size: 'small' | 'medium' | 'large';
+
+  /** Border radius in pixels */
+  borderRadius?: number;
+}
+
+/**
+ * Video recording configuration for a session
+ */
+export interface VideoRecordingConfig {
+  /** Video source type */
+  sourceType: VideoSourceType;
+
+  /** Selected display IDs (for display recording) */
+  displayIds?: string[];
+
+  /** Selected window IDs (for window-specific recording) */
+  windowIds?: string[];
+
+  /** Selected webcam device ID */
+  webcamDeviceId?: string;
+
+  /** Picture-in-Picture configuration (when using webcam with display) */
+  pipConfig?: PiPConfig;
+
+  /** Video quality preset */
+  quality: 'low' | 'medium' | 'high' | 'ultra';
+
+  /** Frame rate (10-60 fps) */
+  fps: number;
+
+  /** Resolution override (optional, defaults to native) */
+  resolution?: {
+    width: number;
+    height: number;
+  };
+}
 
 export interface SessionAudioSegment {
   id: string;

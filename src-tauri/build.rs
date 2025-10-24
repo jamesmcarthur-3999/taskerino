@@ -12,6 +12,7 @@ fn compile_swift_module() {
     use std::env;
 
     println!("cargo:rerun-if-changed=ScreenRecorder/ScreenRecorder.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/PiPCompositor.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/ScreenRecorder.h");
 
     let out_dir = env::var("OUT_DIR").unwrap();
@@ -26,9 +27,9 @@ fn compile_swift_module() {
 
     println!("cargo:warning=Compiling Swift ScreenRecorder module for {}", arch);
 
-    // Compile Swift to dynamic library
+    // Compile Swift to dynamic library (including both Swift files)
     let output = Command::new("swiftc")
-        .args(&[
+        .args([
             "-emit-library",
             "-emit-objc-header",
             "-emit-module",
@@ -36,6 +37,7 @@ fn compile_swift_module() {
             "-o", &format!("{}/libScreenRecorder.dylib", out_dir),
             "-emit-objc-header-path", &format!("{}/ScreenRecorder-Swift.h", out_dir),
             "ScreenRecorder/ScreenRecorder.swift",
+            "ScreenRecorder/PiPCompositor.swift",
             "-target", &format!("{}-apple-macosx12.3", arch),
             "-O", // Optimization
         ])
@@ -64,5 +66,7 @@ fn compile_swift_module() {
     println!("cargo:rustc-link-lib=framework=CoreMedia");
     println!("cargo:rustc-link-lib=framework=CoreGraphics");
     println!("cargo:rustc-link-lib=framework=CoreVideo");
+    println!("cargo:rustc-link-lib=framework=CoreImage");
+    println!("cargo:rustc-link-lib=framework=Metal");
     println!("cargo:rustc-link-lib=framework=Foundation");
 }

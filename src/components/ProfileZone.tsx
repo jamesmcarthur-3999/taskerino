@@ -10,8 +10,9 @@ import { claudeService } from '../services/claudeService';
 import { sessionsAgentService } from '../services/sessionsAgentService';
 import { openAIService } from '../services/openAIService';
 import { audioCompressionService, type AudioQualityPreset } from '../services/audioCompressionService';
-import { Key, Brain, Download, Upload, Trash2, Settings, Clock, Globe, Calendar, ChevronDown, RefreshCw, Bot, Mic, Video } from 'lucide-react';
-import type { AppState } from '../types';
+import { Key, Brain, Download, Upload, Trash2, Settings, Clock, Globe, Calendar, ChevronDown, RefreshCw, Bot, Mic, Video, HardDrive, RotateCcw } from 'lucide-react';
+import type { AppState, Session, Note, Task, Topic, Company, Contact, AISettings, UserPreferences } from '../types';
+import { getStorage, type BackupInfo } from '../services/storage';
 import { LearningDashboard } from './LearningDashboard';
 import { NedSettings } from './ned/NedSettings';
 import { Input } from './Input';
@@ -117,40 +118,156 @@ export default function ProfileZone() {
     alert('Profile saved!');
   };
 
-  const handleExportData = () => {
-    const data = {
-      topics: entitiesState.topics,
-      notes: notesState.notes,
-      tasks: tasksState.tasks,
-      aiSettings: settingsState.aiSettings,
-      preferences: uiState.preferences,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `taskerino-backup-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExportData = async () => {
+    try {
+      // Export directly from storage to ensure completeness
+      const storage = await getStorage();
+
+      const data = {
+        // Entities
+        topics: await storage.load<Topic[]>('topics') || [],
+        companies: await storage.load<Company[]>('companies') || [],
+        contacts: await storage.load<Contact[]>('contacts') || [],
+
+        // Content
+        notes: await storage.load<Note[]>('notes') || [],
+        tasks: await storage.load<Task[]>('tasks') || [],
+        sessions: await storage.load<Session[]>('sessions') || [],
+
+        // Settings
+        aiSettings: await storage.load<AISettings>('aiSettings') || settingsState.aiSettings,
+        preferences: await storage.load<UserPreferences>('preferences') || uiState.preferences,
+
+        // Metadata
+        exportedAt: new Date().toISOString(),
+        version: '1.0.0', // Export format version
+        appVersion: '0.5.1', // From tauri.conf.json
+      };
+
+      // Note: Attachments are NOT included in export (too large)
+      // TODO: Add attachment export in Phase 3
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `taskerino-export-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'success',
+          title: 'Export Complete',
+          message: 'All data exported successfully (attachments excluded)',
+          autoDismiss: true,
+          dismissAfter: 3000,
+        },
+      });
+    } catch (error: any) {
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'error',
+          title: 'Export Failed',
+          message: error.message || 'Unknown error occurred',
+          autoDismiss: false,
+        },
+      });
+    }
   };
 
-  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        if (confirm('This will replace all your current data. Continue?')) {
-          appDispatch({ type: 'LOAD_STATE', payload: data });
-          alert('Data imported successfully!');
-        }
-      } catch {
-        alert('Failed to import data. Invalid file format.');
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      // Validate export format
+      if (!data.version || !data.exportedAt) {
+        throw new Error('Invalid export file format - missing version or exportedAt metadata');
       }
-    };
-    reader.readAsText(file);
+
+      // Version compatibility check
+      if (data.version !== '1.0.0') {
+        throw new Error(`Unsupported export version: ${data.version}. Expected version 1.0.0.`);
+      }
+
+      // Count items for confirmation
+      const counts = {
+        sessions: data.sessions?.length || 0,
+        notes: data.notes?.length || 0,
+        tasks: data.tasks?.length || 0,
+        topics: data.topics?.length || 0,
+        companies: data.companies?.length || 0,
+        contacts: data.contacts?.length || 0,
+      };
+
+      // Confirm with user
+      const confirmMsg = `Import data from ${new Date(data.exportedAt).toLocaleString()}?\n\nThis will overwrite:\n- ${counts.sessions} sessions\n- ${counts.notes} notes\n- ${counts.tasks} tasks\n- ${counts.topics} topics\n- ${counts.companies} companies\n- ${counts.contacts} contacts\n\nCurrent data will be backed up before import.`;
+
+      if (!confirm(confirmMsg)) {
+        return;
+      }
+
+      // Import to storage
+      const storage = await getStorage();
+
+      // Create backup before import (CRITICAL - uses Phase 1.1 mandatory backup)
+      console.log('[Import] Creating pre-import backup...');
+      await storage.createBackup();
+      console.log('[Import] ✓ Pre-import backup created');
+
+      // Import each collection
+      if (data.topics) await storage.save('topics', data.topics);
+      if (data.companies) await storage.save('companies', data.companies);
+      if (data.contacts) await storage.save('contacts', data.contacts);
+      if (data.notes) await storage.save('notes', data.notes);
+      if (data.tasks) await storage.save('tasks', data.tasks);
+      if (data.sessions) await storage.save('sessions', data.sessions);
+      if (data.aiSettings) await storage.save('aiSettings', data.aiSettings);
+      if (data.preferences) await storage.save('preferences', data.preferences);
+
+      console.log('[Import] ✓ All collections imported');
+
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'success',
+          title: 'Import Complete',
+          message: 'Data imported successfully. Please restart the app to see changes.',
+          autoDismiss: false,
+        },
+      });
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error: any) {
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'error',
+          title: 'Import Failed',
+          message: error.message || 'Unknown error occurred',
+          autoDismiss: false,
+        },
+      });
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleClearAllData = () => {
@@ -597,6 +714,57 @@ export default function ProfileZone() {
 
                   <Divider />
 
+                  <Section title="System Backups">
+                    <div className="space-y-4">
+                      {/* Manual Backup Button */}
+                      <Button
+                        onClick={async () => {
+                          try {
+                            const storage = await getStorage();
+                            const backupId = await storage.createBackup();
+                            appDispatch({
+                              type: 'ADD_NOTIFICATION',
+                              payload: {
+                                type: 'success',
+                                title: 'Backup Created',
+                                message: `Backup ${backupId} created successfully`,
+                                autoDismiss: true,
+                                dismissAfter: 3000,
+                              },
+                            });
+                          } catch (error) {
+                            appDispatch({
+                              type: 'ADD_NOTIFICATION',
+                              payload: {
+                                type: 'error',
+                                title: 'Backup Failed',
+                                message: error instanceof Error ? error.message : 'Unknown error',
+                                autoDismiss: false,
+                              },
+                            });
+                          }
+                        }}
+                        variant="secondary"
+                        fullWidth
+                        icon={<HardDrive className="w-5 h-5" />}
+                      >
+                        Create Backup Now
+                      </Button>
+
+                      {/* Backup List */}
+                      <div className={`p-4 ${getGlassClasses('subtle')} ${getRadiusClass('field')}`}>
+                        <h4 className="font-semibold text-gray-900 mb-3">Available Backups</h4>
+                        <BackupList />
+                      </div>
+
+                      <p className="text-sm text-gray-600">
+                        System backups are created automatically and stored locally. Use these to recover from data corruption or accidental changes.
+                      </p>
+                    </div>
+                  </Section>
+
+                  <Divider />
+
                   <Section title="Danger Zone">
                     <Button
                       onClick={handleClearAllData}
@@ -619,6 +787,114 @@ export default function ProfileZone() {
 
       {/* Learning Dashboard Overlay */}
       {showLearningDashboard && <LearningDashboard onClose={() => setShowLearningDashboard(false)} />}
+    </div>
+  );
+}
+
+// Backup List Component
+function BackupList() {
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { dispatch } = useApp();
+
+  useEffect(() => {
+    const loadBackups = async () => {
+      try {
+        const storage = await getStorage();
+        const backupList = await storage.listBackups();
+        setBackups(backupList);
+      } catch (error) {
+        console.error('Failed to load backups:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadBackups();
+  }, []);
+
+  const handleRestore = async (backupId: string) => {
+    if (!confirm(`Are you sure you want to restore from backup ${backupId}? Current data will be overwritten.`)) {
+      return;
+    }
+
+    try {
+      const storage = await getStorage();
+      await storage.restoreBackup(backupId);
+
+      dispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'success',
+          title: 'Backup Restored',
+          message: 'Please restart the app to see restored data',
+          autoDismiss: false,
+        },
+      });
+    } catch (error) {
+      dispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'error',
+          title: 'Restore Failed',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          autoDismiss: false,
+        },
+      });
+    }
+  };
+
+  const formatBackupAge = (timestamp: number): string => {
+    const now = Date.now();
+    const diff = now - timestamp;
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+    if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    return 'Just now';
+  };
+
+  if (loading) {
+    return <div className="text-gray-500 text-sm py-2">Loading backups...</div>;
+  }
+
+  if (backups.length === 0) {
+    return <div className="text-gray-500 text-sm py-2">No backups available</div>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {backups.map((backup) => (
+        <div
+          key={backup.id}
+          className={`flex items-center justify-between p-3 ${getGlassClasses('subtle')} ${getRadiusClass('field')} hover:bg-white/60 transition-colors`}
+        >
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <div className="font-medium text-gray-900 text-sm">
+                {new Date(backup.timestamp).toLocaleString()}
+              </div>
+              <span className="text-xs text-gray-500">
+                ({formatBackupAge(backup.timestamp)})
+              </span>
+            </div>
+            <div className="text-xs text-gray-600 mt-1">
+              {(backup.size / 1024 / 1024).toFixed(2)} MB
+            </div>
+          </div>
+          <Button
+            onClick={() => handleRestore(backup.id)}
+            variant="secondary"
+            icon={<RotateCcw className="w-4 h-4" />}
+          >
+            Restore
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }

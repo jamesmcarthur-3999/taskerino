@@ -181,11 +181,14 @@ For EVERY task, provide ALL fields:
 </task_requirements>
 
 <note_structure>
-Use markdown with:
+Use PLAIN MARKDOWN ONLY (NO HTML tags):
 - ## for headers (Context, Discussion, Decisions, Next Steps)
 - **bold** for key terms/names
 - Bullet lists (-) and numbered lists (1. 2. 3.)
 - Clear sections for scanability
+
+CRITICAL: Return plain markdown text ONLY. Do NOT include HTML tags like <p>, <div>, <h1>, etc.
+The content will be automatically formatted for display by the application.
 </note_structure>
 
 <output_schema>
@@ -303,11 +306,14 @@ For EVERY task, provide ALL fields:
 </task_requirements>
 
 <note_structure>
-Use markdown with:
+Use PLAIN MARKDOWN ONLY (NO HTML tags):
 - ## for headers (Context, Discussion, Decisions, Next Steps)
 - **bold** for key terms/names
 - Bullet lists (-) and numbered lists (1. 2. 3.)
 - Clear sections for scanability
+
+CRITICAL: Return plain markdown text ONLY. Do NOT include HTML tags like <p>, <div>, <h1>, etc.
+The content will be automatically formatted for display by the application.
 </note_structure>
 
 <output_schema>

@@ -8,6 +8,7 @@
 import { BaseDirectory, exists, readTextFile, writeTextFile, mkdir, remove, readDir } from '@tauri-apps/plugin-fs';
 import { StorageAdapter, formatBytes, validateJSON, calculateChecksum } from './StorageAdapter';
 import type { StorageInfo, BackupInfo } from './StorageAdapter';
+import type { StorageTransaction } from './types';
 import JSZip from 'jszip';
 import { compressData, decompressData, isCompressed } from './compressionUtils';
 
@@ -62,6 +63,196 @@ class WriteQueue {
       }
       await new Promise(resolve => setTimeout(resolve, 100));
     }
+  }
+}
+
+/**
+ * Tauri File System Transaction Implementation
+ *
+ * Uses temporary directory staging for atomic writes.
+ * All files are written to a temp directory first, then moved atomically.
+ */
+class TauriFileSystemTransaction implements StorageTransaction {
+  private operations: Array<{
+    type: 'save' | 'delete';
+    key: string;
+    value?: any;
+  }> = [];
+
+  private committed = false;
+  private basePath: string;
+  private adapter: TauriFileSystemAdapter;
+
+  constructor(basePath: string, adapter: TauriFileSystemAdapter) {
+    this.basePath = basePath;
+    this.adapter = adapter;
+  }
+
+  /**
+   * Queue a save operation
+   */
+  save(key: string, value: any): void {
+    if (this.committed) {
+      throw new Error('Transaction already committed or rolled back');
+    }
+    this.operations.push({ type: 'save', key, value });
+  }
+
+  /**
+   * Queue a delete operation
+   */
+  delete(key: string): void {
+    if (this.committed) {
+      throw new Error('Transaction already committed or rolled back');
+    }
+    this.operations.push({ type: 'delete', key });
+  }
+
+  /**
+   * Execute all operations atomically using temp directory staging
+   */
+  async commit(): Promise<void> {
+    if (this.committed) {
+      throw new Error('Transaction already committed or rolled back');
+    }
+
+    // Mark as committed early to prevent new operations
+    this.committed = true;
+
+    if (this.operations.length === 0) {
+      return; // Nothing to commit
+    }
+
+    // Create temp directory for staging
+    const tempDir = `${this.basePath}/.tx-${Date.now()}`;
+
+    try {
+      // Create temp directory
+      await mkdir(tempDir, { baseDir: BaseDirectory.AppData, recursive: true });
+
+      // Prepare and write all changes to temp directory first
+      for (const op of this.operations) {
+        if (op.type === 'save') {
+          const tempPath = `${tempDir}/${op.key}.json`;
+
+          // Prepare data (compress, serialize)
+          const jsonData = JSON.stringify(op.value, null, 2);
+          const checksum = await calculateChecksum(jsonData);
+
+          let compressedData: string;
+          let compressionFailed = false;
+          try {
+            compressedData = await compressData(jsonData);
+          } catch (compressionError) {
+            console.warn(`⚠️  Compression failed for ${op.key}, storing uncompressed:`, compressionError);
+            compressedData = jsonData;
+            compressionFailed = true;
+          }
+
+          const dataWithMeta = {
+            version: 1,
+            checksum,
+            timestamp: Date.now(),
+            compressed: !compressionFailed,
+            data: compressedData
+          };
+
+          const finalData = JSON.stringify(dataWithMeta, null, 2);
+
+          // Write to temp location
+          await writeTextFile(tempPath, finalData, {
+            baseDir: BaseDirectory.AppData
+          });
+        }
+      }
+
+      // All writes to temp succeeded, now move to final locations atomically
+      for (const op of this.operations) {
+        const finalPath = `${this.basePath}/${op.key}.json`;
+
+        if (op.type === 'save') {
+          const tempPath = `${tempDir}/${op.key}.json`;
+
+          // Read from temp
+          const content = await readTextFile(tempPath, {
+            baseDir: BaseDirectory.AppData
+          });
+
+          // Create backup if file exists (using the same backup logic as save())
+          if (await exists(finalPath, { baseDir: BaseDirectory.AppData })) {
+            try {
+              const existingContent = await readTextFile(finalPath, {
+                baseDir: BaseDirectory.AppData
+              });
+
+              const timestamp = Date.now();
+              const backupPath = `${this.basePath}/${op.key}.${timestamp}.backup.json`;
+
+              await writeTextFile(backupPath, existingContent, {
+                baseDir: BaseDirectory.AppData
+              });
+
+              // Verify backup
+              const verifyContent = await readTextFile(backupPath, {
+                baseDir: BaseDirectory.AppData
+              });
+
+              if (verifyContent !== existingContent) {
+                throw new Error(`Backup verification failed for ${op.key}`);
+              }
+            } catch (backupError) {
+              throw new Error(`CRITICAL: Backup failed for ${op.key}: ${backupError instanceof Error ? backupError.message : String(backupError)}`);
+            }
+          }
+
+          // Write to final location
+          await writeTextFile(finalPath, content, {
+            baseDir: BaseDirectory.AppData
+          });
+
+        } else if (op.type === 'delete') {
+          // Delete operation
+          if (await exists(finalPath, { baseDir: BaseDirectory.AppData })) {
+            await remove(finalPath, { baseDir: BaseDirectory.AppData });
+          }
+        }
+      }
+
+      // Clean up temp directory
+      try {
+        await remove(tempDir, { baseDir: BaseDirectory.AppData });
+      } catch (cleanupError) {
+        // Log but don't fail - transaction succeeded
+        console.warn('Failed to clean up temp directory:', cleanupError);
+      }
+
+      console.log(`💾 Transaction committed: ${this.operations.length} operations`);
+
+    } catch (error) {
+      // Rollback: remove temp directory
+      try {
+        await remove(tempDir, { baseDir: BaseDirectory.AppData });
+      } catch (rollbackError) {
+        console.warn('Failed to clean up temp directory after error:', rollbackError);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel all queued operations
+   */
+  async rollback(): Promise<void> {
+    this.operations = [];
+    this.committed = true;
+    console.log('🔄 Transaction rolled back');
+  }
+
+  /**
+   * Get number of pending operations
+   */
+  getPendingOperations(): number {
+    return this.operations.length;
   }
 }
 
@@ -142,7 +333,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
           baseDir: BaseDirectory.AppData
         });
 
-        // If existing file exists, move it to backup
+        // If existing file exists, create a timestamped backup (MANDATORY - DO NOT CONTINUE ON FAILURE)
         if (await exists(path, { baseDir: BaseDirectory.AppData })) {
           try {
             // Read existing file
@@ -150,13 +341,32 @@ export class TauriFileSystemAdapter extends StorageAdapter {
               baseDir: BaseDirectory.AppData
             });
 
-            // Write to backup
-            await writeTextFile(backupPath, existingContent, {
+            // Create timestamped backup filename
+            const timestamp = Date.now();
+            const timestampedBackupPath = `${this.DB_DIR}/${collection}.${timestamp}.backup.json`;
+
+            // Write to timestamped backup
+            await writeTextFile(timestampedBackupPath, existingContent, {
               baseDir: BaseDirectory.AppData
             });
+
+            // Verify backup by reading it back and comparing
+            const verifyContent = await readTextFile(timestampedBackupPath, {
+              baseDir: BaseDirectory.AppData
+            });
+
+            if (verifyContent !== existingContent) {
+              throw new Error(`Backup verification failed for ${collection}: content mismatch after write`);
+            }
+
+            console.log(`✓ Backup created and verified: ${collection}.${timestamp}.backup.json`);
+
+            // Rotate old backups (keep last 10) - non-critical, failures are logged but don't halt
+            await this.rotateBackups(collection, 10);
+
           } catch (error) {
-            console.warn(`Failed to create backup for ${collection}:`, error);
-            // Continue anyway - not critical
+            // CRITICAL: Backup failure must halt the save operation
+            throw new Error(`CRITICAL: Backup failed for ${collection}: ${error instanceof Error ? error.message : String(error)}`);
           }
         }
 
@@ -695,6 +905,68 @@ export class TauriFileSystemAdapter extends StorageAdapter {
       console.warn('Failed to cleanup old backups:', error);
       // Non-critical, continue
     }
+  }
+
+  /**
+   * Rotate old backups, keeping only the most recent ones
+   * @param collection - Collection name to rotate backups for
+   * @param keepCount - Number of most recent backups to keep (default: 10)
+   */
+  private async rotateBackups(collection: string, keepCount: number = 10): Promise<void> {
+    try {
+      // List all files in the db directory
+      const entries = await readDir(this.DB_DIR, { baseDir: BaseDirectory.AppData });
+
+      // Filter to find backup files for this specific collection
+      // Format: {collection}.{timestamp}.backup.json
+      const backupFiles = entries
+        .filter(e => {
+          const name = e.name || '';
+          return name.startsWith(`${collection}.`) && name.endsWith('.backup.json');
+        })
+        .map(e => {
+          const name = e.name || '';
+          // Extract timestamp from filename: collection.{timestamp}.backup.json
+          const parts = name.split('.');
+          const timestamp = parts.length >= 3 ? parseInt(parts[parts.length - 3]) : 0;
+          return {
+            name,
+            timestamp: isNaN(timestamp) ? 0 : timestamp
+          };
+        })
+        .sort((a, b) => b.timestamp - a.timestamp); // Sort newest first
+
+      // Delete backups beyond the keepCount threshold
+      if (backupFiles.length > keepCount) {
+        const toDelete = backupFiles.slice(keepCount);
+
+        for (const backup of toDelete) {
+          const backupPath = `${this.DB_DIR}/${backup.name}`;
+          try {
+            await remove(backupPath, { baseDir: BaseDirectory.AppData });
+            console.log(`🗑️  Deleted old backup: ${backup.name}`);
+          } catch (deleteError) {
+            console.warn(`Failed to delete old backup ${backup.name}:`, deleteError);
+            // Continue with other deletions even if one fails
+          }
+        }
+
+        console.log(`✓ Backup rotation complete for ${collection}: kept ${keepCount} most recent, deleted ${toDelete.length} old backups`);
+      }
+    } catch (error) {
+      // Rotation is not critical - log warning but don't throw
+      // This allows the save operation to complete even if rotation fails
+      console.warn(`Failed to rotate backups for ${collection}:`, error);
+    }
+  }
+
+  /**
+   * Begin a new storage transaction
+   * @returns A new transaction instance
+   */
+  async beginTransaction(): Promise<StorageTransaction> {
+    await this.ensureInitialized();
+    return new TauriFileSystemTransaction(this.DB_DIR, this);
   }
 
   /**

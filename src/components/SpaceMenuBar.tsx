@@ -49,6 +49,7 @@ interface SpaceMenuBarProps {
   primaryAction?: PrimaryAction;
   viewControls?: ViewControls;
   dropdowns?: DropdownControl[];
+  glassDropdowns?: ReactNode; // For GlassSelect components
   filters?: FilterConfig;
   stats?: StatsDisplay;
   children?: ReactNode;
@@ -74,6 +75,7 @@ export function SpaceMenuBar({
   primaryAction,
   viewControls,
   dropdowns = [],
+  glassDropdowns,
   filters,
   stats,
   children,
@@ -192,11 +194,11 @@ export function SpaceMenuBar({
                   {view.label}
                 </Button>
               ))}
-              {dropdowns.length > 0 && <Divider />}
+              {(dropdowns.length > 0 || glassDropdowns) && <Divider />}
             </>
           )}
 
-          {/* Dropdowns */}
+          {/* Dropdowns (legacy) */}
           {dropdowns.map((dropdown, i) => (
             <div key={i} className="flex items-center">
               <DropdownSelect
@@ -209,10 +211,18 @@ export function SpaceMenuBar({
             </div>
           ))}
 
+          {/* Glass Dropdowns (modern) */}
+          {glassDropdowns && (
+            <>
+              {glassDropdowns}
+              {filters && <Divider />}
+            </>
+          )}
+
           {/* Filters */}
           {filters && (
             <>
-              {(viewControls || dropdowns.length > 0) && <Divider />}
+              {!glassDropdowns && (viewControls || dropdowns.length > 0) && <Divider />}
               <button
                 ref={filterButtonRef}
                 onClick={filters.onToggle}

@@ -41,13 +41,13 @@ import { SessionsSortMenu } from './sessions/SessionsSortMenu';
 import { SessionsSearchBar } from './sessions/SessionsSearchBar';
 import { BulkOperationsBar } from './sessions/BulkOperationsBar';
 import { ActiveFiltersDisplay } from './sessions/ActiveFiltersDisplay';
-import { SessionsFilterMenu } from './sessions/SessionsFilterMenu';
 import { SessionListGroup } from './sessions/SessionListGroup';
 import { SessionCard } from './sessions/SessionCard';
 import { SessionsTopBar } from './sessions/SessionsTopBar';
 import { SessionsListPanel } from './sessions/SessionsListPanel';
 import { groupSessionsByDate, calculateTotalStats } from '../utils/sessionHelpers';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 
 export default function SessionsZone() {
   const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment, updateScreenshotAnalysis, addScreenshotComment, toggleScreenshotFlag, setActiveSession, addExtractedTask, addExtractedNote, addContextItem } = useSessions();
@@ -88,6 +88,13 @@ export default function SessionsZone() {
   // Bulk selection state
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+
+  // Device enumeration state (loaded once for all SessionsTopBar instances)
+  const [audioDevices, setAudioDevices] = useState<import('../types').AudioDevice[]>([]);
+  const [displays, setDisplays] = useState<import('../types').DisplayInfo[]>([]);
+  const [windows, setWindows] = useState<import('../types').WindowInfo[]>([]);
+  const [webcams, setWebcams] = useState<import('../types').WebcamInfo[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
 
   // Sidebar state - control sidebar expansion from parent
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
@@ -167,6 +174,134 @@ export default function SessionsZone() {
   // Ref for session list scroll container (enables auto-scroll to live session)
   const sessionListScrollRef = useRef<HTMLDivElement>(null);
 
+  // LAZY LOADING: Devices are NOT loaded on mount to prevent UI freeze
+  // Device enumeration can block waiting for macOS permissions (audio/screen recording)
+  // Instead, devices are loaded on-demand when user opens device selector modals
+  // This ensures the Sessions zone loads instantly without hanging
+
+  // Lazy load devices with timeout protection (called by SessionsTopBar when needed)
+  // NOTE: This can be called with forceReload=true to bypass cache after permission changes
+  const loadDevices = useCallback(async (forceReload = false) => {
+    if (!forceReload && (audioDevices.length > 0 || displays.length > 0 || windows.length > 0 || webcams.length > 0 || loadingDevices)) {
+      console.log('📱 [SESSIONS ZONE] Devices already loaded or loading, skipping');
+      return; // Already loaded or loading
+    }
+
+    if (forceReload) {
+      console.log('🔄 [SESSIONS ZONE] Force reloading devices (permission change detected)');
+    }
+
+    setLoadingDevices(true);
+    try {
+      console.log('📱 [SESSIONS ZONE] Starting device enumeration (lazy load)...');
+
+      // Check screen recording permission FIRST (required for displays/windows)
+      console.log('🔒 [SESSIONS ZONE] Checking screen recording permission...');
+      const hasScreenPermission = await videoRecordingService.checkPermission();
+      console.log(`🔒 [SESSIONS ZONE] Screen recording permission: ${hasScreenPermission ? 'GRANTED' : 'DENIED'}`);
+
+      // Timeout wrapper to prevent indefinite hangs
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Device enumeration timed out after 10s')), 10000)
+      );
+
+      const result = await Promise.race([
+        Promise.all([
+          // Audio devices - usually work without special permissions
+          audioRecordingService.getAudioDevices().catch(err => {
+            console.warn('⚠️ [SESSIONS ZONE] Audio device enumeration failed:', err);
+            toast.error('Failed to load audio devices', {
+              description: err.message || 'Check microphone permissions in System Settings'
+            });
+            return [] as import('../types').AudioDevice[];
+          }),
+
+          // Displays - requires screen recording permission
+          hasScreenPermission
+            ? videoRecordingService.enumerateDisplays().catch(err => {
+                console.warn('⚠️ [SESSIONS ZONE] Display enumeration failed:', err);
+                toast.error('Failed to load displays', {
+                  description: err.message
+                });
+                return [] as import('../types').DisplayInfo[];
+              })
+            : (console.log('⚠️ [SESSIONS ZONE] Skipping display enumeration - no screen recording permission'),
+               Promise.resolve([] as import('../types').DisplayInfo[])),
+
+          // Windows - requires screen recording permission
+          hasScreenPermission
+            ? videoRecordingService.enumerateWindows().catch(err => {
+                console.warn('⚠️ [SESSIONS ZONE] Window enumeration failed:', err);
+                toast.error('Failed to load windows', {
+                  description: err.message
+                });
+                return [] as import('../types').WindowInfo[];
+              })
+            : (console.log('⚠️ [SESSIONS ZONE] Skipping window enumeration - no screen recording permission'),
+               Promise.resolve([] as import('../types').WindowInfo[])),
+
+          // Webcams - requires camera permission (will fail gracefully if denied)
+          videoRecordingService.enumerateWebcams().catch(err => {
+            console.warn('⚠️ [SESSIONS ZONE] Webcam enumeration failed:', err);
+            // Only show error if it's not a permission issue
+            if (!err.message?.includes('permission') && !err.message?.includes('authorized')) {
+              toast.error('Failed to load webcams', {
+                description: 'Check camera permissions in System Settings'
+              });
+            }
+            return [] as import('../types').WebcamInfo[];
+          }),
+        ]),
+        timeoutPromise
+      ]).catch(err => {
+        console.error('❌ [SESSIONS ZONE] Device loading timeout:', err);
+        toast.error('Device loading timed out', {
+          description: 'Some devices may not be available'
+        });
+        return [
+          [] as import('../types').AudioDevice[],
+          [] as import('../types').DisplayInfo[],
+          [] as import('../types').WindowInfo[],
+          [] as import('../types').WebcamInfo[]
+        ] as [import('../types').AudioDevice[], import('../types').DisplayInfo[], import('../types').WindowInfo[], import('../types').WebcamInfo[]];
+      });
+
+      const [audio, disp, wins, cams] = result;
+      setAudioDevices(audio);
+      setDisplays(disp);
+      setWindows(wins);
+      setWebcams(cams);
+
+      // Show permission warning if needed
+      if (!hasScreenPermission && (disp.length === 0 || wins.length === 0)) {
+        toast.warning('Screen Recording Permission Required', {
+          description: 'Grant permission in System Settings to record displays or windows',
+          duration: 8000,
+        });
+      }
+
+      console.log('📱 [SESSIONS ZONE] Devices loaded:', {
+        audioCount: audio.length,
+        displayCount: disp.length,
+        windowCount: wins.length,
+        webcamCount: cams.length,
+        screenPermission: hasScreenPermission
+      });
+    } catch (error) {
+      console.error('❌ [SESSIONS ZONE] Failed to load devices:', error);
+      toast.error('Failed to load recording devices', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Set empty arrays so UI doesn't break
+      setAudioDevices([]);
+      setDisplays([]);
+      setWindows([]);
+      setWebcams([]);
+    } finally {
+      setLoadingDevices(false);
+    }
+  }, [audioDevices.length, displays.length, windows.length, webcams.length, loadingDevices]);
+
   // Register session list as scroll container for menu morphing
   useEffect(() => {
     const container = sessionListScrollRef.current;
@@ -245,10 +380,10 @@ export default function SessionsZone() {
    
 
   // Get all past sessions, filtering out corrupted ones
-  const allPastSessions = sessions
+  const allPastSessions = useMemo(() => sessions
     .filter(s => {
-      // Only include completed sessions
-      if (s.status !== 'completed') return false;
+      // Only include completed and interrupted sessions (both represent past work)
+      if (s.status !== 'completed' && s.status !== 'interrupted') return false;
 
       // Filter out corrupted sessions with invalid data
       if (!s.id || !s.name || !s.startTime) {
@@ -267,7 +402,7 @@ export default function SessionsZone() {
     })
     .sort((a, b) =>
       new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-    );
+    ), [sessions]);
 
   // Extract unique tags for filter options
   const uniqueTags = useMemo(() => {
@@ -1420,6 +1555,8 @@ export default function SessionsZone() {
       audioMode: sessionData.audioMode || 'off',
       audioReviewCompleted: false,
       videoRecording: sessionData.videoRecording ?? false,
+      audioConfig: sessionData.audioConfig, // PASS THROUGH AUDIO CONFIG
+      videoConfig: sessionData.videoConfig, // PASS THROUGH VIDEO CONFIG
     });
   };
 
@@ -1445,6 +1582,37 @@ export default function SessionsZone() {
     });
   };
 
+  // Wrapper to accept Partial<Session> from modal and provide all required defaults
+  const handleStartSessionFromModal = useCallback(async (config: Partial<Session>) => {
+    const audioRecording = config.audioRecording ?? lastSettings.audioRecording;
+    const sessionData = {
+      name: config.name || `Session ${new Date().toLocaleString()}`,
+      description: config.description || '',
+      status: 'active' as const,
+      tags: config.tags || [],
+      screenshotInterval: config.screenshotInterval ?? lastSettings.screenshotInterval,
+      enableScreenshots: config.enableScreenshots ?? lastSettings.enableScreenshots,
+      autoAnalysis: config.autoAnalysis ?? lastSettings.autoAnalysis,
+      audioRecording,
+      audioMode: audioRecording ? ('transcription' as const) : ('off' as const),
+      audioReviewCompleted: false,
+      videoRecording: config.videoRecording ?? lastSettings.videoRecording,
+      ...(config.audioConfig && { audioConfig: config.audioConfig }),
+      ...(config.videoConfig && { videoConfig: config.videoConfig }),
+    };
+
+    // Save settings for next time
+    saveLastSessionSettings({
+      screenshotInterval: sessionData.screenshotInterval,
+      enableScreenshots: sessionData.enableScreenshots,
+      autoAnalysis: sessionData.autoAnalysis,
+      audioRecording: sessionData.audioRecording,
+      videoRecording: sessionData.videoRecording,
+    });
+
+    await startSessionWithCountdown(sessionData);
+  }, [lastSettings, startSessionWithCountdown]);
+
   // Update settings handlers
   const updateScreenshots = (enabled: boolean) => {
     // Update last settings for next session
@@ -1454,7 +1622,15 @@ export default function SessionsZone() {
 
     // If session is active, update the running session too
     if (activeSession) {
-      updateSession({ ...activeSession, enableScreenshots: enabled });
+      const updatedSession = { ...activeSession, enableScreenshots: enabled };
+      updateSession(updatedSession);
+
+      // Show user feedback
+      addNotification({
+        type: 'info',
+        title: 'Screenshot Settings Updated',
+        message: enabled ? 'Screenshots enabled for active session' : 'Screenshots disabled for active session',
+      });
     }
   };
 
@@ -1466,7 +1642,15 @@ export default function SessionsZone() {
 
     // If session is active, update the running session too
     if (activeSession) {
-      updateSession({ ...activeSession, audioRecording: enabled });
+      const updatedSession = { ...activeSession, audioRecording: enabled };
+      updateSession(updatedSession);
+
+      // Show user feedback
+      addNotification({
+        type: 'info',
+        title: 'Audio Settings Updated',
+        message: enabled ? 'Audio recording enabled for active session' : 'Audio recording disabled for active session',
+      });
     }
   };
 
@@ -1478,7 +1662,15 @@ export default function SessionsZone() {
 
     // If session is active, update the running session too
     if (activeSession) {
-      updateSession({ ...activeSession, videoRecording: enabled });
+      const updatedSession = { ...activeSession, videoRecording: enabled };
+      updateSession(updatedSession);
+
+      // Show user feedback
+      addNotification({
+        type: 'info',
+        title: 'Video Settings Updated',
+        message: enabled ? 'Video recording enabled for active session' : 'Video recording disabled for active session',
+      });
     }
   };
 
@@ -1490,7 +1682,24 @@ export default function SessionsZone() {
 
     // If session is active, update the running session too
     if (activeSession) {
-      updateSession({ ...activeSession, screenshotInterval: interval });
+      const updatedSession = { ...activeSession, screenshotInterval: interval };
+      updateSession(updatedSession);
+
+      // Determine interval label for user feedback
+      const intervalLabel = interval === -1 ? 'Adaptive (AI-driven)' :
+                           interval === 10/60 ? '10 seconds' :
+                           interval === 0.5 ? '30 seconds' :
+                           interval === 1 ? '1 minute' :
+                           interval === 2 ? '2 minutes' :
+                           interval === 3 ? '3 minutes' :
+                           interval === 5 ? '5 minutes' : `${interval} minutes`;
+
+      // Show user feedback
+      addNotification({
+        type: 'info',
+        title: 'Screenshot Interval Updated',
+        message: `Screenshot interval changed to ${intervalLabel}`,
+      });
     }
   };
 
@@ -1516,7 +1725,7 @@ export default function SessionsZone() {
   } : lastSettings;
 
   return (
-    <div className={`h-full w-full relative flex flex-col ${BACKGROUND_GRADIENT.primary} overflow-hidden`}>
+    <div className={`h-full w-full relative flex flex-col ${BACKGROUND_GRADIENT.primary}`}>
       {/* Animated gradient overlay */}
       <div className={`absolute inset-0 ${BACKGROUND_GRADIENT.secondary} pointer-events-none`} />
 
@@ -1567,6 +1776,7 @@ export default function SessionsZone() {
             isEnding={isEnding}
             countdown={countdown}
             handleQuickStart={handleQuickStart}
+            startSession={handleStartSessionFromModal}
             handleEndSession={handleEndSession}
             pauseSession={pauseSession}
             resumeSession={resumeSession}
@@ -1587,13 +1797,19 @@ export default function SessionsZone() {
             selectedSessionIds={selectedSessionIds}
             onBulkSelectModeChange={setBulkSelectMode}
             onSelectedSessionIdsChange={setSelectedSessionIds}
+            audioDevices={audioDevices}
+            displays={displays}
+            windows={windows}
+            webcams={webcams}
+            loadingDevices={loadingDevices}
+            onLoadDevices={loadDevices}
             compactMode={false}
           />
         </div>
 
         {/* Top Controls Bar with Stats Pill - Side by Side Layout */}
         <motion.div
-          className="flex items-center justify-between gap-4 mb-4"
+          className="flex items-center justify-between gap-4 mb-4 relative z-50"
           animate={{ opacity: scrollY < 100 ? 1 : 0 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
         >
@@ -1606,6 +1822,7 @@ export default function SessionsZone() {
                 isEnding={isEnding}
                 countdown={countdown}
                 handleQuickStart={handleQuickStart}
+                startSession={handleStartSessionFromModal}
                 handleEndSession={handleEndSession}
                 pauseSession={pauseSession}
                 resumeSession={resumeSession}
@@ -1626,6 +1843,12 @@ export default function SessionsZone() {
                 selectedSessionIds={selectedSessionIds}
                 onBulkSelectModeChange={setBulkSelectMode}
                 onSelectedSessionIdsChange={setSelectedSessionIds}
+                audioDevices={audioDevices}
+                displays={displays}
+                windows={windows}
+                webcams={webcams}
+                loadingDevices={loadingDevices}
+                onLoadDevices={loadDevices}
                 compactMode={compactMode}
               />
           </div>
@@ -1637,7 +1860,7 @@ export default function SessionsZone() {
         {/* Dropdown Menu - Shows when MenuButton is toggled while scrolled */}
         {scrollY >= 100 && uiState.zoneMenuPinned && (
           <motion.div
-            className="fixed top-20 left-24 z-50 bg-white/40 backdrop-blur-2xl rounded-[40px] border-2 border-white/50 shadow-2xl ring-1 ring-black/5 px-6 py-3"
+            className="fixed top-20 left-24 z-[100] bg-white/40 backdrop-blur-2xl rounded-[40px] border-2 border-white/50 shadow-2xl ring-1 ring-black/5 px-6 py-3"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -1651,6 +1874,7 @@ export default function SessionsZone() {
                 isEnding={isEnding}
                 countdown={countdown}
                 handleQuickStart={handleQuickStart}
+                startSession={handleStartSessionFromModal}
                 handleEndSession={handleEndSession}
                 pauseSession={pauseSession}
                 resumeSession={resumeSession}
@@ -1671,6 +1895,12 @@ export default function SessionsZone() {
                 selectedSessionIds={selectedSessionIds}
                 onBulkSelectModeChange={setBulkSelectMode}
                 onSelectedSessionIdsChange={setSelectedSessionIds}
+                audioDevices={audioDevices}
+                displays={displays}
+                windows={windows}
+                webcams={webcams}
+                loadingDevices={loadingDevices}
+                onLoadDevices={loadDevices}
                 compactMode={compactMode}
               />
           </motion.div>

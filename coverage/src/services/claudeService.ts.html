@@ -1095,7 +1095,13 @@
 <a name='L1030'></a><a href='#L1030'>1030</a>
 <a name='L1031'></a><a href='#L1031'>1031</a>
 <a name='L1032'></a><a href='#L1032'>1032</a>
-<a name='L1033'></a><a href='#L1033'>1033</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L1033'></a><a href='#L1033'>1033</a>
+<a name='L1034'></a><a href='#L1034'>1034</a>
+<a name='L1035'></a><a href='#L1035'>1035</a>
+<a name='L1036'></a><a href='#L1036'>1036</a>
+<a name='L1037'></a><a href='#L1037'>1037</a>
+<a name='L1038'></a><a href='#L1038'>1038</a>
+<a name='L1039'></a><a href='#L1039'>1039</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1322,6 +1328,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1378,6 +1387,9 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2310,11 +2322,14 @@ For EVERY task, provide ALL fields:
 &lt;/task_requirements&gt;
 &nbsp;
 &lt;note_structure&gt;
-Use markdown with:
+Use PLAIN MARKDOWN ONLY (NO HTML tags):
 - ## for headers (Context, Discussion, Decisions, Next Steps)
 - **bold** for key terms/names
 - Bullet lists (-) and numbered lists (1. 2. 3.)
 - Clear sections for scanability
+&nbsp;
+CRITICAL: Return plain markdown text ONLY. Do NOT include HTML tags like &lt;p&gt;, &lt;div&gt;, &lt;h1&gt;, etc.
+The content will be automatically formatted for display by the application.
 &lt;/note_structure&gt;
 &nbsp;
 &lt;output_schema&gt;
@@ -2432,11 +2447,14 @@ For EVERY task, provide ALL fields:
 &lt;/task_requirements&gt;
 &nbsp;
 &lt;note_structure&gt;
-Use markdown with:
+Use PLAIN MARKDOWN ONLY (NO HTML tags):
 - ## for headers (Context, Discussion, Decisions, Next Steps)
 - **bold** for key terms/names
 - Bullet lists (-) and numbered lists (1. 2. 3.)
 - Clear sections for scanability
+&nbsp;
+CRITICAL: Return plain markdown text ONLY. Do NOT include HTML tags like &lt;p&gt;, &lt;div&gt;, &lt;h1&gt;, etc.
+The content will be automatically formatted for display by the application.
 &lt;/note_structure&gt;
 &nbsp;
 &lt;output_schema&gt;
@@ -2625,7 +2643,7 @@ Existing Tasks (check for duplicates):
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      const response = await invoke&lt;ClaudeChatResponse&gt;('claude_chat_completion_vision', {</span>
 <span class="cstat-no" title="statement not covered" >        model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5</span>
-<span class="cstat-no" title="statement not covered" >        maxTokens: 4096,</span>
+<span class="cstat-no" title="statement not covered" >        maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)</span>
 <span class="cstat-no" title="statement not covered" >        messages,</span>
 <span class="cstat-no" title="statement not covered" >        system: undefined,</span>
 <span class="cstat-no" title="statement not covered" >        temperature: undefined,</span>
@@ -2985,7 +3003,7 @@ Return ONLY valid JSON (no markdown):
 <span class="cstat-no" title="statement not covered" >      const response = await invoke&lt;ClaudeChatResponse&gt;('claude_chat_completion', {</span>
 <span class="cstat-no" title="statement not covered" >        request: {</span>
 <span class="cstat-no" title="statement not covered" >          model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5</span>
-<span class="cstat-no" title="statement not covered" >          maxTokens: 2048,</span>
+<span class="cstat-no" title="statement not covered" >          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)</span>
 <span class="cstat-no" title="statement not covered" >          messages,</span>
 <span class="cstat-no" title="statement not covered" >          system: undefined,</span>
 <span class="cstat-no" title="statement not covered" >          temperature: undefined,</span>
@@ -3108,7 +3126,7 @@ Only include "suggestedSettings" if shouldOptimize is true. Make conservative ad
 <span class="cstat-no" title="statement not covered" >      const response = await invoke&lt;ClaudeChatResponse&gt;('claude_chat_completion', {</span>
 <span class="cstat-no" title="statement not covered" >        request: {</span>
 <span class="cstat-no" title="statement not covered" >          model: 'claude-sonnet-4-5-20250929',</span>
-<span class="cstat-no" title="statement not covered" >          maxTokens: 1024,</span>
+<span class="cstat-no" title="statement not covered" >          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)</span>
 <span class="cstat-no" title="statement not covered" >          messages,</span>
 <span class="cstat-no" title="statement not covered" >          system: undefined,</span>
 <span class="cstat-no" title="statement not covered" >          temperature: undefined,</span>
@@ -3166,7 +3184,7 @@ Only include "suggestedSettings" if shouldOptimize is true. Make conservative ad
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-10-24T03:16:46.657Z
             </div>
         <script src="../../prettify.js"></script>
         <script>
