@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { useSessions } from '../context/SessionsContext';
+import { useActiveSession } from '../context/ActiveSessionContext';
 import { useUI } from '../context/UIContext';
 import { useTasks } from '../context/TasksContext';
 import { Play, Pause, Square, Clock, Calendar, Tag, Activity, CheckCircle2, AlertCircle, Target, Lightbulb, Search, FileText, CheckSquare, TrendingUp, Camera, BookOpen, Trash2, Sparkles, Save, Filter, SlidersHorizontal, CheckCheck, Video, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
@@ -153,20 +154,20 @@ export default function SessionsZone() {
     setCollapseReason(reason);
   };
 
-  // Ref to track active session ID for audio chunk listener (avoids stale closures)
-  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  // Get active session from context (always fresh, no stale closures)
+  // NOTE: Previously used activeSessionIdRef and stateRef to work around stale closures.
+  // Now using ActiveSession context which provides fresh state automatically.
+  // This replaces the old `const activeSession = sessions.find(...)` pattern.
+  // See: /Users/jamesmcarthur/Documents/taskerino/docs/sessions-rewrite/REFS_ELIMINATION_PLAN.md
+  const { activeSession } = useActiveSession();
 
-  // Ref to track previous active session ID for detecting completion transitions
-  const prevActiveSessionIdRef = useRef<string | null>(null);
+  // State: Track previous active session ID for detecting completion transitions
+  // Converted from ref to state for proper React flow
+  const [prevActiveSessionId, setPrevActiveSessionId] = useState<string | null>(null);
 
-  // Ref to track video recording initialization attempts (prevents duplicate starts)
-  const videoRecordingInitializedRef = useRef<string | null>(null);
-
-  // Ref to store latest state (avoids stale closures in callbacks)
-  const stateRef = useRef({ sessions });
-
-  // Ref to store audio segment handler (prevents duplicate event listeners)
-  const handleAudioSegmentProcessedRef = useRef<((segment: SessionAudioSegment) => void) | null>(null);
+  // State: Track video recording initialization (prevents duplicate starts)
+  // Converted from ref to state for proper React state management
+  const [videoInitializedSessionId, setVideoInitializedSessionId] = useState<string | null>(null);
 
   // Ref to track if audio listener is already active (prevents duplicate registration in StrictMode)
   const audioListenerActiveRef = useRef<boolean>(false);
@@ -329,8 +330,6 @@ export default function SessionsZone() {
   // State for compact mode - enables icon-only buttons when space is constrained
   const [compactMode, setCompactMode] = useState(false);
 
-  const activeSession = sessions.find(s => s.id === activeSessionId);
-
   // Get the selected session from state by ID (always fresh, never stale)
   const selectedSessionForDetail = selectedSessionId
     ? sessions.find(s => s.id === selectedSessionId)
@@ -347,11 +346,11 @@ export default function SessionsZone() {
     willShow: selectedSessionForDetail ? 'selectedSessionForDetail' : activeSession ? 'activeSession' : 'empty'
   });
 
-  // Update refs on every render (cheap operation, avoids stale closures)
+  // Update prevActiveSessionId state to detect completion transitions
+  // Converted from ref-based tracking to state-based for proper React flow
   useEffect(() => {
-    activeSessionIdRef.current = activeSessionId;
-    stateRef.current = { sessions };
-  }, [activeSessionId, sessions]);
+    setPrevActiveSessionId(activeSessionId ?? null);
+  }, [activeSessionId]);
 
   // Show sessions intro tooltip when user first opens Sessions zone with no sessions
   useEffect(() => {
@@ -608,25 +607,21 @@ export default function SessionsZone() {
 
   /**
    * Handle screenshot capture callback
-   * Note: Only depends on addScreenshot and updateScreenshotAnalysis to avoid recreating on every session update
-   * Uses stateRef to access latest state without causing callback recreation
+   * NOTE: Previously used activeSessionIdRef and stateRef to avoid stale closures.
+   * Now uses activeSession from context which provides fresh state automatically.
+   * This callback will re-create when activeSession changes, which is correct behavior.
    */
   const handleScreenshotCaptured = useCallback(async (screenshot: SessionScreenshot) => {
     console.log('📸 Screenshot captured, starting AI analysis...');
 
-    // Get current active session ID from ref (avoids stale closure)
-    const currentActiveSessionId = activeSessionIdRef.current;
-    if (!currentActiveSessionId) return;
+    // Get current active session from context (always fresh, no stale closure)
+    if (!activeSession) return;
 
     // Add screenshot to session
-    addScreenshot(currentActiveSessionId, screenshot);
+    addScreenshot(activeSession.id, screenshot);
 
-    // Get the session from stateRef to check autoAnalysis setting
-    const sessionForAnalysis = stateRef.current.sessions.find(s => s.id === currentActiveSessionId);
-    if (!sessionForAnalysis) return;
-
-    // Trigger AI analysis if enabled
-    if (sessionForAnalysis.autoAnalysis) {
+    // Trigger AI analysis if enabled (activeSession has fresh config)
+    if (activeSession.autoAnalysis) {
       try {
         // Update status to 'analyzing'
         updateScreenshotAnalysis(screenshot.id, undefined, 'analyzing');
@@ -646,10 +641,10 @@ export default function SessionsZone() {
           mimeType
         });
 
-        // Analyze with AI (use sessionForAnalysis which has latest state)
+        // Analyze with AI (activeSession has latest state from context)
         const analysis = await sessionsAgentService.analyzeScreenshot(
           screenshot,
-          sessionForAnalysis,
+          activeSession,
           screenshotData,
           mimeType
         );
@@ -674,29 +669,25 @@ export default function SessionsZone() {
         );
       }
     }
-  }, [updateScreenshotAnalysis]);
+  }, [activeSession, addScreenshot, updateScreenshotAnalysis]);
 
   /**
    * Handle audio segment processed callback
-   * Note: Only depends on addAudioSegment to avoid recreating on every session update
+   * NOTE: Previously used activeSessionIdRef to avoid stale closures.
+   * Now uses activeSession from context which provides fresh state automatically.
+   * This callback will re-create when activeSession changes, which is correct behavior.
    */
   const handleAudioSegmentProcessed = useCallback(async (segment: SessionAudioSegment) => {
     console.log('🎤 Audio segment processed:', segment.id);
 
-    // Get current active session ID from ref (avoids stale closure)
-    const currentActiveSessionId = activeSessionIdRef.current;
-    if (!currentActiveSessionId) return;
+    // Get current active session from context (always fresh, no stale closure)
+    if (!activeSession) return;
 
     // Add audio segment to session
-    addAudioSegment(currentActiveSessionId, segment);
+    addAudioSegment(activeSession.id, segment);
 
     console.log('✅ Audio segment added to session');
-  }, [addAudioSegment]);
-
-  // Update ref whenever callback changes
-  useEffect(() => {
-    handleAudioSegmentProcessedRef.current = handleAudioSegmentProcessed;
-  }, [handleAudioSegmentProcessed]);
+  }, [activeSession, addAudioSegment]);
 
   /**
    * Manage screenshot capture and audio recording lifecycle
@@ -782,13 +773,13 @@ export default function SessionsZone() {
         // Video is enabled - check backend recording status
         const activeVideoSessionId = videoRecordingService.getActiveSessionId();
         const isAlreadyRecordingThisSession = activeVideoSessionId === activeSession.id;
-        const hasAttemptedInitialization = videoRecordingInitializedRef.current === activeSession.id;
+        const hasAttemptedInitialization = videoInitializedSessionId === activeSession.id;
 
         console.log('🎬 [SESSIONS ZONE] Video is ENABLED - activeVideoSessionId:', activeVideoSessionId, 'currentSession:', activeSession.id, 'hasAttempted:', hasAttemptedInitialization);
 
         if (!isAlreadyRecordingThisSession && !hasAttemptedInitialization) {
           // Mark as attempted to prevent duplicate initialization
-          videoRecordingInitializedRef.current = activeSession.id;
+          setVideoInitializedSessionId(activeSession.id);
 
           // Check backend recording status and forcefully stop any existing recording
           console.log('🎬 [SESSIONS ZONE] Checking backend recording status...');
@@ -818,7 +809,7 @@ export default function SessionsZone() {
             .catch(error => {
               console.error('❌ [SESSIONS ZONE] Failed to start video recording:', error);
               // Reset the flag so user can retry manually if needed
-              videoRecordingInitializedRef.current = null;
+              setVideoInitializedSessionId(null);
               // Don't throw - video failure shouldn't stop the session
             });
         } else if (isAlreadyRecordingThisSession) {
@@ -837,7 +828,7 @@ export default function SessionsZone() {
               console.error('❌ [SESSIONS ZONE] Failed to stop video recording:', error);
             });
           // Reset initialization flag when video is disabled
-          videoRecordingInitializedRef.current = null;
+          setVideoInitializedSessionId(null);
         } else {
           console.log('ℹ️ [SESSIONS ZONE] No video to stop for this session');
         }
@@ -888,17 +879,16 @@ export default function SessionsZone() {
    * It catches the moment when a session completes and stops the video exactly once.
    */
   useEffect(() => {
-    const prevSessionId = prevActiveSessionIdRef.current;
     const currentSessionId = activeSessionId;
 
     console.log('🎬 [VIDEO COMPLETION] Checking for session completion transition');
-    console.log('🎬 [VIDEO COMPLETION] prevSessionId:', prevSessionId, 'currentSessionId:', currentSessionId);
+    console.log('🎬 [VIDEO COMPLETION] prevSessionId:', prevActiveSessionId, 'currentSessionId:', currentSessionId);
 
     // Detect session completion: had active session, now undefined
-    if (prevSessionId && !currentSessionId) {
-      const completedSession = sessions.find(s => s.id === prevSessionId && s.status === 'completed');
+    if (prevActiveSessionId && !currentSessionId) {
+      const completedSession = sessions.find(s => s.id === prevActiveSessionId && s.status === 'completed');
 
-      console.log('🎬 [VIDEO COMPLETION] Detected activeSessionId cleared, looking for completed session:', prevSessionId);
+      console.log('🎬 [VIDEO COMPLETION] Detected activeSessionId cleared, looking for completed session:', prevActiveSessionId);
       console.log('🎬 [VIDEO COMPLETION] Found completed session:', completedSession?.id, 'status:', completedSession?.status);
 
       if (completedSession) {
@@ -940,24 +930,24 @@ export default function SessionsZone() {
               }
 
               // Reset initialization flag after stopping
-              videoRecordingInitializedRef.current = null;
+              setVideoInitializedSessionId(null);
             })
             .catch(error => {
               console.error('❌ [VIDEO COMPLETION] Failed to stop video recording:', error);
               // Reset flag even on error to allow retry in next session
-              videoRecordingInitializedRef.current = null;
+              setVideoInitializedSessionId(null);
             });
         } else {
           console.log('ℹ️ [VIDEO COMPLETION] No video to stop - activeVideoSessionId:', activeVideoSessionId, 'completedSession:', completedSession.id);
           // Reset flag since this session is ending
-          videoRecordingInitializedRef.current = null;
+          setVideoInitializedSessionId(null);
         }
       }
     }
 
-    // Update prev ref for next render
-    prevActiveSessionIdRef.current = currentSessionId ?? null;
-  }, [activeSessionId, sessions, updateSession]);
+    // Update prev state for next render
+    setPrevActiveSessionId(currentSessionId ?? null);
+  }, [activeSessionId, sessions, updateSession, prevActiveSessionId]);
 
   /**
    * Listen for menu bar session control events
@@ -1056,11 +1046,13 @@ export default function SessionsZone() {
 
   /**
    * Listen for audio-chunk events from Rust audio recorder
-   * Using refs to prevent duplicate listeners and stale closures
    *
-   * CRITICAL FIX: This effect handles the async nature of listen() properly to prevent
-   * duplicate listeners in React Strict Mode. The cleanup function ensures that any
-   * in-progress setup is canceled and existing listeners are properly removed.
+   * NOTE: Previously used refs to prevent stale closures in the listener callback.
+   * Now the listener re-registers when handleAudioSegmentProcessed changes (which happens
+   * when activeSession changes). This ensures the callback always has fresh session state.
+   *
+   * CRITICAL: audioListenerActiveRef is still used to prevent duplicate registration
+   * during async setup (React Strict Mode safety). This is a legitimate ref use case.
    */
   useEffect(() => {
     let unlistenAudioChunk: (() => void) | undefined;
@@ -1085,23 +1077,16 @@ export default function SessionsZone() {
 
         // Debug logging
         console.log('🎤 [AUDIO CHUNK] Payload sessionId:', sessionId);
-        console.log('🎤 [AUDIO CHUNK] activeSessionIdRef.current:', activeSessionIdRef.current);
+        console.log('🎤 [AUDIO CHUNK] activeSession ID:', activeSession?.id);
 
-        // Only process if this is for the active session (read from ref to avoid stale closure)
-        if (!activeSessionIdRef.current || activeSessionIdRef.current !== sessionId) {
+        // Only process if this is for the active session
+        if (!activeSession || activeSession.id !== sessionId) {
           console.warn('⚠️  [AUDIO CHUNK] Received audio for inactive session, ignoring', {
-            hasActiveSession: !!activeSessionIdRef.current,
-            activeSessionId: activeSessionIdRef.current,
+            hasActiveSession: !!activeSession,
+            activeSessionId: activeSession?.id,
             receivedSessionId: sessionId,
-            match: activeSessionIdRef.current === sessionId
+            match: activeSession?.id === sessionId
           });
-          return;
-        }
-
-        // Get current handler from ref (prevents stale closure)
-        const handler = handleAudioSegmentProcessedRef.current;
-        if (!handler) {
-          console.warn('⚠️  [AUDIO CHUNK] No handler available, ignoring');
           return;
         }
 
@@ -1112,7 +1097,7 @@ export default function SessionsZone() {
             audioBase64,
             duration,
             sessionId,
-            handler
+            handleAudioSegmentProcessed
           );
         } catch (error) {
           console.error('❌ [AUDIO CHUNK] Failed to process audio chunk:', error);
@@ -1145,7 +1130,7 @@ export default function SessionsZone() {
       // Reset the active flag to allow re-registration
       audioListenerActiveRef.current = false;
     };
-  }, []); // Empty dependencies - listener is set up once and uses refs for current values
+  }, [handleAudioSegmentProcessed, activeSession]); // Re-register when callback or session changes
 
   /**
    * Scroll-driven content expansion
@@ -1527,19 +1512,15 @@ export default function SessionsZone() {
    */
   useEffect(() => {
     // When there's no active session but there was one before, it completed
-    if (!activeSession && prevActiveSessionIdRef.current) {
-      const completedSessionId = prevActiveSessionIdRef.current;
-      const completedSession = sessions.find(s => s.id === completedSessionId);
+    if (!activeSession && prevActiveSessionId) {
+      const completedSession = sessions.find(s => s.id === prevActiveSessionId);
 
       if (completedSession && completedSession.status === 'completed') {
-        console.log('🎬 Session completed, transitioning to summary view:', completedSessionId);
+        console.log('🎬 Session completed, transitioning to summary view:', prevActiveSessionId);
         setSelectedSessionId(completedSession.id);
       }
     }
-
-    // Update the ref for next render
-    prevActiveSessionIdRef.current = activeSession?.id || null;
-  }, [activeSession, sessions]);
+  }, [activeSession, sessions, prevActiveSessionId]);
 
   const handleStartSession = (sessionData: Partial<Session>) => {
     startSession({

@@ -11,6 +11,22 @@ import type { StorageInfo, BackupInfo } from './StorageAdapter';
 import type { StorageTransaction } from './types';
 import JSZip from 'jszip';
 import { compressData, decompressData, isCompressed } from './compressionUtils';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+
+/**
+ * Write-Ahead Log Entry
+ * Each entry represents an operation that will be applied to storage
+ */
+interface WALEntry {
+  id: string;              // Unique entry ID
+  timestamp: number;       // Entry creation time
+  operation: 'write' | 'delete' | 'transaction-start' | 'transaction-commit' | 'transaction-rollback';
+  collection: string;      // Collection name
+  data?: any;              // Data payload
+  checksum?: string;       // SHA-256 of data (for integrity verification)
+  transactionId?: string;  // Transaction grouping (for Phase 2.4 transactions)
+}
 
 /**
  * Write queue with mutex to prevent concurrent storage writes
@@ -259,8 +275,12 @@ class TauriFileSystemTransaction implements StorageTransaction {
 export class TauriFileSystemAdapter extends StorageAdapter {
   private readonly DB_DIR = 'db';
   private readonly BACKUP_DIR = 'backups';
+  private readonly WAL_PATH = 'db/wal.log';
+  private readonly CHECKPOINT_PATH = 'db/wal.checkpoint';
   private initialized = false;
   private writeQueue = new WriteQueue();
+  private writesSinceCheckpoint: number = 0;
+  private phase24Transactions = new Map<string, import('./StorageAdapter').Transaction>();
 
   /**
    * Initialize the storage system
@@ -305,6 +325,17 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
         // Calculate checksum for integrity
         const checksum = await calculateChecksum(jsonData);
+
+        // 1. WRITE TO WAL FIRST (Write-Ahead Logging)
+        const walEntry: WALEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+          timestamp: Date.now(),
+          operation: 'write',
+          collection,
+          data,
+          checksum,
+        };
+        await this.appendToWAL(walEntry);
 
         // Compress the JSON data
         let compressedData: string;
@@ -393,6 +424,13 @@ export class TauriFileSystemAdapter extends StorageAdapter {
         }
 
         console.log(`💾 Saved ${collection} (${formatBytes(writtenContent.length)})`);
+
+        // 4. Checkpoint periodically (every 100 writes)
+        this.writesSinceCheckpoint++;
+        if (this.writesSinceCheckpoint >= 100) {
+          await this.checkpoint();
+          this.writesSinceCheckpoint = 0;
+        }
       } catch (error) {
         console.error(`❌ Failed to save ${collection}:`, error);
         throw new Error(`Failed to save ${collection}: ${error}`);
@@ -961,12 +999,476 @@ export class TauriFileSystemAdapter extends StorageAdapter {
   }
 
   /**
+   * Append entry to WAL (Write-Ahead Log)
+   * WAL entries are written before actual file operations for crash recovery
+   */
+  private async appendToWAL(entry: WALEntry): Promise<void> {
+    const line = JSON.stringify(entry) + '\n';
+
+    try {
+      // Check if WAL file exists
+      const walExists = await exists(this.WAL_PATH, { baseDir: BaseDirectory.AppData });
+
+      if (walExists) {
+        // Append to existing WAL
+        const existingWAL = await readTextFile(this.WAL_PATH, { baseDir: BaseDirectory.AppData });
+        await writeTextFile(this.WAL_PATH, existingWAL + line, { baseDir: BaseDirectory.AppData });
+      } else {
+        // Create new WAL file
+        await writeTextFile(this.WAL_PATH, line, { baseDir: BaseDirectory.AppData });
+      }
+
+      console.log(`[WAL] Appended: ${entry.operation} ${entry.collection}`);
+    } catch (error) {
+      throw new Error(`WAL append failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Recover from WAL on startup
+   * Replays uncommitted operations after a crash
+   */
+  async recoverFromWAL(): Promise<void> {
+    try {
+      const walExists = await exists(this.WAL_PATH, { baseDir: BaseDirectory.AppData });
+      if (!walExists) {
+        console.log('[WAL] No WAL file found, skipping recovery');
+        return;
+      }
+
+      const walContent = await readTextFile(this.WAL_PATH, { baseDir: BaseDirectory.AppData });
+      const lines = walContent.split('\n').filter(line => line.trim());
+
+      if (lines.length === 0) {
+        console.log('[WAL] WAL file is empty, skipping recovery');
+        return;
+      }
+
+      const entries = lines.map(line => JSON.parse(line) as WALEntry);
+
+      console.log(`[WAL] Recovering ${entries.length} entries...`);
+
+      // Get last checkpoint timestamp
+      const checkpointExists = await exists(this.CHECKPOINT_PATH, { baseDir: BaseDirectory.AppData });
+      let lastCheckpoint = 0;
+      if (checkpointExists) {
+        const checkpoint = await readTextFile(this.CHECKPOINT_PATH, { baseDir: BaseDirectory.AppData });
+        lastCheckpoint = parseInt(checkpoint);
+      }
+
+      // Replay entries after last checkpoint
+      const toReplay = entries.filter(e => e.timestamp > lastCheckpoint);
+      console.log(`[WAL] Replaying ${toReplay.length} entries since checkpoint ${lastCheckpoint}`);
+
+      // Group by transaction
+      const transactions = new Map<string, WALEntry[]>();
+      const standaloneEntries: WALEntry[] = [];
+
+      for (const entry of toReplay) {
+        if (entry.transactionId) {
+          if (!transactions.has(entry.transactionId)) {
+            transactions.set(entry.transactionId, []);
+          }
+          transactions.get(entry.transactionId)!.push(entry);
+        } else {
+          standaloneEntries.push(entry);
+        }
+      }
+
+      // Replay committed transactions
+      for (const [txId, txEntries] of transactions) {
+        const committed = txEntries.some(e => e.operation === 'transaction-commit');
+        const rolledBack = txEntries.some(e => e.operation === 'transaction-rollback');
+
+        if (committed && !rolledBack) {
+          console.log(`[WAL] Replaying transaction ${txId}`);
+          for (const entry of txEntries) {
+            if (entry.operation === 'write') {
+              await this.replayWrite(entry);
+            } else if (entry.operation === 'delete') {
+              await this.replayDelete(entry);
+            }
+          }
+        } else {
+          console.log(`[WAL] Skipping uncommitted/rolled-back transaction ${txId}`);
+        }
+      }
+
+      // Replay standalone writes
+      for (const entry of standaloneEntries) {
+        if (entry.operation === 'write') {
+          await this.replayWrite(entry);
+        } else if (entry.operation === 'delete') {
+          await this.replayDelete(entry);
+        }
+      }
+
+      console.log('[WAL] Recovery complete');
+
+      // Checkpoint and clear WAL
+      await this.checkpoint();
+
+    } catch (error) {
+      console.error('[WAL] Recovery failed:', error);
+      throw new Error(`WAL recovery failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Replay a write operation from WAL
+   */
+  private async replayWrite(entry: WALEntry): Promise<void> {
+    const path = `${this.DB_DIR}/${entry.collection}.json`;
+    await writeTextFile(path, JSON.stringify(entry.data), {
+      baseDir: BaseDirectory.AppData
+    });
+    console.log(`[WAL] Replayed write: ${entry.collection}`);
+  }
+
+  /**
+   * Replay a delete operation from WAL
+   */
+  private async replayDelete(entry: WALEntry): Promise<void> {
+    const path = `${this.DB_DIR}/${entry.collection}.json`;
+    const fileExists = await exists(path, { baseDir: BaseDirectory.AppData });
+    if (fileExists) {
+      await remove(path, { baseDir: BaseDirectory.AppData });
+      console.log(`[WAL] Replayed delete: ${entry.collection}`);
+    }
+  }
+
+  /**
+   * Checkpoint: Mark all WAL entries as applied
+   * Clears the WAL and updates the checkpoint timestamp
+   */
+  async checkpoint(): Promise<void> {
+    const now = Date.now();
+    await writeTextFile(this.CHECKPOINT_PATH, now.toString(), {
+      baseDir: BaseDirectory.AppData
+    });
+
+    // Clear WAL
+    await writeTextFile(this.WAL_PATH, '', { baseDir: BaseDirectory.AppData });
+
+    console.log(`[WAL] Checkpoint created at ${now}`);
+  }
+
+  /**
+   * Calculate SHA-256 checksum for data integrity
+   * @param data - The string data to hash
+   * @returns Hex-encoded SHA-256 hash
+   */
+  private async calculateSHA256(data: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const dataBytes = encoder.encode(data);
+    const hashBytes = sha256(dataBytes);
+    return bytesToHex(hashBytes);
+  }
+
+  /**
+   * Save single entity to per-entity file
+   * @param collection - Collection name (e.g., 'sessions', 'notes', 'tasks')
+   * @param entity - Entity object with an 'id' field
+   */
+  async saveEntity<T extends { id: string }>(
+    collection: string,
+    entity: T
+  ): Promise<void> {
+    await this.ensureInitialized();
+
+    const dir = `${this.DB_DIR}/${collection}`;
+    const filePath = `${dir}/${collection.slice(0, -1)}-${entity.id}.json`;
+
+    // Ensure directory exists
+    try {
+      await mkdir(dir, { baseDir: BaseDirectory.AppData, recursive: true });
+    } catch (error) {
+      // Directory might already exist, ignore
+    }
+
+    const jsonData = JSON.stringify(entity);
+    const checksum = await this.calculateSHA256(jsonData);
+
+    // Write to WAL
+    const walEntry: WALEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      timestamp: Date.now(),
+      operation: 'write',
+      collection: filePath,
+      data: entity,
+      checksum,
+    };
+    await this.appendToWAL(walEntry);
+
+    // Write entity file
+    await writeTextFile(filePath, jsonData, {
+      baseDir: BaseDirectory.AppData,
+    });
+
+    // Write checksum file
+    await writeTextFile(`${filePath}.checksum`, checksum, {
+      baseDir: BaseDirectory.AppData,
+    });
+
+    // Update index
+    await this.updateIndex(collection, entity);
+
+    console.log(`[Storage] Saved entity ${collection}/${entity.id} (SHA-256: ${checksum.substring(0, 8)}...)`);
+  }
+
+  /**
+   * Load single entity from per-entity file
+   * @param collection - Collection name
+   * @param id - Entity ID
+   * @returns The entity or null if not found
+   */
+  async loadEntity<T>(collection: string, id: string): Promise<T | null> {
+    await this.ensureInitialized();
+
+    const filePath = `${this.DB_DIR}/${collection}/${collection.slice(0, -1)}-${id}.json`;
+    const checksumPath = `${filePath}.checksum`;
+
+    try {
+      const fileExists = await exists(filePath, { baseDir: BaseDirectory.AppData });
+      if (!fileExists) return null;
+
+      // Read data
+      const content = await readTextFile(filePath, { baseDir: BaseDirectory.AppData });
+
+      // Verify checksum if exists
+      const checksumExists = await exists(checksumPath, { baseDir: BaseDirectory.AppData });
+      if (checksumExists) {
+        const storedChecksum = await readTextFile(checksumPath, { baseDir: BaseDirectory.AppData });
+        const actualChecksum = await this.calculateSHA256(content);
+
+        if (storedChecksum !== actualChecksum) {
+          throw new Error(`Checksum mismatch for ${collection}/${id}! Data may be corrupted.`);
+        }
+
+        console.log(`[Storage] Checksum verified for ${collection}/${id}`);
+      }
+
+      return JSON.parse(content);
+    } catch (error) {
+      console.error(`Failed to load entity ${collection}/${id}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Update index with entity metadata
+   * @param collection - Collection name
+   * @param entity - Entity object with metadata to extract
+   */
+  private async updateIndex<T extends { id: string }>(
+    collection: string,
+    entity: T
+  ): Promise<void> {
+    const indexPath = `${this.DB_DIR}/${collection}/index.json`;
+
+    // Load existing index
+    let index: any[] = [];
+    try {
+      const indexExists = await exists(indexPath, { baseDir: BaseDirectory.AppData });
+      if (indexExists) {
+        const content = await readTextFile(indexPath, { baseDir: BaseDirectory.AppData });
+        index = JSON.parse(content);
+      }
+    } catch (error) {
+      console.warn('Failed to load index, creating new:', error);
+    }
+
+    // Extract metadata
+    const metadata: any = { id: entity.id };
+
+    if (collection === 'sessions' && 'startTime' in entity) {
+      metadata.startTime = (entity as any).startTime;
+      metadata.endTime = (entity as any).endTime;
+      metadata.status = (entity as any).status;
+      metadata.name = (entity as any).name;
+    } else if (collection === 'notes' && 'content' in entity) {
+      metadata.createdAt = (entity as any).createdAt;
+      metadata.title = (entity as any).content.substring(0, 50);
+    } else if (collection === 'tasks' && 'title' in entity) {
+      metadata.title = (entity as any).title;
+      metadata.status = (entity as any).status;
+      metadata.priority = (entity as any).priority;
+    }
+
+    // Update or add
+    const existingIndex = index.findIndex(i => i.id === entity.id);
+    if (existingIndex >= 0) {
+      index[existingIndex] = metadata;
+    } else {
+      index.push(metadata);
+    }
+
+    // Write index
+    await writeTextFile(indexPath, JSON.stringify(index), {
+      baseDir: BaseDirectory.AppData,
+    });
+  }
+
+  /**
+   * Load all entities using index for fast lookup
+   * @param collection - Collection name
+   * @returns Array of all entities in the collection
+   */
+  async loadAll<T>(collection: string): Promise<T[]> {
+    await this.ensureInitialized();
+
+    const indexPath = `${this.DB_DIR}/${collection}/index.json`;
+
+    try {
+      const indexExists = await exists(indexPath, { baseDir: BaseDirectory.AppData });
+      if (!indexExists) return [];
+
+      const content = await readTextFile(indexPath, { baseDir: BaseDirectory.AppData });
+      const index = JSON.parse(content);
+
+      // Load all entities in parallel
+      const entities = await Promise.all(
+        index.map((meta: any) => this.loadEntity<T>(collection, meta.id))
+      );
+
+      return entities.filter(e => e !== null) as T[];
+    } catch (error) {
+      console.error(`Failed to load all ${collection}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Begin a new storage transaction
    * @returns A new transaction instance
    */
   async beginTransaction(): Promise<StorageTransaction> {
     await this.ensureInitialized();
     return new TauriFileSystemTransaction(this.DB_DIR, this);
+  }
+
+  /**
+   * Begin a new Phase 2.4 transaction (ACID transaction system)
+   * Returns transaction ID for use with addOperation/commitTransaction/rollbackTransaction
+   */
+  beginPhase24Transaction(): string {
+    const txId = `tx-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    this.phase24Transactions.set(txId, {
+      id: txId,
+      operations: [],
+    });
+
+    // Write transaction-start to WAL
+    const walEntry: WALEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      timestamp: Date.now(),
+      operation: 'transaction-start',
+      collection: '',
+      transactionId: txId,
+    };
+    this.appendToWAL(walEntry).catch(console.error);
+
+    console.log(`[Transaction] Started: ${txId}`);
+    return txId;
+  }
+
+  /**
+   * Add an operation to an active Phase 2.4 transaction
+   * @param txId - Transaction ID from beginPhase24Transaction
+   * @param operation - Operation to add to transaction
+   */
+  addOperation(txId: string, operation: import('./StorageAdapter').TransactionOperation): void {
+    const tx = this.phase24Transactions.get(txId);
+    if (!tx) {
+      throw new Error(`Transaction ${txId} not found`);
+    }
+
+    tx.operations.push(operation);
+    console.log(`[Transaction] Added operation to ${txId}: ${operation.type} ${operation.collection}`);
+  }
+
+  /**
+   * Commit a Phase 2.4 transaction atomically
+   * All operations succeed or all fail
+   * @param txId - Transaction ID to commit
+   */
+  async commitPhase24Transaction(txId: string): Promise<void> {
+    const tx = this.phase24Transactions.get(txId);
+    if (!tx) {
+      throw new Error(`Transaction ${txId} not found`);
+    }
+
+    console.log(`[Transaction] Committing ${txId} (${tx.operations.length} operations)...`);
+
+    try {
+      // Execute all operations
+      for (const op of tx.operations) {
+        // Write to WAL first
+        const walEntry: WALEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+          timestamp: Date.now(),
+          operation: op.type === 'write' ? 'write' : 'delete',
+          collection: op.collection,
+          data: op.data,
+          checksum: op.data ? await calculateChecksum(JSON.stringify(op.data)) : undefined,
+          transactionId: txId,
+        };
+        await this.appendToWAL(walEntry);
+
+        // Execute operation
+        if (op.type === 'write') {
+          // Use regular save() which already handles backups and WAL
+          await this.save(op.collection, op.data);
+        } else if (op.type === 'delete') {
+          // Delete collection
+          await this.delete(op.collection);
+        }
+      }
+
+      // Write commit to WAL
+      const commitEntry: WALEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        timestamp: Date.now(),
+        operation: 'transaction-commit',
+        collection: '',
+        transactionId: txId,
+      };
+      await this.appendToWAL(commitEntry);
+
+      console.log(`[Transaction] ✓ Committed ${txId}`);
+
+      // Clean up
+      this.phase24Transactions.delete(txId);
+
+    } catch (error) {
+      console.error(`[Transaction] Commit failed for ${txId}:`, error);
+      await this.rollbackPhase24Transaction(txId);
+      throw error;
+    }
+  }
+
+  /**
+   * Rollback a Phase 2.4 transaction
+   * Cancels all queued operations
+   * @param txId - Transaction ID to rollback
+   */
+  async rollbackPhase24Transaction(txId: string): Promise<void> {
+    console.log(`[Transaction] Rolling back ${txId}...`);
+
+    // Write rollback to WAL
+    const rollbackEntry: WALEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      timestamp: Date.now(),
+      operation: 'transaction-rollback',
+      collection: '',
+      transactionId: txId,
+    };
+    await this.appendToWAL(rollbackEntry);
+
+    // Clean up
+    this.phase24Transactions.delete(txId);
+
+    console.log(`[Transaction] ✗ Rolled back ${txId}`);
   }
 
   /**

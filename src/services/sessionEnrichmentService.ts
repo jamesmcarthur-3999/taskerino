@@ -363,29 +363,43 @@ export class SessionEnrichmentService {
           progress: 25,
         });
 
-        // Update session in storage with 'in-progress' status
+        // Update session in storage with 'in-progress' status using transaction
         try {
           const storage = await getStorage();
-          const sessions = await storage.load<Session[]>('sessions');
+          const txId = storage.beginPhase24Transaction();
 
-          if (sessions) {
-            const sessionIndex = sessions.findIndex((s) => s.id === session.id);
-            if (sessionIndex !== -1) {
-              sessions[sessionIndex].enrichmentStatus = {
-                status: 'in-progress',
-                progress: 25,
-                currentStage: 'audio',
-                audio: { status: opts.includeAudio ? 'pending' : 'skipped' },
-                video: { status: opts.includeVideo ? 'pending' : 'skipped' },
-                summary: { status: opts.includeSummary ? 'pending' : 'skipped' },
-                totalCost: 0,
-                errors: [],
-                warnings: result.warnings,
-                canResume: true,
-              };
-              await storage.save('sessions', sessions);
-              logger.info('Enrichment status set to in-progress');
+          try {
+            const sessions = await storage.load<Session[]>('sessions');
+
+            if (sessions) {
+              const sessionIndex = sessions.findIndex((s) => s.id === session.id);
+              if (sessionIndex !== -1) {
+                sessions[sessionIndex].enrichmentStatus = {
+                  status: 'in-progress',
+                  progress: 25,
+                  currentStage: 'audio',
+                  audio: { status: opts.includeAudio ? 'pending' : 'skipped' },
+                  video: { status: opts.includeVideo ? 'pending' : 'skipped' },
+                  summary: { status: opts.includeSummary ? 'pending' : 'skipped' },
+                  totalCost: 0,
+                  errors: [],
+                  warnings: result.warnings,
+                  canResume: true,
+                };
+
+                storage.addOperation(txId, {
+                  type: 'write',
+                  collection: 'sessions',
+                  data: sessions,
+                });
+
+                await storage.commitPhase24Transaction(txId);
+                logger.info('Enrichment status set to in-progress (transaction committed)');
+              }
             }
+          } catch (error) {
+            await storage.rollbackPhase24Transaction(txId);
+            throw error;
           }
         } catch (error: any) {
           logger.warn('Failed to set enrichment status to in-progress', error);
@@ -647,29 +661,43 @@ export class SessionEnrichmentService {
         progress: 0,
       });
 
-      // FIX: Update session enrichmentStatus to 'failed' in storage
+      // FIX: Update session enrichmentStatus to 'failed' in storage using transaction
       try {
         const storage = await getStorage();
-        const sessions = await storage.load<Session[]>('sessions');
-        if (sessions) {
-          const sessionIndex = sessions.findIndex((s) => s.id === session.id);
-          if (sessionIndex !== -1) {
-            sessions[sessionIndex].enrichmentStatus = {
-              status: 'failed',
-              completedAt: new Date().toISOString(),
-              progress: 0,
-              currentStage: 'complete',
-              audio: { status: 'failed', error: error.message },
-              video: { status: 'skipped' },
-              summary: { status: 'skipped' },
-              totalCost: result.totalCost,
-              errors: [error.message],
-              warnings: result.warnings,
-              canResume: false,
-            };
-            await storage.save('sessions', sessions);
-            logger.info('Session enrichmentStatus updated to failed');
+        const txId = storage.beginPhase24Transaction();
+
+        try {
+          const sessions = await storage.load<Session[]>('sessions');
+          if (sessions) {
+            const sessionIndex = sessions.findIndex((s) => s.id === session.id);
+            if (sessionIndex !== -1) {
+              sessions[sessionIndex].enrichmentStatus = {
+                status: 'failed',
+                completedAt: new Date().toISOString(),
+                progress: 0,
+                currentStage: 'complete',
+                audio: { status: 'failed', error: error.message },
+                video: { status: 'skipped' },
+                summary: { status: 'skipped' },
+                totalCost: result.totalCost,
+                errors: [error.message],
+                warnings: result.warnings,
+                canResume: false,
+              };
+
+              storage.addOperation(txId, {
+                type: 'write',
+                collection: 'sessions',
+                data: sessions,
+              });
+
+              await storage.commitPhase24Transaction(txId);
+              logger.info('Session enrichmentStatus updated to failed (transaction committed)');
+            }
           }
+        } catch (txError) {
+          await storage.rollbackPhase24Transaction(txId);
+          throw txError;
         }
       } catch (updateError: any) {
         logger.error('Failed to update session with error status', updateError);

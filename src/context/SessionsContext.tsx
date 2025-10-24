@@ -10,6 +10,7 @@ import { sessionEnrichmentService } from '../services/sessionEnrichmentService';
 import { validateAudioConfig, validateVideoConfig, validateSession } from '../utils/sessionValidation';
 import { useUI } from './UIContext';
 import { useEnrichmentContext } from './EnrichmentContext';
+import { getPersistenceQueue } from '../services/storage/PersistenceQueue';
 
 interface SessionsState {
   sessions: Session[];
@@ -447,10 +448,10 @@ const CRITICAL_ACTIONS = new Set([
 export function SessionsProvider({ children }: { children: ReactNode }) {
   const [state, baseDispatch] = useReducer(sessionsReducer, initialState);
   const [hasLoaded, setHasLoaded] = React.useState(false);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const stateRef = useRef(state);
   const { addNotification } = useUI();
   const { startTracking, updateProgress, stopTracking } = useEnrichmentContext();
+  const queue = getPersistenceQueue();
 
   // Audio chunk queue management (Fix #7: Prevent unbounded memory growth)
   const audioChunkQueueRef = useRef<Map<string, SessionAudioSegment[]>>(new Map()); // sessionId -> queue
@@ -510,25 +511,30 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     console.log('[DISPATCH] Action fired:', action.type, action.payload);
     baseDispatch(action);
 
-    // If critical action, save immediately (after state update)
+    // If critical action, enqueue with critical priority (immediate processing)
     if (CRITICAL_ACTIONS.has(action.type)) {
-      console.log('[DISPATCH] Critical action detected, queuing save:', action.type);
+      console.log('[DISPATCH] Critical action detected, enqueueing with critical priority:', action.type);
       queueMicrotask(async () => {
         await new Promise(resolve => requestAnimationFrame(resolve));
 
-        console.log(`[DISPATCH] Critical action ${action.type} - saving immediately`);
+        console.log(`[DISPATCH] Critical action ${action.type} - enqueueing to persistence queue`);
+
+        // Enqueue sessions with critical priority
+        queue.enqueue('sessions', stateRef.current.sessions, 'critical');
+
+        // Enqueue settings with critical priority
         try {
           const storage = await getStorage();
-          await storage.save('sessions', stateRef.current.sessions);
-
-          // Also save activeSessionId to settings
           const settings = await storage.load<any>('settings') || {};
-          await storage.save('settings', {
+          queue.enqueue('settings', {
             ...settings,
             activeSessionId: stateRef.current.activeSessionId,
-          });
+          }, 'critical');
+        } catch (error) {
+          console.error('Failed to load settings for critical save:', error);
+        }
 
-          console.log('Critical session data saved immediately');
+        console.log('Critical session data enqueued for immediate persistence');
 
           // Auto-trigger enrichment when session ends
           if (action.type === 'END_SESSION') {
@@ -665,24 +671,9 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
                 });
               }
           }
-        } catch (error) {
-          console.error('Failed to save critical session data:', error);
-          // Fallback to localStorage
-          try {
-            const dataToSave = {
-              sessions: stateRef.current.sessions,
-              activeSessionId: stateRef.current.activeSessionId,
-              timestamp: Date.now(),
-            };
-            localStorage.setItem('taskerino-critical-save', JSON.stringify(dataToSave));
-            console.warn('Critical data saved to localStorage fallback');
-          } catch (fallbackError) {
-            console.error('Fallback save also failed:', fallbackError);
-          }
-        }
       });
     }
-  }, [startTracking, updateProgress, stopTracking]);
+  }, [queue, startTracking, updateProgress, stopTracking]);
 
   // Load sessions on mount
   useEffect(() => {
@@ -819,30 +810,29 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     loadSessions();
   }, []);
 
-  // Save on window/app close - critical safety net
+  // Flush queue on window/app close - critical safety net
   useEffect(() => {
     const handleBeforeUnload = async () => {
-      console.log('App closing - forcing final session save');
+      console.log('App closing - flushing persistence queue');
       try {
-        const storage = await getStorage();
-        await storage.save('sessions', stateRef.current.sessions);
-
-        const settings = await storage.load<any>('settings') || {};
-        await storage.save('settings', {
-          ...settings,
-          activeSessionId: stateRef.current.activeSessionId,
-        });
-
-        console.log('Final session save complete');
+        await queue.shutdown();
+        console.log('Persistence queue flushed successfully');
       } catch (error) {
-        console.error('Failed final session save:', error);
+        console.error('Failed to flush persistence queue:', error);
+        // Fallback: try direct save
         try {
-          const dataToSave = {
-            sessions: stateRef.current.sessions,
+          const storage = await getStorage();
+          await storage.save('sessions', stateRef.current.sessions);
+
+          const settings = await storage.load<any>('settings') || {};
+          await storage.save('settings', {
+            ...settings,
             activeSessionId: stateRef.current.activeSessionId,
-          };
-          localStorage.setItem('taskerino-emergency-save', JSON.stringify(dataToSave));
-        } catch {}
+          });
+          console.log('Fallback save complete');
+        } catch (fallbackError) {
+          console.error('Fallback save also failed:', fallbackError);
+        }
       }
     };
 
@@ -851,22 +841,30 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, []);
+  }, [queue]);
 
   // Periodic auto-save for active sessions - limits data loss to 30 seconds
+  // Uses critical priority to ensure immediate persistence
   useEffect(() => {
     if (!hasLoaded || !state.activeSessionId) return;
 
     console.log('Starting periodic auto-save for active session');
 
     const interval = setInterval(async () => {
-      console.log('Periodic auto-save for active session');
+      console.log('Periodic auto-save for active session (critical priority)');
+      // Enqueue with critical priority for immediate processing
+      queue.enqueue('sessions', stateRef.current.sessions, 'critical');
+
+      // Also save activeSessionId to settings
       try {
         const storage = await getStorage();
-        await storage.save('sessions', stateRef.current.sessions);
-        console.log('Periodic auto-save complete');
+        const settings = await storage.load<any>('settings') || {};
+        queue.enqueue('settings', {
+          ...settings,
+          activeSessionId: stateRef.current.activeSessionId,
+        }, 'critical');
       } catch (error) {
-        console.error('Periodic auto-save failed:', error);
+        console.error('Periodic auto-save settings enqueue failed:', error);
       }
     }, 30000); // Every 30 seconds
 
@@ -874,45 +872,30 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       console.log('Stopping periodic auto-save');
       clearInterval(interval);
     };
-  }, [hasLoaded, state.activeSessionId]);
+  }, [hasLoaded, state.activeSessionId, queue]);
 
-  // Save sessions (debounced)
+  // Save sessions using persistence queue (replaces debounced saves)
   useEffect(() => {
     if (!hasLoaded) return;
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
+    // Enqueue sessions with normal priority (batched 100ms)
+    queue.enqueue('sessions', state.sessions, 'normal');
 
-    saveTimeoutRef.current = setTimeout(async () => {
+    // Enqueue settings with normal priority (batched 100ms)
+    // We need to load current settings first to avoid overwriting
+    (async () => {
       try {
-        // Phase 1.2: Removed enrichment skip logic that blocked ALL saves during enrichment
-        // This eliminates data loss windows. Phase 2.4 will add proper transactions
-        // to prevent enrichment conflicts, but the skip logic created a LARGER risk
-        // by blocking all saves for the entire enrichment duration (~30 seconds).
-
         const storage = await getStorage();
-        await storage.save('sessions', state.sessions);
-
-        // Also save activeSessionId to settings
         const settings = await storage.load<any>('settings') || {};
-        await storage.save('settings', {
+        queue.enqueue('settings', {
           ...settings,
           activeSessionId: state.activeSessionId,
-        });
-
-        console.log('Sessions saved');
+        }, 'normal');
       } catch (error) {
-        console.error('Failed to save sessions:', error);
+        console.error('Failed to load settings for queue save:', error);
       }
-    }, 1000); // Reduced from 5000ms to 1000ms - faster saves with smaller data loss window
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [hasLoaded, state.sessions, state.activeSessionId]);
+    })();
+  }, [hasLoaded, state.sessions, state.activeSessionId, queue]);
 
   const value: SessionsContextType = {
     sessions: state.sessions,
@@ -1145,10 +1128,44 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * @deprecated This hook is deprecated and will be removed in Phase 7.
+ *
+ * SessionsContext has been split into three focused contexts for better maintainability:
+ * - useSessionList() - For managing the list of completed sessions
+ * - useActiveSession() - For managing the currently active session
+ * - useRecording() - For managing recording services
+ *
+ * See migration guide: /docs/sessions-rewrite/CONTEXT_MIGRATION_GUIDE.md
+ *
+ * @example
+ * // Before
+ * const { sessions, activeSessionId, startSession } = useSessions();
+ *
+ * // After
+ * const { sessions } = useSessionList();
+ * const { activeSession, startSession } = useActiveSession();
+ * const { startScreenshots } = useRecording();
+ */
 export function useSessions() {
   const context = useContext(SessionsContext);
   if (context === undefined) {
     throw new Error('useSessions must be used within a SessionsProvider');
   }
+
+  // Log deprecation warning once per component mount
+  React.useEffect(() => {
+    console.warn(
+      '%c[DEPRECATED] useSessions() is deprecated',
+      'color: orange; font-weight: bold',
+      '\n\nSessionsContext has been split into three focused contexts:\n' +
+      '  • useSessionList() - For session list operations\n' +
+      '  • useActiveSession() - For active session operations\n' +
+      '  • useRecording() - For recording services\n\n' +
+      'See migration guide: /docs/sessions-rewrite/CONTEXT_MIGRATION_GUIDE.md\n\n' +
+      'This hook will be removed in Phase 7 (Week 13-14).'
+    );
+  }, []);
+
   return context;
 }

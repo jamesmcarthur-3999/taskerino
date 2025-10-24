@@ -8,6 +8,9 @@ import { NotesProvider } from './context/NotesContext';
 import { TasksProvider } from './context/TasksContext';
 import { EnrichmentProvider } from './context/EnrichmentContext';
 import { SessionsProvider } from './context/SessionsContext';
+import { SessionListProvider } from './context/SessionListContext';
+import { ActiveSessionProvider } from './context/ActiveSessionContext';
+import { RecordingProvider } from './context/RecordingContext';
 import { ScrollAnimationProvider } from './contexts/ScrollAnimationContext';
 import { TopNavigation } from './components/TopNavigation';
 import { ReferencePanel } from './components/ReferencePanel';
@@ -19,6 +22,7 @@ import { FloatingControls } from './components/FloatingControls';
 import { NedOverlay } from './components/NedOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FeatureTooltip } from './components/FeatureTooltip';
+import { QueueMonitor } from './components/dev/QueueMonitor';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { claudeService } from './services/claudeService';
 import { sessionsAgentService } from './services/sessionsAgentService';
@@ -27,6 +31,7 @@ import { contextAgent } from './services/contextAgent';
 import { sessionsQueryAgent } from './services/sessionsQueryAgent';
 import { migrateApiKeysToTauri } from './utils/apiKeyMigration';
 import { getStorage } from './services/storage';
+import { getPersistenceQueue } from './services/storage/PersistenceQueue';
 
 // Lazy load zone components for better performance
 const CaptureZone = lazy(() => import('./components/CaptureZone'));
@@ -175,6 +180,7 @@ function MainApp() {
       <QuickTaskModal />
       <FloatingControls />
       <NedOverlay />
+      <QueueMonitor />
 
       {/* Sidebar (for task/note details) */}
       {uiState.sidebar.isOpen && uiState.sidebar.type === 'task' && uiState.sidebar.itemId && (
@@ -270,6 +276,35 @@ function AppContent() {
           console.log('API keys migrated successfully:', migrationResult);
         }
 
+        // Recover from WAL if app crashed
+        console.log('[APP] Checking for WAL recovery...');
+        const storage = await getStorage();
+        if ('recoverFromWAL' in storage) {
+          try {
+            await (storage as any).recoverFromWAL();
+            console.log('[APP] WAL recovery complete');
+          } catch (error) {
+            console.error('[APP] WAL recovery failed:', error);
+            // Continue anyway - recovery failure shouldn't block app startup
+          }
+        }
+
+        // Check if per-entity file migration is needed
+        const migrationFlag = await storage.load<boolean>('__migration_per_entity_complete');
+        if (!migrationFlag) {
+          console.log('[APP] Running per-entity file migration...');
+          try {
+            const { migrateToPerEntityFiles } = await import('./migrations/splitCollections');
+            await migrateToPerEntityFiles();
+            await storage.save('__migration_per_entity_complete', true);
+            console.log('[APP] Per-entity file migration complete');
+          } catch (error) {
+            console.error('[APP] Per-entity file migration failed:', error);
+            // Continue anyway - migration failure shouldn't block app startup
+            // User can retry by deleting the flag or re-running migration manually
+          }
+        }
+
         // Load API keys with error handling
         try {
           const savedClaudeKey = await invoke<string | null>('get_claude_api_key');
@@ -332,15 +367,23 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps = run once on mount (dispatch is stable)
 
-  // Graceful shutdown: create backup and flush pending writes on app close
+  // Graceful shutdown: flush queue, create backup, and flush pending writes on app close
   useEffect(() => {
     const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
       try {
+        // Step 1: Flush persistence queue first (ensures all enqueued saves complete)
+        console.log('[APP] Flushing persistence queue...');
+        const queue = getPersistenceQueue();
+        await queue.shutdown();
+        console.log('[APP] ✓ Persistence queue flushed');
+
+        // Step 2: Create shutdown backup
         console.log('[APP] Creating shutdown backup...');
         const storage = await getStorage();
         await storage.createBackup();
         console.log('[APP] ✓ Shutdown backup created');
 
+        // Step 3: Flush any remaining pending writes
         console.log('[APP] Flushing pending writes before shutdown...');
         await storage.shutdown();
         console.log('[APP] Graceful shutdown complete');
@@ -444,12 +487,20 @@ export default function App() {
             <NotesProvider>
               <TasksProvider>
                 <EnrichmentProvider>
-                  <SessionsProvider>
-                    {/* OLD AppProvider - TODO: Remove once all components are migrated (13 remaining) */}
-                    <AppProvider>
-                      <AppContent />
-                    </AppProvider>
-                  </SessionsProvider>
+                  {/* NEW: Split session contexts for better maintainability */}
+                  <SessionListProvider>
+                    <ActiveSessionProvider>
+                      <RecordingProvider>
+                        {/* OLD: Keep SessionsProvider for backward compatibility during migration */}
+                        <SessionsProvider>
+                          {/* OLD AppProvider - TODO: Remove once all components are migrated (13 remaining) */}
+                          <AppProvider>
+                            <AppContent />
+                          </AppProvider>
+                        </SessionsProvider>
+                      </RecordingProvider>
+                    </ActiveSessionProvider>
+                  </SessionListProvider>
                 </EnrichmentProvider>
               </TasksProvider>
             </NotesProvider>

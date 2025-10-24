@@ -1868,6 +1868,47 @@ export interface VideoRecordingConfig {
   };
 }
 
+/**
+ * Session recording configuration for XState machine
+ * Used to configure what gets recorded during a session
+ */
+export interface SessionRecordingConfig {
+  /** Session name */
+  name: string;
+
+  /** Session description (optional) */
+  description?: string;
+
+  /** Enable screenshot capture */
+  screenshotsEnabled: boolean;
+
+  /** Audio recording configuration (optional) */
+  audioConfig?: {
+    enabled: boolean;
+    sourceType: AudioSourceType;
+    micDeviceId?: string;
+    systemAudioDeviceId?: string;
+    balance?: number;
+    micVolume?: number;
+    systemVolume?: number;
+  };
+
+  /** Video recording configuration (optional) */
+  videoConfig?: {
+    enabled: boolean;
+    sourceType: VideoSourceType;
+    displayIds?: string[];
+    windowIds?: string[];
+    webcamDeviceId?: string;
+    quality?: 'low' | 'medium' | 'high' | 'ultra';
+    fps?: number;
+    resolution?: {
+      width: number;
+      height: number;
+    };
+  };
+}
+
 export interface SessionAudioSegment {
   id: string;
   sessionId: string;

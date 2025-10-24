@@ -33,6 +33,25 @@ export interface MigrationStatus {
 }
 
 /**
+ * Transaction for atomic multi-collection operations
+ * Ensures all operations succeed or all fail (ACID properties)
+ */
+export interface Transaction {
+  id: string;
+  operations: TransactionOperation[];
+}
+
+/**
+ * Single operation within a transaction
+ */
+export interface TransactionOperation {
+  type: 'write' | 'delete';
+  collection: string;
+  data?: any;
+  entityId?: string;
+}
+
+/**
  * Abstract storage adapter interface
  * All storage implementations must implement these methods
  */
@@ -145,6 +164,33 @@ export abstract class StorageAdapter {
    * @returns A new transaction instance
    */
   abstract beginTransaction(): Promise<StorageTransaction>;
+
+  /**
+   * Begin a new Phase 2.4 transaction (ACID transaction system)
+   * Returns transaction ID for use with addOperation/commitTransaction/rollbackTransaction
+   */
+  abstract beginPhase24Transaction(): string;
+
+  /**
+   * Add an operation to an active Phase 2.4 transaction
+   * @param txId - Transaction ID from beginPhase24Transaction
+   * @param operation - Operation to add to transaction
+   */
+  abstract addOperation(txId: string, operation: TransactionOperation): void;
+
+  /**
+   * Commit a Phase 2.4 transaction atomically
+   * All operations succeed or all fail
+   * @param txId - Transaction ID to commit
+   */
+  abstract commitPhase24Transaction(txId: string): Promise<void>;
+
+  /**
+   * Rollback a Phase 2.4 transaction
+   * Cancels all queued operations
+   * @param txId - Transaction ID to rollback
+   */
+  abstract rollbackPhase24Transaction(txId: string): Promise<void>;
 }
 
 /**

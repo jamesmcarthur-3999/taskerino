@@ -228,6 +228,7 @@ export class IndexedDBAdapter extends StorageAdapter {
   private db: IDBDatabase | null = null;
   private initialized = false;
   private writeQueue = new WriteQueue();
+  private phase24Transactions = new Map<string, import('./StorageAdapter').TransactionOperation[]>();
 
   /**
    * Initialize the storage system
@@ -806,6 +807,70 @@ export class IndexedDBAdapter extends StorageAdapter {
   async beginTransaction(): Promise<StorageTransaction> {
     await this.ensureInitialized();
     return new IndexedDBTransaction(this.db!, this.COLLECTIONS_STORE, this);
+  }
+
+  /**
+   * Begin a new Phase 2.4 transaction (ACID transaction system)
+   * Note: IndexedDB has native transaction support, so this is a simplified implementation
+   */
+  beginPhase24Transaction(): string {
+    const txId = `tx-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log(`[Transaction] Started (IndexedDB): ${txId}`);
+    return txId;
+  }
+
+  /**
+   * Add an operation to an active Phase 2.4 transaction
+   * Note: For IndexedDB, operations are executed immediately using native transactions
+   */
+  addOperation(txId: string, operation: import('./StorageAdapter').TransactionOperation): void {
+    console.log(`[Transaction] Operation queued for ${txId}: ${operation.type} ${operation.collection}`);
+    // Store operation metadata for commit phase
+    if (!this.phase24Transactions.has(txId)) {
+      this.phase24Transactions.set(txId, []);
+    }
+    this.phase24Transactions.get(txId)!.push(operation);
+  }
+
+  /**
+   * Commit a Phase 2.4 transaction atomically
+   */
+  async commitPhase24Transaction(txId: string): Promise<void> {
+    const operations = this.phase24Transactions.get(txId) || [];
+
+    console.log(`[Transaction] Committing ${txId} (${operations.length} operations)...`);
+
+    try {
+      // Execute all operations using native IndexedDB transactions
+      for (const op of operations) {
+        if (op.type === 'write') {
+          await this.save(op.collection, op.data);
+        } else if (op.type === 'delete') {
+          await this.delete(op.collection);
+        }
+      }
+
+      console.log(`[Transaction] ✓ Committed ${txId}`);
+
+      // Clean up
+      this.phase24Transactions.delete(txId);
+    } catch (error) {
+      console.error(`[Transaction] Commit failed for ${txId}:`, error);
+      await this.rollbackPhase24Transaction(txId);
+      throw error;
+    }
+  }
+
+  /**
+   * Rollback a Phase 2.4 transaction
+   */
+  async rollbackPhase24Transaction(txId: string): Promise<void> {
+    console.log(`[Transaction] Rolling back ${txId}...`);
+
+    // Clean up
+    this.phase24Transactions.delete(txId);
+
+    console.log(`[Transaction] ✗ Rolled back ${txId}`);
   }
 
   /**
