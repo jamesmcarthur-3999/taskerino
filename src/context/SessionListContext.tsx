@@ -275,10 +275,10 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
       if (session.video?.fullVideoAttachmentId) {
         attachmentIds.push(session.video.fullVideoAttachmentId);
       }
-      if (session.video?.chapterVideos) {
-        session.video.chapterVideos.forEach(chapter => {
-          if (chapter.attachmentId) {
-            attachmentIds.push(chapter.attachmentId);
+      if (session.video?.chunks) {
+        session.video.chunks.forEach(chunk => {
+          if (chunk.attachmentId) {
+            attachmentIds.push(chunk.attachmentId);
           }
         });
       }

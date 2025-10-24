@@ -91,11 +91,11 @@ export class LazyLoader<T extends { id: string }> {
    */
   async initialize(): Promise<void> {
     // Load metadata index from Phase 3.1
-    const indexResult = await this.storage.loadIndex(this.collection, 'metadata' as any);
+    const indexResult = await this.storage.loadIndex<EntityMetadata[]>(this.collection, 'metadata' as any);
 
     if (indexResult) {
       // Extract IDs from metadata index
-      this.entityIds = indexResult.index.map((meta: any) => meta.id);
+      this.entityIds = indexResult.index.map((meta) => meta.id);
       console.log(`[LazyLoader] Initialized ${this.collection}: ${this.entityIds.length} entities`);
     } else {
       console.warn(`[LazyLoader] No metadata index found for ${this.collection}`);
@@ -131,11 +131,11 @@ export class LazyLoader<T extends { id: string }> {
 
     // Load missing metadata from index
     if (toLoad.length > 0) {
-      const indexResult = await this.storage.loadIndex(this.collection, 'metadata' as any);
+      const indexResult = await this.storage.loadIndex<EntityMetadata[]>(this.collection, 'metadata' as any);
 
       if (indexResult) {
         for (const id of toLoad) {
-          const meta = indexResult.index.find((m: any) => m.id === id);
+          const meta = indexResult.index.find((m) => m.id === id);
           if (meta) {
             this.metadataCache.set(id, meta);
             results.push(meta);

@@ -19,7 +19,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { getPersistenceQueue, QueueStats } from '@/services/storage/PersistenceQueue';
+import { getPersistenceQueue } from '@/services/storage/PersistenceQueue';
+import type { QueueStats } from '@/services/storage/PersistenceQueue';
 
 export function QueueMonitor() {
   const [stats, setStats] = useState<QueueStats | null>(null);

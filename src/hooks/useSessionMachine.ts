@@ -208,8 +208,8 @@ export function useSessionMachine() {
      *
      * @param event - Event to check
      */
-    canSend: (event: string) => {
-      return state.can({ type: event as SessionMachineEvent['type'] });
+    canSend: (event: SessionMachineEvent) => {
+      return state.can(event);
     },
   };
 }

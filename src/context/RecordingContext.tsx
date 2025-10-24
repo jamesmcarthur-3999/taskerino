@@ -100,6 +100,10 @@ export function RecordingProvider({ children }: RecordingProviderProps) {
     video: 'idle',
   });
 
+  // Store session and callback for screenshot resume
+  const screenshotSessionRef = useRef<Session | null>(null);
+  const screenshotCallbackRef = useRef<((screenshot: SessionScreenshot) => void) | null>(null);
+
   // Cleanup metrics tracking
   const cleanupMetricsRef = useRef<CleanupMetrics>({
     sessionEnds: {
@@ -128,6 +132,10 @@ export function RecordingProvider({ children }: RecordingProviderProps) {
   const startScreenshots = useCallback((session: Session, onCapture: (screenshot: SessionScreenshot) => void) => {
     console.log('[RecordingContext] Starting screenshot capture for session:', session.id);
     try {
+      // Store session and callback for resume
+      screenshotSessionRef.current = session;
+      screenshotCallbackRef.current = onCapture;
+
       screenshotCaptureService.startCapture(session, onCapture);
       setRecordingState(prev => ({ ...prev, screenshots: 'active' }));
     } catch (error) {
@@ -141,6 +149,9 @@ export function RecordingProvider({ children }: RecordingProviderProps) {
     console.log('[RecordingContext] Stopping screenshot capture');
     try {
       screenshotCaptureService.stopCapture();
+      // Clear stored session and callback
+      screenshotSessionRef.current = null;
+      screenshotCallbackRef.current = null;
       setRecordingState(prev => ({ ...prev, screenshots: 'stopped' }));
     } catch (error) {
       console.error('[RecordingContext] Failed to stop screenshots:', error);
@@ -157,7 +168,11 @@ export function RecordingProvider({ children }: RecordingProviderProps) {
 
   const resumeScreenshots = useCallback(() => {
     console.log('[RecordingContext] Resuming screenshot capture');
-    screenshotCaptureService.resumeCapture();
+    if (!screenshotSessionRef.current || !screenshotCallbackRef.current) {
+      console.error('[RecordingContext] Cannot resume: session or callback not found');
+      return;
+    }
+    screenshotCaptureService.resumeCapture(screenshotSessionRef.current, screenshotCallbackRef.current);
     setRecordingState(prev => ({ ...prev, screenshots: 'active' }));
   }, []);
 
