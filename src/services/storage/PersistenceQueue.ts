@@ -22,8 +22,35 @@
  * ```
  */
 
-import { EventEmitter } from 'events';
 import { getStorage } from './index';
+
+/**
+ * Simple browser-compatible EventEmitter implementation
+ */
+class SimpleEventEmitter {
+  private listeners: Map<string, Set<(...args: any[]) => void>> = new Map();
+
+  on(event: string, listener: (...args: any[]) => void): void {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(listener);
+  }
+
+  off(event: string, listener: (...args: any[]) => void): void {
+    const eventListeners = this.listeners.get(event);
+    if (eventListeners) {
+      eventListeners.delete(listener);
+    }
+  }
+
+  emit(event: string, ...args: any[]): void {
+    const eventListeners = this.listeners.get(event);
+    if (eventListeners) {
+      eventListeners.forEach(listener => listener(...args));
+    }
+  }
+}
 
 export type QueuePriority = 'critical' | 'normal' | 'low';
 
@@ -58,7 +85,7 @@ const MAX_RETRIES: Record<QueuePriority, number> = {
 const BATCH_DELAY_MS = 100;
 const MAX_QUEUE_SIZE = 1000;
 
-export class PersistenceQueue extends EventEmitter {
+export class PersistenceQueue extends SimpleEventEmitter {
   private criticalQueue: QueueItem[] = [];
   private normalQueue: QueueItem[] = [];
   private lowQueue: QueueItem[] = [];
