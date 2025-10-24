@@ -8,16 +8,25 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PersistenceQueue, resetPersistenceQueue, getPersistenceQueue } from '../PersistenceQueue';
 
 // Mock the storage adapter
+const mockSave = vi.fn();
+const mockLoad = vi.fn();
+
 vi.mock('../index', () => ({
-  getStorage: vi.fn().mockResolvedValue({
-    set: vi.fn().mockResolvedValue(undefined),
-  }),
+  getStorage: vi.fn(async () => ({
+    save: mockSave,
+    load: mockLoad,
+  })),
 }));
 
 describe('PersistenceQueue', () => {
   let queue: PersistenceQueue;
 
   beforeEach(() => {
+    // Reset mocks
+    vi.clearAllMocks();
+    mockSave.mockResolvedValue(undefined);
+    mockLoad.mockResolvedValue(null);
+
     // Reset singleton and create fresh instance
     resetPersistenceQueue();
     queue = new PersistenceQueue();
@@ -128,42 +137,46 @@ describe('PersistenceQueue', () => {
     it('should retry on failure', async () => {
       // Mock storage to fail once, then succeed
       let callCount = 0;
-      const { getStorage } = await import('../index');
-      vi.mocked(getStorage).mockResolvedValue({
-        set: vi.fn().mockImplementation(async () => {
-          callCount++;
-          if (callCount === 1) {
-            throw new Error('Storage error');
-          }
-          return undefined;
-        }),
-      } as any);
+      mockSave.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('Storage error');
+        }
+        return undefined;
+      });
 
-      const retryPromise = new Promise<void>((resolve) => {
+      // Wait for both retry event AND completion after retry
+      let retryFired = false;
+      const completionPromise = new Promise<void>((resolve) => {
         queue.on('retry', (item) => {
           if (item.key === 'retry-test') {
+            retryFired = true;
+          }
+        });
+
+        queue.on('completed', (item) => {
+          if (item.key === 'retry-test' && retryFired) {
             resolve();
           }
         });
       });
 
-      queue.enqueue('retry-test', { data: 'test' }, 'critical');
+      // Use 'normal' priority which has 3 retries (critical only has 1)
+      queue.enqueue('retry-test', { data: 'test' }, 'normal');
 
-      // Wait for retry event
+      // Wait for completion after retry (needs longer timeout for batch delay + retry + backoff)
       await Promise.race([
-        retryPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 500)),
+        completionPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1500)),
       ]);
 
-      expect(callCount).toBeGreaterThan(1);
+      expect(callCount).toBe(2); // First call fails, second succeeds
+      expect(retryFired).toBe(true);
     });
 
     it('should fail after max retries', async () => {
       // Mock storage to always fail
-      const { getStorage } = await import('../index');
-      vi.mocked(getStorage).mockResolvedValue({
-        set: vi.fn().mockRejectedValue(new Error('Storage error')),
-      } as any);
+      mockSave.mockRejectedValue(new Error('Storage error'));
 
       const failedPromise = new Promise<void>((resolve) => {
         queue.on('failed', (item) => {

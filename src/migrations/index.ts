@@ -22,3 +22,6 @@ export {
   rollbackEnrichmentMigration,
   showMigrationStatus,
 } from './runMigration';
+
+// Attachment Hash Migration (V3.5 - Deduplication)
+export { migrateAttachmentHashes } from './migrateAttachmentHashes';

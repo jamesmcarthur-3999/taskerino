@@ -11,7 +11,7 @@ export async function migrateToCompressed() {
     console.log(`[Migration] Compressing ${collection}...`);
 
     // Load all entities using existing index
-    const entities = await (storage as any).loadAll<any>(collection);
+    const entities = await (storage as any).loadAll(collection);
 
     if (!entities || entities.length === 0) {
       console.log(`[Migration] No ${collection} to compress`);

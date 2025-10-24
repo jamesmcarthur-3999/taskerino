@@ -51,8 +51,70 @@ async function waitForQueueProcessing(queue: PersistenceQueue, timeout = 1000): 
 
 describe('Storage Queue + Transaction Integration', () => {
   let queue: PersistenceQueue;
+  let mockDB: any;
+  let collections: Map<string, any>;
 
   beforeEach(() => {
+    // Create IndexedDB mock
+    collections = new Map<string, any>();
+
+    const createNormalTransaction = (stores: any, mode: any) => {
+      const mockStore = {
+        put: vi.fn((record) => {
+          collections.set(record.name, record);
+          const request = {
+            onsuccess: null as any,
+            onerror: null as any
+          };
+          setTimeout(() => { if (request.onsuccess) request.onsuccess(); }, 0);
+          return request;
+        }),
+        get: vi.fn((key) => {
+          const record = collections.get(key);
+          const request = {
+            onsuccess: null as any,
+            result: record,
+            onerror: null as any
+          };
+          setTimeout(() => { if (request.onsuccess) request.onsuccess(); }, 0);
+          return request;
+        })
+      };
+
+      const mockTransaction = {
+        objectStore: vi.fn(() => mockStore),
+        oncomplete: null as any,
+        onerror: null as any,
+        onabort: null as any,
+        error: null
+      };
+
+      setTimeout(() => { if (mockTransaction.oncomplete) mockTransaction.oncomplete(); }, 0);
+      return mockTransaction;
+    };
+
+    mockDB = {
+      transaction: vi.fn(createNormalTransaction)
+    };
+
+    const mockOpenRequest = {
+      result: mockDB,
+      onsuccess: null as any,
+      onerror: null as any,
+      onupgradeneeded: null as any
+    };
+
+    global.indexedDB = {
+      open: vi.fn(() => {
+        setTimeout(() => {
+          if (mockOpenRequest.onsuccess) {
+            mockOpenRequest.onsuccess({ target: mockOpenRequest } as any);
+          }
+        }, 0);
+        return mockOpenRequest as any;
+      })
+    } as any;
+
     resetPersistenceQueue();
     queue = getPersistenceQueue();
   });
@@ -60,6 +122,7 @@ describe('Storage Queue + Transaction Integration', () => {
   afterEach(async () => {
     await queue.shutdown();
     resetPersistenceQueue();
+    delete (global as any).indexedDB;
   });
 
   describe('Basic Queue Operations', () => {

@@ -5,7 +5,7 @@
  * Files are stored in the app's data directory.
  */
 
-import { BaseDirectory, exists, readTextFile, writeTextFile, writeBinaryFile, readBinaryFile, mkdir, remove, readDir } from '@tauri-apps/plugin-fs';
+import { BaseDirectory, exists, readTextFile, writeTextFile, writeFile, readFile, mkdir, remove, readDir } from '@tauri-apps/plugin-fs';
 import { StorageAdapter, formatBytes, validateJSON, calculateChecksum } from './StorageAdapter';
 import type { StorageInfo, BackupInfo } from './StorageAdapter';
 import type { StorageTransaction } from './types';
@@ -143,6 +143,9 @@ class TauriFileSystemTransaction implements StorageTransaction {
     // Create temp directory for staging
     const tempDir = `${this.basePath}/.tx-${Date.now()}`;
 
+    // Track files written to final locations for rollback
+    const writtenFiles: string[] = [];
+
     try {
       // Create temp directory
       await mkdir(tempDir, { baseDir: BaseDirectory.AppData, recursive: true });
@@ -227,10 +230,15 @@ class TauriFileSystemTransaction implements StorageTransaction {
             baseDir: BaseDirectory.AppData
           });
 
+          // Track written file for potential rollback
+          writtenFiles.push(finalPath);
+
         } else if (op.type === 'delete') {
           // Delete operation
           if (await exists(finalPath, { baseDir: BaseDirectory.AppData })) {
             await remove(finalPath, { baseDir: BaseDirectory.AppData });
+            // Track deleted file for potential rollback
+            writtenFiles.push(finalPath);
           }
         }
       }
@@ -246,12 +254,24 @@ class TauriFileSystemTransaction implements StorageTransaction {
       console.log(`💾 Transaction committed: ${this.operations.length} operations`);
 
     } catch (error) {
-      // Rollback: remove temp directory
+      // Rollback: remove temp directory AND any files written to final locations
       try {
         await remove(tempDir, { baseDir: BaseDirectory.AppData });
       } catch (rollbackError) {
         console.warn('Failed to clean up temp directory after error:', rollbackError);
       }
+
+      // Remove any files that were written to final locations before the error
+      for (const filePath of writtenFiles) {
+        try {
+          if (await exists(filePath, { baseDir: BaseDirectory.AppData })) {
+            await remove(filePath, { baseDir: BaseDirectory.AppData });
+          }
+        } catch (removeError) {
+          console.warn(`Failed to remove ${filePath} during rollback:`, removeError);
+        }
+      }
+
       throw error;
     }
   }
@@ -483,6 +503,14 @@ export class TauriFileSystemAdapter extends StorageAdapter {
             actualData = JSON.parse(decompressed);
           } catch (decompressionError) {
             console.error(`Failed to decompress ${collection}:`, decompressionError);
+            return await this.loadFromBackup(collection);
+          }
+        } else if (typeof actualData === 'string') {
+          // Uncompressed JSON string - parse it
+          try {
+            actualData = JSON.parse(actualData);
+          } catch (parseError) {
+            console.error(`Failed to parse ${collection}:`, parseError);
             return await this.loadFromBackup(collection);
           }
         }
@@ -1601,7 +1629,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     });
 
     // Write compressed binary file
-    await writeBinaryFile(filePath, compressed, { baseDir: BaseDirectory.AppData });
+    await writeFile(filePath, compressed, { baseDir: BaseDirectory.AppData });
 
     // Write checksum file (same as before)
     await writeTextFile(`${filePath}.checksum`, checksum, { baseDir: BaseDirectory.AppData });
@@ -1628,7 +1656,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
     try {
       // Read compressed binary file
-      const compressed = await readBinaryFile(filePath, { baseDir: BaseDirectory.AppData });
+      const compressed = await readFile(filePath, { baseDir: BaseDirectory.AppData });
 
       // Decompress
       const jsonData = await this.decompress(compressed);

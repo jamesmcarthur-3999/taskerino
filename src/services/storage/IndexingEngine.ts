@@ -603,6 +603,106 @@ export class IndexingEngine {
   }
 
   /**
+   * Build metadata index for lazy loading (Phase 3.2)
+   * Creates lightweight entity previews for fast list rendering
+   * Format: Array<EntityMetadata>
+   */
+  async buildMetadataIndex(collection: string): Promise<{ index: any[]; metadata: IndexMetadata }> {
+    console.log(`[Index] Building metadata index for ${collection}...`);
+    const startTime = Date.now();
+
+    const metadataIndex: any[] = [];
+    let entityCount = 0;
+
+    try {
+      // Load all entities from collection
+      const entities = await this.storage.load<any[]>(collection);
+
+      if (!entities || !Array.isArray(entities)) {
+        console.log(`[Index] No entities found in ${collection}`);
+        return {
+          index: metadataIndex,
+          metadata: {
+            lastBuilt: Date.now(),
+            entityCount: 0
+          }
+        };
+      }
+
+      // Stream entities and extract metadata
+      for (const entity of entities) {
+        if (!entity || !entity.id) continue;
+
+        // Extract metadata based on collection type
+        let metadata: any;
+
+        if (collection === 'sessions') {
+          metadata = {
+            id: entity.id,
+            title: entity.name || 'Untitled Session',
+            preview: (entity.description || '').substring(0, 100),
+            date: entity.startTime ? new Date(entity.startTime).getTime() : Date.now(),
+            status: entity.status,
+            tags: entity.tags || [],
+            size: JSON.stringify(entity).length
+          };
+        } else if (collection === 'notes') {
+          metadata = {
+            id: entity.id,
+            title: entity.summary || 'Untitled Note',
+            preview: (entity.content || '').substring(0, 100),
+            date: entity.timestamp ? new Date(entity.timestamp).getTime() : Date.now(),
+            tags: [
+              ...(entity.topicIds || []),
+              ...(entity.companyIds || []),
+              ...(entity.contactIds || [])
+            ],
+            size: JSON.stringify(entity).length
+          };
+        } else if (collection === 'tasks') {
+          metadata = {
+            id: entity.id,
+            title: entity.title || 'Untitled Task',
+            preview: (entity.description || '').substring(0, 100),
+            date: entity.createdAt ? new Date(entity.createdAt).getTime() : Date.now(),
+            status: entity.status,
+            tags: entity.tags || [],
+            size: JSON.stringify(entity).length
+          };
+        } else {
+          // Generic metadata for unknown collections
+          metadata = {
+            id: entity.id,
+            title: entity.name || entity.title || 'Untitled',
+            preview: '',
+            date: Date.now(),
+            size: JSON.stringify(entity).length
+          };
+        }
+
+        metadataIndex.push(metadata);
+        entityCount++;
+      }
+
+      const duration = Date.now() - startTime;
+      const metadata: IndexMetadata = {
+        lastBuilt: Date.now(),
+        entityCount
+      };
+
+      // Save metadata index to storage (using special 'metadata' type)
+      await this.storage.saveIndex(collection, 'metadata' as any, metadataIndex, metadata);
+
+      console.log(`[Index] Built metadata index for ${collection} (${entityCount} entities, ${duration}ms)`);
+
+      return { index: metadataIndex, metadata };
+    } catch (error) {
+      console.error(`[Index] Failed to build metadata index for ${collection}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Tokenize text for full-text indexing
    * - Lowercase
    * - Remove punctuation

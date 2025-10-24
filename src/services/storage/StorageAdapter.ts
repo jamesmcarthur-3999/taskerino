@@ -195,13 +195,13 @@ export abstract class StorageAdapter {
   /**
    * Save an index to storage
    * @param collection - Collection name (e.g., 'sessions', 'notes', 'tasks')
-   * @param indexType - Type of index ('date', 'tag', 'status', 'fulltext')
+   * @param indexType - Type of index ('date', 'tag', 'status', 'fulltext', 'metadata')
    * @param index - Index data structure
    * @param metadata - Index metadata (lastBuilt, entityCount, etc.)
    */
   abstract saveIndex(
     collection: string,
-    indexType: 'date' | 'tag' | 'status' | 'fulltext',
+    indexType: 'date' | 'tag' | 'status' | 'fulltext' | 'metadata',
     index: any,
     metadata: import('./IndexingEngine').IndexMetadata
   ): Promise<void>;
@@ -214,7 +214,7 @@ export abstract class StorageAdapter {
    */
   abstract loadIndex<T>(
     collection: string,
-    indexType: 'date' | 'tag' | 'status' | 'fulltext'
+    indexType: 'date' | 'tag' | 'status' | 'fulltext' | 'metadata'
   ): Promise<{ index: T; metadata: import('./IndexingEngine').IndexMetadata } | null>;
 
   /**

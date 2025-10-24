@@ -34,79 +34,125 @@ import type { Session, SessionScreenshot, SessionAudioSegment } from '../../type
 // Mocks
 // ============================================================================
 
-const mockStorage = {
-  load: vi.fn(() => Promise.resolve([])),
-  save: vi.fn(() => Promise.resolve()),
-  delete: vi.fn(() => Promise.resolve()),
-  beginTransaction: vi.fn(() => Promise.resolve({
-    save: vi.fn(),
-    commit: vi.fn(() => Promise.resolve()),
-    rollback: vi.fn(() => Promise.resolve()),
-  })),
-};
-
-vi.mock('../../services/storage', () => ({
-  getStorage: vi.fn(() => Promise.resolve(mockStorage)),
-}));
-
-const mockAttachmentStorage = {
-  createAttachment: vi.fn((data) =>
-    Promise.resolve({
-      id: 'attachment-' + Date.now() + '-' + Math.random().toString(36).substring(7),
-      ...data,
-    })
-  ),
-  loadAttachment: vi.fn(() => Promise.resolve('base64-data')),
-  deleteAttachments: vi.fn(() => Promise.resolve()),
-};
-
+// Mock attachment storage using factory function (hoisted)
 vi.mock('../../services/attachmentStorage', () => ({
-  attachmentStorage: mockAttachmentStorage,
+  attachmentStorage: {
+    createAttachment: vi.fn((data) =>
+      Promise.resolve({
+        id: 'attachment-' + Date.now() + '-' + Math.random().toString(36).substring(7),
+        ...data,
+      })
+    ),
+    loadAttachment: vi.fn(() => Promise.resolve('base64-data')),
+    deleteAttachments: vi.fn(() => Promise.resolve()),
+  },
 }));
 
-const mockScreenshotService = {
-  startCapture: vi.fn((session, callback) => {
-    // Store callback for manual triggering
-    mockScreenshotService._callback = callback;
-  }),
-  stopCapture: vi.fn(),
-  pauseCapture: vi.fn(),
-  resumeCapture: vi.fn(),
-  _callback: null as any,
+// Create mock storage with proper state management
+const createMockStorage = () => {
+  const collections = new Map<string, any>();
+
+  return {
+    load: vi.fn((key: string) => {
+      const record = collections.get(key);
+      return Promise.resolve(record || null);
+    }),
+    save: vi.fn((key: string, data: any) => {
+      collections.set(key, data);
+      return Promise.resolve();
+    }),
+    delete: vi.fn((key: string) => {
+      collections.delete(key);
+      return Promise.resolve();
+    }),
+    beginTransaction: vi.fn(() => {
+      const pendingOps: Array<{ type: 'save' | 'delete'; key: string; data?: any }> = [];
+
+      return Promise.resolve({
+        save: vi.fn((key: string, data: any) => {
+          pendingOps.push({ type: 'save', key, data });
+        }),
+        delete: vi.fn((key: string) => {
+          pendingOps.push({ type: 'delete', key });
+        }),
+        commit: vi.fn(() => {
+          // Apply all pending operations atomically
+          pendingOps.forEach((op) => {
+            if (op.type === 'save') {
+              collections.set(op.key, op.data);
+            } else {
+              collections.delete(op.key);
+            }
+          });
+          return Promise.resolve();
+        }),
+        rollback: vi.fn(() => Promise.resolve()),
+        getPendingOperations: vi.fn(() => pendingOps.length),
+      });
+    }),
+    _collections: collections, // For test inspection
+  };
 };
 
-const mockAudioService = {
-  startRecording: vi.fn((session, callback) => {
-    mockAudioService._callback = callback;
-    return Promise.resolve();
-  }),
-  stopRecording: vi.fn(() => Promise.resolve()),
-  pauseRecording: vi.fn(),
-  resumeRecording: vi.fn(),
-  _callback: null as any,
-};
+let mockStorageInstance = createMockStorage();
 
-const mockVideoService = {
-  startRecording: vi.fn(() => Promise.resolve()),
-  stopRecording: vi.fn(() =>
-    Promise.resolve({
-      fullVideoAttachmentId: 'video-attachment-1',
-      duration: 120,
-    })
-  ),
-};
-
-vi.mock('../../services/screenshotCaptureService', () => ({
-  screenshotCaptureService: mockScreenshotService,
+// Mock storage using factory function (hoisted)
+vi.mock('../../services/storage', () => ({
+  getStorage: vi.fn(() => Promise.resolve(mockStorageInstance)),
 }));
 
-vi.mock('../../services/audioRecordingService', () => ({
-  audioRecordingService: mockAudioService,
-}));
+// Mock screenshot service using factory function (hoisted)
+vi.mock('../../services/screenshotCaptureService', () => {
+  const mockService = {
+    startCapture: vi.fn((session, callback) => {
+      // Store callback for manual triggering
+      mockService._callback = callback;
+    }),
+    stopCapture: vi.fn(),
+    pauseCapture: vi.fn(),
+    resumeCapture: vi.fn(),
+    _callback: null as any,
+  };
+  return {
+    screenshotCaptureService: mockService,
+  };
+});
 
+// Mock audio service using factory function (hoisted)
+vi.mock('../../services/audioRecordingService', () => {
+  const mockService = {
+    startRecording: vi.fn((session, callback) => {
+      mockService._callback = callback;
+      return Promise.resolve();
+    }),
+    stopRecording: vi.fn(() => Promise.resolve()),
+    pauseRecording: vi.fn(),
+    resumeRecording: vi.fn(),
+    _callback: null as any,
+  };
+  return {
+    audioRecordingService: mockService,
+  };
+});
+
+// Mock video service using factory function (hoisted)
 vi.mock('../../services/videoRecordingService', () => ({
-  videoRecordingService: mockVideoService,
+  videoRecordingService: {
+    startRecording: vi.fn(() => Promise.resolve()),
+    stopRecording: vi.fn(() =>
+      Promise.resolve({
+        fullVideoAttachmentId: 'video-attachment-1',
+        duration: 120,
+      })
+    ),
+  },
 }));
+
+// Import mocked services to access them in tests
+const { attachmentStorage: mockAttachmentStorage } = await import('../../services/attachmentStorage');
+const { screenshotCaptureService: mockScreenshotService } = await import('../../services/screenshotCaptureService');
+const { audioRecordingService: mockAudioService } = await import('../../services/audioRecordingService');
+const { videoRecordingService: mockVideoService } = await import('../../services/videoRecordingService');
 
 // ============================================================================
 // Test Helpers
@@ -150,11 +196,14 @@ async function waitForQueueEmpty(timeout = 2000): Promise<void> {
 // ============================================================================
 
 describe('End-to-End Session Flow', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     resetPersistenceQueue();
-    mockStorage.load.mockResolvedValue([]);
-    mockStorage.save.mockResolvedValue(undefined);
+
+    // Reset storage instance with fresh collections
+    mockStorageInstance = createMockStorage();
+    vi.mocked(getStorage).mockResolvedValue(mockStorageInstance);
+
     mockScreenshotService._callback = null;
     mockAudioService._callback = null;
   });
@@ -185,26 +234,22 @@ describe('End-to-End Session Flow', () => {
         name: 'E2E Test Session',
         description: 'Complete end-to-end test',
         status: 'active',
-        screenshots: [],
-        extractedTaskIds: [],
-        extractedNoteIds: [],
         tags: ['test', 'e2e'],
         category: 'Development',
         subCategory: 'Testing',
-        screenshotConfig: {
-          enabled: true,
-          interval: 30,
-          quality: 80,
-        },
+        screenshotInterval: 30,
+        audioRecording: true,
         audioConfig: {
-          enabled: true,
-          sampleRate: 44100,
-          channels: 1,
+          sourceType: 'microphone',
+          micDeviceId: 'test-mic-device',
+          micVolume: 1.0,
         },
+        videoRecording: true,
         videoConfig: {
-          enabled: true,
-          resolution: '1920x1080',
-          frameRate: 30,
+          sourceType: 'display',
+          displayIds: ['test-display-1'],
+          quality: 'high',
+          fps: 30,
         },
       });
     });
@@ -318,8 +363,10 @@ describe('End-to-End Session Flow', () => {
       result.current.activeSession.addExtractedNote('note-1');
     });
 
-    expect(result.current.activeSession.activeSession!.extractedTaskIds).toHaveLength(2);
-    expect(result.current.activeSession.activeSession!.extractedNoteIds).toHaveLength(1);
+    await waitFor(() => {
+      expect(result.current.activeSession.activeSession!.extractedTaskIds).toHaveLength(2);
+      expect(result.current.activeSession.activeSession!.extractedNoteIds).toHaveLength(1);
+    });
 
     // ========================================
     // STEP 5: Stop Recording Services
@@ -361,10 +408,11 @@ describe('End-to-End Session Flow', () => {
     await waitForQueueEmpty();
 
     // Verify storage.save was called
-    expect(mockStorage.save).toHaveBeenCalled();
+    const storage = await getStorage();
+    expect(vi.mocked(storage.save)).toHaveBeenCalled();
 
     // Get the saved session
-    const saveCalls = mockStorage.save.mock.calls.filter((call) => call[0] === 'sessions');
+    const saveCalls = vi.mocked(storage.save).mock.calls.filter((call) => call[0] === 'sessions');
     expect(saveCalls.length).toBeGreaterThan(0);
 
     const lastSaveCall = saveCalls[saveCalls.length - 1];
@@ -408,9 +456,8 @@ describe('End-to-End Session Flow', () => {
     // ========================================
     console.log('[E2E] Step 8: Verifying session appears in list...');
 
-    // Mock storage to return the saved session
-    mockStorage.load.mockResolvedValue(savedSessions);
-
+    // The saved session should already be in storage from the save operations
+    // Just refresh the session list to pick it up
     await act(async () => {
       await result.current.sessionList.refreshSessions();
     });
@@ -466,9 +513,9 @@ describe('End-to-End Session Flow', () => {
         name: 'Pause Resume Test',
         description: '',
         status: 'active',
-        screenshots: [],
-        extractedTaskIds: [],
-        extractedNoteIds: [],
+        screenshotInterval: 30,
+        audioRecording: false,
+        videoRecording: false,
       });
     });
 
@@ -509,6 +556,9 @@ describe('End-to-End Session Flow', () => {
     const pausedAt = result.current.activeSession.activeSession!.pausedAt;
     expect(pausedAt).toBeDefined();
 
+    // Wait a bit to accumulate pause time
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     // Resume
     act(() => {
       result.current.activeSession.resumeSession();
@@ -540,7 +590,8 @@ describe('End-to-End Session Flow', () => {
     await waitForQueueEmpty();
 
     // Verify paused time was calculated
-    const savedSessions = mockStorage.save.mock.calls
+    const storage = await getStorage();
+    const savedSessions = vi.mocked(storage.save).mock.calls
       .filter((call) => call[0] === 'sessions')
       .map((call) => call[1])
       .flat() as Session[];
@@ -564,9 +615,9 @@ describe('End-to-End Session Flow', () => {
         name: 'Error Handling Test',
         description: '',
         status: 'active',
-        screenshots: [],
-        extractedTaskIds: [],
-        extractedNoteIds: [],
+        screenshotInterval: 30,
+        audioRecording: false,
+        videoRecording: false,
       });
     });
 
@@ -607,7 +658,8 @@ describe('End-to-End Session Flow', () => {
     await waitForQueueEmpty();
 
     // Verify data was saved despite error
-    const savedSessions = mockStorage.save.mock.calls
+    const storage = await getStorage();
+    const savedSessions = vi.mocked(storage.save).mock.calls
       .filter((call) => call[0] === 'sessions')
       .map((call) => call[1])
       .flat() as Session[];

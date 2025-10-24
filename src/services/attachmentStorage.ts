@@ -12,8 +12,8 @@
  */
 
 import { BaseDirectory, exists, readTextFile, writeTextFile, mkdir, remove, readDir } from '@tauri-apps/plugin-fs';
-import { sha256 } from '@noble/hashes/sha2';
-import { bytesToHex } from '@noble/hashes/utils';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import type { Attachment, AttachmentRef } from '../types';
 import { getStorage } from './storage';
 
@@ -564,36 +564,55 @@ class AttachmentStorageService {
       // Remove from cache first
       this.removeFromCache(id);
 
-      // Load attachment metadata to get file path
-      const attachment = await this.getAttachment(id);
+      // Load attachment metadata
+      const attachment = await this.loadAttachmentMetadata(id);
 
-      // Delete the actual file if it exists
-      if (attachment?.path) {
-        const actualFilePath = attachment.path;
-        try {
-          if (await exists(actualFilePath, { baseDir: BaseDirectory.AppData })) {
-            await remove(actualFilePath, { baseDir: BaseDirectory.AppData });
-            console.log(`🗑️ Deleted actual file: ${actualFilePath}`);
+      if (!attachment) {
+        console.warn(`[Attachment] Attachment ${id} not found`);
+        return;
+      }
+
+      // If attachment has a hash, use reference counting
+      if (attachment.hash) {
+        // Decrement reference count (may delete physical file if count reaches 0)
+        const physicalFileDeleted = await this.decrementRefCount(attachment.hash, id);
+
+        // Delete attachment metadata
+        await this.deleteAttachmentMetadata(id);
+
+        console.log(`[Attachment] ✓ Deleted attachment ${id} (physical file ${physicalFileDeleted ? 'deleted' : 'retained'})`);
+      } else {
+        // Legacy attachment without hash - delete normally
+        // Load from file system
+        const fsAttachment = await this.getAttachment(id);
+
+        // Delete the actual file if it exists
+        if (fsAttachment?.path) {
+          const actualFilePath = fsAttachment.path;
+          try {
+            if (await exists(actualFilePath, { baseDir: BaseDirectory.AppData })) {
+              await remove(actualFilePath, { baseDir: BaseDirectory.AppData });
+              console.log(`🗑️ Deleted actual file: ${actualFilePath}`);
+            }
+          } catch (error) {
+            console.error(`Failed to delete actual file ${actualFilePath}:`, error);
           }
-        } catch (error) {
-          console.error(`Failed to delete actual file ${actualFilePath}:`, error);
-          // Continue with metadata cleanup even if file deletion fails
         }
-      }
 
-      // Delete metadata file
-      const metaPath = `${this.ATTACHMENTS_DIR}/${id}.meta.json`;
-      if (await exists(metaPath, { baseDir: BaseDirectory.AppData })) {
-        await remove(metaPath, { baseDir: BaseDirectory.AppData });
-      }
+        // Delete metadata file
+        const metaPath = `${this.ATTACHMENTS_DIR}/${id}.meta.json`;
+        if (await exists(metaPath, { baseDir: BaseDirectory.AppData })) {
+          await remove(metaPath, { baseDir: BaseDirectory.AppData });
+        }
 
-      // Delete data file
-      const dataPath = `${this.ATTACHMENTS_DIR}/${id}.dat`;
-      if (await exists(dataPath, { baseDir: BaseDirectory.AppData })) {
-        await remove(dataPath, { baseDir: BaseDirectory.AppData });
-      }
+        // Delete data file
+        const dataPath = `${this.ATTACHMENTS_DIR}/${id}.dat`;
+        if (await exists(dataPath, { baseDir: BaseDirectory.AppData })) {
+          await remove(dataPath, { baseDir: BaseDirectory.AppData });
+        }
 
-      console.log(`✅ Attachment deleted: ${id}`);
+        console.log(`✅ Attachment deleted (legacy): ${id}`);
+      }
     } catch (error) {
       console.error(`Failed to delete attachment ${id}:`, error);
       throw error;
@@ -691,6 +710,161 @@ class AttachmentStorageService {
     if (staleIds.length > 0) {
       console.log(`🧹 Cleaned up ${staleIds.length} stale cache entries`);
     }
+  }
+
+  /**
+   * Rebuild attachment references from existing attachments
+   * Used for recovery or migrating from non-deduplicated storage
+   */
+  async rebuildAttachmentRefs(): Promise<void> {
+    console.log('[Attachment] Rebuilding attachment references...');
+
+    const storage = await getStorage();
+
+    // Load all data that contains attachments
+    const sessions = await storage.load<any[]>('sessions') || [];
+    const notes = await storage.load<any[]>('notes') || [];
+    const tasks = await storage.load<any[]>('tasks') || [];
+
+    const allAttachments: Attachment[] = [];
+
+    // Collect all attachments from sessions
+    for (const session of sessions) {
+      // Screenshots
+      if (session.screenshots) {
+        for (const screenshot of session.screenshots) {
+          if (screenshot.attachmentId) {
+            const attachment = await this.loadAttachmentMetadata(screenshot.attachmentId);
+            if (attachment) {
+              allAttachments.push(attachment);
+            }
+          }
+        }
+      }
+
+      // Audio segments
+      if (session.audioSegments) {
+        for (const segment of session.audioSegments) {
+          if (segment.attachmentId) {
+            const attachment = await this.loadAttachmentMetadata(segment.attachmentId);
+            if (attachment) {
+              allAttachments.push(attachment);
+            }
+          }
+        }
+      }
+
+      // Full audio
+      if (session.fullAudioAttachmentId) {
+        const attachment = await this.loadAttachmentMetadata(session.fullAudioAttachmentId);
+        if (attachment) {
+          allAttachments.push(attachment);
+        }
+      }
+
+      // Video
+      if (session.video?.fullVideoAttachmentId) {
+        const attachment = await this.loadAttachmentMetadata(session.video.fullVideoAttachmentId);
+        if (attachment) {
+          allAttachments.push(attachment);
+        }
+      }
+    }
+
+    // Collect attachments from notes
+    for (const note of notes) {
+      if (note.attachments) {
+        for (const att of note.attachments) {
+          allAttachments.push(att);
+        }
+      }
+    }
+
+    // Collect attachments from tasks
+    for (const task of tasks) {
+      if (task.attachments) {
+        for (const att of task.attachments) {
+          allAttachments.push(att);
+        }
+      }
+    }
+
+    console.log(`[Attachment] Found ${allAttachments.length} total attachments`);
+
+    // Build refs map
+    const refsMap = new Map<string, AttachmentRef>();
+
+    for (const attachment of allAttachments) {
+      if (!attachment.hash) {
+        console.warn(`[Attachment] Skipping ${attachment.id} (no hash)`);
+        continue;
+      }
+
+      const existing = refsMap.get(attachment.hash);
+
+      if (existing) {
+        // Duplicate found
+        existing.refCount++;
+        existing.attachmentIds.push(attachment.id);
+      } else {
+        // New unique file
+        refsMap.set(attachment.hash, {
+          hash: attachment.hash,
+          physicalPath: attachment.path || '',
+          refCount: 1,
+          size: attachment.size,
+          attachmentIds: [attachment.id],
+          createdAt: new Date(attachment.createdAt).getTime(),
+          lastAccessedAt: Date.now(),
+        });
+      }
+    }
+
+    // Save refs
+    const refs = Array.from(refsMap.values());
+    await storage.save('attachment_refs', refs);
+
+    const duplicates = allAttachments.filter(a => a.hash).length - refs.length;
+    const savings = refs.reduce((sum, ref) => sum + (ref.size * (ref.refCount - 1)), 0);
+
+    console.log(`[Attachment] ✓ Rebuilt ${refs.length} references from ${allAttachments.length} attachments`);
+    console.log(`[Attachment] Found ${duplicates} duplicates, saving ${(savings / 1024 / 1024).toFixed(2)} MB`);
+  }
+
+  /**
+   * Get deduplication statistics
+   */
+  async getDeduplicationStats(): Promise<{
+    totalAttachments: number;
+    uniqueFiles: number;
+    duplicates: number;
+    totalSize: number;
+    actualSize: number;
+    savedSize: number;
+    savedPercentage: number;
+  }> {
+    const storage = await getStorage();
+    const refs = await storage.load<AttachmentRef[]>('attachment_refs') || [];
+    const attachments = await storage.load<Attachment[]>('attachments') || [];
+
+    const totalAttachments = attachments.length;
+    const uniqueFiles = refs.length;
+    const duplicates = Math.max(0, totalAttachments - uniqueFiles);
+
+    const totalSize = refs.reduce((sum, ref) => sum + (ref.size * ref.refCount), 0);
+    const actualSize = refs.reduce((sum, ref) => sum + ref.size, 0);
+    const savedSize = totalSize - actualSize;
+    const savedPercentage = totalSize > 0 ? (savedSize / totalSize) * 100 : 0;
+
+    return {
+      totalAttachments,
+      uniqueFiles,
+      duplicates,
+      totalSize,
+      actualSize,
+      savedSize,
+      savedPercentage,
+    };
   }
 
   /**

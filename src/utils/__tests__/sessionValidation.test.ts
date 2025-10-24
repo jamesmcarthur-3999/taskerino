@@ -259,7 +259,7 @@ describe('sessionValidation', () => {
       it('should validate window config', () => {
         const config: VideoRecordingConfig = {
           sourceType: 'window',
-          windowId: 'window-123',
+          windowIds: ['window-123'],
           quality: 'high',
           fps: 60,
         };

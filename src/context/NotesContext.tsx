@@ -4,6 +4,7 @@ import type { Note, Company, Contact, Topic, ManualNoteData } from '../types';
 import { getStorage } from '../services/storage';
 import { generateId } from '../utils/helpers';
 import { useEntities } from './EntitiesContext';
+import { QueryEngine, type QueryFilter, type QuerySort } from '../services/storage/QueryEngine';
 
 // Notes State
 interface NotesState {
@@ -64,6 +65,9 @@ const NotesContext = createContext<{
   deleteNote: (id: string) => void;
   batchAddNotes: (notes: Note[]) => void;
   createManualNote: (data: ManualNoteData) => void;
+
+  // Query Engine Methods (Phase 3.3)
+  queryNotes: (filters: QueryFilter[], sort?: QuerySort, limit?: number) => Promise<Note[]>;
 } | null>(null);
 
 // Provider
@@ -448,8 +452,25 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     addNote(newNote);
   };
 
+  // Query Engine Methods (Phase 3.3)
+  const queryNotes = React.useCallback(async (filters: QueryFilter[], sort?: QuerySort, limit?: number) => {
+    const storage = await getStorage();
+    const queryEngine = new QueryEngine(storage);
+
+    const result = await queryEngine.execute<Note>({
+      collection: 'notes',
+      filters,
+      sort,
+      limit,
+    });
+
+    console.log(`[Notes] Query returned ${result.entitiesReturned} notes in ${result.executionTime}ms`);
+
+    return result.entities;
+  }, []);
+
   return (
-    <NotesContext.Provider value={{ state, dispatch, addNote, updateNote, deleteNote, batchAddNotes, createManualNote }}>
+    <NotesContext.Provider value={{ state, dispatch, addNote, updateNote, deleteNote, batchAddNotes, createManualNote, queryNotes }}>
       {children}
     </NotesContext.Provider>
   );

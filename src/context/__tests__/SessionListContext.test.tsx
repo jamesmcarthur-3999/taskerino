@@ -24,16 +24,20 @@ describe('SessionListContext', () => {
   });
 
   describe('Provider', () => {
-    it('should provide context value', () => {
+    it('should provide context value', async () => {
       const wrapper = ({ children }: { children: React.ReactNode }) => (
         <SessionListProvider>{children}</SessionListProvider>
       );
 
       const { result } = renderHook(() => useSessionList(), { wrapper });
 
+      // Wait for initial load to complete
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
       expect(result.current).toBeDefined();
       expect(result.current.sessions).toEqual([]);
-      expect(result.current.loading).toBe(false);
       expect(result.current.error).toBeNull();
     });
 

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Task, ManualTaskData } from '../types';
 import { getStorage } from '../services/storage';
 import { generateId } from '../utils/helpers';
+import { QueryEngine, type QueryFilter, type QuerySort } from '../services/storage/QueryEngine';
 
 // Tasks State
 interface TasksState {
@@ -110,6 +111,9 @@ function tasksReducer(state: TasksState, action: TasksAction): TasksState {
 const TasksContext = createContext<{
   state: TasksState;
   dispatch: React.Dispatch<TasksAction>;
+
+  // Query Engine Methods (Phase 3.3)
+  queryTasks: (filters: QueryFilter[], sort?: QuerySort, limit?: number) => Promise<Task[]>;
 } | null>(null);
 
 // Provider
@@ -163,8 +167,25 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     };
   }, [hasLoaded, state.tasks]);
 
+  // Query Engine Methods (Phase 3.3)
+  const queryTasks = React.useCallback(async (filters: QueryFilter[], sort?: QuerySort, limit?: number) => {
+    const storage = await getStorage();
+    const queryEngine = new QueryEngine(storage);
+
+    const result = await queryEngine.execute<Task>({
+      collection: 'tasks',
+      filters,
+      sort,
+      limit,
+    });
+
+    console.log(`[Tasks] Query returned ${result.entitiesReturned} tasks in ${result.executionTime}ms`);
+
+    return result.entities;
+  }, []);
+
   return (
-    <TasksContext.Provider value={{ state, dispatch }}>
+    <TasksContext.Provider value={{ state, dispatch, queryTasks }}>
       {children}
     </TasksContext.Provider>
   );

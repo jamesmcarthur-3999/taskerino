@@ -23,64 +23,87 @@ describe('Transaction Integration - IndexedDB', () => {
   let adapter: IndexedDBAdapter;
   let mockDB: any;
   let collections: Map<string, any>;
+  let originalTransactionFn: any;
 
   beforeEach(async () => {
     // Create a more complete IndexedDB mock
     collections = new Map<string, any>();
 
+    const createNormalTransaction = (stores: any, mode: any) => {
+      const mockStore = {
+        put: vi.fn((record) => {
+          collections.set(record.name, record);
+          const request = {
+            onsuccess: null as any,
+            onerror: null as any
+          };
+
+          // Simulate async operation
+          setTimeout(() => {
+            if (request.onsuccess) {
+              request.onsuccess();
+            }
+          }, 0);
+
+          return request;
+        }),
+        delete: vi.fn((key) => {
+          collections.delete(key);
+          const request = {
+            onsuccess: null as any,
+            onerror: null as any
+          };
+
+          // Simulate async operation
+          setTimeout(() => {
+            if (request.onsuccess) {
+              request.onsuccess();
+            }
+          }, 0);
+
+          return request;
+        }),
+        get: vi.fn((key) => {
+          const record = collections.get(key);
+          const request = {
+            onsuccess: null as any,
+            result: record,
+            onerror: null as any
+          };
+
+          // Simulate async operation
+          setTimeout(() => {
+            if (request.onsuccess) {
+              request.onsuccess();
+            }
+          }, 0);
+
+          return request;
+        })
+      };
+
+      const mockTransaction = {
+        objectStore: vi.fn(() => mockStore),
+        oncomplete: null as any,
+        onerror: null as any,
+        onabort: null as any,
+        error: null
+      };
+
+      // Simulate async transaction completion
+      setTimeout(() => {
+        if (mockTransaction.oncomplete) {
+          mockTransaction.oncomplete();
+        }
+      }, 0);
+
+      return mockTransaction;
+    };
+
+    originalTransactionFn = vi.fn(createNormalTransaction);
+
     mockDB = {
-      transaction: vi.fn((stores, mode) => {
-        const mockStore = {
-          put: vi.fn((record) => {
-            collections.set(record.name, record);
-            return {
-              onsuccess: null as any,
-              onerror: null as any
-            };
-          }),
-          delete: vi.fn((key) => {
-            collections.delete(key);
-            return {
-              onsuccess: null as any,
-              onerror: null as any
-            };
-          }),
-          get: vi.fn((key) => {
-            const record = collections.get(key);
-            const request = {
-              onsuccess: null as any,
-              result: record,
-              onerror: null as any
-            };
-
-            // Simulate async operation
-            setTimeout(() => {
-              if (request.onsuccess) {
-                request.onsuccess();
-              }
-            }, 0);
-
-            return request;
-          })
-        };
-
-        const mockTransaction = {
-          objectStore: vi.fn(() => mockStore),
-          oncomplete: null as any,
-          onerror: null as any,
-          onabort: null as any,
-          error: null
-        };
-
-        // Simulate async transaction completion
-        setTimeout(() => {
-          if (mockTransaction.oncomplete) {
-            mockTransaction.oncomplete();
-          }
-        }, 0);
-
-        return mockTransaction;
-      })
+      transaction: originalTransactionFn
     };
 
     const mockOpenRequest = {
@@ -106,6 +129,10 @@ describe('Transaction Integration - IndexedDB', () => {
   });
 
   afterEach(() => {
+    // Restore original transaction mock
+    if (mockDB && originalTransactionFn) {
+      mockDB.transaction = originalTransactionFn;
+    }
     delete (global as any).indexedDB;
   });
 
@@ -135,21 +162,60 @@ describe('Transaction Integration - IndexedDB', () => {
 
     it('should fail all operations together on error', async () => {
       // Mock transaction to fail
-      mockDB.transaction = vi.fn(() => {
+      mockDB.transaction = vi.fn((stores, mode) => {
+        // For write transactions, fail
+        if (mode === 'readwrite') {
+          const mockTransaction = {
+            objectStore: vi.fn(() => ({
+              put: vi.fn(),
+              delete: vi.fn()
+            })),
+            oncomplete: null as any,
+            onerror: null as any,
+            onabort: null as any,
+            error: new Error('Simulated error')
+          };
+
+          setTimeout(() => {
+            if (mockTransaction.onerror) {
+              mockTransaction.onerror();
+            }
+          }, 0);
+
+          return mockTransaction;
+        }
+
+        // For read transactions, return normal mock
+        const mockStore = {
+          get: vi.fn((key) => {
+            const record = collections.get(key);
+            const request = {
+              onsuccess: null as any,
+              result: record,
+              onerror: null as any
+            };
+
+            setTimeout(() => {
+              if (request.onsuccess) {
+                request.onsuccess();
+              }
+            }, 0);
+
+            return request;
+          })
+        };
+
         const mockTransaction = {
-          objectStore: vi.fn(() => ({
-            put: vi.fn(),
-            delete: vi.fn()
-          })),
+          objectStore: vi.fn(() => mockStore),
           oncomplete: null as any,
           onerror: null as any,
           onabort: null as any,
-          error: new Error('Simulated error')
+          error: null
         };
 
         setTimeout(() => {
-          if (mockTransaction.onerror) {
-            mockTransaction.onerror();
+          if (mockTransaction.oncomplete) {
+            mockTransaction.oncomplete();
           }
         }, 0);
 

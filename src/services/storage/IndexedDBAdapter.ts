@@ -148,14 +148,14 @@ class IndexedDBTransaction implements StorageTransaction {
       if (op.type === 'save') {
         // Serialize and compress
         const jsonString = JSON.stringify(op.value);
-        let storedData: any;
+        let storedData: string;
 
         try {
           const compressed = await compressData(jsonString);
           storedData = compressed;
         } catch (compressionError) {
-          console.warn(`⚠️  Compression failed for ${op.key}, storing uncompressed:`, compressionError);
-          storedData = op.value;
+          console.warn(`⚠️  Compression failed for ${op.key}, storing uncompressed JSON:`, compressionError);
+          storedData = jsonString; // Store JSON string, not object
         }
 
         const record: StoredCollection = {
@@ -283,13 +283,13 @@ export class IndexedDBAdapter extends StorageAdapter {
         const jsonString = JSON.stringify(data);
 
         // Compress the JSON data
-        let storedData: any;
+        let storedData: string;
         try {
           const compressed = await compressData(jsonString);
           storedData = compressed; // Store as compressed string
         } catch (compressionError) {
-          console.warn(`⚠️  Compression failed for ${collection}, storing uncompressed:`, compressionError);
-          storedData = data; // Fallback to uncompressed
+          console.warn(`⚠️  Compression failed for ${collection}, storing uncompressed JSON:`, compressionError);
+          storedData = jsonString; // Fallback to uncompressed JSON string
         }
 
         return new Promise<void>((resolve, reject) => {
@@ -348,13 +348,17 @@ export class IndexedDBAdapter extends StorageAdapter {
               const decompressed = await decompressData(result.data);
               const parsed = JSON.parse(decompressed);
               resolve(parsed as T);
+            } else if (typeof result.data === 'string') {
+              // Uncompressed JSON string - parse it
+              const parsed = JSON.parse(result.data);
+              resolve(parsed as T);
             } else {
-              // Uncompressed data (backward compatible)
+              // Legacy: Stored as object (backward compatible)
               resolve(result.data as T);
             }
-          } catch (decompressionError) {
-            console.error(`Failed to decompress ${collection}:`, decompressionError);
-            // Try to use data as-is if decompression fails
+          } catch (error) {
+            console.error(`Failed to parse ${collection}:`, error);
+            // Try to use data as-is if parsing fails
             resolve(result.data as T);
           }
         } else {

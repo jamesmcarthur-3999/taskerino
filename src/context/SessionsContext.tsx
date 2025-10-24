@@ -11,6 +11,7 @@ import { validateAudioConfig, validateVideoConfig, validateSession } from '../ut
 import { useUI } from './UIContext';
 import { useEnrichmentContext } from './EnrichmentContext';
 import { getPersistenceQueue } from '../services/storage/PersistenceQueue';
+import { QueryEngine, type QueryFilter, type QuerySort } from '../services/storage/QueryEngine';
 
 interface SessionsState {
   sessions: Session[];
@@ -428,6 +429,9 @@ interface SessionsContextType {
   addExtractedNote: (sessionId: string, noteId: string) => void;
   addContextItem: (sessionId: string, item: SessionContextItem) => void;
   getCleanupMetrics: () => CleanupMetrics;
+
+  // Query Engine Methods (Phase 3.3)
+  querySessions: (filters: QueryFilter[], sort?: QuerySort, limit?: number) => Promise<Session[]>;
 }
 
 const SessionsContext = createContext<SessionsContextType | undefined>(undefined);
@@ -1119,6 +1123,23 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     }, [dispatch]),
 
     getCleanupMetrics: React.useCallback(() => cleanupMetricsRef.current, []),
+
+    // Query Engine Methods (Phase 3.3)
+    querySessions: React.useCallback(async (filters: QueryFilter[], sort?: QuerySort, limit?: number) => {
+      const storage = await getStorage();
+      const queryEngine = new QueryEngine(storage);
+
+      const result = await queryEngine.execute<Session>({
+        collection: 'sessions',
+        filters,
+        sort,
+        limit,
+      });
+
+      console.log(`[Sessions] Query returned ${result.entitiesReturned} sessions in ${result.executionTime}ms`);
+
+      return result.entities;
+    }, []),
   };
 
   return (

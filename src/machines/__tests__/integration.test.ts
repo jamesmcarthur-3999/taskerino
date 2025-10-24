@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { waitFor } from '@testing-library/react';
-import { createActor } from 'xstate';
+import { createActor, fromPromise } from 'xstate';
 import { sessionMachine } from '../sessionMachine';
 import type { SessionRecordingConfig } from '../../types';
 
@@ -40,15 +40,15 @@ const mockResumeRecordingServices = vi.fn(() => Promise.resolve());
 const mockStopRecordingServices = vi.fn(() => Promise.resolve());
 const mockMonitorRecordingHealth = vi.fn(() => Promise.resolve());
 
-// Mock the service implementations
+// Mock the service implementations - must return fromPromise actors for XState v5
 vi.mock('../sessionMachineServices', () => ({
-  validateConfig: ({ input }: { input: { config: SessionRecordingConfig } }) => mockValidateConfig(input),
-  checkPermissions: () => mockCheckPermissions(),
-  startRecordingServices: () => mockStartRecordingServices(),
-  pauseRecordingServices: () => mockPauseRecordingServices(),
-  resumeRecordingServices: () => mockResumeRecordingServices(),
-  stopRecordingServices: () => mockStopRecordingServices(),
-  monitorRecordingHealth: () => mockMonitorRecordingHealth(),
+  validateConfig: fromPromise(({ input }: { input: { config: SessionRecordingConfig } }) => mockValidateConfig(input)),
+  checkPermissions: fromPromise(() => mockCheckPermissions()),
+  startRecordingServices: fromPromise(() => mockStartRecordingServices()),
+  pauseRecordingServices: fromPromise(() => mockPauseRecordingServices()),
+  resumeRecordingServices: fromPromise(() => mockResumeRecordingServices()),
+  stopRecordingServices: fromPromise(() => mockStopRecordingServices()),
+  monitorRecordingHealth: fromPromise(() => mockMonitorRecordingHealth()),
 }));
 
 // ============================================================================
@@ -110,8 +110,9 @@ describe('State Machine + Context Integration', () => {
       expect(mockCheckPermissions).toHaveBeenCalled();
       expect(mockStartRecordingServices).toHaveBeenCalled();
 
-      // Verify state progression
-      expect(states).toEqual(['idle', 'validating', 'checking_permissions', 'starting', 'active']);
+      // Verify state progression (removing duplicates as the subscriber can capture same state multiple times)
+      const uniqueStates = Array.from(new Set(states));
+      expect(uniqueStates).toEqual(['idle', 'validating', 'checking_permissions', 'starting', 'active']);
 
       actor.stop();
     });
