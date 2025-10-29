@@ -6,7 +6,7 @@
  */
 
 import type { AppState, Session } from '../types';
-import type { ToolCall, ToolResult } from './nedTools';
+import type { ToolCall, ToolResult } from './nedToolsZod';
 import { contextAgent } from './contextAgent';
 import { sessionsQueryAgent } from './sessionsQueryAgent';
 import { nedMemory } from './nedMemory';

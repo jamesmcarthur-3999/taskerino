@@ -145,6 +145,183 @@ const SourcesSection = ({
   );
 };
 
+// Tool Call Section - expandable container for tool inputs/outputs
+const ToolCallSection = ({
+  toolName,
+  toolStatus,
+  toolInput,
+  toolOutput,
+  structuredContent,
+  onTaskComplete,
+  onTaskEdit,
+  onTaskDelete,
+  onNoteClick,
+  onNoteEdit,
+  onNoteDelete,
+}: {
+  toolName: string;
+  toolStatus: 'pending' | 'success' | 'error';
+  toolInput?: any;
+  toolOutput?: any;
+  structuredContent?: MessageContent[];
+  onTaskComplete?: (taskId: string) => void;
+  onTaskEdit?: (taskId: string) => void;
+  onTaskDelete?: (taskId: string) => void;
+  onNoteClick?: (noteId: string) => void;
+  onNoteEdit?: (noteId: string) => void;
+  onNoteDelete?: (noteId: string) => void;
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  
+  const statusConfig = {
+    pending: {
+      icon: '⏳',
+      color: 'from-yellow-500 to-amber-500',
+      bgColor: 'bg-yellow-50',
+      textColor: 'text-yellow-700',
+    },
+    success: {
+      icon: '✓',
+      color: 'from-green-500 to-emerald-500',
+      bgColor: 'bg-green-50',
+      textColor: 'text-green-700',
+    },
+    error: {
+      icon: '✕',
+      color: 'from-red-500 to-rose-500',
+      bgColor: 'bg-red-50',
+      textColor: 'text-red-700',
+    },
+  };
+
+  const config = statusConfig[toolStatus];
+  const displayName = toolName.replace(/_/g, ' ');
+
+  return (
+    <div className="my-3">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className={`w-full flex items-center justify-between gap-3 px-5 py-3.5 ${getRadiusClass('element')}
+                 ${getGlassClasses('medium')} hover:from-slate-100 hover:to-slate-100
+                 hover:border-white/80
+                 ${TRANSITIONS.standard} group shadow-lg shadow-slate-100/30 hover:shadow-xl hover:shadow-slate-200/40 ring-1 ring-black/5`}
+      >
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${config.color}
+                        flex items-center justify-center shadow-md group-hover:shadow-lg transition-all group-hover:scale-105`}>
+            <span className="text-white text-lg">{config.icon}</span>
+          </div>
+          <div className="text-left">
+            <div className="text-sm font-bold text-gray-900">{displayName}</div>
+            <div className={`text-xs font-medium ${config.textColor}`}>
+              {toolStatus === 'pending' && 'Executing...'}
+              {toolStatus === 'success' && 'Completed'}
+              {toolStatus === 'error' && 'Failed'}
+            </div>
+          </div>
+        </div>
+        <svg
+          className={`w-5 h-5 text-gray-400 transition-transform duration-300 group-hover:text-cyan-600 ${expanded ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 pl-2 animate-in fade-in slide-in-from-top-2 duration-300 space-y-3">
+          {/* Tool Input */}
+          {toolInput && (
+            <div className={`px-4 py-3 ${getRadiusClass('element')} bg-slate-50 border border-slate-200 shadow-sm`}>
+              <div className="text-xs font-semibold text-slate-500 mb-2">Input</div>
+              <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono overflow-x-auto">
+                {typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput, null, 2)}
+              </pre>
+            </div>
+          )}
+          
+          {/* Structured Content (tasks, notes, etc.) */}
+          {structuredContent && structuredContent.length > 0 && (
+            <div className="space-y-3">
+              {structuredContent.map((content, idx) => (
+                <div key={idx}>
+                  {content.type === 'task-list' && content.tasks && (
+                    <div className="space-y-2">
+                      {content.tasks.map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onComplete={onTaskComplete}
+                          onEdit={onTaskEdit}
+                          onDelete={onTaskDelete}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {content.type === 'note-list' && content.notes && (
+                    <div className="space-y-2">
+                      {content.notes.map((note) => (
+                        <NoteCard
+                          key={note.id}
+                          note={note}
+                          onClick={onNoteClick}
+                          onEdit={onNoteEdit}
+                          onDelete={onNoteDelete}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {content.type === 'session-list' && content.sessions && (
+                    <div className="space-y-2">
+                      {content.sessions.map((session) => (
+                        <SessionCard key={session.id} session={session} />
+                      ))}
+                    </div>
+                  )}
+                  {content.type === 'task-created' && content.task && (
+                    <div className={`px-4 py-3 ${getRadiusClass('element')} ${config.bgColor} border border-green-200 shadow-sm`}>
+                      <div className="text-sm font-semibold text-green-700">Created Task</div>
+                      <TaskCard
+                        task={content.task}
+                        onComplete={onTaskComplete}
+                        onEdit={onTaskEdit}
+                        onDelete={onTaskDelete}
+                      />
+                    </div>
+                  )}
+                  {content.type === 'note-created' && content.note && (
+                    <div className={`px-4 py-3 ${getRadiusClass('element')} ${config.bgColor} border border-green-200 shadow-sm`}>
+                      <div className="text-sm font-semibold text-green-700">Created Note</div>
+                      <NoteCard
+                        note={content.note}
+                        onClick={onNoteClick}
+                        onEdit={onNoteEdit}
+                        onDelete={onNoteDelete}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Tool Output (raw) */}
+          {toolOutput && !structuredContent?.length && (
+            <div className={`px-4 py-3 ${getRadiusClass('element')} bg-slate-50 border border-slate-200 shadow-sm`}>
+              <div className="text-xs font-semibold text-slate-500 mb-2">Output</div>
+              <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono overflow-x-auto">
+                {typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Change Card - shows what was updated (compact, matches TaskCard/NoteCard style)
 const ChangeCard = ({
   type,
@@ -424,9 +601,12 @@ interface MessageContent {
   // For created items
   task?: Task;
   note?: Note;
-  // Tool use
+  // Tool use with expandable inputs/outputs
   toolName?: string;
   toolStatus?: 'pending' | 'success' | 'error';
+  toolInput?: any;
+  toolOutput?: any;
+  structuredContent?: MessageContent[];
 }
 
 interface NedMessageProps {
@@ -580,17 +760,11 @@ export const NedMessage: React.FC<NedMessageProps> = ({
               </div>
             )}
 
-            {/* Tool use - compact display */}
+            {/* Tool use - inline stream display */}
             {content.type === 'tool-use' && content.toolName && (
-              <div className={`flex items-center gap-2 px-3 py-1.5 ${getRadiusClass('element')} ${getInfoGradient('light').container} shadow-sm ring-1 ring-black/5`}>
-                <div className="flex gap-1">
-                  <span className={`w-1.5 h-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} animate-bounce [animation-delay:0ms]`} />
-                  <span className={`w-1.5 h-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} animate-bounce [animation-delay:150ms]`} />
-                  <span className={`w-1.5 h-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} animate-bounce [animation-delay:300ms]`} />
-                </div>
-                <span className="text-xs font-medium text-cyan-700">
-                  {content.toolName.replace(/_/g, ' ')}
-                </span>
+              <div className="inline-flex items-center gap-1.5 text-sm text-gray-500 italic">
+                <span className="w-1 h-1 bg-cyan-400 rounded-full animate-pulse" />
+                <span>{content.toolName.replace(/_/g, ' ')}</span>
               </div>
             )}
 

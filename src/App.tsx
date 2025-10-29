@@ -152,7 +152,6 @@ import { QueueMonitor } from './components/dev/QueueMonitor';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { claudeService } from './services/claudeService';
 import { sessionsAgentService } from './services/sessionsAgentService';
-import { nedService } from './services/nedService';
 import { contextAgent } from './services/contextAgent';
 import { sessionsQueryAgent } from './services/sessionsQueryAgent';
 import { migrateApiKeysToTauri } from './utils/apiKeyMigration';
@@ -459,10 +458,9 @@ function AppContent() {
         try {
           const savedClaudeKey = await invoke<string | null>('get_claude_api_key');
           if (savedClaudeKey) {
-            await claudeService.setApiKey(savedClaudeKey);
-            await sessionsAgentService.setApiKey(savedClaudeKey);
-            await nedService.setApiKey(savedClaudeKey);
-            await contextAgent.setApiKey(savedClaudeKey);
+            claudeService.setApiKey(savedClaudeKey);
+            sessionsAgentService.setApiKey(savedClaudeKey);
+            contextAgent.setApiKey(savedClaudeKey);
             await sessionsQueryAgent.setApiKey(savedClaudeKey);
           }
 

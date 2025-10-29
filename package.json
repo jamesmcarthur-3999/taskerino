@@ -5,9 +5,9 @@
   "type": "module",
   "packageManager": "bun@1.3.0",
   "scripts": {
-    "dev": "turbo run dev:vite",
+    "dev": "vite",
     "tauri": "tauri",
-    "tauri:dev": "turbo run dev:tauri",
+    "tauri:dev": "tauri dev",
     "tauri:build": "turbo run build:tauri",
     "build": "turbo run build:vite",
     "build:production": "NODE_ENV=production turbo run build:vite build:tauri",

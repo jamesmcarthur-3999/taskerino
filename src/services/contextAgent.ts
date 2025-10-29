@@ -21,7 +21,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { ClaudeChatResponse, ClaudeMessage } from '../types/tauri-ai-commands';
 import type { Note, Task, Company, Contact, Topic } from '../types';
-import type { ContextAgentResult } from './nedTools';
+import type { ContextAgentResult } from './nedToolsZod';
 
 interface AgentThread {
   id: string;

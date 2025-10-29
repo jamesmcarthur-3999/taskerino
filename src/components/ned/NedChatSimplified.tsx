@@ -158,11 +158,12 @@ export const NedChatSimplified: React.FC = () => {
     const toolExecutor = createToolExecutor();
     const allTools = getAllNedTools();
     
-    // Baleybots accepts ZodToolDefinition format: { description, schema, function }
+    // Baleybots accepts ZodToolDefinition format: { name, description, schema, function }
     const baleybotTools: Record<string, any> = {};
     
     for (const [toolName, toolDef] of Object.entries(allTools)) {
       baleybotTools[toolName] = {
+        name: toolName, // REQUIRED: OpenAI API needs tools[0].function.name
         description: toolDef.description,
         schema: toolDef.schema, // Zod schema - baleybots handles this natively!
         function: async (args: any) => {
@@ -343,50 +344,23 @@ export const NedChatSimplified: React.FC = () => {
   // But now it's much simpler since UIChatMessage is already in the right format
   const renderMessages = useMemo(() => {
     console.log('[NedChat] Rendering messages:', messages.length, messages);
-    return messages.map((msg) => {
-      // For tool messages, extract the data for rendering
-      if (msg.role === 'tool') {
-        console.log('[NedChat] Processing tool message:', msg);
+    
+    // Build a map of tool results by tool_call_id for easy lookup
+    const toolResultsMap = new Map<string, any>();
+    messages.forEach(msg => {
+      if (msg.role === 'tool' && msg.tool_call_id) {
         const toolData = getToolResultData(msg);
-        console.log('[NedChat] Tool data:', toolData);
-        
-        // Create a simplified message for NedMessage component
-        const nedMsg = {
-          id: msg.id,
-          role: 'assistant' as const,
-          contents: toolData ? [
-            // Render task lists
-            ...(toolData.full_tasks && toolData.full_tasks.length > 0 ? [{
-              type: 'task-list' as const,
-              tasks: toolData.full_tasks,
-            }] : []),
-            // Render note lists
-            ...(toolData.full_notes && toolData.full_notes.length > 0 ? [{
-              type: 'note-list' as const,
-              notes: toolData.full_notes,
-            }] : []),
-            // Render session lists
-            ...(toolData.full_sessions && toolData.full_sessions.length > 0 ? [{
-              type: 'session-list' as const,
-              sessions: toolData.full_sessions,
-            }] : []),
-            // Render task/note creation
-            ...(toolData.operation === 'create' && toolData.item_type === 'task' && toolData.item ? [{
-              type: 'task-created' as const,
-              task: toolData.item,
-              timestamp: new Date().toISOString(),
-            }] : []),
-            ...(toolData.operation === 'create' && toolData.item_type === 'note' && toolData.item ? [{
-              type: 'note-created' as const,
-              note: toolData.item,
-              timestamp: new Date().toISOString(),
-            }] : []),
-          ] : [],
-          timestamp: msg.timestamp?.toISOString() || new Date().toISOString(),
-        };
-        
-        console.log('[NedChat] Converted to NedMessage:', nedMsg);
-        return nedMsg.contents.length > 0 ? nedMsg : null;
+        toolResultsMap.set(msg.tool_call_id, {
+          content: msg.content,
+          parsedData: toolData,
+        });
+      }
+    });
+    
+    return messages.map((msg) => {
+      // Skip tool result messages - they're rendered with their tool calls
+      if (msg.role === 'tool') {
+        return null;
       }
       
       // For user and assistant messages, render as text
@@ -402,19 +376,10 @@ export const NedChatSimplified: React.FC = () => {
         };
       }
       
-      // For assistant messages with tool calls, show tool-use indicators
+      // Skip assistant messages with tool calls - we only show the results
+      // This prevents the "turbo UI" from taking over the chat
       if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-        console.log('[NedChat] Processing assistant message with tool calls:', msg.tool_calls);
-        return {
-          id: msg.id,
-          role: 'assistant' as const,
-          contents: msg.tool_calls.map((toolCall: any) => ({
-            type: 'tool-use' as const,
-            toolName: toolCall.function?.name || toolCall.name,
-            toolStatus: 'pending' as const,
-          })),
-          timestamp: msg.timestamp?.toISOString() || new Date().toISOString(),
-        };
+        return null;
       }
       
       return null;

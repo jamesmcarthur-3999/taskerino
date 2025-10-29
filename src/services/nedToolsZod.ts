@@ -5,6 +5,62 @@
  */
 
 import { z } from 'zod';
+import type { Note, Task } from '../types';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  input: Record<string, any>;
+}
+
+export interface ToolResult {
+  tool_use_id: string;
+  content: string | Record<string, any>;
+  is_error?: boolean;
+  // UI-only data (not sent to Claude)
+  full_notes?: Note[];
+  full_tasks?: Task[];
+  full_sessions?: any[]; // Session type - using any[] to avoid circular import
+  // Change tracking for UI notifications
+  operation?: 'create' | 'update' | 'delete';
+  item_type?: 'task' | 'note';
+  item?: Task | Note;
+  changes?: Array<{
+    field: string;
+    label: string;
+    oldValue: any;
+    newValue: any;
+  }>;
+}
+
+// Context Agent Response
+export interface ContextAgentResult {
+  notes: Note[];
+  tasks: Task[];
+  summary: string;
+  suggestions?: string[];
+  thread_id: string;
+}
+
+// Memory
+export interface NedMemory {
+  id: string;
+  type: 'user_preference' | 'interaction_outcome' | 'context_note';
+  content: string;
+  createdAt: string;
+  relevanceScore: number;
+}
+
+// Permission
+export interface ToolPermission {
+  toolName: string;
+  level: 'forever' | 'session' | 'always-ask';
+  grantedAt: string;
+}
 
 // ============================================================================
 // READ TOOLS (No Permission Required)
@@ -209,6 +265,9 @@ export const WRITE_TOOL_NAMES = [
   'record_memory',
 ];
 
+// Backward compatibility - same as WRITE_TOOL_NAMES
+export const WRITE_TOOLS = WRITE_TOOL_NAMES;
+
 /**
  * Get all Ned tools as Zod-based tool definitions
  */
@@ -259,4 +318,19 @@ export function getReadOnlyTools() {
 export function toolRequiresPermission(toolName: string): boolean {
   return WRITE_TOOL_NAMES.includes(toolName);
 }
+
+// ============================================================================
+// TOOL DESCRIPTIONS (for UI display)
+// ============================================================================
+
+export const TOOL_DESCRIPTIONS: Record<string, string> = {
+  create_task: 'Create new tasks',
+  update_task: 'Modify existing tasks',
+  complete_task: 'Mark tasks as complete',
+  delete_task: 'Delete tasks',
+  create_note: 'Create new notes',
+  update_note: 'Modify existing notes',
+  delete_note: 'Delete notes',
+  record_memory: 'Save memories about preferences and context',
+};
 
