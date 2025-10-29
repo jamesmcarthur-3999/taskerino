@@ -8,6 +8,8 @@ pnpm-debug.log*
 lerna-debug.log*
 build.log
 
+.turbo
+
 node_modules
 dist
 dist-ssr
@@ -54,3 +56,6 @@ src-tauri/WixTools
 # Backup files
 *.backup
 *.bak
+
+# Turbo
+.turbo

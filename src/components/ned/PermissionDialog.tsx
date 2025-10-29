@@ -45,25 +45,25 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop - fixed to viewport */}
           <motion.div
             variants={modalBackdropVariants.critical}
             initial="hidden"
             animate="visible"
             exit="exit"
-            className={`${MODAL_OVERLAY} z-50`}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999]"
             onClick={onDeny}
           />
 
-          {/* Dialog */}
-          <motion.div
-            variants={modalConfirmationVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md pointer-events-none"
-          >
-            <div className="pointer-events-auto">
+          {/* Dialog - fixed to viewport, centered */}
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6">
+            <motion.div
+              variants={modalConfirmationVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="w-full max-w-md"
+            >
             <div className={`bg-white dark:bg-gray-800 ${getRadiusClass('modal')} shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden`}>
               {/* Header */}
               <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6">
@@ -163,8 +163,8 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
                 </button>
               </div>
             </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
