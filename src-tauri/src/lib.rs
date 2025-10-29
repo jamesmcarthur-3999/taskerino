@@ -727,7 +727,6 @@ pub fn run() {
                     let last_time = state.last_screenshot_time.clone();
 
                     if !is_active || last_time.is_empty() {
-                        println!("⚫ Idle state: active={}, last_time_empty={}", is_active, last_time.is_empty());
                         // Update tray icon title to show idle state
                         if let Ok(tray_guard) = tray_handle_for_thread.lock() {
                             if let Some(tray) = tray_guard.as_ref() {

@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minimize2, MessageCircle } from 'lucide-react';
 import { useUI } from '../context/UIContext';
-import { NedChat } from './ned/NedChat';
+import { NedChatSimplified as NedChatSimple } from './ned/NedChatSimplified';
 import { getGlassClasses } from '../design-system/theme';
 
 export const NedOverlay: React.FC = () => {
@@ -53,9 +53,9 @@ export const NedOverlay: React.FC = () => {
       }}
       className={`fixed top-20 right-6 w-[480px] h-[calc(100vh-140px)] z-[60] flex flex-col ${getGlassClasses('strong')} rounded-[40px] shadow-2xl ring-1 ring-black/5 overflow-hidden pointer-events-auto`}
     >
-        {/* Ned Chat - Full height, input on top */}
+        {/* Ned Chat - Full height, input on top (simple) */}
         <div className="flex-1 min-h-0 flex flex-col">
-          <NedChat />
+          <NedChatSimple />
         </div>
       </motion.div>,
     document.body

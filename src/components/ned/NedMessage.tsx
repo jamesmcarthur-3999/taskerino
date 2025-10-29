@@ -580,8 +580,19 @@ export const NedMessage: React.FC<NedMessageProps> = ({
               </div>
             )}
 
-            {/* Tool use - completely hidden from UI */}
-            {content.type === 'tool-use' && null}
+            {/* Tool use - compact display */}
+            {content.type === 'tool-use' && content.toolName && (
+              <div className={`flex items-center gap-2 px-3 py-1.5 ${getRadiusClass('element')} ${getInfoGradient('light').container} shadow-sm ring-1 ring-black/5`}>
+                <div className="flex gap-1">
+                  <span className={`w-1.5 h-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} animate-bounce [animation-delay:0ms]`} />
+                  <span className={`w-1.5 h-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} animate-bounce [animation-delay:150ms]`} />
+                  <span className={`w-1.5 h-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 ${getRadiusClass('pill')} animate-bounce [animation-delay:300ms]`} />
+                </div>
+                <span className="text-xs font-medium text-cyan-700">
+                  {content.toolName.replace(/_/g, ' ')}
+                </span>
+              </div>
+            )}
 
             {content.type === 'error' && content.content && (
               <div className={`px-5 py-3.5 ${getRadiusClass('element')} ${getGlassClasses('medium')} bg-gradient-to-r from-red-50 to-rose-50 border-red-200 shadow-xl shadow-red-100/30 ring-1 ring-red-100/50`}>
