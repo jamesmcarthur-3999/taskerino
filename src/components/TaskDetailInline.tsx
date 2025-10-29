@@ -2,10 +2,18 @@ import { useState, useEffect } from 'react';
 import { useTasks } from '../context/TasksContext';
 import { useNotes } from '../context/NotesContext';
 import { useUI } from '../context/UIContext';
-import { Calendar, Clock, CheckSquare, Circle, Plus, X, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, CheckSquare, Circle, Plus, X, Trash2, CheckCircle2, AlertCircle, Settings } from 'lucide-react';
 import type { Task, SubTask } from '../types';
 import { formatRelativeTime, isTaskOverdue, isTaskDueToday, generateId } from '../utils/helpers';
 import { getRadiusClass } from '../design-system/theme';
+import { RelationshipPills } from './relationships/RelationshipPills';
+import { RelationshipModal } from './relationships/RelationshipModal';
+import { RelationshipCardSection } from './relationships/RelationshipCardSection';
+import { EntityType, RelationshipType } from '../types/relationships';
+import { TopicPillManager } from './TopicPillManager';
+import { CompanyPillManager } from './CompanyPillManager';
+import { ContactPillManager } from './ContactPillManager';
+import { useEntities } from '../context/EntitiesContext';
 
 interface TaskDetailInlineProps {
   taskId: string;
@@ -16,6 +24,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
   const { state: notesState } = useNotes();
   const { dispatch: uiDispatch } = useUI();
+  const { state: entitiesState, addCompany, addContact, addTopic } = useEntities();
   const task = tasksState.tasks.find(t => t.id === taskId);
 
   const [title, setTitle] = useState('');
@@ -29,6 +38,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
   const [subtasks, setSubtasks] = useState<SubTask[]>([]);
   const [newSubtask, setNewSubtask] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -120,6 +130,89 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
     if (confirm('Delete this task?')) {
       tasksDispatch({ type: 'DELETE_TASK', payload: taskId });
     }
+  };
+
+  const handleTopicChange = (topicId: string | undefined) => {
+    if (!task) return;
+
+    // Update task with new topic
+    tasksDispatch({
+      type: 'UPDATE_TASK',
+      payload: {
+        ...task,
+        topicId,
+      }
+    });
+
+    // TODO: Also create/remove TASK_TOPIC relationship
+    // This will be handled by migration service or context integration
+  };
+
+  const handleCompaniesChange = (companyIds: string[]) => {
+    if (!task) return;
+
+    tasksDispatch({
+      type: 'UPDATE_TASK',
+      payload: {
+        ...task,
+        companyIds,
+      }
+    });
+
+    // TODO: Also create/remove TASK_COMPANY relationships
+  };
+
+  const handleContactsChange = (contactIds: string[]) => {
+    if (!task) return;
+
+    tasksDispatch({
+      type: 'UPDATE_TASK',
+      payload: {
+        ...task,
+        contactIds,
+      }
+    });
+
+    // TODO: Also create/remove TASK_CONTACT relationships
+  };
+
+  // Entity creation callbacks
+  const handleCreateCompany = async (name: string) => {
+    const newCompany = {
+      id: generateId(),
+      name,
+      createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      noteCount: 0,
+      profile: {},
+    };
+    addCompany(newCompany);
+    return newCompany;
+  };
+
+  const handleCreateContact = async (name: string) => {
+    const newContact = {
+      id: generateId(),
+      name,
+      createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      noteCount: 0,
+      profile: {},
+    };
+    addContact(newContact);
+    return newContact;
+  };
+
+  const handleCreateTopic = async (name: string) => {
+    const newTopic = {
+      id: generateId(),
+      name,
+      createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      noteCount: 0,
+    };
+    addTopic(newTopic);
+    return newTopic;
   };
 
   if (!task) {
@@ -412,6 +505,75 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
           </div>
         </div>
 
+        {/* Topic Section */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Topic
+          </label>
+          <TopicPillManager
+            topicId={task.topicId}
+            onTopicChange={handleTopicChange}
+            allTopics={entitiesState.topics}
+            editable={true}
+            onCreateTopic={handleCreateTopic}
+          />
+        </div>
+
+        {/* Companies Section */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Companies
+          </label>
+          <CompanyPillManager
+            companyIds={task.companyIds || []}
+            onCompaniesChange={handleCompaniesChange}
+            allCompanies={entitiesState.companies}
+            editable={true}
+            onCreateCompany={handleCreateCompany}
+          />
+        </div>
+
+        {/* Contacts Section */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Contacts
+          </label>
+          <ContactPillManager
+            contactIds={task.contactIds || []}
+            onContactsChange={handleContactsChange}
+            allContacts={entitiesState.contacts}
+            editable={true}
+            onCreateContact={handleCreateContact}
+          />
+        </div>
+
+        {/* Related Content Sections */}
+        <div className="space-y-4">
+          <RelationshipCardSection
+            entityId={task.id}
+            entityType={EntityType.TASK}
+            title="Related Notes"
+            filterTypes={[RelationshipType.TASK_NOTE]}
+            maxVisible={8}
+            variant="default"
+            showActions={true}
+            showExcerpts={false}
+            onAddClick={() => setRelationshipModalOpen(true)}
+          />
+
+          <RelationshipCardSection
+            entityId={task.id}
+            entityType={EntityType.TASK}
+            title="Related Sessions"
+            filterTypes={[RelationshipType.TASK_SESSION]}
+            maxVisible={8}
+            variant="default"
+            showActions={true}
+            showExcerpts={false}
+            onAddClick={() => setRelationshipModalOpen(true)}
+          />
+        </div>
+
         {/* AI Context (if present) */}
         {task.aiContext && (
           <div className={`p-4 bg-purple-50/60 backdrop-blur-sm border border-purple-200 ${getRadiusClass('field')}`}>
@@ -442,6 +604,14 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
           </div>
         )}
       </div>
+
+      {/* Relationship Management Modal */}
+      <RelationshipModal
+        open={relationshipModalOpen}
+        onClose={() => setRelationshipModalOpen(false)}
+        entityId={task.id}
+        entityType={EntityType.TASK}
+      />
     </div>
   );
 }

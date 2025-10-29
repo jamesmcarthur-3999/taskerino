@@ -10,13 +10,12 @@
  * This replaces both the Timeline and Audio tabs with a single, more powerful Review tab.
  */
 
-import React, { useState, useRef, useEffect } from 'react';
-import { ImageIcon, Mic, Video } from 'lucide-react';
-import type { Session, SessionContextItem, AudioKeyMoment } from '../types';
+import React, { useState, useRef } from 'react';
+import { ImageIcon } from 'lucide-react';
+import type { Session, SessionContextItem } from '../types';
 import { ReviewTimeline } from './ReviewTimeline';
-import { keyMomentsDetectionService } from '../services/keyMomentsDetectionService';
-import { UnifiedMediaPlayer } from './UnifiedMediaPlayer';
-import type { UnifiedMediaPlayerRef } from './UnifiedMediaPlayer';
+import { SimpleMediaPlayer } from './SimpleMediaPlayer';
+import type { SimpleMediaPlayerRef } from './SimpleMediaPlayer';
 
 interface SessionReviewProps {
   session: Session;
@@ -36,13 +35,13 @@ export function SessionReview({
   onSessionUpdate,
 }: SessionReviewProps) {
   const [currentTime, setCurrentTime] = useState(0); // Current playback position in seconds
-  const [keyMoments, setKeyMoments] = useState<AudioKeyMoment[]>([]);
-  const mediaPlayerRef = useRef<UnifiedMediaPlayerRef>(null);
+  const mediaPlayerRef = useRef<SimpleMediaPlayerRef>(null);
 
   // Detect what media is available
   const hasScreenshots = session.screenshots && session.screenshots.length > 0;
   const hasAudio = session.audioSegments && session.audioSegments.length > 0;
-  const hasVideo = session.video && session.video.fullVideoAttachmentId;
+  // hasVideo is true if there's either a video recording OR an optimized media file (audio or video+audio)
+  const hasVideo = session.video && (session.video.fullVideoAttachmentId || session.video.optimizedPath);
 
   console.log('📺 [SESSION REVIEW] Media detection:', {
     sessionId: session.id,
@@ -60,17 +59,6 @@ export function SessionReview({
     : Date.now() - new Date(session.startTime).getTime();
   const sessionDurationSeconds = sessionDurationMs / 1000;
 
-  // Detect key moments for audio
-  useEffect(() => {
-    const detectMoments = async () => {
-      if (session.audioSegments && session.audioSegments.length > 0) {
-        const moments = await keyMomentsDetectionService.detectKeyMoments(session);
-        setKeyMoments(moments);
-      }
-    };
-    detectMoments();
-  }, [session]);
-
   console.log('📺 [SESSION REVIEW] Media detected:', {
     hasScreenshots,
     hasAudio,
@@ -85,18 +73,9 @@ export function SessionReview({
     const newTime = Math.max(0, Math.min(seekTime, sessionDurationSeconds));
     setCurrentTime(newTime);
 
-    // Seek unified media player
+    // Seek media player
     if (mediaPlayerRef.current) {
       mediaPlayerRef.current.seekTo(newTime);
-    }
-  };
-
-  // Handle chapters saved - notify parent to refresh session data
-  const handleChaptersSaved = () => {
-    if (onSessionUpdate) {
-      // Parent component should re-fetch session data to get updated chapters
-      // We pass the current session as a signal that it needs to be refreshed
-      onSessionUpdate(session);
     }
   };
 
@@ -116,16 +95,11 @@ export function SessionReview({
 
   return (
     <div className="space-y-6">
-      {/* Unified Media Player - handles all 7 media combinations */}
-      <UnifiedMediaPlayer
+      {/* Simple Media Player - plays optimized MP4/MP3 from session.video.optimizedPath */}
+      <SimpleMediaPlayer
         ref={mediaPlayerRef}
         session={session}
-        screenshots={session.screenshots || []}
-        audioSegments={session.audioSegments}
-        video={session.video}
-        keyMoments={keyMoments}
         onTimeUpdate={setCurrentTime}
-        onChaptersGenerated={handleChaptersSaved}
       />
 
       {/* Unified Timeline - Always shown, syncs with player above */}

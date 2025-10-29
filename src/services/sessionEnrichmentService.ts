@@ -57,10 +57,21 @@ import { getCheckpointService, type EnrichmentCheckpoint } from './checkpointSer
 import { getEnrichmentLockService } from './enrichmentLockService';
 import { retryWithBackoff } from '../utils/retryWithBackoff';
 import { getStorage } from './storage';
+import { getChunkedStorage, type SessionMetadata } from './storage/ChunkedSessionStorage';
 import { generateId } from '../utils/helpers';
 import { generateFlexibleSummary } from '../utils/sessionSynthesis';
 import { invoke } from '@tauri-apps/api/core';
 import { aiCanvasGenerator } from './aiCanvasGenerator';
+import { getEnrichmentResultCache } from './enrichment/EnrichmentResultCache';
+import type { EnrichmentResultCache } from './enrichment/EnrichmentResultCache';
+import { getIncrementalEnrichmentService } from './enrichment/IncrementalEnrichmentService';
+import type { IncrementalEnrichmentService } from './enrichment/IncrementalEnrichmentService';
+import { getEnrichmentErrorHandler } from './enrichment/EnrichmentErrorHandler';
+import type { EnrichmentErrorHandler } from './enrichment/EnrichmentErrorHandler';
+import { getProgressTrackingService } from './enrichment/ProgressTrackingService';
+import type { ProgressTrackingService } from './enrichment/ProgressTrackingService';
+import { adaptiveModelSelector } from './optimization/AdaptiveModelSelector';
+import type { ModelSelectionContext } from './optimization/AdaptiveModelSelector';
 
 // ============================================================================
 // Types & Interfaces
@@ -207,6 +218,10 @@ export interface EnrichmentCapability {
 export class SessionEnrichmentService {
   private readonly checkpointService = getCheckpointService();
   private readonly lockService = getEnrichmentLockService();
+  private readonly cache: EnrichmentResultCache;
+  private readonly incrementalService: IncrementalEnrichmentService;
+  private readonly errorHandler: EnrichmentErrorHandler;
+  private readonly progressService: ProgressTrackingService;
 
   // Cost estimation constants (as of 2025)
   private readonly COST_PER_AUDIO_MINUTE = 0.026; // GPT-4o audio preview
@@ -218,6 +233,84 @@ export class SessionEnrichmentService {
   // Default settings
   private readonly DEFAULT_MAX_COST = 10.0; // $10 USD
   private readonly DEFAULT_LOCK_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+  constructor() {
+    this.cache = getEnrichmentResultCache();
+    this.incrementalService = getIncrementalEnrichmentService();
+    this.errorHandler = getEnrichmentErrorHandler();
+    this.progressService = getProgressTrackingService();
+  }
+
+  /**
+   * Select optimal models for enrichment tasks using AdaptiveModelSelector
+   *
+   * This ensures:
+   * - Screenshot analysis uses Haiku 4.5 (real-time, $1/MTok) - 67% cost savings
+   * - Video chaptering uses appropriate model based on complexity
+   * - Session summaries use Sonnet 4.5 (comprehensive, $3/MTok)
+   *
+   * @returns Selected models for each enrichment stage
+   */
+  private selectEnrichmentModels(): {
+    screenshotModel: string;
+    videoModel: string;
+    summaryModel: string;
+  } {
+    // Screenshot analysis - real-time, low complexity
+    const screenshotContext: ModelSelectionContext = {
+      taskType: 'screenshot_analysis_realtime',
+      realtime: true,
+      stakes: 'low',
+      estimatedInputTokens: 500,
+      expectedOutputTokens: 200,
+    };
+    const screenshotResult = adaptiveModelSelector.selectModel(screenshotContext);
+
+    // Video chaptering - batch processing, moderate complexity
+    const videoContext: ModelSelectionContext = {
+      taskType: 'video_chaptering',
+      realtime: false,
+      stakes: 'medium',
+      estimatedInputTokens: 2000,
+      expectedOutputTokens: 1000,
+    };
+    const videoResult = adaptiveModelSelector.selectModel(videoContext);
+
+    // Session summary - batch processing, high complexity
+    const summaryContext: ModelSelectionContext = {
+      taskType: 'summarization',
+      realtime: false,
+      stakes: 'high',
+      estimatedInputTokens: 5000,
+      expectedOutputTokens: 1500,
+    };
+    const summaryResult = adaptiveModelSelector.selectModel(summaryContext);
+
+    // Log model selections (backend only, not user-facing)
+    console.log('[MODEL SELECTION] Enrichment models selected:', {
+      screenshot: {
+        model: screenshotResult.model,
+        reason: screenshotResult.config.reason,
+        estimatedCost: screenshotResult.estimatedCost,
+      },
+      video: {
+        model: videoResult.model,
+        reason: videoResult.config.reason,
+        estimatedCost: videoResult.estimatedCost,
+      },
+      summary: {
+        model: summaryResult.model,
+        reason: summaryResult.config.reason,
+        estimatedCost: summaryResult.estimatedCost,
+      },
+    });
+
+    return {
+      screenshotModel: screenshotResult.model,
+      videoModel: videoResult.model,
+      summaryModel: summaryResult.model,
+    };
+  }
 
   /**
    * Enrich a session with comprehensive audio/video analysis
@@ -239,6 +332,33 @@ export class SessionEnrichmentService {
       options,
     });
 
+    // DEBUG: Log audioSegments structure to diagnose missing attachmentIds
+    if (session.audioSegments && session.audioSegments.length > 0) {
+      logger.info('🔍 [DEBUG] AudioSegments inspection:', {
+        count: session.audioSegments.length,
+        firstSegment: {
+          id: session.audioSegments[0].id,
+          duration: session.audioSegments[0].duration,
+          hasAttachmentId: !!session.audioSegments[0].attachmentId,
+          attachmentId: session.audioSegments[0].attachmentId || 'MISSING',
+          hasHash: !!session.audioSegments[0].hash,
+          hash: session.audioSegments[0].hash?.substring(0, 16) || 'MISSING',
+          hasTranscription: !!session.audioSegments[0].transcription,
+          keys: Object.keys(session.audioSegments[0]),
+        },
+        allSegments: session.audioSegments.map(s => ({
+          id: s.id,
+          hasAttachmentId: !!s.attachmentId,
+          hasHash: !!s.hash,
+        })),
+      });
+    } else {
+      logger.warn('⚠️  [DEBUG] No audioSegments in session!', {
+        hasAudioSegments: !!session.audioSegments,
+        audioSegmentsLength: session.audioSegments?.length || 0,
+      });
+    }
+
     // Default options
     const opts: Required<EnrichmentOptions> = {
       includeAudio: options.includeAudio ?? true,
@@ -258,7 +378,134 @@ export class SessionEnrichmentService {
       warnings: [],
     };
 
+    // Start progress tracking (NO COST INFO)
+    this.progressService.startProgress(session.id, {
+      includeAudio: opts.includeAudio,
+      includeVideo: opts.includeVideo,
+      includeSummary: opts.includeSummary,
+      includeCanvas: opts.includeCanvas,
+    });
+
     try {
+      // Stage 0: Cache Lookup (only if not forcing regeneration)
+      if (!opts.forceRegenerate) {
+        opts.onProgress({
+          stage: 'validating',
+          message: 'Checking cache...',
+          progress: 2,
+        });
+
+        // Select optimal models using AdaptiveModelSelector
+        const selectedModels = this.selectEnrichmentModels();
+
+        const cacheKey = this.cache.generateCacheKeyFromSession(
+          session,
+          'enrichment-v1', // Versioned prompt to invalidate on major changes
+          {
+            audioModel: 'gpt-4o-audio-preview-2024-10-01', // Audio model remains GPT-4o
+            videoModel: selectedModels.videoModel,
+            summaryModel: selectedModels.summaryModel,
+          }
+        );
+
+        const cachedResult = await this.cache.getCachedResult(cacheKey);
+        if (cachedResult) {
+          logger.info('✓ Cache HIT - returning cached enrichment result', {
+            cacheKey: cacheKey.slice(0, 8),
+            cachedAt: new Date(cachedResult.cachedAt).toISOString(),
+            costSavings: cachedResult.totalCost,
+          });
+
+          // Update session with cached results
+          // Add 'completed: true' to match EnrichmentResult type
+          const cachedEnrichmentResult = {
+            success: true,
+            audio: cachedResult.audio ? { ...cachedResult.audio, completed: true } : undefined,
+            video: cachedResult.video ? { ...cachedResult.video, completed: true } : undefined,
+            summary: cachedResult.summary ? { ...cachedResult.summary, completed: true } : undefined,
+            canvas: cachedResult.canvas ? { ...cachedResult.canvas, completed: true } : undefined,
+            totalCost: 0, // No actual cost incurred
+            totalDuration: (Date.now() - startTime) / 1000,
+            warnings: ['Result retrieved from cache (no processing cost)'],
+          };
+
+          await this.updateSessionWithResults(session, cachedEnrichmentResult);
+
+          opts.onProgress({
+            stage: 'complete',
+            message: 'Enrichment complete (cached)!',
+            progress: 100,
+          });
+
+          return cachedEnrichmentResult;
+        }
+
+        logger.info('✗ Cache MISS - proceeding with full enrichment', {
+          cacheKey: cacheKey.slice(0, 8),
+        });
+      } else {
+        logger.info('⚠ Force regenerate enabled - skipping cache lookup');
+      }
+
+      // Stage 0.5: Check for Incremental Enrichment (only if not forcing regeneration)
+      let useIncremental = false;
+      let incrementalDelta: any = null;
+      let incrementalSession: Session = session;
+
+      if (!opts.forceRegenerate) {
+        opts.onProgress({
+          stage: 'validating',
+          message: 'Checking for incremental enrichment...',
+          progress: 3,
+        });
+
+        const checkpoint = await this.incrementalService.getCheckpoint(session.id);
+        if (checkpoint) {
+          logger.info('✓ Checkpoint found - checking if incremental enrichment is possible');
+
+          const delta = await this.incrementalService.detectDelta(session, checkpoint);
+
+          if (!delta.requiresFullRegeneration && (delta.newScreenshots.length > 0 || delta.newAudioSegments.length > 0)) {
+            // Incremental enrichment is possible!
+            const estimatedSavings = this.incrementalService.estimateCostSavings(session, delta);
+
+            logger.info('✓ Incremental enrichment enabled - processing only new data', {
+              newScreenshots: delta.newScreenshots.length,
+              newAudioSegments: delta.newAudioSegments.length,
+              estimatedSavings: estimatedSavings.toFixed(4),
+            });
+
+            opts.onProgress({
+              stage: 'validating',
+              message: `Processing ${delta.newScreenshots.length} new screenshots and ${delta.newAudioSegments.length} new audio segments...`,
+              progress: 5,
+            });
+
+            // Enable incremental mode
+            useIncremental = true;
+            incrementalDelta = delta;
+
+            // Create incremental session snapshot (contains only new data)
+            incrementalSession = {
+              ...session,
+              screenshots: delta.newScreenshots,
+              audioSegments: delta.newAudioSegments,
+            };
+
+            result.warnings.push(
+              `Incremental enrichment: Processing ${delta.newScreenshots.length} new screenshots, ${delta.newAudioSegments.length} new audio segments. Estimated savings: $${estimatedSavings.toFixed(2)}`
+            );
+          } else {
+            logger.info('⚠ Full regeneration required', {
+              reasons: delta.fullRegenerationReasons,
+            });
+            result.warnings.push(...delta.fullRegenerationReasons.map(r => `Full regeneration: ${r}`));
+          }
+        } else {
+          logger.info('✗ No checkpoint found - first enrichment or checkpoint cleared');
+        }
+      }
+
       // Stage 1: Validation
       opts.onProgress({
         stage: 'validating',
@@ -266,7 +513,8 @@ export class SessionEnrichmentService {
         progress: 5,
       });
 
-      const capability = await this.canEnrich(session);
+      // Validate using incrementalSession (which may contain only new data)
+      const capability = await this.canEnrich(incrementalSession);
       logger.info('Session enrichment capability', capability);
 
       // Adjust options based on capability
@@ -283,8 +531,8 @@ export class SessionEnrichmentService {
         }
       }
 
-      // Check if already enriched (unless force regenerate)
-      if (!opts.forceRegenerate) {
+      // Check if already enriched (unless force regenerate OR incremental mode)
+      if (!opts.forceRegenerate && !useIncremental) {
         if (session.audioReviewCompleted && opts.includeAudio) {
           opts.includeAudio = false;
           result.warnings.push('Audio review already completed. Use forceRegenerate to re-run.');
@@ -363,15 +611,22 @@ export class SessionEnrichmentService {
           progress: 25,
         });
 
-        // Update session in storage with 'in-progress' status using transaction + optimistic locking
+        // Update session in storage with 'in-progress' status
         try {
-          const storage = await getStorage();
-          const txId = storage.beginPhase24Transaction();
+          const chunkedStorage = await getChunkedStorage();
 
           try {
-            // Load current session with version (use any cast for TauriFileSystemAdapter-specific method)
-            const loadEntity = (storage as any).loadEntity as <T>(collection: string, id: string) => Promise<T | null>;
-            const currentSession = await loadEntity<Session>('sessions', session.id);
+            // Load current session (Phase 4: use ChunkedStorage with cache-first)
+            // Try cache first for freshest data (optimistic updates from ActiveSessionContext)
+            let currentSession = chunkedStorage.getCachedSession(session.id);
+
+            // Fallback to storage if not in cache
+            if (!currentSession) {
+              console.log(`[ENRICHMENT] Cache miss for session ${session.id}, loading from storage...`);
+              currentSession = await chunkedStorage.loadFullSession(session.id);
+            } else {
+              console.log(`[ENRICHMENT] Cache hit for session ${session.id} - using optimistic data`);
+            }
 
             if (!currentSession) {
               throw new Error(`Session ${session.id} not found`);
@@ -380,7 +635,7 @@ export class SessionEnrichmentService {
             const expectedVersion = currentSession.version || 0;
 
             // Update enrichment status
-            const updatedSession = {
+            const updatedSession: Session = {
               ...currentSession,
               enrichmentStatus: {
                 status: 'in-progress' as const,
@@ -394,23 +649,14 @@ export class SessionEnrichmentService {
                 warnings: result.warnings,
                 canResume: true,
               },
-              version: expectedVersion, // Keep current version for optimistic lock check
+              version: expectedVersion + 1,
             };
 
-            // Add operation to transaction
-            storage.addOperation(txId, {
-              type: 'write',
-              collection: 'sessions',
-              entityId: session.id,
-              data: updatedSession,
-            });
-
-            // Commit with version check
-            await storage.commitPhase24Transaction(txId);
+            // Save session (Phase 4: ChunkedStorage)
+            await chunkedStorage.saveFullSession(updatedSession);
 
             logger.info(`[Enrichment] ✓ Set in-progress status (version ${expectedVersion} → ${expectedVersion + 1})`);
           } catch (error) {
-            await storage.rollbackPhase24Transaction(txId);
             throw error;
           }
         } catch (error: any) {
@@ -422,10 +668,10 @@ export class SessionEnrichmentService {
           // Stage 5: Parallel Enrichment
           const enrichmentPromises: Array<Promise<any>> = [];
 
-          // Audio enrichment
+          // Audio enrichment (use incrementalSession for incremental mode)
           if (opts.includeAudio) {
             enrichmentPromises.push(
-              this.enrichAudio(session, checkpoint.id, opts.onProgress)
+              this.enrichAudio(incrementalSession, checkpoint.id, opts.onProgress)
             );
           } else {
             result.audio = {
@@ -436,10 +682,10 @@ export class SessionEnrichmentService {
             };
           }
 
-          // Video enrichment
+          // Video enrichment (use incrementalSession for incremental mode)
           if (opts.includeVideo) {
             enrichmentPromises.push(
-              this.enrichVideo(session, checkpoint.id, opts.onProgress)
+              this.enrichVideo(incrementalSession, checkpoint.id, opts.onProgress)
             );
           } else {
             result.video = {
@@ -545,8 +791,13 @@ export class SessionEnrichmentService {
             }
           }
 
-          // Stage 6.5: Canvas Generation (requires summary)
-          if (opts.includeCanvas && opts.includeSummary && result.summary?.completed) {
+          // Stage 6.5: Canvas Generation (independent of summary - can use audio/video insights directly)
+          // Canvas can be generated from summary OR audio/video insights
+          const canHasEnrichedData =
+            (result.audio?.completed && result.audio.insights) ||
+            (result.video?.completed && result.video.chapters && result.video.chapters.length > 0);
+
+          if (opts.includeCanvas && canHasEnrichedData) {
             opts.onProgress({
               stage: 'canvas',
               message: 'Generating interactive canvas...',
@@ -556,51 +807,68 @@ export class SessionEnrichmentService {
             try {
               const canvasStartTime = Date.now();
 
-              // Get latest session data with enriched summary
-              const storage = await getStorage();
-              const sessions = await storage.load<Session[]>('sessions');
-              const latestSession = sessions?.find((s) => s.id === session.id);
+              // Get latest session data (Phase 4: use ChunkedStorage)
+              const chunkedStorage = await getChunkedStorage();
+              const latestSession = await chunkedStorage.loadFullSession(session.id);
 
               if (!latestSession) {
-                throw new Error('Session not found for canvas generation');
-              }
-
-              // Update session with summary before canvas generation
-              const sessionWithSummary = {
-                ...latestSession,
-                summary: result.summary.summary,
-                audioInsights: result.audio?.insights,
-                video: latestSession.video ? {
-                  ...latestSession.video,
-                  chapters: result.video?.chapters || latestSession.video.chapters,
-                } : undefined,
-              };
-
-              logger.info('Generating canvas for enriched session');
-
-              // Generate canvas with progress tracking
-              const canvasSpec = await aiCanvasGenerator.generate(sessionWithSummary, (progress, stage) => {
-                // Map canvas generation progress (90-95%) within the overall enrichment progress
-                const overallProgress = 90 + (progress * 5);
-                opts.onProgress({
-                  stage: 'canvas',
-                  message: stage || 'Generating interactive canvas...',
-                  progress: overallProgress,
+                // Graceful handling: Session may have been deleted during enrichment
+                console.warn(`[Enrichment] Session ${session.id} not found during canvas generation - skipping`);
+                logger.warn('Session not found during canvas generation', {
+                  sessionId: session.id,
+                  stage: 'canvas_generation',
                 });
-              });
+                // Skip canvas generation but don't fail entire enrichment
+                result.canvas = {
+                  completed: false,
+                  error: 'Session not found - may have been deleted during enrichment',
+                  duration: 0,
+                };
+                // Don't generate canvas, but continue with rest of enrichment (fall through to end of try block)
+              } else {
+                // Build enriched session with available data (summary OR audio/video insights)
+                const enrichedSession = {
+                  ...latestSession,
+                  // Use enriched summary if available, otherwise use existing
+                  summary: result.summary?.completed ? result.summary.summary : latestSession.summary,
+                  // Always include fresh audio/video insights
+                  audioInsights: result.audio?.insights || latestSession.audioInsights,
+                  video: latestSession.video ? {
+                    ...latestSession.video,
+                    chapters: result.video?.chapters || latestSession.video.chapters,
+                  } : undefined,
+                };
 
-              const canvasDuration = (Date.now() - canvasStartTime) / 1000;
+                logger.info('Generating canvas from enriched session data', {
+                  hasSummary: !!enrichedSession.summary,
+                  hasAudioInsights: !!enrichedSession.audioInsights,
+                  hasVideoChapters: !!(enrichedSession.video?.chapters && enrichedSession.video.chapters.length > 0),
+                });
 
-              result.canvas = {
-                completed: true,
-                canvasSpec,
-                duration: canvasDuration,
-              };
+                // Generate canvas with progress tracking
+                const canvasSpec = await aiCanvasGenerator.generate(enrichedSession, (progress, stage) => {
+                  // Map canvas generation progress (90-95%) within the overall enrichment progress
+                  const overallProgress = 90 + (progress * 5);
+                  opts.onProgress({
+                    stage: 'canvas',
+                    message: stage || 'Generating interactive canvas...',
+                    progress: overallProgress,
+                  });
+                });
 
-              logger.info('Canvas generation completed', {
-                duration: canvasDuration,
-                componentCount: canvasSpec.componentTree?.children?.length || 0,
-              });
+                const canvasDuration = (Date.now() - canvasStartTime) / 1000;
+
+                result.canvas = {
+                  completed: true,
+                  canvasSpec,
+                  duration: canvasDuration,
+                };
+
+                logger.info('Canvas generation completed', {
+                  duration: canvasDuration,
+                  componentCount: canvasSpec.componentTree?.children?.length || 0,
+                });
+              }
             } catch (error: any) {
               logger.error('Canvas generation failed', error);
               result.canvas = {
@@ -611,12 +879,9 @@ export class SessionEnrichmentService {
               // Canvas failure is not critical - continue with enrichment
               result.warnings.push(`Canvas generation failed: ${error.message}`);
             }
-          } else if (opts.includeCanvas && !opts.includeSummary) {
-            logger.warn('Canvas generation skipped: requires includeSummary to be true');
-            result.warnings.push('Canvas generation skipped because summary regeneration was not enabled');
-          } else if (opts.includeCanvas && !result.summary?.completed) {
-            logger.warn('Canvas generation skipped: summary regeneration failed');
-            result.warnings.push('Canvas generation skipped because summary regeneration failed');
+          } else if (opts.includeCanvas && !canHasEnrichedData) {
+            logger.warn('Canvas generation skipped: no enriched audio/video data available');
+            result.warnings.push('Canvas generation skipped because no enriched audio or video data is available');
           }
 
           // Determine overall success BEFORE updating session (FIX: was calculated too late)
@@ -635,11 +900,93 @@ export class SessionEnrichmentService {
 
           result.totalDuration = (Date.now() - startTime) / 1000;
 
+          // Stage 9: Cache successful result for future use
+          if (result.success && !opts.forceRegenerate) {
+            try {
+              // Select optimal models using AdaptiveModelSelector
+              const selectedModels = this.selectEnrichmentModels();
+
+              const cacheKey = this.cache.generateCacheKeyFromSession(
+                session,
+                'enrichment-v1',
+                {
+                  audioModel: 'gpt-4o-audio-preview-2024-10-01', // Audio model remains GPT-4o
+                  videoModel: selectedModels.videoModel,
+                  summaryModel: selectedModels.summaryModel,
+                }
+              );
+
+              await this.cache.cacheResult(cacheKey, {
+                audio: result.audio,
+                video: result.video,
+                summary: result.summary,
+                canvas: result.canvas,
+                totalCost: result.totalCost,
+                totalDuration: result.totalDuration,
+              });
+
+              logger.info('✓ Cached enrichment result for future use', {
+                cacheKey: cacheKey.slice(0, 8),
+                costCached: result.totalCost,
+              });
+            } catch (cacheError: any) {
+              logger.warn('Failed to cache enrichment result (non-fatal)', cacheError);
+              // Don't fail enrichment if caching fails
+            }
+          }
+
+          // Stage 10: Create/Update Incremental Enrichment Checkpoint
+          if (result.success && !opts.forceRegenerate) {
+            try {
+              const existingCheckpoint = await this.incrementalService.getCheckpoint(session.id);
+
+              if (existingCheckpoint) {
+                // Update existing checkpoint
+                await this.incrementalService.updateCheckpoint(session.id, {
+                  lastScreenshotIndex: session.screenshots.length - 1,
+                  lastAudioSegmentIndex: (session.audioSegments?.length ?? 0) - 1,
+                  audioHash: session.audioSegments && session.audioSegments.length > 0
+                    ? await this.hashAudioData(session.audioSegments)
+                    : '',
+                  videoHash: session.screenshots.length > 0
+                    ? await this.hashVideoData(session.screenshots)
+                    : '',
+                  additionalCost: result.totalCost,
+                  additionalScreenshots: session.screenshots.length - (existingCheckpoint.screenshotsProcessed || 0),
+                  additionalAudioSegments: (session.audioSegments?.length ?? 0) - (existingCheckpoint.audioSegmentsProcessed || 0),
+                });
+
+                logger.info('✓ Updated incremental enrichment checkpoint', {
+                  sessionId: session.id,
+                  totalCost: existingCheckpoint.totalCost + result.totalCost,
+                });
+              } else {
+                // Create initial checkpoint
+                await this.incrementalService.createCheckpoint(session.id, session, result.totalCost);
+
+                logger.info('✓ Created initial incremental enrichment checkpoint', {
+                  sessionId: session.id,
+                  totalCost: result.totalCost,
+                });
+              }
+            } catch (checkpointError: any) {
+              logger.warn('Failed to create/update incremental enrichment checkpoint (non-fatal)', checkpointError);
+              // Don't fail enrichment if checkpoint fails
+            }
+          }
+
           opts.onProgress({
             stage: 'complete',
             message: 'Enrichment complete!',
             progress: 100,
           });
+
+          // Update progress tracking (NO COST INFO)
+          this.progressService.completeProgress(
+            session.id,
+            true,
+            'Session enrichment complete'
+          );
 
           logger.info('Enrichment completed successfully', {
             totalCost: result.totalCost,
@@ -673,15 +1020,29 @@ export class SessionEnrichmentService {
         progress: 0,
       });
 
-      // FIX: Update session enrichmentStatus to 'failed' in storage using transaction + optimistic locking
+      // Update progress tracking (NO COST INFO)
+      this.progressService.completeProgress(
+        session.id,
+        false,
+        error.message || 'Enrichment failed'
+      );
+
+      // FIX: Update session enrichmentStatus to 'failed' in storage (Phase 4: ChunkedStorage)
       try {
-        const storage = await getStorage();
-        const txId = storage.beginPhase24Transaction();
+        const chunkedStorage = await getChunkedStorage();
 
         try {
-          // Load current session with version (use any cast for TauriFileSystemAdapter-specific method)
-          const loadEntity = (storage as any).loadEntity as <T>(collection: string, id: string) => Promise<T | null>;
-          const currentSession = await loadEntity<Session>('sessions', session.id);
+          // Load current session (Phase 4: ChunkedStorage with cache-first)
+          // Try cache first for freshest data (optimistic updates from ActiveSessionContext)
+          let currentSession = chunkedStorage.getCachedSession(session.id);
+
+          // Fallback to storage if not in cache
+          if (!currentSession) {
+            console.log(`[ENRICHMENT] Cache miss for session ${session.id}, loading from storage...`);
+            currentSession = await chunkedStorage.loadFullSession(session.id);
+          } else {
+            console.log(`[ENRICHMENT] Cache hit for session ${session.id} - using optimistic data`);
+          }
 
           if (!currentSession) {
             throw new Error(`Session ${session.id} not found`);
@@ -690,7 +1051,7 @@ export class SessionEnrichmentService {
           const expectedVersion = currentSession.version || 0;
 
           // Update enrichment status to failed
-          const updatedSession = {
+          const updatedSession: Session = {
             ...currentSession,
             enrichmentStatus: {
               status: 'failed' as const,
@@ -705,23 +1066,14 @@ export class SessionEnrichmentService {
               warnings: result.warnings,
               canResume: false,
             },
-            version: expectedVersion, // Keep current version for optimistic lock check
+            version: expectedVersion + 1,
           };
 
-          // Add operation to transaction
-          storage.addOperation(txId, {
-            type: 'write',
-            collection: 'sessions',
-            entityId: session.id,
-            data: updatedSession,
-          });
-
-          // Commit with version check
-          await storage.commitPhase24Transaction(txId);
+          // Save session (Phase 4: ChunkedStorage)
+          await chunkedStorage.saveFullSession(updatedSession);
 
           logger.info(`[Enrichment] ✓ Set failed status (version ${expectedVersion} → ${expectedVersion + 1})`);
         } catch (txError) {
-          await storage.rollbackPhase24Transaction(txId);
           throw txError;
         }
       } catch (updateError: any) {
@@ -970,13 +1322,18 @@ export class SessionEnrichmentService {
     // Increment retry count
     await this.checkpointService.incrementRetryCount(checkpoint.id);
 
-    // Load session
-    const storage = await getStorage();
-    const sessions = await storage.load<Session[]>('sessions');
-    const session = sessions?.find((s) => s.id === sessionId);
+    // Load session (Phase 4: use ChunkedStorage)
+    const chunkedStorage = await getChunkedStorage();
+    const session = await chunkedStorage.loadFullSession(sessionId);
 
     if (!session) {
-      throw new Error('Session not found');
+      // Graceful handling: Session may have been deleted
+      console.warn(`[Enrichment] Session ${sessionId} not found - cannot resume from checkpoint`);
+      logger.warn('Session not found during checkpoint resume', {
+        sessionId,
+        checkpointStage: checkpoint.stage,
+      });
+      throw new Error('Session not found - may have been deleted');
     }
 
     // Resume enrichment with partial results
@@ -1046,25 +1403,54 @@ export class SessionEnrichmentService {
         segmentCount: session.audioSegments.length,
       });
 
-      // Run audio review with retry logic
-      const audioResult = await retryWithBackoff(
-        () =>
-          audioReviewService.reviewSession(session, (progress) => {
+      // Run audio review with EnrichmentErrorHandler for robust error handling
+      let audioResult;
+      let attemptNumber = 0;
+      const maxAttempts = 3;
+
+      while (attemptNumber < maxAttempts) {
+        try {
+          attemptNumber++;
+          audioResult = await audioReviewService.reviewSession(session, (progress) => {
             onProgress({
               stage: 'audio',
               message: progress.message,
               progress: 30 + (progress.progress / 100) * 40, // 30-70% of total
             });
-          }),
-        {
-          maxRetries: 2,
-          initialDelay: 5000,
-          maxDelay: 30000,
+          });
+          break; // Success - exit retry loop
+        } catch (error: any) {
+          const resolution = await this.errorHandler.handleError(error, {
+            sessionId: session.id,
+            operation: 'audio-review',
+            attemptNumber,
+          });
+
+          logger.error(`Audio enrichment error (attempt ${attemptNumber}/${maxAttempts})`, {
+            error: resolution.backendDetails.error,
+            shouldRetry: resolution.shouldRetry,
+            retryDelay: resolution.retryDelay,
+          });
+
+          if (resolution.shouldRetry && attemptNumber < maxAttempts) {
+            // Wait and retry
+            await new Promise(resolve => setTimeout(resolve, resolution.retryDelay || 1000));
+            logger.info(`Retrying audio enrichment after ${resolution.retryDelay}ms...`);
+          } else {
+            // Max retries or permanent error
+            logger.error('Audio enrichment failed permanently', resolution.backendDetails);
+            throw new Error(resolution.userMessage);
+          }
         }
-      );
+      }
 
       const duration = (Date.now() - startTime) / 1000;
       const costEstimate = audioReviewService.getCostEstimate(session);
+
+      // Ensure audioResult was successfully obtained
+      if (!audioResult) {
+        throw new Error('Audio enrichment failed: No result obtained after retries');
+      }
 
       // Update checkpoint
       await this.checkpointService.updateCheckpoint(checkpointId, {
@@ -1161,15 +1547,45 @@ export class SessionEnrichmentService {
         screenshotCount: session.screenshots?.length || 0,
       });
 
-      // Run video chaptering with retry logic
-      const proposedChapters = await retryWithBackoff(
-        () => videoChapteringService.proposeChapters(session),
-        {
-          maxRetries: 2,
-          initialDelay: 5000,
-          maxDelay: 30000,
+      // Run video chaptering with EnrichmentErrorHandler for robust error handling
+      let proposedChapters;
+      let attemptNumber = 0;
+      const maxAttempts = 3;
+
+      while (attemptNumber < maxAttempts) {
+        try {
+          attemptNumber++;
+          proposedChapters = await videoChapteringService.proposeChapters(session);
+          break; // Success - exit retry loop
+        } catch (error: any) {
+          const resolution = await this.errorHandler.handleError(error, {
+            sessionId: session.id,
+            operation: 'video-chaptering',
+            attemptNumber,
+          });
+
+          logger.error(`Video enrichment error (attempt ${attemptNumber}/${maxAttempts})`, {
+            error: resolution.backendDetails.error,
+            shouldRetry: resolution.shouldRetry,
+            retryDelay: resolution.retryDelay,
+          });
+
+          if (resolution.shouldRetry && attemptNumber < maxAttempts) {
+            // Wait and retry
+            await new Promise(resolve => setTimeout(resolve, resolution.retryDelay || 1000));
+            logger.info(`Retrying video enrichment after ${resolution.retryDelay}ms...`);
+          } else {
+            // Max retries or permanent error
+            logger.error('Video enrichment failed permanently', resolution.backendDetails);
+            throw new Error(resolution.userMessage);
+          }
         }
-      );
+      }
+
+      // Ensure proposedChapters was successfully obtained
+      if (!proposedChapters) {
+        throw new Error('Video chaptering failed: No chapters obtained after retries');
+      }
 
       // Convert ChapterProposal[] to VideoChapter[] by adding required fields
       // NOTE: We don't call saveChapters() here to avoid race condition
@@ -1263,13 +1679,26 @@ export class SessionEnrichmentService {
         progress: 80,
       });
 
-      // Get latest session data
-      const storage = await getStorage();
-      const sessions = await storage.load<Session[]>('sessions');
-      const latestSession = sessions?.find((s) => s.id === session.id);
+      // Get latest session data (Phase 4: use ChunkedStorage)
+      const chunkedStorage = await getChunkedStorage();
+      const latestSession = await chunkedStorage.loadFullSession(session.id);
 
       if (!latestSession) {
-        throw new Error('Session not found');
+        // Graceful handling: Session may have been deleted during enrichment
+        console.warn(`[Enrichment] Session ${session.id} not found in storage - may have been deleted during enrichment`);
+        logger.warn('Session not found during summary generation', {
+          sessionId: session.id,
+          stage: 'summary_generation',
+        });
+
+        // Return partial results instead of throwing
+        return {
+          success: false,
+          sessionId: session.id,
+          summary: null,
+          error: 'Session not found - may have been deleted during enrichment',
+          partialResults: freshEnrichment,
+        };
       }
 
       // Collect existing categories, subcategories, and tags from all sessions for consistency
@@ -1277,11 +1706,13 @@ export class SessionEnrichmentService {
       const existingSubCategories = new Set<string>();
       const existingTags = new Set<string>();
 
-      (sessions || []).forEach((s) => {
-        if (s.category) existingCategories.add(s.category);
-        if (s.subCategory) existingSubCategories.add(s.subCategory);
-        if (s.tags && Array.isArray(s.tags)) {
-          s.tags.forEach((tag) => existingTags.add(tag));
+      // Load all session metadata (Phase 4: ChunkedStorage)
+      const allMetadata = await chunkedStorage.listAllMetadata();
+      allMetadata.forEach((metadata) => {
+        if (metadata.category) existingCategories.add(metadata.category);
+        if (metadata.subCategory) existingSubCategories.add(metadata.subCategory);
+        if (metadata.tags && Array.isArray(metadata.tags)) {
+          metadata.tags.forEach((tag) => existingTags.add(tag));
         }
       });
 
@@ -1596,53 +2027,70 @@ export class SessionEnrichmentService {
     result: EnrichmentResult
   ): Promise<void> {
     const logger = this.createLogger(session.id);
-    logger.info('Updating session with enrichment results');
+    logger.info('Updating session with enrichment results via ChunkedStorage');
 
     try {
-      const storage = await getStorage();
-      const txId = storage.beginPhase24Transaction();
+      // Get ChunkedStorage instance
+      const chunkedStorage = await getChunkedStorage();
 
-      try {
-        // Load current session with version (use any cast for TauriFileSystemAdapter-specific method)
-        const loadEntity = (storage as any).loadEntity as <T>(collection: string, id: string) => Promise<T | null>;
-        const currentSession = await loadEntity<Session>('sessions', session.id);
+      // Load current metadata
+      const metadata = await chunkedStorage.loadMetadata(session.id);
+      if (!metadata) {
+        throw new Error(`Session ${session.id} not found in ChunkedStorage`);
+      }
 
-        if (!currentSession) {
-          throw new Error(`Session ${session.id} not found`);
-        }
-
-        const expectedVersion = currentSession.version || 0;
-        const updatedSession = currentSession;
+      // Build updates object for metadata
+      const metadataUpdates: Partial<SessionMetadata> = {};
 
       // Update audio results
       if (result.audio?.completed) {
-        updatedSession.audioReviewCompleted = true;
-        updatedSession.fullTranscription = result.audio.fullTranscription;
-        updatedSession.fullAudioAttachmentId = result.audio.fullAudioAttachmentId;
-        updatedSession.audioInsights = result.audio.insights;
+        metadataUpdates.audioReviewCompleted = true;
+        metadataUpdates.fullAudioAttachmentId = result.audio.fullAudioAttachmentId;
+        metadataUpdates.transcriptUpgradeCompleted = !!result.audio.upgradedSegments;
+        metadataUpdates.hasAudioInsights = !!result.audio.insights;
 
+        // Save audio insights to separate file
+        if (result.audio.insights) {
+          logger.info('Saving audio insights');
+          await chunkedStorage.saveAudioInsights(session.id, result.audio.insights);
+        }
+
+        // Save transcription to separate file
+        if (result.audio.fullTranscription) {
+          logger.info('Saving full transcription');
+          await chunkedStorage.saveTranscription(session.id, result.audio.fullTranscription);
+        }
+
+        // Update audio segments if upgraded
         if (result.audio.upgradedSegments) {
-          updatedSession.audioSegments = result.audio.upgradedSegments;
-          updatedSession.transcriptUpgradeCompleted = true;
+          logger.info('Saving upgraded audio segments');
+          await chunkedStorage.saveAudioSegments(session.id, result.audio.upgradedSegments);
         }
       }
 
-      // Update video results - save chapters atomically with other enrichment data
-      if (result.video?.completed && result.video.chapters && updatedSession.video) {
-        // Update chapters (video object must already exist from session recording)
-        updatedSession.video.chapters = result.video.chapters;
+      // Update video results - save chapters to metadata
+      if (result.video?.completed && result.video.chapters && metadata.video) {
+        // Update chapters in video metadata
+        metadataUpdates.video = {
+          ...metadata.video,
+          chapters: result.video.chapters,
+        };
 
-        logger.info('✅ Video chapters updated', {
+        logger.info('✅ Video chapters updated in metadata', {
           chapterCount: result.video.chapters.length,
         });
       }
 
       // Update summary
       if (result.summary?.completed && result.summary.summary) {
-        updatedSession.summary = result.summary.summary; // FIX: Store the full summary object
-        updatedSession.category = result.summary.summary.category;
-        updatedSession.subCategory = result.summary.summary.subCategory;
-        updatedSession.tags = result.summary.summary.tags;
+        metadataUpdates.hasSummary = true;
+        metadataUpdates.category = result.summary.summary.category;
+        metadataUpdates.subCategory = result.summary.summary.subCategory;
+        metadataUpdates.tags = result.summary.summary.tags;
+
+        // Save summary to separate file
+        logger.info('Saving session summary');
+        await chunkedStorage.saveSummary(session.id, result.summary.summary);
 
         // Process related-context section if present (flexible summaries only)
         if (isFlexibleSummary(result.summary.summary)) {
@@ -1678,114 +2126,143 @@ export class SessionEnrichmentService {
             const linkedNoteIds = relatedSection.data.relatedNotes.map(n => n.noteId);
 
             // Merge with existing (avoid duplicates)
-            updatedSession.extractedTaskIds = Array.from(new Set([
-              ...updatedSession.extractedTaskIds,
+            metadataUpdates.extractedTaskIds = Array.from(new Set([
+              ...metadata.extractedTaskIds,
               ...linkedTaskIds,
             ]));
 
-            updatedSession.extractedNoteIds = Array.from(new Set([
-              ...updatedSession.extractedNoteIds,
+            metadataUpdates.extractedNoteIds = Array.from(new Set([
+              ...metadata.extractedNoteIds,
               ...linkedNoteIds,
             ]));
 
             logger.info('Session extracted IDs updated', {
-              totalTaskIds: updatedSession.extractedTaskIds.length,
-              totalNoteIds: updatedSession.extractedNoteIds.length,
+              totalTaskIds: metadataUpdates.extractedTaskIds.length,
+              totalNoteIds: metadataUpdates.extractedNoteIds.length,
             });
           }
         }
       }
 
-      // Update canvas
+      // Update canvas - THIS IS THE KEY FIX FOR CANVAS PERSISTENCE
       if (result.canvas?.completed && result.canvas.canvasSpec) {
-        updatedSession.canvasSpec = result.canvas.canvasSpec;
-        logger.info('✅ Canvas spec updated');
+        metadataUpdates.hasCanvasSpec = true;
+
+        // Save canvas spec to separate file (canvas-spec.json)
+        logger.info('Saving canvas spec via ChunkedStorage');
+        await chunkedStorage.saveCanvasSpec(session.id, result.canvas.canvasSpec);
+        logger.info('✅ Canvas spec saved to chunked storage (canvas-spec.json)');
       }
 
-        // Update enrichment status
-        updatedSession.enrichmentStatus = {
-          status: result.success ? 'completed' : 'failed',
-          completedAt: new Date().toISOString(),
-          progress: 100,
-          currentStage: 'complete',
-          audio: {
-            status: result.audio?.completed ? 'completed' : result.audio?.error ? 'failed' : 'skipped',
-            completedAt: result.audio?.completed ? new Date().toISOString() : undefined,
-            error: result.audio?.error,
-            cost: result.audio?.cost,
-          },
-          video: {
-            status: result.video?.completed ? 'completed' : result.video?.error ? 'failed' : 'skipped',
-            completedAt: result.video?.completed ? new Date().toISOString() : undefined,
-            error: result.video?.error,
-            cost: result.video?.cost,
-          },
-          summary: {
-            status: result.summary?.completed ? 'completed' : result.summary?.error ? 'failed' : 'skipped',
-            error: result.summary?.error,
-          },
-          totalCost: result.totalCost,
-          errors: [
-            ...(result.audio?.error ? [result.audio.error] : []),
-            ...(result.video?.error ? [result.video.error] : []),
-            ...(result.summary?.error ? [result.summary.error] : []),
-          ],
-          warnings: result.warnings,
-          canResume: false,
-        };
+      // Update enrichment status
+      metadataUpdates.enrichmentStatus = {
+        status: result.success ? 'completed' : 'failed',
+        completedAt: new Date().toISOString(),
+        progress: 100,
+        currentStage: 'complete',
+        audio: {
+          status: result.audio?.completed ? 'completed' : result.audio?.error ? 'failed' : 'skipped',
+          completedAt: result.audio?.completed ? new Date().toISOString() : undefined,
+          error: result.audio?.error,
+          cost: result.audio?.cost,
+        },
+        video: {
+          status: result.video?.completed ? 'completed' : result.video?.error ? 'failed' : 'skipped',
+          completedAt: result.video?.completed ? new Date().toISOString() : undefined,
+          error: result.video?.error,
+          cost: result.video?.cost,
+        },
+        summary: {
+          status: result.summary?.completed ? 'completed' : result.summary?.error ? 'failed' : 'skipped',
+          error: result.summary?.error,
+        },
+        totalCost: result.totalCost,
+        errors: [
+          ...(result.audio?.error ? [result.audio.error] : []),
+          ...(result.video?.error ? [result.video.error] : []),
+          ...(result.summary?.error ? [result.summary.error] : []),
+        ],
+        warnings: result.warnings,
+        canResume: false,
+      };
 
-        // Keep current version for optimistic lock check
-        updatedSession.version = expectedVersion;
+      // Merge all updates into metadata and save
+      const updatedMetadata: SessionMetadata = {
+        ...metadata,
+        ...metadataUpdates,
+        updatedAt: new Date().toISOString(),
+      };
 
-        // Add operation to transaction
-        storage.addOperation(txId, {
-          type: 'write',
-          collection: 'sessions',
-          entityId: session.id,
-          data: updatedSession,
-        });
+      // Save metadata atomically
+      await chunkedStorage.saveMetadata(updatedMetadata);
 
-        // Commit with version check
-        await storage.commitPhase24Transaction(txId);
+      logger.info('✅ Session updated with enrichment results via ChunkedStorage', {
+        audioCompleted: result.audio?.completed,
+        videoCompleted: result.video?.completed,
+        chaptersCount: result.video?.chapters?.length || 0,
+        summaryCompleted: result.summary?.completed,
+        canvasCompleted: result.canvas?.completed,
+      });
 
-        logger.info(`[Enrichment] ✓ Updated session with results (version ${expectedVersion} → ${expectedVersion + 1})`, {
-          audioCompleted: result.audio?.completed,
-          videoCompleted: result.video?.completed,
-          chaptersCount: result.video?.chapters?.length || 0,
-          summaryCompleted: result.summary?.completed,
-        });
-
-        // Verification: Reload and confirm chapters were saved (non-fatal)
-        if (result.video?.completed && result.video.chapters && result.video.chapters.length > 0) {
-          try {
-            const loadEntity = (storage as any).loadEntity as <T>(collection: string, id: string) => Promise<T | null>;
-            const verifiedSession = await loadEntity<Session>('sessions', session.id);
-
-            if (!verifiedSession?.video?.chapters || verifiedSession.video.chapters.length === 0) {
-              logger.warn('⚠️ WARNING: Chapters not immediately visible in storage (may be timing)', {
-                expectedChapters: result.video.chapters.length,
-                actualChapters: verifiedSession?.video?.chapters?.length || 0,
-              });
-              // Don't throw - just log warning and add to warnings array
-              result.warnings.push('Chapter verification failed (timing issue - chapters may appear after reload)');
-            } else {
-              logger.info('✅ Verification: Chapters confirmed in storage', {
-                chapterCount: verifiedSession.video.chapters.length,
-              });
-            }
-          } catch (verifyError: any) {
-            // Verification failure should never crash enrichment
-            logger.warn('⚠️ Chapter verification failed (non-fatal)', verifyError);
-            result.warnings.push('Chapter verification failed - chapters may still be saved correctly');
-          }
-        }
-      } catch (error) {
-        await storage.rollbackPhase24Transaction(txId);
-        throw error;
-      }
     } catch (error: any) {
-      logger.error('Failed to update session', error);
+      logger.error('Failed to update session with enrichment results', error);
       throw error;
+    }
+  }
+
+  /**
+   * Hash audio data using SHA-256
+   *
+   * @param audioSegments - Audio segments to hash
+   * @returns SHA-256 hash (hex string)
+   */
+  private async hashAudioData(audioSegments: SessionAudioSegment[]): Promise<string> {
+    try {
+      const { sha256 } = await import('@noble/hashes/sha2.js');
+      const { bytesToHex } = await import('@noble/hashes/utils.js');
+
+      // Create stable representation of audio data
+      const dataToHash = audioSegments
+        .map((seg) => `${seg.id}:${seg.duration}:${seg.startTime}`)
+        .join('|');
+
+      const encoder = new TextEncoder();
+      const data = encoder.encode(dataToHash);
+      const hashBytes = sha256(data);
+      const hashHex = bytesToHex(hashBytes);
+
+      return hashHex;
+    } catch (error) {
+      console.error('[SessionEnrichment] Failed to hash audio data', error);
+      return '';
+    }
+  }
+
+  /**
+   * Hash video data using SHA-256
+   *
+   * @param screenshots - Screenshots to hash
+   * @returns SHA-256 hash (hex string)
+   */
+  private async hashVideoData(screenshots: SessionScreenshot[]): Promise<string> {
+    try {
+      const { sha256 } = await import('@noble/hashes/sha2.js');
+      const { bytesToHex } = await import('@noble/hashes/utils.js');
+
+      // Create stable representation of video data
+      const dataToHash = screenshots
+        .map((shot) => `${shot.id}:${shot.timestamp}:${shot.attachmentId}`)
+        .join('|');
+
+      const encoder = new TextEncoder();
+      const data = encoder.encode(dataToHash);
+      const hashBytes = sha256(data);
+      const hashHex = bytesToHex(hashBytes);
+
+      return hashHex;
+    } catch (error) {
+      console.error('[SessionEnrichment] Failed to hash video data', error);
+      return '';
     }
   }
 

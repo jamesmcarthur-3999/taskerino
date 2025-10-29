@@ -43,6 +43,8 @@ public func screen_recorder_start(
     height: Int32,
     fps: Int32
 ) -> Bool {
+    clearLastFFIError() // Clear previous error state
+
     let instance = Unmanaged<ScreenRecorder>.fromOpaque(recorder).takeUnretainedValue()
     let pathString = String(cString: path)
 
@@ -59,8 +61,31 @@ public func screen_recorder_start(
         do {
             try await instance.startRecording(path: pathString)
             success = true
+        } catch let error as RecordingSourceError {
+            // Map specific RecordingSourceError to FFI error codes
+            print("❌ RecordingSourceError: \(error)")
+            setLastFFIError(mapRecordingSourceError(error))
+            success = false
         } catch {
+            // Check for NSError permission denials
+            let nsError = error as NSError
             print("❌ Failed to start recording: \(error)")
+
+            if nsError.domain == "com.apple.screencapturekit" && nsError.code == -3801 {
+                // ScreenCaptureKit permission denied
+                setLastFFIError(FFIErrorContext(
+                    code: .permissionDenied,
+                    message: "Screen Recording permission denied. Enable in System Settings > Privacy & Security > Screen Recording",
+                    canRetry: true
+                ))
+            } else {
+                // Generic error
+                setLastFFIError(FFIErrorContext(
+                    code: .unknown,
+                    message: error.localizedDescription,
+                    canRetry: false
+                ))
+            }
             success = false
         }
         semaphore.signal()
@@ -164,6 +189,53 @@ public func screen_recorder_get_duration(path: UnsafePointer<CChar>) -> Double {
     return seconds
 }
 
+/// Check if video file is ready for reading by AVFoundation
+/// Returns true if the video has valid tracks, duration, and is not locked by the OS
+@_cdecl("screen_recorder_is_video_ready")
+public func screen_recorder_is_video_ready(
+    path: UnsafePointer<CChar>
+) -> Bool {
+    let pathString = String(cString: path)
+    let url = URL(fileURLWithPath: pathString)
+
+    // Check if file exists
+    guard FileManager.default.fileExists(atPath: pathString) else {
+        print("⚠️ Video file does not exist: \(pathString)")
+        return false
+    }
+
+    // CRITICAL: Check if file is locked by trying to open it for reading
+    // This ensures the OS has released the file handle from the encoder
+    do {
+        let fileHandle = try FileHandle(forReadingFrom: url)
+        try fileHandle.close()
+        print("✅ Video file is not locked (can open for reading)")
+    } catch {
+        print("⚠️ Video file is locked or cannot be opened: \(error.localizedDescription)")
+        return false
+    }
+
+    // Try to load video with AVFoundation
+    let asset = AVURLAsset(url: url)
+
+    // Check if asset has video tracks
+    let videoTracks = asset.tracks(withMediaType: .video)
+    guard !videoTracks.isEmpty else {
+        print("⚠️ Video file has no video tracks (moov atom may not be finalized)")
+        return false
+    }
+
+    // Check if duration is valid
+    let duration = asset.duration
+    guard duration.isValid && duration.seconds > 0 else {
+        print("⚠️ Video file has invalid duration (metadata not ready)")
+        return false
+    }
+
+    print("✅ Video file is ready: \(pathString) (duration: \(duration.seconds)s)")
+    return true
+}
+
 /// Generate video thumbnail as base64 PNG
 @_cdecl("screen_recorder_generate_thumbnail")
 public func screen_recorder_generate_thumbnail(
@@ -187,8 +259,9 @@ public func screen_recorder_generate_thumbnail(
         guard let tiffData = nsImage.tiffRepresentation,
               let bitmapImage = NSBitmapImageRep(data: tiffData),
               let pngData = bitmapImage.representation(using: .png, properties: [:]) else {
-            print("❌ Failed to generate PNG data")
-            return nil
+            let errorMsg = "ERROR: Failed to generate PNG data from CGImage"
+            print("❌ \(errorMsg)")
+            return UnsafePointer(strdup(errorMsg))
         }
 
         // Convert to base64
@@ -200,8 +273,9 @@ public func screen_recorder_generate_thumbnail(
         let cString = strdup(base64String)
         return UnsafePointer(cString)
     } catch {
-        print("❌ Failed to generate thumbnail: \(error)")
-        return nil
+        let errorMsg = "ERROR: Failed to generate thumbnail: \(error.localizedDescription)"
+        print("❌ \(errorMsg)")
+        return UnsafePointer(strdup(errorMsg))
     }
 }
 
@@ -319,7 +393,13 @@ public class ScreenRecorder: NSObject {
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.showsCursor = true
 
-        print("⚙️  Configuration: \(width)x\(height) @ \(fps)fps")
+        // Explicitly disable audio for video-only recording (macOS 13.0+)
+        if #available(macOS 13.0, *) {
+            config.capturesAudio = false
+            print("⚙️  Configuration: \(width)x\(height) @ \(fps)fps, capturesAudio: false")
+        } else {
+            print("⚙️  Configuration: \(width)x\(height) @ \(fps)fps")
+        }
 
         // Set up AVAssetWriter
         try setupAssetWriter(url: url)
@@ -2002,7 +2082,7 @@ extension AudioCapture: SCStreamDelegate {
 }
 
 /// Audio capture errors
-enum AudioCaptureError: Error {
+public enum AudioCaptureError: Error {
     case displayNotFound
     case alreadyCapturing
     case notCapturing
@@ -2166,6 +2246,8 @@ public func system_audio_capture_start(
     callback: @escaping @convention(c) (UnsafePointer<Float>, Int32, UInt32, UInt16, UnsafeMutableRawPointer?) -> Void,
     context: UnsafeMutableRawPointer?
 ) -> Bool {
+    clearLastFFIError() // Clear previous error state
+
     if #available(macOS 13.0, *) {
         let instance = Unmanaged<AudioCapture>.fromOpaque(capture).takeUnretainedValue()
 
@@ -2202,8 +2284,31 @@ public func system_audio_capture_start(
                 }
 
                 success = true
+            } catch let error as AudioCaptureError {
+                // Map specific AudioCaptureError to FFI error codes
+                print("❌ [SYSTEM AUDIO] AudioCaptureError: \(error)")
+                setLastFFIError(mapAudioCaptureError(error))
+                success = false
             } catch {
+                // Check for NSError permission denials
+                let nsError = error as NSError
                 print("❌ [SYSTEM AUDIO] Failed to start capture: \(error)")
+
+                if nsError.domain == "com.apple.screencapturekit" && nsError.code == -3801 {
+                    // ScreenCaptureKit permission denied
+                    setLastFFIError(FFIErrorContext(
+                        code: .permissionDenied,
+                        message: "Screen Recording permission required for system audio. Enable in System Settings > Privacy & Security > Screen Recording",
+                        canRetry: true
+                    ))
+                } else {
+                    // Generic error
+                    setLastFFIError(FFIErrorContext(
+                        code: .unknown,
+                        message: "Failed to start system audio: \(error.localizedDescription)",
+                        canRetry: true
+                    ))
+                }
                 success = false
             }
             semaphore.signal()
@@ -2212,6 +2317,11 @@ public func system_audio_capture_start(
         semaphore.wait()
         return success
     } else {
+        setLastFFIError(FFIErrorContext(
+            code: .unknown,
+            message: "System audio requires macOS 13.0+",
+            canRetry: false
+        ))
         print("❌ [SYSTEM AUDIO] System audio capture requires macOS 13.0+")
         return false
     }
@@ -2255,6 +2365,97 @@ public func system_audio_capture_destroy(capture: UnsafeMutableRawPointer) {
         }
 
         print("🗑️ [SYSTEM AUDIO] System audio capture destroyed")
+    }
+}
+
+/// Check if SCStream audio capture permission is granted
+///
+/// This performs a more thorough permission check than `system_audio_capture_is_available()`
+/// by actually attempting to create and start a temporary SCStream with audio enabled.
+/// This tests the exact permission needed for system audio capture.
+///
+/// - Returns: true if permission is granted, false otherwise (sets FFI error on denial)
+@_cdecl("system_audio_check_stream_permission")
+public func system_audio_check_stream_permission() -> Bool {
+    clearLastFFIError() // Clear previous error state
+
+    if #available(macOS 13.0, *) {
+        let semaphore = DispatchSemaphore(value: 0)
+        var hasPermission = false
+
+        Task {
+            do {
+                // Get shareable content
+                let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+
+                guard let display = content.displays.first else {
+                    setLastFFIError(FFIErrorContext(
+                        code: .deviceNotFound,
+                        message: "No display found for permission check",
+                        canRetry: false
+                    ))
+                    semaphore.signal()
+                    return
+                }
+
+                // Create minimal SCStream with audio enabled
+                let filter = SCContentFilter(display: display, excludingWindows: [])
+                let config = SCStreamConfiguration()
+                config.capturesAudio = true
+                config.sampleRate = 48000
+                config.channelCount = 2
+                // Minimal video settings (required but not used)
+                config.width = 1
+                config.height = 1
+                config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+
+                let stream = SCStream(filter: filter, configuration: config, delegate: nil)
+
+                // Attempt to start capture - this is where permission is actually checked
+                try await stream.startCapture()
+
+                // Success - permission granted
+                hasPermission = true
+
+                // Immediately stop the stream
+                try await stream.stopCapture()
+
+                print("✅ [PERMISSION CHECK] SCStream audio permission granted")
+
+            } catch {
+                // Check for permission denial
+                let nsError = error as NSError
+                print("❌ [PERMISSION CHECK] SCStream audio permission check failed: \(error)")
+
+                if nsError.domain == "com.apple.screencapturekit" && nsError.code == -3801 {
+                    // ScreenCaptureKit permission denied
+                    setLastFFIError(FFIErrorContext(
+                        code: .permissionDenied,
+                        message: "Screen Recording permission required for system audio. Enable in System Settings > Privacy & Security > Screen Recording",
+                        canRetry: true
+                    ))
+                } else {
+                    // Other error
+                    setLastFFIError(FFIErrorContext(
+                        code: .unknown,
+                        message: "Permission check failed: \(error.localizedDescription)",
+                        canRetry: true
+                    ))
+                }
+                hasPermission = false
+            }
+            semaphore.signal()
+        }
+
+        semaphore.wait()
+        return hasPermission
+    } else {
+        setLastFFIError(FFIErrorContext(
+            code: .unknown,
+            message: "System audio requires macOS 13.0+",
+            canRetry: false
+        ))
+        return false
     }
 }
 
@@ -2561,4 +2762,705 @@ public func screen_recorder_capture_window_thumbnail(
     // Return as C string (caller must free)
     let cString = strdup(dataUri)
     return UnsafePointer(cString)
+}
+
+// MARK: - RecordingSession FFI (Task 2.8 - Phase 2)
+
+/// C-compatible stats structure for RecordingSession
+/// Note: We cannot use Swift structs with @_cdecl, so we use separate out-parameters
+/// The Rust side will receive these as individual values
+
+/// FFI Error codes for RecordingSession functions
+/// - 0: Success
+/// - 1: Invalid parameters (null pointer, invalid values)
+/// - 2: Not found (display/window not found)
+/// - 3: Already recording (session already started)
+/// - 4: Not recording (session not started)
+/// - 5: Source limit reached (too many sources)
+/// - 6: Internal error (Swift exception or other error)
+public enum RecordingSessionFFIError: Int32, Error {
+    case success = 0
+    case invalidParams = 1
+    case notFound = 2
+    case alreadyRecording = 3
+    case notRecording = 4
+    case sourceLimitReached = 5
+    case internalError = 6
+    case permissionDenied = 7
+}
+
+/// Create a new RecordingSession instance
+/// - Parameters:
+///   - outputPath: Path where video will be saved
+///   - width: Output video width
+///   - height: Output video height
+///   - fps: Output video frame rate
+/// - Returns: Opaque pointer to RecordingSession, or nil on failure
+@_cdecl("recording_session_create")
+public func recording_session_create(
+    outputPath: UnsafePointer<CChar>,
+    width: Int32,
+    height: Int32,
+    fps: Int32
+) -> UnsafeMutableRawPointer? {
+    guard width > 0, height > 0, fps > 0 else {
+        print("❌ [RecordingSession FFI] Invalid parameters: width=\(width), height=\(height), fps=\(fps)")
+        return nil
+    }
+
+    let pathString = String(cString: outputPath)
+    print("🎬 [RecordingSession FFI] Creating session: \(pathString) (\(width)x\(height)@\(fps)fps)")
+
+    // Create RecordingSessionManager (helper class to bridge actor and FFI)
+    let manager = RecordingSessionManager(
+        outputPath: pathString,
+        width: Int(width),
+        height: Int(height),
+        fps: Int(fps)
+    )
+
+    let pointer = Unmanaged.passRetained(manager).toOpaque()
+    print("✅ [RecordingSession FFI] Session created: \(pointer)")
+    return pointer
+}
+
+/// Add a display source to the recording session
+/// - Parameters:
+///   - session: Opaque pointer to RecordingSession
+///   - displayID: CGDirectDisplayID of the display to record
+/// - Returns: Error code (0 = success)
+@_cdecl("recording_session_add_display_source")
+public func recording_session_add_display_source(
+    session: UnsafeMutableRawPointer,
+    displayID: UInt32
+) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    print("📺 [RecordingSession FFI] Adding display source: \(displayID)")
+
+    let result = manager.addDisplaySource(displayID: displayID)
+
+    switch result {
+    case .success:
+        print("✅ [RecordingSession FFI] Display source added")
+        return RecordingSessionFFIError.success.rawValue
+    case .failure(let error):
+        print("❌ [RecordingSession FFI] Failed to add display source: \(error)")
+        return error.rawValue
+    }
+}
+
+/// Add a window source to the recording session
+/// - Parameters:
+///   - session: Opaque pointer to RecordingSession
+///   - windowID: CGWindowID of the window to record
+/// - Returns: Error code (0 = success)
+@_cdecl("recording_session_add_window_source")
+public func recording_session_add_window_source(
+    session: UnsafeMutableRawPointer,
+    windowID: UInt32
+) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    print("🪟 [RecordingSession FFI] Adding window source: \(windowID)")
+
+    let result = manager.addWindowSource(windowID: windowID)
+
+    switch result {
+    case .success:
+        print("✅ [RecordingSession FFI] Window source added")
+        return RecordingSessionFFIError.success.rawValue
+    case .failure(let error):
+        print("❌ [RecordingSession FFI] Failed to add window source: \(error)")
+        return error.rawValue
+    }
+}
+
+/// Add a webcam source to the recording session
+/// - Parameters:
+///   - session: Opaque pointer to RecordingSession
+///   - deviceID: C string containing the webcam device ID (AVCaptureDevice uniqueID)
+/// - Returns: Error code (0 = success)
+@_cdecl("recording_session_add_webcam_source")
+public func recording_session_add_webcam_source(
+    session: UnsafeMutableRawPointer,
+    deviceID: UnsafePointer<CChar>
+) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    let deviceIDString = String(cString: deviceID)
+    print("📹 [RecordingSession FFI] Adding webcam source: \(deviceIDString)")
+
+    let result = manager.addWebcamSource(deviceID: deviceIDString)
+
+    switch result {
+    case .success:
+        print("✅ [RecordingSession FFI] Webcam source added")
+        return RecordingSessionFFIError.success.rawValue
+    case .failure(let error):
+        print("❌ [RecordingSession FFI] Failed to add webcam source: \(error)")
+        return error.rawValue
+    }
+}
+
+/// Set the compositor type for the recording session
+/// - Parameters:
+///   - session: Opaque pointer to RecordingSession
+///   - compositorType: 0 = passthrough, 1 = grid, 2 = side-by-side
+/// - Returns: Error code (0 = success)
+@_cdecl("recording_session_set_compositor")
+public func recording_session_set_compositor(
+    session: UnsafeMutableRawPointer,
+    compositorType: Int32
+) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    print("🎨 [RecordingSession FFI] Setting compositor type: \(compositorType)")
+
+    let result = manager.setCompositor(type: compositorType)
+
+    switch result {
+    case .success:
+        print("✅ [RecordingSession FFI] Compositor set")
+        return RecordingSessionFFIError.success.rawValue
+    case .failure(let error):
+        print("❌ [RecordingSession FFI] Failed to set compositor: \(error)")
+        return error.rawValue
+    }
+}
+
+/// Start the recording session
+/// - Parameters:
+///   - session: Opaque pointer to RecordingSession
+/// - Returns: Error code (0 = success)
+@_cdecl("recording_session_start")
+public func recording_session_start(
+    session: UnsafeMutableRawPointer
+) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    print("▶️  [RecordingSession FFI] Starting session")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var errorCode: Int32 = RecordingSessionFFIError.success.rawValue
+
+    Task {
+        let result = await manager.start()
+
+        switch result {
+        case .success:
+            print("✅ [RecordingSession FFI] Session started")
+            errorCode = RecordingSessionFFIError.success.rawValue
+        case .failure(let error):
+            print("❌ [RecordingSession FFI] Failed to start: \(error)")
+            errorCode = error.rawValue
+        }
+
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    return errorCode
+}
+
+/// Stop the recording session
+/// - Parameters:
+///   - session: Opaque pointer to RecordingSession
+/// - Returns: Error code (0 = success)
+@_cdecl("recording_session_stop")
+public func recording_session_stop(
+    session: UnsafeMutableRawPointer
+) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    print("⏹️  [RecordingSession FFI] Stopping session")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var errorCode: Int32 = RecordingSessionFFIError.success.rawValue
+
+    Task {
+        let result = await manager.stop()
+
+        switch result {
+        case .success:
+            print("✅ [RecordingSession FFI] Session stopped")
+            errorCode = RecordingSessionFFIError.success.rawValue
+        case .failure(let error):
+            print("❌ [RecordingSession FFI] Failed to stop: \(error)")
+            errorCode = error.rawValue
+        }
+
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    return errorCode
+}
+
+/// Get recording statistics
+/// - Parameters:
+///   - session: Opaque pointer to RecordingSession
+///   - outFramesProcessed: Pointer to store frames processed count
+///   - outFramesDropped: Pointer to store frames dropped count
+///   - outIsRecording: Pointer to store recording state
+/// - Returns: Error code (0 = success)
+@_cdecl("recording_session_get_stats")
+public func recording_session_get_stats(
+    session: UnsafeMutableRawPointer,
+    outFramesProcessed: UnsafeMutablePointer<UInt64>,
+    outFramesDropped: UnsafeMutablePointer<UInt64>,
+    outIsRecording: UnsafeMutablePointer<Bool>
+) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    let (framesProcessed, framesDropped, isRecording) = manager.getStats()
+
+    outFramesProcessed.pointee = framesProcessed
+    outFramesDropped.pointee = framesDropped
+    outIsRecording.pointee = isRecording
+
+    return RecordingSessionFFIError.success.rawValue
+}
+
+/// Pause an active recording session
+/// - Parameter session: Pointer to RecordingSession
+/// - Returns: 0 on success, error code on failure
+@_cdecl("recording_session_pause")
+public func recording_session_pause(_ session: UnsafeMutableRawPointer) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    print("⏸️  [RecordingSession FFI] Pausing session")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var errorCode: Int32 = RecordingSessionFFIError.success.rawValue
+
+    Task {
+        let result = await manager.pause()
+
+        switch result {
+        case .success:
+            print("✅ [RecordingSession FFI] Session paused")
+            errorCode = RecordingSessionFFIError.success.rawValue
+        case .failure(let error):
+            print("❌ [RecordingSession FFI] Failed to pause: \(error)")
+            errorCode = error.rawValue
+        }
+
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    return errorCode
+}
+
+/// Resume a paused recording session
+/// - Parameter session: Pointer to RecordingSession
+/// - Returns: 0 on success, error code on failure
+@_cdecl("recording_session_resume")
+public func recording_session_resume(_ session: UnsafeMutableRawPointer) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    print("▶️  [RecordingSession FFI] Resuming session")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var errorCode: Int32 = RecordingSessionFFIError.success.rawValue
+
+    Task {
+        let result = await manager.resume()
+
+        switch result {
+        case .success:
+            print("✅ [RecordingSession FFI] Session resumed")
+            errorCode = RecordingSessionFFIError.success.rawValue
+        case .failure(let error):
+            print("❌ [RecordingSession FFI] Failed to resume: \(error)")
+            errorCode = error.rawValue
+        }
+
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    return errorCode
+}
+
+/// Check if recording session is paused
+/// - Parameter session: Pointer to RecordingSession
+/// - Returns: 1 if paused, 0 if not paused
+@_cdecl("recording_session_is_paused")
+public func recording_session_is_paused(_ session: UnsafeMutableRawPointer) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var isPaused: Bool = false
+
+    Task {
+        isPaused = await manager.getIsPaused()
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+
+    return isPaused ? 1 : 0
+}
+
+/// Switch a source in an active recording session
+/// - Parameters:
+///   - session: Pointer to RecordingSession
+///   - oldSourceId: C string ID of source to replace
+///   - newSourcePtr: Pointer to new RecordingSource
+/// - Returns: 0 on success, error code on failure
+@_cdecl("recording_session_switch_source")
+public func recording_session_switch_source(
+    _ session: UnsafeMutableRawPointer,
+    _ oldSourceId: UnsafePointer<CChar>,
+    _ sourceType: Int32,
+    _ sourceIdPtr: UnsafePointer<CChar>
+) -> Int32 {
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeUnretainedValue()
+
+    guard let oldIdString = String(cString: oldSourceId, encoding: .utf8) else {
+        print("❌ [RecordingSession FFI] Invalid old source ID string")
+        return RecordingSessionFFIError.invalidParams.rawValue
+    }
+
+    guard let sourceIdString = String(cString: sourceIdPtr, encoding: .utf8) else {
+        print("❌ [RecordingSession FFI] Invalid new source ID string")
+        return RecordingSessionFFIError.invalidParams.rawValue
+    }
+
+    print("🔄 [RecordingSession FFI] Switching source: \(oldIdString) (type: \(sourceType))")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var errorCode: Int32 = RecordingSessionFFIError.success.rawValue
+
+    Task {
+        // Create new source based on type
+        let newSource: RecordingSource
+        do {
+            switch sourceType {
+            case 0:  // Display
+                guard let displayId = UInt32(sourceIdString) else {
+                    print("❌ [RecordingSession FFI] Invalid display ID: \(sourceIdString)")
+                    errorCode = RecordingSessionFFIError.invalidParams.rawValue
+                    semaphore.signal()
+                    return
+                }
+                newSource = DisplaySource(displayID: displayId)
+                print("🔄 [RecordingSession FFI] Created DisplaySource with ID: \(displayId)")
+
+            case 1:  // Window
+                guard let windowId = UInt32(sourceIdString) else {
+                    print("❌ [RecordingSession FFI] Invalid window ID: \(sourceIdString)")
+                    errorCode = RecordingSessionFFIError.invalidParams.rawValue
+                    semaphore.signal()
+                    return
+                }
+                newSource = WindowSource(windowID: windowId)
+                print("🔄 [RecordingSession FFI] Created WindowSource with ID: \(windowId)")
+
+            case 2:  // Webcam
+                newSource = WebcamSource(deviceID: sourceIdString)
+                print("🔄 [RecordingSession FFI] Created WebcamSource with ID: \(sourceIdString)")
+
+            default:
+                print("❌ [RecordingSession FFI] Invalid source type: \(sourceType)")
+                errorCode = RecordingSessionFFIError.invalidParams.rawValue
+                semaphore.signal()
+                return
+            }
+        }
+
+        let result = await manager.switchSource(oldSourceId: oldIdString, newSource: newSource)
+
+        switch result {
+        case .success:
+            print("✅ [RecordingSession FFI] Source switched successfully")
+            errorCode = RecordingSessionFFIError.success.rawValue
+        case .failure(let error):
+            print("❌ [RecordingSession FFI] Failed to switch source: \(error)")
+            errorCode = error.rawValue
+        }
+
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    return errorCode
+}
+
+/// Destroy the recording session and free resources
+/// - Parameters:
+///   - session: Opaque pointer to RecordingSession
+@_cdecl("recording_session_destroy")
+public func recording_session_destroy(
+    session: UnsafeMutableRawPointer
+) {
+    print("🗑️  [RecordingSession FFI] Destroying session")
+
+    let manager = Unmanaged<RecordingSessionManager>.fromOpaque(session).takeRetainedValue()
+
+    // Ensure session is stopped before destroying
+    let semaphore = DispatchSemaphore(value: 0)
+
+    Task {
+        _ = await manager.stop()
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+
+    print("✅ [RecordingSession FFI] Session destroyed")
+}
+
+// MARK: - RecordingSessionManager (Bridge between Actor and FFI)
+
+/// Helper class to bridge RecordingSession actor with synchronous FFI
+/// This is necessary because FFI cannot directly call actor methods
+@available(macOS 12.3, *)
+class RecordingSessionManager {
+    private let outputPath: String
+    private let width: Int
+    private let height: Int
+    private let fps: Int
+
+    private var sources: [RecordingSource] = []
+    private var compositor: FrameCompositor?
+    private var session: RecordingSession?
+    private var isRecording = false
+
+    init(outputPath: String, width: Int, height: Int, fps: Int) {
+        self.outputPath = outputPath
+        self.width = width
+        self.height = height
+        self.fps = fps
+
+        // Default to passthrough compositor (single source)
+        self.compositor = PassthroughCompositor()
+
+        print("✅ [RecordingSessionManager] Initialized: \(width)x\(height)@\(fps)fps")
+    }
+
+    func addDisplaySource(displayID: UInt32) -> Result<Void, RecordingSessionFFIError> {
+        guard !isRecording else {
+            return .failure(.alreadyRecording)
+        }
+
+        guard sources.count < 4 else {
+            return .failure(.sourceLimitReached)
+        }
+
+        let source = DisplaySource(displayID: CGDirectDisplayID(displayID))
+        sources.append(source)
+
+        return .success(())
+    }
+
+    func addWindowSource(windowID: UInt32) -> Result<Void, RecordingSessionFFIError> {
+        guard !isRecording else {
+            return .failure(.alreadyRecording)
+        }
+
+        guard sources.count < 4 else {
+            return .failure(.sourceLimitReached)
+        }
+
+        let source = WindowSource(windowID: CGWindowID(windowID))
+        sources.append(source)
+
+        return .success(())
+    }
+
+    func addWebcamSource(deviceID: String) -> Result<Void, RecordingSessionFFIError> {
+        guard !isRecording else {
+            return .failure(.alreadyRecording)
+        }
+
+        guard sources.count < 4 else {
+            return .failure(.sourceLimitReached)
+        }
+
+        let source = WebcamSource(deviceID: deviceID)
+        sources.append(source)
+
+        return .success(())
+    }
+
+    func setCompositor(type: Int32) -> Result<Void, RecordingSessionFFIError> {
+        guard !isRecording else {
+            return .failure(.alreadyRecording)
+        }
+
+        do {
+            switch type {
+            case 0:
+                compositor = PassthroughCompositor()
+            case 1:
+                compositor = try GridCompositor(outputWidth: width, outputHeight: height)
+            case 2:
+                compositor = try SideBySideCompositor(outputWidth: width, outputHeight: height)
+            default:
+                return .failure(.invalidParams)
+            }
+        } catch {
+            print("❌ [RecordingSessionManager] Failed to create compositor: \(error)")
+            return .failure(.internalError)
+        }
+
+        return .success(())
+    }
+
+    func start() async -> Result<Void, RecordingSessionFFIError> {
+        guard !isRecording else {
+            return .failure(.alreadyRecording)
+        }
+
+        guard !sources.isEmpty else {
+            return .failure(.invalidParams)
+        }
+
+        guard let compositor = compositor else {
+            return .failure(.invalidParams)
+        }
+
+        do {
+            // Configure all sources before starting (CRITICAL FIX)
+            print("🔧 [RecordingSessionManager] Configuring \(sources.count) sources...")
+            for source in sources {
+                try await source.configure(width: width, height: height, fps: fps)
+            }
+            print("✅ [RecordingSessionManager] All sources configured")
+
+            // Create encoder
+            let outputURL = URL(fileURLWithPath: outputPath)
+            let encoder = try VideoEncoder(
+                outputURL: outputURL,
+                width: width,
+                height: height,
+                fps: fps
+            )
+
+            // Create session
+            let session = RecordingSession(
+                sources: sources,
+                compositor: compositor,
+                encoder: encoder
+            )
+
+            // Start recording
+            try await session.start()
+
+            self.session = session
+            self.isRecording = true
+
+            return .success(())
+
+        } catch let error as RecordingSourceError {
+            // Map source-specific errors to appropriate FFI errors
+            print("❌ [RecordingSessionManager] Source error: \(error)")
+            switch error {
+            case .permissionDenied:
+                return .failure(.permissionDenied)
+            case .notConfigured:
+                return .failure(.invalidParams)
+            default:
+                return .failure(.internalError)
+            }
+        } catch {
+            // Other errors (encoder, session, etc.)
+            print("❌ [RecordingSessionManager] Failed to start: \(error)")
+            return .failure(.internalError)
+        }
+    }
+
+    func stop() async -> Result<Void, RecordingSessionFFIError> {
+        guard isRecording, let session = session else {
+            return .failure(.notRecording)
+        }
+
+        do {
+            try await session.stop()
+            self.session = nil
+            self.isRecording = false
+
+            return .success(())
+
+        } catch {
+            print("❌ [RecordingSessionManager] Failed to stop: \(error)")
+            return .failure(.internalError)
+        }
+    }
+
+    func getStats() -> (framesProcessed: UInt64, framesDropped: UInt64, isRecording: Bool) {
+        guard let session = session else {
+            return (0, 0, false)
+        }
+
+        // Get stats synchronously (actor will handle this safely)
+        let semaphore = DispatchSemaphore(value: 0)
+        var stats = RecordingStats()
+
+        Task {
+            stats = await session.getStats()
+            semaphore.signal()
+        }
+
+        semaphore.wait()
+
+        return (
+            framesProcessed: UInt64(stats.framesProcessed),
+            framesDropped: UInt64(stats.framesDropped),
+            isRecording: isRecording
+        )
+    }
+
+    func pause() async -> Result<Void, RecordingSessionFFIError> {
+        guard isRecording, let session = session else {
+            return .failure(.notRecording)
+        }
+
+        do {
+            try await session.pause()
+            return .success(())
+        } catch {
+            print("❌ [RecordingSessionManager] Failed to pause: \(error)")
+            return .failure(.internalError)
+        }
+    }
+
+    func resume() async -> Result<Void, RecordingSessionFFIError> {
+        guard isRecording, let session = session else {
+            return .failure(.notRecording)
+        }
+
+        do {
+            try await session.resume()
+            return .success(())
+        } catch {
+            print("❌ [RecordingSessionManager] Failed to resume: \(error)")
+            return .failure(.internalError)
+        }
+    }
+
+    func getIsPaused() async -> Bool {
+        guard let session = session else {
+            return false
+        }
+
+        return await session.getIsPaused()
+    }
+
+    func switchSource(oldSourceId: String, newSource: RecordingSource) async -> Result<Void, RecordingSessionFFIError> {
+        guard isRecording, let session = session else {
+            return .failure(.notRecording)
+        }
+
+        do {
+            try await session.switchSource(oldSourceId: oldSourceId, newSource: newSource)
+            return .success(())
+        } catch {
+            print("❌ [RecordingSessionManager] Failed to switch source: \(error)")
+            return .failure(.internalError)
+        }
+    }
 }

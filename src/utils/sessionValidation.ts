@@ -1,3 +1,12 @@
+/**
+ * @file sessionValidation.ts - Session configuration validation utilities
+ *
+ * @overview
+ * Provides comprehensive validation for session configurations including audio devices,
+ * video recording setups, and session-level settings. Ensures configurations are valid
+ * before starting a session to prevent runtime errors.
+ */
+
 import type {
   Session,
   AudioDeviceConfig,
@@ -7,7 +16,7 @@ import type {
 } from '../types';
 
 /**
- * Validation result
+ * Validation result returned by all validation functions
  */
 export interface ValidationResult {
   valid: boolean;
@@ -15,7 +24,30 @@ export interface ValidationResult {
 }
 
 /**
- * Validate audio device configuration
+ * Validates audio device configuration
+ *
+ * @param config - Audio device configuration to validate
+ * @returns Validation result with any errors found
+ *
+ * @example
+ * ```typescript
+ * const result = validateAudioConfig({
+ *   sourceType: 'microphone',
+ *   micDeviceId: 'default',
+ *   micVolume: 1.0
+ * });
+ * if (!result.valid) {
+ *   console.error('Audio config errors:', result.errors);
+ * }
+ * ```
+ *
+ * @validation_rules
+ * - sourceType must be 'microphone', 'system-audio', or 'both'
+ * - micDeviceId required for 'microphone' and 'both' modes
+ * - systemAudioDeviceId required for 'system-audio' and 'both' modes
+ * - balance must be 0-100 (only for 'both' mode)
+ * - volumes must be 0.0-1.0 (finite numbers)
+ * - Device IDs cannot be empty strings
  */
 export function validateAudioConfig(config: AudioDeviceConfig): ValidationResult {
   const errors: string[] = [];
@@ -87,7 +119,34 @@ export function validateAudioConfig(config: AudioDeviceConfig): ValidationResult
 }
 
 /**
- * Validate video recording configuration
+ * Validates video recording configuration
+ *
+ * @param config - Video recording configuration to validate
+ * @returns Validation result with any errors found
+ *
+ * @example
+ * ```typescript
+ * const result = validateVideoConfig({
+ *   sourceType: 'display',
+ *   displayIds: ['main-display'],
+ *   quality: 'high',
+ *   fps: 30
+ * });
+ * ```
+ *
+ * @validation_rules
+ * - sourceType: 'display', 'window', 'webcam', 'display-with-webcam', or 'multi-source'
+ * - displayIds required for 'display' and 'display-with-webcam' modes
+ * - windowIds required for 'window' mode
+ * - webcamDeviceId required for 'webcam' and 'display-with-webcam' modes
+ * - multiSourceConfig required for 'multi-source' mode (≥2 sources)
+ * - quality: 'low', 'medium', 'high', or 'ultra'
+ * - fps: 10-60 (finite number)
+ * - resolution: width ≥640, height ≥480
+ * - PiP config validated for 'display-with-webcam' mode
+ *
+ * @wave_1_3
+ * Added support for 'multi-source' recording with compositor modes
  */
 export function validateVideoConfig(config: VideoRecordingConfig): ValidationResult {
   const errors: string[] = [];
@@ -98,8 +157,8 @@ export function validateVideoConfig(config: VideoRecordingConfig): ValidationRes
     return { valid: false, errors };
   }
 
-  // Validate source type
-  const validSourceTypes: VideoSourceType[] = ['display', 'window', 'webcam', 'display-with-webcam'];
+  // Validate source type (Wave 1.3: added 'multi-source')
+  const validSourceTypes: Array<VideoSourceType | 'multi-source'> = ['display', 'window', 'webcam', 'display-with-webcam', 'multi-source'];
   if (!validSourceTypes.includes(config.sourceType)) {
     errors.push(`Invalid sourceType: ${config.sourceType}. Must be one of: ${validSourceTypes.join(', ')}`);
   }
@@ -131,6 +190,24 @@ export function validateVideoConfig(config: VideoRecordingConfig): ValidationRes
   if (config.sourceType === 'webcam' || config.sourceType === 'display-with-webcam') {
     if (!config.webcamDeviceId || config.webcamDeviceId.trim() === '') {
       errors.push('webcamDeviceId is required and cannot be empty when sourceType includes webcam');
+    }
+  }
+
+  // Validate multi-source config (Wave 1.3)
+  if (config.sourceType === 'multi-source') {
+    if (!config.multiSourceConfig) {
+      errors.push('multiSourceConfig is required when sourceType is "multi-source"');
+    } else {
+      if (!config.multiSourceConfig.sources || config.multiSourceConfig.sources.length === 0) {
+        errors.push('At least one source is required in multiSourceConfig');
+      } else if (config.multiSourceConfig.sources.length < 2) {
+        errors.push('Multi-source recording requires at least 2 sources');
+      }
+
+      const validCompositors = ['passthrough', 'grid', 'sidebyside'];
+      if (!validCompositors.includes(config.multiSourceConfig.compositor)) {
+        errors.push(`Invalid compositor: ${config.multiSourceConfig.compositor}. Must be one of: ${validCompositors.join(', ')}`);
+      }
     }
   }
 
@@ -183,7 +260,38 @@ export function validateVideoConfig(config: VideoRecordingConfig): ValidationRes
 }
 
 /**
- * Validate complete session configuration
+ * Validates complete session configuration before starting
+ *
+ * @param session - Partial session object to validate
+ * @returns Validation result with any errors found
+ *
+ * @example
+ * ```typescript
+ * const result = validateSession({
+ *   name: "Work Session",
+ *   description: "Daily work",
+ *   screenshotInterval: 5,
+ *   audioRecording: true,
+ *   audioConfig: { ... },
+ *   videoRecording: false
+ * });
+ * if (!result.valid) {
+ *   // Show errors to user
+ * }
+ * ```
+ *
+ * @validation_rules
+ * - name: non-empty string
+ * - description: must be a string if provided
+ * - screenshotInterval: ≥1 minute or -1 for adaptive mode
+ * - audioConfig: validated if audioRecording is true
+ * - videoConfig: validated if videoRecording is true
+ * - enrichmentConfig: all boolean fields validated, maxCostThreshold ≥0
+ *
+ * @edge_cases
+ * - Handles null/undefined session gracefully
+ * - Allows partial configuration for updates
+ * - Validates nested configs (audio, video, enrichment)
  */
 export function validateSession(session: Partial<Session>): ValidationResult {
   const errors: string[] = [];
@@ -207,8 +315,9 @@ export function validateSession(session: Partial<Session>): ValidationResult {
   if (session.screenshotInterval !== undefined) {
     if (typeof session.screenshotInterval !== 'number' || isNaN(session.screenshotInterval)) {
       errors.push('screenshotInterval must be a valid number');
-    } else if (session.screenshotInterval !== -1 && session.screenshotInterval < 1) {
-      errors.push('screenshotInterval must be at least 1 minute or -1 for adaptive mode');
+    } else if (session.screenshotInterval !== -1 && session.screenshotInterval < 0.1) {
+      // Allow intervals down to 0.1 minutes (6 seconds) - UI offers 10s (0.167) and 30s (0.5)
+      errors.push('screenshotInterval must be at least 0.1 minutes (6 seconds) or -1 for adaptive mode');
     }
   }
 
@@ -263,15 +372,176 @@ export function validateSession(session: Partial<Session>): ValidationResult {
 }
 
 /**
- * Check if a session uses the new media config system
+ * Checks if a session uses the new media config system (Phase 3+)
+ *
+ * @param session - Session to check
+ * @returns true if session uses audioConfig or videoConfig
+ *
+ * @example
+ * ```typescript
+ * if (hasMediaConfig(session)) {
+ *   // Use new Phase 3 media system
+ * } else {
+ *   // Migrate from legacy
+ * }
+ * ```
+ *
+ * @phase_3
+ * New sessions use audioConfig/videoConfig instead of legacy boolean flags
  */
 export function hasMediaConfig(session: Session): boolean {
   return !!(session.audioConfig || session.videoConfig);
 }
 
 /**
- * Check if a session is using legacy (pre-media-config) settings
+ * Validates that selected audio devices are currently available
+ *
+ * @param config - Audio device configuration to validate
+ * @param availableDevices - Array of currently available audio devices
+ * @returns Validation result with errors for missing devices
+ *
+ * @example
+ * ```typescript
+ * const availableDevices = await audioRecordingService.getAudioDevices();
+ * const result = validateAudioDeviceAvailability(config, availableDevices);
+ * if (!result.valid) {
+ *   // Fallback to default device or show error
+ * }
+ * ```
+ *
+ * @runtime_validation
+ * This checks if devices configured in the session still exist at runtime.
+ * Devices may be disconnected between configuration and session start.
  */
-export function isLegacySession(session: Session): boolean {
-  return !hasMediaConfig(session);
+export function validateAudioDeviceAvailability(
+  config: AudioDeviceConfig,
+  availableDevices: Array<{ id: string; name: string; deviceType: string }>
+): ValidationResult {
+  const errors: string[] = [];
+
+  if (!config) {
+    errors.push('Audio config cannot be null or undefined');
+    return { valid: false, errors };
+  }
+
+  if (!availableDevices || availableDevices.length === 0) {
+    errors.push('No audio devices available');
+    return { valid: false, errors };
+  }
+
+  // Check microphone device
+  if (config.sourceType === 'microphone' || config.sourceType === 'both') {
+    if (config.micDeviceId) {
+      const micExists = availableDevices.some(
+        (d) => d.id === config.micDeviceId && d.deviceType === 'Input'
+      );
+      if (!micExists) {
+        errors.push(`Microphone device not found: ${config.micDeviceId}. Device may have been disconnected.`);
+      }
+    }
+  }
+
+  // Check system audio device
+  if (config.sourceType === 'system-audio' || config.sourceType === 'both') {
+    if (config.systemAudioDeviceId) {
+      const systemAudioExists = availableDevices.some(
+        (d) => d.id === config.systemAudioDeviceId && d.deviceType === 'Output'
+      );
+      if (!systemAudioExists) {
+        errors.push(`System audio device not found: ${config.systemAudioDeviceId}. Device may have been disconnected.`);
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
 }
+
+/**
+ * Attempts to fix audio config by falling back to default devices
+ *
+ * @param config - Audio device configuration with missing devices
+ * @param availableDevices - Array of currently available audio devices
+ * @returns Fixed config with default devices, or null if no devices available
+ *
+ * @example
+ * ```typescript
+ * const fixed = fallbackToDefaultAudioDevices(config, availableDevices);
+ * if (fixed) {
+ *   // Use fixed config
+ * } else {
+ *   // Cannot proceed - no devices available
+ * }
+ * ```
+ *
+ * @fallback_strategy
+ * - Replaces missing microphone with default input device
+ * - Replaces missing system audio with default output device
+ * - Returns null if no default devices are available
+ */
+export function fallbackToDefaultAudioDevices(
+  config: AudioDeviceConfig,
+  availableDevices: Array<{ id: string; name: string; deviceType: string; isDefault: boolean }>
+): AudioDeviceConfig | null {
+  const fixed = { ...config };
+  let madeChanges = false;
+
+  // Find default input device
+  const defaultInput = availableDevices.find((d) => d.deviceType === 'Input' && d.isDefault);
+  const firstInput = availableDevices.find((d) => d.deviceType === 'Input');
+  const fallbackInput = defaultInput || firstInput;
+
+  // Find default output device
+  const defaultOutput = availableDevices.find((d) => d.deviceType === 'Output' && d.isDefault);
+  const firstOutput = availableDevices.find((d) => d.deviceType === 'Output');
+  const fallbackOutput = defaultOutput || firstOutput;
+
+  // Fix microphone device
+  if (config.sourceType === 'microphone' || config.sourceType === 'both') {
+    if (config.micDeviceId) {
+      const micExists = availableDevices.some(
+        (d) => d.id === config.micDeviceId && d.deviceType === 'Input'
+      );
+      if (!micExists && fallbackInput) {
+        console.warn(`[VALIDATION] Microphone device "${config.micDeviceId}" not found, falling back to ${fallbackInput.name}`);
+        fixed.micDeviceId = fallbackInput.id;
+        madeChanges = true;
+      } else if (!micExists && !fallbackInput) {
+        // No input device available - cannot proceed with microphone mode
+        if (config.sourceType === 'microphone') {
+          return null; // Cannot use microphone-only mode without input device
+        }
+        // For 'both' mode, switch to system-audio only
+        fixed.sourceType = 'system-audio';
+        madeChanges = true;
+      }
+    }
+  }
+
+  // Fix system audio device
+  if (config.sourceType === 'system-audio' || config.sourceType === 'both') {
+    if (config.systemAudioDeviceId) {
+      const systemExists = availableDevices.some(
+        (d) => d.id === config.systemAudioDeviceId && d.deviceType === 'Output'
+      );
+      if (!systemExists && fallbackOutput) {
+        console.warn(`[VALIDATION] System audio device "${config.systemAudioDeviceId}" not found, falling back to ${fallbackOutput.name}`);
+        fixed.systemAudioDeviceId = fallbackOutput.id;
+        madeChanges = true;
+      } else if (!systemExists && !fallbackOutput) {
+        // No output device available - cannot proceed with system-audio mode
+        if (config.sourceType === 'system-audio') {
+          return null; // Cannot use system-audio-only mode without output device
+        }
+        // For 'both' mode, switch to microphone only
+        fixed.sourceType = 'microphone';
+        madeChanges = true;
+      }
+    }
+  }
+
+  return madeChanges ? fixed : config;
+}
+

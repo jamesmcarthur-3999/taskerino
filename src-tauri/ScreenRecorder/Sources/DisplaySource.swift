@@ -65,7 +65,14 @@ public final class DisplaySource: RecordingSource {
         print("⚙️  [DisplaySource] Configuring display \(displayID): \(width)x\(height) @ \(fps)fps")
 
         // Get shareable content
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let content: SCShareableContent
+        do {
+            content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        } catch {
+            // macOS: Permission denial throws error from ScreenCaptureKit
+            print("❌ [DisplaySource] Failed to get shareable content (permission denied?): \(error)")
+            throw RecordingSourceError.permissionDenied
+        }
 
         guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
             throw DisplaySourceError.displayNotFound(displayID)

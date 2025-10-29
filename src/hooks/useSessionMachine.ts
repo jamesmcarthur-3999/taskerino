@@ -4,6 +4,23 @@ import type { SessionRecordingConfig } from '../types';
 import type { SessionMachineContext, SessionMachineEvent } from '../machines/sessionMachine';
 
 /**
+ * Session state value type
+ * Explicitly defined to work around XState v5 type inference issues
+ */
+type SessionStateValue =
+  | 'idle'
+  | 'validating'
+  | 'checking_permissions'
+  | 'starting'
+  | 'active'
+  | 'pausing'
+  | 'paused'
+  | 'resuming'
+  | 'ending'
+  | 'completed'
+  | 'error';
+
+/**
  * React hook for the session state machine
  *
  * Provides a clean, type-safe API for managing session recording lifecycle.
@@ -44,6 +61,11 @@ import type { SessionMachineContext, SessionMachineEvent } from '../machines/ses
 export function useSessionMachine() {
   const [state, send] = useMachine(sessionMachine);
 
+  // Type assertion helper for state.matches()
+  const matches = (stateValue: SessionStateValue): boolean => {
+    return state.matches(stateValue);
+  };
+
   return {
     // =========================================================================
     // Current State Information
@@ -66,69 +88,69 @@ export function useSessionMachine() {
     /**
      * True if the machine is in the idle state (no session active)
      */
-    isIdle: state.matches('idle'),
+    isIdle: matches('idle'),
 
     /**
      * True if the machine is validating configuration
      */
-    isValidating: state.matches('validating'),
+    isValidating: matches('validating'),
 
     /**
      * True if the machine is checking permissions
      */
-    isCheckingPermissions: state.matches('checking_permissions'),
+    isCheckingPermissions: matches('checking_permissions'),
 
     /**
      * True if the machine is starting recording services
      */
-    isStarting: state.matches('starting'),
+    isStarting: matches('starting'),
 
     /**
      * True if the session is actively recording
      */
-    isActive: state.matches('active'),
+    isActive: matches('active'),
 
     /**
      * True if the machine is pausing recording services
      */
-    isPausing: state.matches('pausing'),
+    isPausing: matches('pausing'),
 
     /**
      * True if the session is paused
      */
-    isPaused: state.matches('paused'),
+    isPaused: matches('paused'),
 
     /**
      * True if the machine is resuming recording services
      */
-    isResuming: state.matches('resuming'),
+    isResuming: matches('resuming'),
 
     /**
      * True if the machine is ending the session
      */
-    isEnding: state.matches('ending'),
+    isEnding: matches('ending'),
 
     /**
      * True if the session has completed successfully
      */
-    isCompleted: state.matches('completed'),
+    isCompleted: matches('completed'),
 
     /**
      * True if the machine is in an error state
      */
-    isError: state.matches('error'),
+    isError: matches('error'),
 
     /**
      * True if the machine is in any transitional state
      * (validating, checking permissions, starting, pausing, resuming, ending)
      */
     isTransitioning:
-      state.matches('validating') ||
-      state.matches('checking_permissions') ||
-      state.matches('starting') ||
-      state.matches('pausing') ||
-      state.matches('resuming') ||
-      state.matches('ending'),
+      matches('validating') ||
+      matches('checking_permissions') ||
+      matches('starting') ||
+      matches('pausing') ||
+      matches('resuming') ||
+      matches('ending'),
 
     // =========================================================================
     // Action Methods
@@ -140,7 +162,35 @@ export function useSessionMachine() {
      * @param config - Session recording configuration
      */
     startSession: (config: SessionRecordingConfig) => {
-      send({ type: 'START', config });
+      // Generate session ID
+      const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Create minimal session object with all required fields
+      const session: import('../types').Session = {
+        id: sessionId,
+        name: config.name || 'Untitled Session',
+        description: config.description || '',
+        status: 'active',
+        startTime: new Date().toISOString(),
+        screenshotInterval: 2,
+        autoAnalysis: false,
+        enableScreenshots: config.screenshotsEnabled,
+        audioMode: config.audioConfig?.enabled ? 'transcription' : 'off',
+        audioRecording: config.audioConfig?.enabled || false,
+        screenshots: [],
+        extractedTaskIds: [],
+        extractedNoteIds: [],
+        audioReviewCompleted: false,
+        tags: [],
+      };
+
+      // Create callbacks (can be undefined, the machine handles optionality)
+      const callbacks = {
+        onScreenshotCapture: undefined,
+        onAudioSegment: undefined,
+      };
+
+      send({ type: 'START', config, session, callbacks });
     },
 
     /**
@@ -179,6 +229,20 @@ export function useSessionMachine() {
     },
 
     /**
+     * Force reset the machine to idle state from ANY state
+     * Used for recovery from stuck states or cleanup after errors
+     *
+     * CRITICAL: This is a forceful reset that clears ALL state and transitions
+     * to idle regardless of current state. Use this when:
+     * - Recovery modal is dismissed
+     * - Machine is stuck in a bad state
+     * - Need to completely reset session lifecycle
+     */
+    reset: () => {
+      send({ type: 'RESET' });
+    },
+
+    /**
      * Update the recording state for individual services
      *
      * @param updates - Partial recording state to update
@@ -187,6 +251,16 @@ export function useSessionMachine() {
       updates: Partial<SessionMachineContext['recordingState']>
     ) => {
       send({ type: 'UPDATE_RECORDING_STATE', updates });
+    },
+
+    /**
+     * Report an error from a recording service
+     * Transitions the machine to error state
+     *
+     * @param error - Error message
+     */
+    reportError: (error: string) => {
+      send({ type: 'ERROR', error });
     },
 
     // =========================================================================

@@ -379,6 +379,20 @@ npm run build
 - Browser localStorage has limits (~5-10MB)
 - Export & clear periodically for best performance
 
+## 📚 Documentation
+
+**For Developers:**
+- **[CLAUDE.md](CLAUDE.md)** - Comprehensive developer guide and AI agent instructions
+- **[Documentation Index](docs/INDEX.md)** - Navigate all project documentation
+- **[User Guide](docs/user-guides/USER_GUIDE.md)** - Complete user documentation
+- **[API Reference](docs/developer/API_REFERENCE_GUIDE.md)** - API documentation
+- **[Sessions Rewrite](docs/sessions-rewrite/)** - Sessions system architecture and progress
+
+**For Contributors:**
+- [Contributing Guide](CONTRIBUTING.md) - How to contribute
+- [Deployment Guide](DEPLOYMENT.md) - Production deployment
+- [Keyboard Shortcuts](KEYBOARD_SHORTCUTS.md) - All shortcuts reference
+
 ## 📝 License
 
 MIT - use and modify freely!

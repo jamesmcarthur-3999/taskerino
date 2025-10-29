@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/386</span>
+                <span class='fraction'>0/388</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/386</span>
+                <span class='fraction'>0/388</span>
             </div>
         
             
@@ -568,31 +568,14 @@
 <a name='L503'></a><a href='#L503'>503</a>
 <a name='L504'></a><a href='#L504'>504</a>
 <a name='L505'></a><a href='#L505'>505</a>
-<a name='L506'></a><a href='#L506'>506</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L506'></a><a href='#L506'>506</a>
+<a name='L507'></a><a href='#L507'>507</a>
+<a name='L508'></a><a href='#L508'>508</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -611,10 +594,31 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1078,6 +1082,7 @@
 <span class="cstat-no" title="statement not covered" >import { useTasks } from '../context/TasksContext';</span>
 <span class="cstat-no" title="statement not covered" >import { useNotes } from '../context/NotesContext';</span>
 <span class="cstat-no" title="statement not covered" >import { useEntities } from '../context/EntitiesContext';</span>
+<span class="cstat-no" title="statement not covered" >import { useSessionList } from '../context/SessionListContext';</span>
 <span class="cstat-no" title="statement not covered" >import { Command } from 'cmdk';</span>
 <span class="cstat-no" title="statement not covered" >import {</span>
   Search,
@@ -1125,6 +1130,7 @@ interface CommandPaletteProps {
 <span class="cstat-no" title="statement not covered" >  const { state: tasksState, dispatch: tasksDispatch } = useTasks();</span>
 <span class="cstat-no" title="statement not covered" >  const { state: notesState } = useNotes();</span>
 <span class="cstat-no" title="statement not covered" >  const { state: entitiesState } = useEntities();</span>
+<span class="cstat-no" title="statement not covered" >  const { sessions } = useSessionList();</span>
 <span class="cstat-no" title="statement not covered" >  const { colorScheme } = useTheme();</span>
 <span class="cstat-no" title="statement not covered" >  const [search, setSearch] = useState('');</span>
 &nbsp;
@@ -1225,7 +1231,7 @@ interface CommandPaletteProps {
 &nbsp;
   // Filter sessions based on search (same deep search as SessionsZone)
 <span class="cstat-no" title="statement not covered" >  const filteredSessions: Session[] = search</span>
-<span class="cstat-no" title="statement not covered" >    ? ([] as Session[]) // TODO: Add sessions data from useSessions() hook</span>
+<span class="cstat-no" title="statement not covered" >    ? sessions</span>
 <span class="cstat-no" title="statement not covered" >        .filter((session: Session) =&gt; session.status === 'completed') // Only show completed sessions</span>
 <span class="cstat-no" title="statement not covered" >        .filter((s: Session) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >          const query = search.toLowerCase();</span>
@@ -1585,7 +1591,7 @@ interface CommandPaletteProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-24T03:56:25.511Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

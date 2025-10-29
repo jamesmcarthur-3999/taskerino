@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNotes } from '../context/NotesContext';
-import { useSessions } from '../context/SessionsContext';
+import { useActiveSession } from '../context/ActiveSessionContext';
 import { useUI } from '../context/UIContext';
 import { X, FileText, Sparkles } from 'lucide-react';
 import type { Note } from '../types';
@@ -31,7 +31,7 @@ export function QuickNoteFromSession({
   screenshotId,
 }: QuickNoteFromSessionProps) {
   const { addNote } = useNotes();
-  const { addExtractedNote } = useSessions();
+  const { addExtractedNote } = useActiveSession();
   const { addNotification } = useUI();
   const [content, setContent] = useState(suggestedContent);
   const [summary, setSummary] = useState('');
@@ -68,7 +68,7 @@ export function QuickNoteFromSession({
     addNote(newNote);
 
     // Add note ID to session's extractedNoteIds
-    addExtractedNote(sessionId, newNote.id);
+    addExtractedNote(newNote.id);
 
     addNotification({
       type: 'success',

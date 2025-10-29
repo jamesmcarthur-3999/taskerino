@@ -17,6 +17,7 @@ import { generateId } from '../utils/helpers';
 import { openAIService } from './openAIService';
 import { audioStorageService } from './audioStorageService';
 import { audioCompressionService } from './audioCompressionService';
+import { ParallelAudioQueue, type AudioProcessorDependencies } from './ParallelAudioQueue';
 
 interface AudioSegmentEvent {
   sessionId: string;
@@ -29,6 +30,7 @@ export class AudioRecordingService {
   private isRecording: boolean = false;
   private segmentCounter: number = 0; // Track chunk index for storage
   private unlistenAudioChunk: (() => void) | null = null;
+  private parallelQueue: ParallelAudioQueue | null = null;
 
   /**
    * Start audio recording for a session
@@ -54,33 +56,42 @@ export class AudioRecordingService {
 
   /**
    * Stop audio recording
-   * Keeps session ID active for 5 seconds to allow pending chunks to complete
+   * ALWAYS cleans up state, even if Rust backend stop fails
    */
   async stopRecording(): Promise<void> {
     if (!this.isRecording) {
       return;
     }
 
-    console.log('🛑 [AUDIO SERVICE] Stopping audio recording (grace period for pending chunks)');
+    console.log('🛑 [AUDIO SERVICE] Stopping audio recording');
 
+    let stopSucceeded = false;
     try {
       await invoke('stop_audio_recording');
-      this.isRecording = false;
 
-      const sessionIdToKeep = this.activeSessionId;
-      setTimeout(() => {
-        if (this.activeSessionId === sessionIdToKeep) {
-          console.log('🧹 [AUDIO SERVICE] Grace period ended, clearing session');
-          this.activeSessionId = null;
-          this.segmentCounter = 0;
-          this.unlistenAudioChunk?.();
-          this.unlistenAudioChunk = null;
-        }
-      }, 5000);
-
-      console.log('✅ [AUDIO SERVICE] Audio recording stopped (accepting pending chunks for 5s)');
+      // Grace period: Wait 400ms for in-flight audio chunks to arrive
+      // This accounts for:
+      // - 100ms: Max delay for Rust processing thread to check stop flag
+      // - 100ms: Event delivery latency (Tauri IPC)
+      // - 200ms: Safety margin for final chunk processing
+      console.log('⏳ [AUDIO SERVICE] Waiting 400ms grace period for pending audio chunks...');
+      await new Promise(resolve => setTimeout(resolve, 400));
+      stopSucceeded = true;
     } catch (error) {
       console.error('❌ [AUDIO SERVICE] Failed to stop audio recording:', error);
+    } finally {
+      // CRITICAL: Always cleanup state, even if invoke failed
+      // Prevents 40-minute audio bleed bug where listener stays active
+      this.isRecording = false;
+      this.activeSessionId = null;
+      this.segmentCounter = 0;
+      this.unlistenAudioChunk?.();
+      this.unlistenAudioChunk = null;
+      this.parallelQueue = null;
+
+      console.log(stopSucceeded
+        ? '✅ [AUDIO SERVICE] Audio recording stopped successfully'
+        : '⚠️ [AUDIO SERVICE] Audio recording stopped with errors (cleanup completed)');
     }
   }
 
@@ -174,6 +185,7 @@ export class AudioRecordingService {
         duration,
         transcription,
         attachmentId: audioAttachment.id, // Link to stored audio file
+        hash: audioAttachment.hash, // CA storage hash for direct lookup
       };
 
       console.log(`✅ [AUDIO SERVICE] Audio segment created: ${segment.id}`);
@@ -301,21 +313,14 @@ export class AudioRecordingService {
   }
 
   /**
-   * Calculate chunk duration based on screenshot interval
+   * Calculate chunk duration for audio recording
+   *
+   * Always returns 10 seconds for fast, consistent transcription delivery.
+   * Audio processing is independent of screenshot intervals for optimal UX.
    */
   private calculateChunkDuration(session: Session): number {
-    let chunkDurationSecs: number;
-
-    if (session.screenshotInterval === -1) {
-      chunkDurationSecs = 20;
-      console.log(`🎤 [AUDIO SERVICE] Adaptive mode: using 20s audio chunks for screenshot alignment`);
-    } else {
-      const intervalMinutes = session.screenshotInterval || 2;
-      chunkDurationSecs = Math.min(intervalMinutes * 60, 120);
-      console.log(`🎤 [AUDIO SERVICE] Fixed interval mode: using ${chunkDurationSecs}s chunks (${intervalMinutes}m interval)`);
-    }
-
-    return Math.max(10, chunkDurationSecs);
+    console.log('🎤 [AUDIO SERVICE] Using 10s audio chunks (constant)');
+    return 10;
   }
 
   /**
@@ -353,6 +358,7 @@ export class AudioRecordingService {
         duration: event.duration,
         transcription,
         attachmentId: audioAttachment.id,
+        hash: audioAttachment.hash, // CA storage hash for direct lookup
       };
 
       console.log(`✅ [AUDIO SERVICE] Audio segment created: ${segment.id}`);
@@ -382,25 +388,56 @@ export class AudioRecordingService {
 
     const chunkDurationSecs = this.calculateChunkDuration(session);
 
-    const unlisten = await listen<AudioSegmentEvent>('audio-chunk', async (event) => {
+    // Initialize parallel processing queue (6 concurrent chunks)
+    this.parallelQueue = new ParallelAudioQueue(6, {
+      saveAudioChunk: (sessionId, audioBase64, duration, timestamp, segmentIndex) =>
+        audioStorageService.saveAudioChunk(audioBase64, sessionId, segmentIndex, duration),
+      compressForAPI: (audioBase64) =>
+        audioCompressionService.compressForAPI(audioBase64, 'transcription'),
+      transcribeAudio: (compressedAudio) =>
+        openAIService.transcribeAudio(compressedAudio),
+      createSegment: (sessionId, audioAttachment, transcription, duration, timestamp, isSilent) => ({
+        id: generateId(),
+        sessionId,
+        timestamp: new Date(timestamp).toISOString(),
+        duration,
+        transcription,
+        attachmentId: audioAttachment.id,
+        hash: audioAttachment.hash,
+      })
+    });
+
+    const unlisten = await listen<AudioSegmentEvent>('audio-chunk', (event) => {
       console.log('🎵 [AUDIO SERVICE] Received audio chunk');
 
-      if (!this.isRecording || this.activeSessionId !== session.id) {
+      // FIX: Check event payload sessionId instead of closure-captured session.id
+      // This prevents processing chunks from old/ended sessions
+      if (!this.isRecording ||
+          this.activeSessionId !== event.payload.sessionId ||
+          !this.parallelQueue) {
+        if (event.payload.sessionId !== this.activeSessionId) {
+          console.warn(`⚠️ [AUDIO SERVICE] Ignoring chunk for inactive session (expected: ${this.activeSessionId}, got: ${event.payload.sessionId})`);
+        }
         return;
       }
 
-      try {
-        const audioSegment = await this.processAudioSegment(
-          session.id,
-          event.payload
-        );
-
-        if (audioSegment) {
-          onAudioSegmentProcessed(audioSegment);
+      // Enqueue chunk for parallel processing (6 concurrent chunks)
+      const segmentIndex = this.segmentCounter++;
+      this.parallelQueue.enqueue({
+        sessionId: session.id,
+        chunkData: {
+          audioBase64: event.payload.audioBase64,
+          duration: event.payload.duration,
+          timestamp: Date.now(),
+          isSilent: false,
+          segmentIndex
+        },
+        callback: (segment) => {
+          if (segment) {
+            onAudioSegmentProcessed(segment);
+          }
         }
-      } catch (error) {
-        console.error('❌ [AUDIO SERVICE] Error processing audio chunk:', error);
-      }
+      });
     });
 
     this.unlistenAudioChunk = unlisten;
@@ -434,6 +471,7 @@ export class AudioRecordingService {
       this.activeSessionId = null;
       this.unlistenAudioChunk?.();
       this.unlistenAudioChunk = null;
+      this.parallelQueue = null;
       console.error('❌ [AUDIO SERVICE] Failed to start recording:', error);
       throw error;
     }

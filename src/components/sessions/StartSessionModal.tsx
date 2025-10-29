@@ -132,12 +132,9 @@ export function StartSessionModal({
       setWindows(wins);
       setWebcams(cams);
 
-      // Auto-select default devices if not already set
-      if (!selectedAudioDevice && audio.length > 0) {
-        const defaultInput = audio.find(d => d.deviceType === 'Input' && d.isDefault);
-        const firstInput = audio.find(d => d.deviceType === 'Input');
-        setSelectedAudioDevice((defaultInput || firstInput)?.id);
-      }
+      // Don't auto-select audio device - let backend use OS default
+      // This ensures we always use the current OS default mic (not locked to a specific device like iPhone)
+      // The backend will select the OS default when micDeviceId is undefined
 
       if (selectedDisplayIds.length === 0 && disp.length > 0) {
         const primary = disp.find(d => d.isPrimary);
@@ -263,7 +260,7 @@ export function StartSessionModal({
     // Add audio config if audio recording is enabled
     if (audioRecording) {
       // Determine source type based on what's enabled
-      let sourceType: 'microphone' | 'system-audio' | 'both' = 'microphone';
+      let sourceType: 'microphone' | 'system-audio' | 'both' = lastSettings?.audioSourceType || 'microphone';
       if (selectedAudioDevice && enableSystemAudio && selectedSystemAudioDevice) {
         sourceType = 'both';
       } else if (enableSystemAudio && selectedSystemAudioDevice) {
@@ -271,7 +268,7 @@ export function StartSessionModal({
       }
 
       config.audioConfig = {
-        micDeviceId: selectedAudioDevice,
+        micDeviceId: selectedAudioDevice, // undefined = backend uses OS default
         systemAudioDeviceId: selectedSystemAudioDevice,
         sourceType,
         balance: audioBalance,
@@ -284,20 +281,42 @@ export function StartSessionModal({
     if (videoRecording) {
       const fps = customResolution.width && customResolution.height ? customFps : getFpsForQuality(qualityPreset);
 
-      config.videoConfig = {
-        sourceType: recordWindow ? 'window' : 'display',
-        displayIds: recordWindow ? undefined : selectedDisplayIds,
-        windowIds: recordWindow ? [selectedWindowId] : undefined,
-        webcamDeviceId: webcamMode.mode !== 'off' ? selectedWebcamId : undefined,
-        pipConfig: webcamMode.mode === 'pip' && webcamMode.pipConfig ? {
-          enabled: true,
-          position: webcamMode.pipConfig.position,
-          size: webcamMode.pipConfig.size,
-          borderRadius: 8,
-        } : undefined,
-        quality: qualityPreset,
-        fps,
-      };
+      // Build config differently based on recording mode to ensure clean separation
+      if (recordWindow) {
+        // Window recording mode - explicitly omit displayIds
+        config.videoConfig = {
+          sourceType: 'window',
+          windowIds: selectedWindowId ? [selectedWindowId] : undefined,
+          webcamDeviceId: webcamMode.mode !== 'off' ? selectedWebcamId : undefined,
+          pipConfig: webcamMode.mode === 'pip' && webcamMode.pipConfig ? {
+            enabled: true,
+            position: webcamMode.pipConfig.position,
+            size: webcamMode.pipConfig.size,
+            borderRadius: 8,
+          } : undefined,
+          quality: qualityPreset,
+          fps,
+        };
+      } else {
+        // Display recording mode - explicitly omit windowIds, filter displayIds
+        const filteredDisplayIds = selectedDisplayIds.filter((id): id is string =>
+          id !== undefined && id !== null && id.trim() !== ''
+        );
+
+        config.videoConfig = {
+          sourceType: 'display',
+          displayIds: filteredDisplayIds.length > 0 ? filteredDisplayIds : undefined,
+          webcamDeviceId: webcamMode.mode !== 'off' ? selectedWebcamId : undefined,
+          pipConfig: webcamMode.mode === 'pip' && webcamMode.pipConfig ? {
+            enabled: true,
+            position: webcamMode.pipConfig.position,
+            size: webcamMode.pipConfig.size,
+            borderRadius: 8,
+          } : undefined,
+          quality: qualityPreset,
+          fps,
+        };
+      }
     }
 
     onStartSession(config);

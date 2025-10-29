@@ -9,6 +9,7 @@
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
+  "plugins": {},
   "app": {
     "withGlobalTauri": false,
     "windows": [
@@ -56,7 +57,7 @@
       "frameworks": [],
       "minimumSystemVersion": "12.3",
       "exceptionDomain": "",
-      "signingIdentity": null,
+      "signingIdentity": "Developer ID Application: YOUR_NAME (TEAM_ID)",
       "entitlements": "entitlements.plist"
     }
   }

@@ -272,7 +272,7 @@ pub async fn openai_analyze_full_audio(
     let request_body = json!({
         "model": "gpt-4o-audio-preview-2025-06-03",
         "modalities": ["text"],
-        "max_tokens": 16384, // GPT-4o-audio-preview max output limit (2025)
+        "max_tokens": 16000, // Hard limit is 16,384, use 16,000 for safety buffer (chunking handles longer sessions)
         "messages": [
             {
                 "role": "system",
@@ -324,6 +324,31 @@ pub async fn openai_analyze_full_audio(
         .json()
         .await
         .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    // Check for truncation BEFORE parsing content
+    let finish_reason = json_response["choices"][0]["finish_reason"]
+        .as_str()
+        .unwrap_or("unknown");
+
+    if finish_reason == "length" {
+        let tokens_used = json_response["usage"]["completion_tokens"]
+            .as_u64()
+            .unwrap_or(0);
+
+        eprintln!("⚠️  OpenAI response truncated: hit max_tokens limit");
+        eprintln!("   Tokens used: {}", tokens_used);
+
+        return Err(format!(
+            "Audio analysis truncated: exceeded token limit ({} tokens used). Try shorter sessions.",
+            tokens_used
+        ));
+    }
+
+    eprintln!(
+        "✅ OpenAI analysis complete (finish_reason: {}, tokens: {})",
+        finish_reason,
+        json_response["usage"]["completion_tokens"].as_u64().unwrap_or(0)
+    );
 
     let content_text = json_response["choices"][0]["message"]["content"]
         .as_str()

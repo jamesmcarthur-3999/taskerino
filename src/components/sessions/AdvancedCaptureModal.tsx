@@ -1,35 +1,16 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Monitor, Video, Camera, Settings2, FileVideo } from 'lucide-react';
+import { X, Monitor, Camera, Settings2 } from 'lucide-react';
 import type { DisplayInfo } from '../../types';
 import { DisplayMultiSelect } from './DisplayMultiSelect';
+import { validateVideoConfig, type ValidationResult } from '../../utils/sessionValidation';
 
 interface AdvancedCaptureModalProps {
   show: boolean;
   onClose: () => void;
 
-  // Video quality settings
-  quality: 'low' | 'medium' | 'high' | 'ultra' | 'custom';
-  onQualityChange: (quality: 'low' | 'medium' | 'high' | 'ultra' | 'custom') => void;
-  customResolution?: { width: number; height: number };
-  onCustomResolutionChange: (resolution: { width: number; height: number }) => void;
-  customFrameRate?: number;
-  onCustomFrameRateChange: (fps: number) => void;
-
-  // Codec settings
-  codec: 'h264' | 'h265' | 'vp9';
-  onCodecChange: (codec: 'h264' | 'h265' | 'vp9') => void;
-  bitrate?: number; // kbps
-  onBitrateChange: (bitrate: number) => void;
-
-  // Screenshot settings
-  screenshotFormat: 'png' | 'jpg' | 'webp';
-  onScreenshotFormatChange: (format: 'png' | 'jpg' | 'webp') => void;
-  screenshotQuality: number; // 0-100 for jpg/webp
-  onScreenshotQualityChange: (quality: number) => void;
-
-  // Webcam PiP advanced
+  // Webcam PiP settings
   pipPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'custom';
   onPipPositionChange: (position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'custom') => void;
   pipSize: 'small' | 'medium' | 'large' | 'custom';
@@ -43,40 +24,20 @@ interface AdvancedCaptureModalProps {
   displays: DisplayInfo[];
   selectedDisplayIds: string[];
   onDisplayIdsChange: (displayIds: string[]) => void;
-
-  // Storage settings
-  storageLocation: string;
-  onStorageLocationChange: (path: string) => void;
-  fileNamingPattern: string;
-  onFileNamingPatternChange: (pattern: string) => void;
 }
 
 /**
- * AdvancedCaptureModal - Full-screen modal for power-user capture settings
+ * AdvancedCaptureModal - Simplified capture settings
  *
  * Design Philosophy:
- * - Tabbed layout for organization (Video, Screenshots, PiP, Storage)
- * - Detailed controls not needed for quick access
- * - Professional presentation with clear sections
- * - Modular structure for easy modification
+ * - Focus on essential settings: Display selection and PiP overlay
+ * - We handle technical details (codec, bitrate, quality) automatically
+ * - Simple tabbed layout for organization
+ * - Users shouldn't worry about video/audio encoding settings
  */
 export function AdvancedCaptureModal({
   show,
   onClose,
-  quality,
-  onQualityChange,
-  customResolution,
-  onCustomResolutionChange,
-  customFrameRate,
-  onCustomFrameRateChange,
-  codec,
-  onCodecChange,
-  bitrate,
-  onBitrateChange,
-  screenshotFormat,
-  onScreenshotFormatChange,
-  screenshotQuality,
-  onScreenshotQualityChange,
   pipPosition,
   onPipPositionChange,
   pipSize,
@@ -88,12 +49,43 @@ export function AdvancedCaptureModal({
   displays,
   selectedDisplayIds,
   onDisplayIdsChange,
-  storageLocation,
-  onStorageLocationChange,
-  fileNamingPattern,
-  onFileNamingPatternChange,
 }: AdvancedCaptureModalProps) {
-  const [activeTab, setActiveTab] = useState<'video' | 'screenshots' | 'pip' | 'storage'>('video');
+  const [activeTab, setActiveTab] = useState<'display' | 'pip'>('display');
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
+  // Handle save: validate settings, call onChange callbacks, then close
+  const handleSave = () => {
+    // Build video config for validation (minimal config for display selection validation)
+    const videoConfig = {
+      sourceType: 'display' as const,
+      displayIds: selectedDisplayIds,
+      quality: 'medium' as const,
+      fps: 30,
+    };
+
+    // Validate using centralized validation
+    const validation: ValidationResult = validateVideoConfig(videoConfig);
+
+    if (!validation.valid) {
+      setValidationErrors(validation.errors);
+      return; // Don't close if validation fails
+    }
+
+    // Validation passed - now call all onChange callbacks to persist settings
+    // Note: These callbacks should already be called during user interaction,
+    // but we ensure they're all applied here before closing the modal
+    onDisplayIdsChange(selectedDisplayIds);
+    onPipPositionChange(pipPosition);
+    onPipSizeChange(pipSize);
+    if (pipCustomPosition) {
+      onPipCustomPositionChange(pipCustomPosition);
+    }
+    onPipBorderToggle(pipBorderEnabled);
+
+    // Clear errors and close
+    setValidationErrors([]);
+    onClose();
+  };
 
   if (!show) return null;
 
@@ -121,8 +113,8 @@ export function AdvancedCaptureModal({
                 <Settings2 size={24} className="text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Advanced Capture Settings</h2>
-                <p className="text-sm text-gray-500">Fine-tune your recording configuration</p>
+                <h2 className="text-2xl font-bold text-gray-900">Capture Settings</h2>
+                <p className="text-sm text-gray-500">Display selection and webcam overlay</p>
               </div>
             </div>
             <button
@@ -137,57 +129,26 @@ export function AdvancedCaptureModal({
           {/* Tabs */}
           <div className="flex gap-2 px-6 pt-4 border-b border-gray-200/50">
             <TabButton
-              icon={<Video size={16} />}
-              label="Video Quality"
-              active={activeTab === 'video'}
-              onClick={() => setActiveTab('video')}
-            />
-            <TabButton
               icon={<Monitor size={16} />}
-              label="Screenshots"
-              active={activeTab === 'screenshots'}
-              onClick={() => setActiveTab('screenshots')}
+              label="Display Selection"
+              active={activeTab === 'display'}
+              onClick={() => setActiveTab('display')}
             />
             <TabButton
               icon={<Camera size={16} />}
-              label="PiP Overlay"
+              label="Webcam Overlay"
               active={activeTab === 'pip'}
               onClick={() => setActiveTab('pip')}
-            />
-            <TabButton
-              icon={<FileVideo size={16} />}
-              label="Storage"
-              active={activeTab === 'storage'}
-              onClick={() => setActiveTab('storage')}
             />
           </div>
 
           {/* Tab Content */}
           <div className="p-6 overflow-y-auto max-h-[calc(85vh-200px)]">
-            {activeTab === 'video' && (
-              <VideoTab
-                quality={quality}
-                onQualityChange={onQualityChange}
-                customResolution={customResolution}
-                onCustomResolutionChange={onCustomResolutionChange}
-                customFrameRate={customFrameRate}
-                onCustomFrameRateChange={onCustomFrameRateChange}
-                codec={codec}
-                onCodecChange={onCodecChange}
-                bitrate={bitrate}
-                onBitrateChange={onBitrateChange}
+            {activeTab === 'display' && (
+              <DisplayTab
                 displays={displays}
                 selectedDisplayIds={selectedDisplayIds}
                 onDisplayIdsChange={onDisplayIdsChange}
-              />
-            )}
-
-            {activeTab === 'screenshots' && (
-              <ScreenshotsTab
-                format={screenshotFormat}
-                onFormatChange={onScreenshotFormatChange}
-                quality={screenshotQuality}
-                onQualityChange={onScreenshotQualityChange}
               />
             )}
 
@@ -203,31 +164,40 @@ export function AdvancedCaptureModal({
                 onBorderToggle={onPipBorderToggle}
               />
             )}
-
-            {activeTab === 'storage' && (
-              <StorageTab
-                location={storageLocation}
-                onLocationChange={onStorageLocationChange}
-                namingPattern={fileNamingPattern}
-                onNamingPatternChange={onFileNamingPatternChange}
-              />
-            )}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200/50 bg-gray-50/50">
-            <button
-              onClick={onClose}
-              className="px-6 py-2.5 rounded-xl font-semibold text-gray-700 hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onClose}
-              className="px-6 py-2.5 rounded-xl font-semibold bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 transition-all shadow-lg"
-            >
-              Save Changes
-            </button>
+          <div className="p-6 border-t border-gray-200/50 bg-gray-50/50 space-y-3">
+            {/* Validation Errors */}
+            {validationErrors.length > 0 && (
+              <div className="p-4 rounded-xl bg-red-50 border-2 border-red-200 space-y-2 animate-in slide-in-from-top-2 duration-300">
+                <div className="flex items-start gap-3">
+                  <div className="text-red-600 font-bold text-lg">⚠️</div>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm font-semibold text-red-900">Invalid Capture Settings</p>
+                    {validationErrors.map((error, idx) => (
+                      <p key={idx} className="text-xs text-red-800">• {error}</p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl font-semibold text-gray-700 hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-6 py-2.5 rounded-xl font-semibold bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 transition-all shadow-lg"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </motion.div>
       </motion.div>
@@ -267,177 +237,50 @@ function TabButton({ icon, label, active, onClick }: TabButtonProps) {
 }
 
 // ============================================================================
-// VIDEO TAB
+// DISPLAY TAB
 // ============================================================================
 
-interface VideoTabProps {
-  quality: 'low' | 'medium' | 'high' | 'ultra' | 'custom';
-  onQualityChange: (quality: 'low' | 'medium' | 'high' | 'ultra' | 'custom') => void;
-  customResolution?: { width: number; height: number };
-  onCustomResolutionChange: (resolution: { width: number; height: number }) => void;
-  customFrameRate?: number;
-  onCustomFrameRateChange: (fps: number) => void;
-  codec: 'h264' | 'h265' | 'vp9';
-  onCodecChange: (codec: 'h264' | 'h265' | 'vp9') => void;
-  bitrate?: number;
-  onBitrateChange: (bitrate: number) => void;
+interface DisplayTabProps {
   displays: DisplayInfo[];
   selectedDisplayIds: string[];
   onDisplayIdsChange: (displayIds: string[]) => void;
 }
 
-function VideoTab({
-  quality,
-  onQualityChange,
-  customResolution,
-  onCustomResolutionChange,
-  customFrameRate,
-  onCustomFrameRateChange,
-  codec,
-  onCodecChange,
-  bitrate,
-  onBitrateChange,
-  displays,
-  selectedDisplayIds,
-  onDisplayIdsChange,
-}: VideoTabProps) {
+function DisplayTab({ displays, selectedDisplayIds, onDisplayIdsChange }: DisplayTabProps) {
   return (
     <div className="space-y-6">
-      <Section title="Quality Preset">
-        <RadioGrid
-          options={[
-            { value: 'low', label: '720p @ 15fps', description: 'Low bandwidth' },
-            { value: 'medium', label: '1080p @ 30fps', description: 'Balanced' },
-            { value: 'high', label: '1080p @ 60fps', description: 'High quality' },
-            { value: 'ultra', label: '4K @ 30fps', description: 'Maximum detail' },
-            { value: 'custom', label: 'Custom', description: 'Manual config' },
-          ]}
-          value={quality}
-          onChange={(v) => onQualityChange(v as typeof quality)}
-        />
-      </Section>
-
-      {quality === 'custom' && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="space-y-4"
-        >
-          <Section title="Custom Resolution">
-            <div className="grid grid-cols-2 gap-4">
-              <NumberInput
-                label="Width"
-                value={customResolution?.width || 1920}
-                onChange={(w) => onCustomResolutionChange({ width: w, height: customResolution?.height || 1080 })}
-                min={640}
-                max={3840}
-                step={1}
-              />
-              <NumberInput
-                label="Height"
-                value={customResolution?.height || 1080}
-                onChange={(h) => onCustomResolutionChange({ width: customResolution?.width || 1920, height: h })}
-                min={480}
-                max={2160}
-                step={1}
-              />
-            </div>
-          </Section>
-
-          <Section title="Frame Rate">
-            <NumberInput
-              label="FPS"
-              value={customFrameRate || 30}
-              onChange={onCustomFrameRateChange}
-              min={15}
-              max={120}
-              step={5}
-            />
-          </Section>
-        </motion.div>
-      )}
-
-      <Section title="Video Codec">
-        <RadioGrid
-          options={[
-            { value: 'h264', label: 'H.264', description: 'Best compatibility' },
-            { value: 'h265', label: 'H.265', description: 'Better compression' },
-            { value: 'vp9', label: 'VP9', description: 'Open source' },
-          ]}
-          value={codec}
-          onChange={(v) => onCodecChange(v as typeof codec)}
-        />
-      </Section>
-
-      <Section title="Bitrate">
-        <NumberInput
-          label="kbps"
-          value={bitrate || 5000}
-          onChange={onBitrateChange}
-          min={1000}
-          max={50000}
-          step={500}
-        />
-        <p className="text-xs text-gray-500 mt-2">
-          Higher bitrate = better quality but larger files. Recommended: 5000-10000 kbps for 1080p
-        </p>
-      </Section>
-
-      {displays.length > 0 && (
-        <Section title="Display Selection">
+      <Section title="Screen Selection">
+        {displays.length > 0 ? (
           <DisplayMultiSelect
             displays={displays}
             selectedDisplayIds={selectedDisplayIds}
             onChange={onDisplayIdsChange}
           />
-        </Section>
-      )}
-    </div>
-  );
-}
-
-// ============================================================================
-// SCREENSHOTS TAB
-// ============================================================================
-
-interface ScreenshotsTabProps {
-  format: 'png' | 'jpg' | 'webp';
-  onFormatChange: (format: 'png' | 'jpg' | 'webp') => void;
-  quality: number;
-  onQualityChange: (quality: number) => void;
-}
-
-function ScreenshotsTab({ format, onFormatChange, quality, onQualityChange }: ScreenshotsTabProps) {
-  return (
-    <div className="space-y-6">
-      <Section title="Image Format">
-        <RadioGrid
-          options={[
-            { value: 'png', label: 'PNG', description: 'Lossless, larger files' },
-            { value: 'jpg', label: 'JPEG', description: 'Compressed, smaller files' },
-            { value: 'webp', label: 'WebP', description: 'Modern, best compression' },
-          ]}
-          value={format}
-          onChange={(v) => onFormatChange(v as typeof format)}
-        />
+        ) : (
+          <div className="p-4 rounded-xl border-2 border-gray-200 text-center text-gray-500">
+            No displays detected. Please check your system settings.
+          </div>
+        )}
+        <p className="text-xs text-gray-500 mt-2">
+          Select which displays to capture during your session. You can record multiple displays simultaneously.
+        </p>
       </Section>
 
-      {(format === 'jpg' || format === 'webp') && (
-        <Section title="Compression Quality">
-          <Slider
-            label="Quality"
-            value={quality}
-            onChange={onQualityChange}
-            min={50}
-            max={100}
-            step={5}
-            suffix="%"
-          />
-          <p className="text-xs text-gray-500 mt-2">
-            Higher quality = better detail but larger files. Recommended: 85-95%
-          </p>
-        </Section>
-      )}
+      <Section title="Recording Quality">
+        <div className="p-4 rounded-xl bg-cyan-50 border-2 border-cyan-200">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-cyan-500">
+              <Settings2 size={16} className="text-white" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900">Automatic Optimization</h4>
+              <p className="text-sm text-gray-600 mt-1">
+                We automatically optimize video quality, codec (H.264), and bitrate (5000 kbps) for the best balance of quality and file size. Screenshots are saved as WebP at 80% quality for efficient AI analysis.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Section>
     </div>
   );
 }
@@ -537,46 +380,6 @@ function PiPTab({
   );
 }
 
-// ============================================================================
-// STORAGE TAB
-// ============================================================================
-
-interface StorageTabProps {
-  location: string;
-  onLocationChange: (path: string) => void;
-  namingPattern: string;
-  onNamingPatternChange: (pattern: string) => void;
-}
-
-function StorageTab({ location, onLocationChange, namingPattern, onNamingPatternChange }: StorageTabProps) {
-  return (
-    <div className="space-y-6">
-      <Section title="Storage Location">
-        <TextInput
-          label="Path"
-          value={location}
-          onChange={onLocationChange}
-          placeholder="/Users/you/Taskerino/sessions"
-        />
-        <p className="text-xs text-gray-500 mt-2">
-          Location where session recordings will be saved
-        </p>
-      </Section>
-
-      <Section title="File Naming Pattern">
-        <TextInput
-          label="Pattern"
-          value={namingPattern}
-          onChange={onNamingPatternChange}
-          placeholder="session-{date}-{time}"
-        />
-        <p className="text-xs text-gray-500 mt-2">
-          Available variables: {'{date}'}, {'{time}'}, {'{name}'}
-        </p>
-      </Section>
-    </div>
-  );
-}
 
 // ============================================================================
 // REUSABLE UI PRIMITIVES
@@ -627,31 +430,6 @@ function RadioGrid({ options, value, onChange }: RadioGridProps) {
   );
 }
 
-interface NumberInputProps {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-  min: number;
-  max: number;
-  step: number;
-}
-
-function NumberInput({ label, value, onChange, min, max, step }: NumberInputProps) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-gray-600">{label}</label>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        min={min}
-        max={max}
-        step={step}
-        className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-cyan-400 focus:outline-none text-sm font-medium text-gray-900"
-      />
-    </div>
-  );
-}
 
 interface SliderProps {
   label: string;
@@ -696,27 +474,6 @@ function Slider({ label, value, onChange, min, max, step, suffix }: SliderProps)
   );
 }
 
-interface TextInputProps {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}
-
-function TextInput({ label, value, onChange, placeholder }: TextInputProps) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-gray-600">{label}</label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-cyan-400 focus:outline-none text-sm font-medium text-gray-900"
-      />
-    </div>
-  );
-}
 
 interface ToggleSwitchProps {
   label: string;

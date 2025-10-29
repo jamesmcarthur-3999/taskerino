@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useUI } from '../../context/UIContext';
-import { useSessions } from '../../context/SessionsContext';
+import { useActiveSession } from '../../context/ActiveSessionContext';
 import { useScrollAnimation } from '../../contexts/ScrollAnimationContext';
 import type { TabType } from '../../types';
 import { Z_INDEX } from '../../design-system/theme';
@@ -24,10 +24,11 @@ import { LogoContainer } from './components/LogoContainer';
 import { NavigationIsland } from './components/NavigationIsland';
 import { RightActionsBar } from './components/RightActionsBar';
 import { MenuButton } from '../MenuButton';
+import { EnrichmentStatusIndicator } from './EnrichmentStatusIndicator';
 
 export function TopNavigation() {
   const { state: uiState, dispatch: uiDispatch } = useUI();
-  const { pauseSession, resumeSession, endSession, startSession, activeSessionId } = useSessions();
+  const { pauseSession, resumeSession, endSession, startSession, activeSessionId } = useActiveSession();
   const { scrollY } = useScrollAnimation();
 
   // Compact mode hook
@@ -60,17 +61,17 @@ export function TopNavigation() {
     ...navActionsFromHook,
     onPauseSession: () => {
       if (activeSessionId) {
-        pauseSession(activeSessionId);
+        pauseSession();
       }
     },
     onResumeSession: () => {
       if (activeSessionId) {
-        resumeSession(activeSessionId);
+        resumeSession();
       }
     },
     onEndSession: async () => {
       if (activeSessionId) {
-        await endSession(activeSessionId);
+        await endSession();
       }
     },
     onStartSession: async (config: any) => {
@@ -135,11 +136,11 @@ export function TopNavigation() {
 
       {/* Navigation layout: Grid for edges, absolute positioning for center */}
       <header className="fixed top-0 left-0 right-0 z-50 pt-4 px-6">
-        {/* Grid container for Logo, MenuButton, and Actions at edges */}
+        {/* Grid container for Logo, MenuButton, EnrichmentIndicator, and Actions at edges */}
         <div className={`grid gap-3 items-start ${
           scrollY >= 100
-            ? 'grid-cols-[auto_min-content_1fr_auto]'  // 4 columns when MenuButton shown
-            : 'grid-cols-[auto_1fr_auto]'               // 3 columns when MenuButton hidden
+            ? 'grid-cols-[auto_min-content_min-content_1fr_auto]'  // 5 columns when MenuButton shown
+            : 'grid-cols-[auto_min-content_1fr_auto]'               // 4 columns when MenuButton hidden
         }`}>
           {/* Column 1: Logo - Fixed width */}
           <div data-logo-container className="pointer-events-none">
@@ -161,10 +162,15 @@ export function TopNavigation() {
             </motion.div>
           )}
 
-          {/* Column 3: Empty spacer (Island now positioned absolutely) */}
+          {/* Column 3: Enrichment Status Indicator - Always present (auto-hides when no jobs) */}
+          <div className="min-w-0">
+            <EnrichmentStatusIndicator />
+          </div>
+
+          {/* Column 4: Empty spacer (Island now positioned absolutely) */}
           <div className="min-w-0" />
 
-          {/* Column 4: Actions Bar - Fixed width */}
+          {/* Column 5: Actions Bar - Fixed width */}
           <div className="pointer-events-none">
             <RightActionsBar
               isCompact={isCompact}

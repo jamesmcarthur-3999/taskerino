@@ -1,4 +1,11 @@
 /**
+ * @deprecated This component is not currently in use. MenuMorphPill.tsx is the active
+ * implementation for the morphing menu system. This file is kept for reference but
+ * may be removed in a future cleanup.
+ *
+ * @see MenuMorphPill.tsx for the current implementation
+ * @see SpaceMenuBar.tsx for the menu content component
+ *
  * MorphingMenuButton Component - TRUE MORPHING EDITION
  *
  * A morphing menu system that TRULY morphs between states using a single element.

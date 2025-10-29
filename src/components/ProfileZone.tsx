@@ -5,7 +5,7 @@ import { useUI } from '../context/UIContext';
 import { useEntities } from '../context/EntitiesContext';
 import { useNotes } from '../context/NotesContext';
 import { useTasks } from '../context/TasksContext';
-import { useApp } from '../context/AppContext'; // Keep for LOAD_STATE and RESET_ONBOARDING
+import { useApp } from '../context/AppContext'; // Keep for LOAD_STATE and notifications in backups
 import { claudeService } from '../services/claudeService';
 import { sessionsAgentService } from '../services/sessionsAgentService';
 import { openAIService } from '../services/openAIService';
@@ -23,7 +23,7 @@ import { BACKGROUND_GRADIENT, getGlassClasses, getRadiusClass, getTabClasses, ge
 type SettingsTab = 'general' | 'ai' | 'ned' | 'sessions' | 'time' | 'data';
 
 export default function ProfileZone() {
-  const { dispatch: appDispatch } = useApp(); // Only for LOAD_STATE and RESET_ONBOARDING
+  const { dispatch: appDispatch } = useApp(); // Only for LOAD_STATE and notifications in backups
   const { state: settingsState, dispatch: settingsDispatch } = useSettings();
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { state: entitiesState } = useEntities();
@@ -232,7 +232,41 @@ export default function ProfileZone() {
       if (data.contacts) await storage.save('contacts', data.contacts);
       if (data.notes) await storage.save('notes', data.notes);
       if (data.tasks) await storage.save('tasks', data.tasks);
-      if (data.sessions) await storage.save('sessions', data.sessions);
+
+      // Import sessions through ChunkedStorage
+      if (data.sessions) {
+        console.log(`[Import] Importing ${data.sessions.length} sessions through ChunkedStorage...`);
+
+        const { getChunkedStorage } = await import('../services/storage/ChunkedSessionStorage');
+        const { getInvertedIndexManager } = await import('../services/storage/InvertedIndexManager');
+
+        const chunkedStorage = await getChunkedStorage();
+        const indexManager = await getInvertedIndexManager();
+
+        let importedCount = 0;
+        let failedCount = 0;
+
+        for (const session of data.sessions) {
+          try {
+            // Save to ChunkedStorage
+            await chunkedStorage.saveFullSession(session);
+
+            // Load metadata and update indexes
+            const metadata = await chunkedStorage.loadMetadata(session.id);
+            if (metadata) {
+              await indexManager.updateIndexes(metadata);
+            }
+
+            importedCount++;
+          } catch (error) {
+            console.error(`[Import] Failed to import session ${session.id}:`, error);
+            failedCount++;
+          }
+        }
+
+        console.log(`[Import] Session import complete: ${importedCount} succeeded, ${failedCount} failed`);
+      }
+
       if (data.aiSettings) await storage.save('aiSettings', data.aiSettings);
       if (data.preferences) await storage.save('preferences', data.preferences);
 
@@ -282,9 +316,9 @@ export default function ProfileZone() {
 
 
   const handleResetOnboarding = () => {
-    if (confirm('This will reset the onboarding flow. You\'ll see the welcome screen next time you refresh. Continue?')) {
+    if (confirm('Reset onboarding to experience the streamlined welcome flow again?\n\nThis will:\n• Reset all feature introductions and tooltips\n• Clear onboarding progress\n• Show the welcome screen on next refresh\n\nYour data and API keys will NOT be affected.\n\nContinue?')) {
       uiDispatch({ type: 'RESET_ONBOARDING' });
-      alert('Onboarding reset! Refresh the page to see the welcome flow again.');
+      alert('Onboarding has been reset!\n\nRefresh the page to experience our streamlined welcome flow again. Your data and settings remain unchanged.');
     }
   };
 

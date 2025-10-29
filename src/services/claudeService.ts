@@ -9,6 +9,13 @@ import type {
   Attachment,
 } from '../types';
 import type {
+  CaptureResult,
+  ConversationContext,
+  RefinementRequest,
+  RefinementResponse,
+  RefinementError,
+} from '../types/captureProcessing';
+import type {
   ClaudeChatResponse,
   ClaudeMessage,
   ClaudeContentBlock,
@@ -161,11 +168,10 @@ ${text}
 ${attachmentInfo}
 
 <core_rules>
-1. Topic Hierarchy: PRIMARY (Customer/Company) > SECONDARY (People) > TERTIARY (Features/Tech)
-2. Note Consolidation: ONE comprehensive note per customer/topic from each input
-3. Update vs Create: Check if recent note exists for same topic before creating new
-4. Duplicate Detection: Check existing tasks; if duplicate, add to skippedTasks array with reason
-5. Task Extraction: Create SEPARATE task for EACH distinct action item mentioned
+1. You can create notes, update existing notes, skip notes, extract tasks, or any combination based on what the input needs
+2. Topic Hierarchy: PRIMARY (Customer/Company) > SECONDARY (People) > TERTIARY (Features/Tech)
+3. Check existing data to avoid creating duplicates
+4. For duplicate tasks, add to skippedTasks array with reason
 </core_rules>
 
 <task_requirements>
@@ -191,12 +197,17 @@ CRITICAL: Return plain markdown text ONLY. Do NOT include HTML tags like <p>, <d
 The content will be automatically formatted for display by the application.
 </note_structure>
 
+<ai_summary_instructions>
+Generate a brief, friendly welcome message that summarizes what you prepared for the user. Be specific and conversational, not generic.
+</ai_summary_instructions>
+
 <output_schema>
 {
+  "aiSummary": "Brief friendly summary",
   "inputType": "call_transcript" | "meeting_note" | "quick_note",
   "primaryTopic": {"name": "", "type": "company", "confidence": 0.95, "matchedExisting": ""},
   "secondaryTopics": [{"name": "", "type": "person", "relationTo": ""}],
-  "noteStrategy": {"action": "create"|"update", "shouldConsolidate": true, "updateNoteId": ""},
+  "noteStrategy": {"action": "create"|"update"|"skip", "shouldConsolidate": true, "updateNoteId": "", "skipReason": ""},
   "note": {
     "content": "## Context\n\n...\n\n## Discussion Points\n\n...\n\n## Next Steps\n\n...",
     "summary": "One-line summary (max 100 chars)",
@@ -286,11 +297,10 @@ ${settings.systemInstructions}
 ${learningsSection}
 
 <core_rules>
-1. Topic Hierarchy: PRIMARY (Customer/Company) > SECONDARY (People) > TERTIARY (Features/Tech)
-2. Note Consolidation: ONE comprehensive note per customer/topic from each input
-3. Update vs Create: Check if recent note exists for same topic before creating new
-4. Duplicate Detection: Check existing tasks; if duplicate, add to skippedTasks array with reason
-5. Task Extraction: Create SEPARATE task for EACH distinct action item mentioned
+1. You can create notes, update existing notes, skip notes, extract tasks, or any combination based on what the input needs
+2. Topic Hierarchy: PRIMARY (Customer/Company) > SECONDARY (People) > TERTIARY (Features/Tech)
+3. Check existing data to avoid creating duplicates
+4. For duplicate tasks, add to skippedTasks array with reason
 </core_rules>
 
 <task_requirements>
@@ -316,12 +326,17 @@ CRITICAL: Return plain markdown text ONLY. Do NOT include HTML tags like <p>, <d
 The content will be automatically formatted for display by the application.
 </note_structure>
 
+<ai_summary_instructions>
+Generate a brief, friendly welcome message that summarizes what you prepared for the user. Be specific and conversational, not generic.
+</ai_summary_instructions>
+
 <output_schema>
 {
+  "aiSummary": "Brief friendly summary",
   "inputType": "call_transcript" | "meeting_note" | "quick_note",
   "primaryTopic": {"name": "", "type": "company", "confidence": 0.95, "matchedExisting": ""},
   "secondaryTopics": [{"name": "", "type": "person", "relationTo": ""}],
-  "noteStrategy": {"action": "create"|"update", "shouldConsolidate": true, "updateNoteId": ""},
+  "noteStrategy": {"action": "create"|"update"|"skip", "shouldConsolidate": true, "updateNoteId": "", "skipReason": ""},
   "note": {
     "content": "## Context\n\n...\n\n## Discussion Points\n\n...\n\n## Next Steps\n\n...",
     "summary": "One-line summary (max 100 chars)",
@@ -501,8 +516,8 @@ ${attachmentInfo}`;
       ];
 
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion_vision', {
-        model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5
-        maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
+        model: 'claude-haiku-4-5-20251001', // Claude Haiku 4.5 - Fast, cost-effective
+        maxTokens: 64000, // Claude Haiku 4.5 max output limit
         messages,
         system: undefined,
         temperature: undefined,
@@ -861,8 +876,8 @@ ${context}
 
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
-          model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5
-          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
+          model: 'claude-haiku-4-5-20251001', // Claude Haiku 4.5 - Fast, cost-effective
+          maxTokens: 64000, // Claude Haiku 4.5 max output limit
           messages,
           system: undefined,
           temperature: undefined,
@@ -984,8 +999,8 @@ Only include "suggestedSettings" if shouldOptimize is true. Make conservative ad
 
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
-          model: 'claude-sonnet-4-5-20250929',
-          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
+          model: 'claude-haiku-4-5-20251001', // Claude Haiku 4.5 - Fast, cost-effective
+          maxTokens: 64000, // Claude Haiku 4.5 max output limit
           messages,
           system: undefined,
           temperature: undefined,
@@ -1030,6 +1045,195 @@ Only include "suggestedSettings" if shouldOptimize is true. Make conservative ad
       return {
         shouldOptimize: false,
         reasoning: 'Failed to analyze: ' + (error instanceof Error ? error.message : 'Unknown error'),
+      };
+    }
+  }
+
+  /**
+   * Refine existing capture results based on user feedback
+   * Uses conversation history to maintain context across refinements
+   */
+  async refineCapture(
+    request: RefinementRequest
+  ): Promise<RefinementResponse> {
+    if (!this.hasApiKey) {
+      return {
+        success: false,
+        error: 'API key not set. Please configure your Claude API key in Settings.',
+      };
+    }
+
+    const { userMessage, currentResult } = request;
+    const context = currentResult.conversationContext;
+
+    // Check iteration limit
+    if (context.iterationCount >= 10) {
+      return {
+        success: false,
+        error: 'Maximum refinement iterations reached (10). Please save or cancel.',
+      };
+    }
+
+    try {
+      // Build refinement prompt
+      const refinementPrompt = `You are refining a previous capture analysis based on user feedback.
+
+<context>
+Original Capture: ${context.originalCapture}
+
+Your Previous Output:
+${JSON.stringify({
+  notes: currentResult.notes,
+  tasks: currentResult.tasks,
+  detectedTopics: currentResult.detectedTopics,
+}, null, 2)}
+
+Conversation History:
+${context.messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content.substring(0, 500)}`).join('\n')}
+</context>
+
+<user_request>
+${userMessage}
+</user_request>
+
+<instructions>
+1. Understand what the user wants changed
+2. Update the tasks/notes accordingly
+3. Keep everything else consistent unless explicitly asked to change
+4. Generate a brief summary of what you changed
+
+Return the FULL updated result with the new summary.
+</instructions>
+
+<ai_summary_instructions>
+Briefly summarize what you changed in a conversational way.
+</ai_summary_instructions>
+
+<output_schema>
+{
+  "aiSummary": "Brief summary of changes",
+  "inputType": "${currentResult.inputType || 'quick_note'}",
+  "primaryTopic": ${JSON.stringify(currentResult.detectedTopics[0] || null)},
+  "secondaryTopics": ${JSON.stringify(currentResult.detectedTopics.slice(1) || [])},
+  "note": {
+    "content": "...",
+    "summary": "...",
+    "topicAssociation": "...",
+    "tags": [],
+    "source": "...",
+    "sentiment": "...",
+    "keyPoints": [],
+    "relatedTopics": []
+  },
+  "tasks": [
+    {
+      "title": "",
+      "priority": "high",
+      "dueDate": "",
+      "dueTime": "",
+      "dueDateReasoning": "",
+      "description": "",
+      "tags": [],
+      "suggestedSubtasks": [],
+      "sourceExcerpt": ""
+    }
+  ],
+  "tags": [],
+  "sentiment": "..."
+}
+</output_schema>
+
+Return valid JSON only (no markdown).`;
+
+      // Build message with conversation history
+      const messages: ClaudeMessage[] = [
+        { role: 'user', content: refinementPrompt }
+      ];
+
+      const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
+        request: {
+          model: 'claude-haiku-4-5-20251001', // Claude Haiku 4.5 - Fast refinements
+          maxTokens: 64000,
+          messages,
+          system: undefined,
+          temperature: undefined,
+        }
+      });
+
+      const content = response.content[0];
+      if (content.type !== 'text') {
+        return {
+          success: false,
+          error: 'Unexpected response format from Claude',
+        };
+      }
+
+      const responseText = content.text.trim();
+      let jsonText = responseText;
+
+      // Extract JSON from response
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[1].trim();
+      } else if (!responseText.startsWith('{') && !responseText.startsWith('[')) {
+        const objectMatch = responseText.match(/(\{[\s\S]*\})/);
+        if (objectMatch) {
+          jsonText = objectMatch[1];
+        }
+      }
+
+      let aiResponse;
+      try {
+        aiResponse = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error('Failed to parse refinement response');
+        return {
+          success: false,
+          error: 'Failed to parse AI response. Please try again.',
+        };
+      }
+
+      // Build updated result with new conversation context
+      const updatedResult: CaptureResult = {
+        ...currentResult,
+        aiSummary: aiResponse.aiSummary || 'I\'ve updated the capture based on your request.',
+        notes: aiResponse.note ? [{
+          topicId: aiResponse.primaryTopic?.name || 'General',
+          topicName: aiResponse.primaryTopic?.name || 'General',
+          content: aiResponse.note.content,
+          summary: aiResponse.note.summary,
+          sourceText: context.originalCapture,
+          isNew: true,
+          tags: aiResponse.note.tags || [],
+          source: aiResponse.note.source || 'thought',
+          sentiment: aiResponse.note.sentiment || 'neutral',
+          keyPoints: aiResponse.note.keyPoints || [],
+          relatedTopics: aiResponse.note.relatedTopics || [],
+        }] : currentResult.notes,
+        tasks: aiResponse.tasks || currentResult.tasks,
+        detectedTopics: currentResult.detectedTopics, // Keep existing topics
+        conversationContext: {
+          ...context,
+          messages: [
+            ...context.messages,
+            { role: 'user', content: userMessage },
+            { role: 'assistant', content: JSON.stringify(aiResponse) },
+          ],
+          iterationCount: context.iterationCount + 1,
+        },
+        processingSteps: ['Refined based on user feedback'],
+        processingTimeMs: 0, // Not tracked for refinements
+      };
+
+      return {
+        success: true,
+        updatedResult,
+      };
+    } catch (error) {
+      console.error('Error refining capture:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during refinement',
       };
     }
   }

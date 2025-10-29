@@ -10,7 +10,7 @@ import { Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, Camera } from 'luci
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { Session, Attachment, SessionScreenshot, VideoChapter } from '../types';
 import { videoStorageService } from '../services/videoStorageService';
-import { attachmentStorage } from '../services/attachmentStorage';
+import { getCAStorage } from '../services/storage/ContentAddressableStorage';
 import { getGlassClasses, RADIUS, SCALE, TRANSITIONS, SHADOWS } from '../design-system/theme';
 
 interface VideoPlayerProps {
@@ -106,64 +106,66 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
       }
 
       try {
-        console.log('🎥 [VIDEO PLAYER] Loading video attachment:', session.video.fullVideoAttachmentId);
+        console.log('🎥 [VIDEO PLAYER] Loading video from file system');
 
-        // Get attachment from storage
-        const attachment = await attachmentStorage.getAttachment(session.video.fullVideoAttachmentId);
+        // Videos are stored on file system (NOT in CAS - too large)
+        // Primary: Use direct file path (current architecture)
+        // Fallback: Try CAS for legacy videos (backwards compatibility)
 
-        if (!attachment) {
-          const errorMsg = `Video attachment not found in storage. The video file may have been deleted or the attachment ID is invalid.\n\nAttachment ID: ${session.video.fullVideoAttachmentId}`;
-          console.error('❌ [VIDEO PLAYER]', errorMsg);
-          console.error('❌ [VIDEO PLAYER] Session ID:', session.id);
-          console.error('❌ [VIDEO PLAYER] This may indicate data corruption or missing attachment metadata');
-          setError(errorMsg);
-          setIsLoading(false);
-          return;
+        let videoPath: string | null = null;
+
+        // Try direct file path first (modern videos)
+        if (session.video.path) {
+          console.log('🎥 [VIDEO PLAYER] Using direct file path:', session.video.path);
+          videoPath = session.video.path;
+        }
+        // Fallback: Try CAS for legacy videos
+        else if (session.video.hash) {
+          console.log('🎥 [VIDEO PLAYER] Fallback: Trying CAS lookup for legacy video');
+          try {
+            const caStorage = await getCAStorage();
+            const attachment = await caStorage.loadAttachment(session.video.hash);
+
+            if (attachment?.path) {
+              console.log('🎥 [VIDEO PLAYER] Legacy video found in CAS');
+              videoPath = attachment.path;
+            }
+          } catch (casError) {
+            console.warn('⚠️ [VIDEO PLAYER] CAS lookup failed:', casError);
+          }
         }
 
-        // Convert file path to Tauri asset URL
-        console.log('🎥 [VIDEO PLAYER] Attachment found:', {
-          id: attachment.id,
-          path: attachment.path,
-          size: attachment.size,
-          mimeType: attachment.mimeType,
-          type: attachment.type,
-        });
-
-        if (!attachment.path) {
-          const errorMsg = 'Video attachment has no file path. This indicates corrupted attachment data.';
+        if (!videoPath) {
+          const errorMsg = `Video file path not found.\n\nThis session's video may have been recorded with an older version or the file may have been deleted.\n\nSession ID: ${session.id}`;
           console.error('❌ [VIDEO PLAYER]', errorMsg);
-          console.error('❌ [VIDEO PLAYER] Attachment:', attachment);
           setError(errorMsg);
           setIsLoading(false);
           return;
         }
 
         // CRITICAL: Detect path corruption bug (attachment ID stored as path)
-        if (attachment.path.startsWith('video-') && !attachment.path.includes('/')) {
-          const errorMsg = `VIDEO PATH CORRUPTION DETECTED!\n\nThe attachment path contains an attachment ID instead of a file path.\n\nCorrupted path: ${attachment.path}\n\nThis is a known bug. Please restart the app to trigger automatic repair.`;
+        if (videoPath.startsWith('video-') && !videoPath.includes('/')) {
+          const errorMsg = `VIDEO PATH CORRUPTION DETECTED!\n\nThe video path contains an attachment ID instead of a file path.\n\nCorrupted path: ${videoPath}\n\nThis is a known bug. Please restart the app to trigger automatic repair.`;
           console.error('❌ [VIDEO PLAYER] CRITICAL BUG:', errorMsg);
-          console.error('❌ [VIDEO PLAYER] Attachment ID:', attachment.id);
-          console.error('❌ [VIDEO PLAYER] Corrupted path:', attachment.path);
-          console.error('❌ [VIDEO PLAYER] This should have been fixed on app startup by fixVideoAttachments');
+          console.error('❌ [VIDEO PLAYER] Corrupted path:', videoPath);
           setError(errorMsg);
           setIsLoading(false);
           return;
         }
 
-        const url = await videoStorageService.getVideoUrl(attachment);
+        // Convert file path to Tauri asset URL
+        const url = convertFileSrc(videoPath);
 
         if (!url) {
-          const errorMsg = `Failed to convert file path to playable URL.\n\nFile path: ${attachment.path}\n\nThis may indicate:\n- File permissions issue\n- Invalid file path format\n- Tauri asset protocol configuration problem`;
+          const errorMsg = `Failed to convert file path to playable URL.\n\nFile path: ${videoPath}\n\nThis may indicate:\n- File permissions issue\n- Invalid file path format\n- Tauri asset protocol configuration problem`;
           console.error('❌ [VIDEO PLAYER]', errorMsg);
-          console.error('❌ [VIDEO PLAYER] Check videoStorageService.getVideoUrl() logs for details');
           setError(errorMsg);
           setIsLoading(false);
           return;
         }
 
         console.log('✅ [VIDEO PLAYER] Video URL loaded successfully');
-        console.log('📍 [VIDEO PLAYER] File path:', attachment.path);
+        console.log('📍 [VIDEO PLAYER] File path:', videoPath);
         console.log('🔗 [VIDEO PLAYER] Asset URL:', url);
 
         setVideoUrl(url);

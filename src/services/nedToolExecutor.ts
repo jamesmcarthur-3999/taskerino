@@ -11,7 +11,7 @@ import { contextAgent } from './contextAgent';
 import { sessionsQueryAgent } from './sessionsQueryAgent';
 import { nedMemory } from './nedMemory';
 import { sessionsAgentService } from './sessionsAgentService';
-import { attachmentStorage } from './attachmentStorage';
+import { getCAStorage } from './storage/ContentAddressableStorage';
 import { generateId, stripHtmlTags } from '../utils/helpers';
 
 type DispatchFunction = (action: any) => void;
@@ -965,8 +965,10 @@ export class NedToolExecutor {
     }
 
     try {
-      // Load the attachment containing the screenshot
-      const attachment = await attachmentStorage.getAttachment(screenshot.attachmentId);
+      // Load the attachment containing the screenshot (Phase 4: Use hash if available)
+      const caStorage = await getCAStorage();
+      const identifier = screenshot.hash || screenshot.attachmentId;
+      const attachment = await caStorage.loadAttachment(identifier);
 
       if (!attachment || !attachment.base64) {
         return {

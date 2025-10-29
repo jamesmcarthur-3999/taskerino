@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTasks } from '../context/TasksContext';
 import { useNotes } from '../context/NotesContext';
 import { useUI } from '../context/UIContext';
-import { Calendar, Clock, Circle, Plus, X, Trash2, CheckCircle2 } from 'lucide-react';
+import { Calendar, Clock, Circle, Plus, X, Trash2, CheckCircle2, Settings } from 'lucide-react';
 import type { Task, SubTask } from '../types';
 import { formatRelativeTime, isTaskOverdue, isTaskDueToday, generateId } from '../utils/helpers';
 import { InlineTagManager } from './InlineTagManager';
@@ -17,6 +17,9 @@ import {
   getDangerGradient,
 } from '../design-system/theme';
 import { useTheme } from '../context/ThemeContext';
+import { RelationshipPills } from './relationships/RelationshipPills';
+import { RelationshipModal } from './relationships/RelationshipModal';
+import { EntityType } from '../types/relationships';
 
 interface TaskDetailSidebarProps {
   taskId: string | undefined;
@@ -39,6 +42,7 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
   const [newSubtask, setNewSubtask] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'saving'>('saved');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
   const isInitialMount = useRef(true);
 
   // Get all available tags for suggestions
@@ -405,6 +409,28 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
               </div>
             </div>
 
+            {/* Relationships Section */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Relationships</h3>
+                <button
+                  onClick={() => setRelationshipModalOpen(true)}
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold"
+                >
+                  <Settings className="w-4 h-4" />
+                  Manage
+                </button>
+              </div>
+
+              <RelationshipPills
+                entityId={task.id}
+                entityType={EntityType.TASK}
+                maxVisible={5}
+                showRemoveButton={true}
+                onPillClick={() => setRelationshipModalOpen(true)}
+              />
+            </div>
+
             {/* AI Context (if present) */}
             {task.aiContext && (
               <div className={`bg-gradient-to-br from-purple-50 to-violet-50 ${getRadiusClass('card')} border border-purple-200/60 p-4 shadow-sm`}>
@@ -468,6 +494,14 @@ export function TaskDetailSidebar({ taskId }: TaskDetailSidebarProps) {
         message="This will permanently delete this task. This action cannot be undone."
         confirmLabel="Delete Task"
         variant="danger"
+      />
+
+      {/* Relationship Modal */}
+      <RelationshipModal
+        open={relationshipModalOpen}
+        onClose={() => setRelationshipModalOpen(false)}
+        entityId={task.id}
+        entityType={EntityType.TASK}
       />
     </>
   );

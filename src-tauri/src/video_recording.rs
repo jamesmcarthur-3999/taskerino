@@ -8,79 +8,31 @@
  */
 use std::ffi::CString;
 use std::os::raw::c_char;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use tauri::State;
+use std::sync::Arc;
+use tauri::Manager;
+
+// Note: RecordingError and related types now mostly handled by recording/ module
 
 // FFI declarations for Swift functions
+// NOTE: Most video recording functionality now uses recording/ module with recording_session_* FFI
+// These remaining functions are used by legacy commands and will be phased out
 #[cfg(target_os = "macos")]
 extern "C" {
-    fn screen_recorder_create() -> *mut std::ffi::c_void;
-    fn screen_recorder_start(
-        recorder: *mut std::ffi::c_void,
-        path: *const c_char,
-        width: i32,
-        height: i32,
-        fps: i32,
-    ) -> bool;
-    fn screen_recorder_stop(recorder: *mut std::ffi::c_void) -> bool;
-    fn screen_recorder_is_recording(recorder: *mut std::ffi::c_void) -> bool;
-    fn screen_recorder_destroy(recorder: *mut std::ffi::c_void);
-    fn screen_recorder_check_permission() -> bool;
-    fn screen_recorder_request_permission();
+    // Utility functions (still used by commands)
     fn screen_recorder_get_duration(path: *const c_char) -> f64;
+    fn screen_recorder_is_video_ready(path: *const c_char) -> bool;
     fn screen_recorder_generate_thumbnail(path: *const c_char, time: f64) -> *const c_char;
+
+    // Enumeration functions (wrapped by recording/ module)
     fn screen_recorder_enumerate_displays() -> *const c_char;
     fn screen_recorder_enumerate_windows() -> *const c_char;
     fn screen_recorder_enumerate_webcams() -> *const c_char;
-    fn screen_recorder_capture_display_thumbnail(displayId: *const c_char) -> *const c_char;
-    fn screen_recorder_capture_window_thumbnail(windowId: *const c_char) -> *const c_char;
-
-    // Advanced recording mode FFI
-    fn screen_recorder_start_display_recording(
-        display_ids_json: *const c_char,
-        output_path: *const c_char,
-        fps: i32,
-        width: i32,
-        height: i32,
-    ) -> i32;
-
-    fn screen_recorder_start_window_recording(
-        window_id: *const c_char,
-        output_path: *const c_char,
-        fps: i32,
-        width: i32,
-        height: i32,
-    ) -> i32;
-
-    fn screen_recorder_start_webcam_recording(
-        webcam_id: *const c_char,
-        output_path: *const c_char,
-        fps: i32,
-        width: i32,
-        height: i32,
-    ) -> i32;
-
-    fn screen_recorder_start_pip_recording(
-        config_json: *const c_char,
-        output_path: *const c_char,
-    ) -> i32;
-
-    fn screen_recorder_update_pip_config(config_json: *const c_char) -> i32;
-
-    // PiP Compositor FFI
-    fn pip_compositor_create() -> *mut std::ffi::c_void;
-    fn pip_compositor_configure(
-        compositor: *mut std::ffi::c_void,
-        position: i32,
-        size: i32,
-        border_radius: f32,
-    ) -> bool;
-    fn pip_compositor_destroy(compositor: *mut std::ffi::c_void);
 }
 
-/// Video quality settings
+/// Video quality settings (legacy - kept for backward compatibility with old commands)
+/// New code should use recording::VideoQuality from recording/ module
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[allow(dead_code)]  // Used by Tauri command parameters
 pub struct VideoQuality {
     pub width: u32,
     pub height: u32,
@@ -97,440 +49,8 @@ impl Default for VideoQuality {
     }
 }
 
-/// Video recorder manages screen capture via Swift ScreenCaptureKit
-pub struct VideoRecorder {
-    #[cfg(target_os = "macos")]
-    swift_recorder: Option<*mut std::ffi::c_void>,
-    #[cfg(target_os = "macos")]
-    pip_compositor: Option<*mut std::ffi::c_void>,
-    current_session_id: Arc<Mutex<Option<String>>>,
-    output_path: Arc<Mutex<Option<PathBuf>>>,
-    recording_config: Arc<Mutex<Option<crate::types::VideoRecordingConfig>>>,
-}
-
-// Manual implementation of Send for VideoRecorder
-// SAFETY: swift_recorder pointer is only accessed from a single thread
-// and protected by the Arc<Mutex<VideoRecorder>> wrapper
-unsafe impl Send for VideoRecorder {}
-unsafe impl Sync for VideoRecorder {}
-
-impl VideoRecorder {
-    pub fn new() -> Self {
-        VideoRecorder {
-            #[cfg(target_os = "macos")]
-            swift_recorder: None,
-            #[cfg(target_os = "macos")]
-            pip_compositor: None,
-            current_session_id: Arc::new(Mutex::new(None)),
-            output_path: Arc::new(Mutex::new(None)),
-            recording_config: Arc::new(Mutex::new(None)),
-        }
-    }
-
-    /// Start recording screen for a session
-    pub fn start_recording(
-        &mut self,
-        session_id: String,
-        output_path: PathBuf,
-        quality: VideoQuality,
-    ) -> Result<(), String> {
-        #[cfg(target_os = "macos")]
-        {
-            // Check if already recording
-            if self.swift_recorder.is_some() {
-                return Err("Already recording".to_string());
-            }
-
-            // Check permission
-            if !Self::check_permission()? {
-                return Err("Screen recording permission not granted. Please enable in System Settings > Privacy & Security > Screen Recording".to_string());
-            }
-
-            // Create Swift recorder instance
-            let recorder = unsafe { screen_recorder_create() };
-            if recorder.is_null() {
-                return Err("Failed to create screen recorder".to_string());
-            }
-
-            // Convert path to C string
-            let path_str = output_path.to_str().ok_or("Invalid output path")?;
-            let c_path =
-                CString::new(path_str).map_err(|_| "Failed to convert path to C string")?;
-
-            println!("🎬 Starting screen recording for session: {}", session_id);
-            println!("   Output: {:?}", output_path);
-            println!(
-                "   Quality: {}x{} @ {}fps",
-                quality.width, quality.height, quality.fps
-            );
-
-            // Start recording
-            let success = unsafe {
-                screen_recorder_start(
-                    recorder,
-                    c_path.as_ptr(),
-                    quality.width as i32,
-                    quality.height as i32,
-                    quality.fps as i32,
-                )
-            };
-
-            if !success {
-                unsafe { screen_recorder_destroy(recorder) };
-                return Err(
-                    "Failed to start screen recording. Check console for details.".to_string(),
-                );
-            }
-
-            self.swift_recorder = Some(recorder);
-            *self
-                .current_session_id
-                .lock()
-                .map_err(|e| format!("Failed to lock session_id: {}", e))? =
-                Some(session_id.clone());
-            *self
-                .output_path
-                .lock()
-                .map_err(|e| format!("Failed to lock output_path: {}", e))? =
-                Some(output_path.clone());
-
-            println!("✅ Screen recording started successfully");
-            Ok(())
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            Err("Screen recording only supported on macOS 12.3+".to_string())
-        }
-    }
-
-    /// Stop recording and save video
-    pub fn stop_recording(&mut self) -> Result<PathBuf, String> {
-        #[cfg(target_os = "macos")]
-        {
-            let recorder = self.swift_recorder.take().ok_or("No active recording")?;
-
-            println!("⏹️  Stopping screen recording...");
-
-            let success = unsafe { screen_recorder_stop(recorder) };
-
-            if !success {
-                println!("⚠️  Failed to stop recording gracefully, but continuing cleanup");
-            }
-
-            let path = self
-                .output_path
-                .lock()
-                .map_err(|e| format!("Failed to lock output_path: {}", e))?
-                .take()
-                .ok_or("No output path set")?;
-
-            // Clean up Swift recorder
-            unsafe { screen_recorder_destroy(recorder) };
-            *self
-                .current_session_id
-                .lock()
-                .map_err(|e| format!("Failed to lock session_id: {}", e))? = None;
-
-            println!("✅ Screen recording stopped, video saved to: {:?}", path);
-            Ok(path)
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            Err("Screen recording only supported on macOS 12.3+".to_string())
-        }
-    }
-
-    /// Check if currently recording
-    pub fn is_recording(&self) -> bool {
-        #[cfg(target_os = "macos")]
-        {
-            if let Some(recorder) = self.swift_recorder {
-                return unsafe { screen_recorder_is_recording(recorder) };
-            }
-        }
-        false
-    }
-
-    /// Check if screen recording permission is granted
-    pub fn check_permission() -> Result<bool, String> {
-        #[cfg(target_os = "macos")]
-        {
-            Ok(unsafe { screen_recorder_check_permission() })
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            Ok(false)
-        }
-    }
-
-    /// Request screen recording permission
-    pub fn request_permission() -> Result<(), String> {
-        #[cfg(target_os = "macos")]
-        {
-            unsafe { screen_recorder_request_permission() };
-            Ok(())
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            Err("Screen recording only supported on macOS 12.3+".to_string())
-        }
-    }
-
-    /// Get current session ID if recording
-    pub fn current_session_id(&self) -> Option<String> {
-        self.current_session_id.lock().ok().and_then(|s| s.clone())
-    }
-
-    /// Start recording with advanced configuration
-    pub fn start_recording_with_config(
-        &mut self,
-        session_id: String,
-        output_path: PathBuf,
-        config: crate::types::VideoRecordingConfig,
-    ) -> Result<(), String> {
-        #[cfg(target_os = "macos")]
-        {
-            // Check if already recording
-            if self.swift_recorder.is_some() {
-                return Err("Already recording".to_string());
-            }
-
-            // Check permission
-            if !Self::check_permission()? {
-                return Err("Screen recording permission not granted".to_string());
-            }
-
-            println!(
-                "[VIDEO] Starting advanced recording - mode: {:?}",
-                config.source_type
-            );
-
-            // Convert quality preset to dimensions
-            let quality = match config.quality {
-                crate::types::VideoQuality::Low => VideoQuality {
-                    width: 854,
-                    height: 480,
-                    fps: 15,
-                },
-                crate::types::VideoQuality::Medium => VideoQuality {
-                    width: 1280,
-                    height: 720,
-                    fps: 15,
-                },
-                crate::types::VideoQuality::High => VideoQuality {
-                    width: 1920,
-                    height: 1080,
-                    fps: 30,
-                },
-                crate::types::VideoQuality::Ultra => VideoQuality {
-                    width: 2560,
-                    height: 1440,
-                    fps: 30,
-                },
-            };
-
-            // Override with custom resolution if provided
-            let final_quality = if let Some(res) = &config.resolution {
-                VideoQuality {
-                    width: res.width,
-                    height: res.height,
-                    fps: config.fps,
-                }
-            } else {
-                VideoQuality {
-                    width: quality.width,
-                    height: quality.height,
-                    fps: config.fps,
-                }
-            };
-
-            let path_str = output_path.to_str().ok_or("Invalid output path")?;
-            let c_output_path =
-                CString::new(path_str).map_err(|e| format!("Invalid output path string: {}", e))?;
-
-            // Store configuration before starting
-            *self
-                .recording_config
-                .lock()
-                .map_err(|e| format!("Failed to lock config: {}", e))? = Some(config.clone());
-
-            // Route to appropriate recording mode via FFI
-            let result = unsafe {
-                match config.source_type {
-                    crate::types::VideoSourceType::Display => {
-                        println!("[VIDEO] Starting display-only recording");
-
-                        let display_ids_json =
-                            serde_json::to_string(&config.display_ids.unwrap_or_else(|| vec![]))
-                                .map_err(|e| format!("Failed to serialize display IDs: {}", e))?;
-
-                        let c_display_ids = CString::new(display_ids_json)
-                            .map_err(|e| format!("Invalid display IDs string: {}", e))?;
-
-                        screen_recorder_start_display_recording(
-                            c_display_ids.as_ptr(),
-                            c_output_path.as_ptr(),
-                            final_quality.fps as i32,
-                            final_quality.width as i32,
-                            final_quality.height as i32,
-                        )
-                    }
-
-                    crate::types::VideoSourceType::Window => {
-                        println!("[VIDEO] Starting window-only recording");
-
-                        // Get first window ID from array (Swift layer currently supports single window)
-                        let window_id = config
-                            .window_ids
-                            .as_ref()
-                            .and_then(|ids| ids.first())
-                            .ok_or("At least one window ID required for window recording")?;
-
-                        let c_window_id = CString::new(window_id.clone())
-                            .map_err(|e| format!("Invalid window ID: {}", e))?;
-
-                        screen_recorder_start_window_recording(
-                            c_window_id.as_ptr(),
-                            c_output_path.as_ptr(),
-                            final_quality.fps as i32,
-                            final_quality.width as i32,
-                            final_quality.height as i32,
-                        )
-                    }
-
-                    crate::types::VideoSourceType::Webcam => {
-                        println!("[VIDEO] Starting webcam-only recording");
-
-                        let webcam_id = config
-                            .webcam_device_id
-                            .ok_or("Webcam device ID required for webcam recording")?;
-
-                        let c_webcam_id = CString::new(webcam_id)
-                            .map_err(|e| format!("Invalid webcam ID: {}", e))?;
-
-                        screen_recorder_start_webcam_recording(
-                            c_webcam_id.as_ptr(),
-                            c_output_path.as_ptr(),
-                            final_quality.fps as i32,
-                            final_quality.width as i32,
-                            final_quality.height as i32,
-                        )
-                    }
-
-                    crate::types::VideoSourceType::DisplayWithWebcam => {
-                        println!("[VIDEO] Starting display + PiP recording");
-
-                        // Serialize full config for PiP mode
-                        let config_json = serde_json::to_string(&config)
-                            .map_err(|e| format!("Failed to serialize config: {}", e))?;
-
-                        let c_config = CString::new(config_json)
-                            .map_err(|e| format!("Invalid config JSON: {}", e))?;
-
-                        screen_recorder_start_pip_recording(
-                            c_config.as_ptr(),
-                            c_output_path.as_ptr(),
-                        )
-                    }
-                }
-            };
-
-            if result != 0 {
-                return Err(format!(
-                    "Failed to start recording (error code: {})",
-                    result
-                ));
-            }
-
-            // NOTE: For advanced recording modes (display/window/webcam/PiP), the Swift
-            // GlobalScreenRecorder singleton manages the recorder lifecycle internally.
-            // We do NOT create a separate handle here to avoid double-creation bugs.
-            // The swift_recorder field remains None for these modes.
-
-            *self
-                .current_session_id
-                .lock()
-                .map_err(|e| format!("Failed to lock session_id: {}", e))? =
-                Some(session_id.clone());
-            *self
-                .output_path
-                .lock()
-                .map_err(|e| format!("Failed to lock output_path: {}", e))? =
-                Some(output_path.clone());
-
-            println!("✅ [VIDEO] Advanced recording started successfully");
-            Ok(())
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            Err("Advanced recording only supported on macOS 12.3+".to_string())
-        }
-    }
-
-    /// Update PiP configuration during recording
-    pub fn update_pip_config(&mut self, pip_config: crate::types::PiPConfig) -> Result<(), String> {
-        #[cfg(target_os = "macos")]
-        {
-            if !self.is_recording() {
-                return Err("Not currently recording".to_string());
-            }
-
-            println!("[VIDEO] Updating PiP configuration: {:?}", pip_config);
-
-            // Serialize config to JSON
-            let config_json = serde_json::to_string(&pip_config)
-                .map_err(|e| format!("Failed to serialize PiP config: {}", e))?;
-
-            let c_config =
-                CString::new(config_json).map_err(|e| format!("Invalid config JSON: {}", e))?;
-
-            // Call FFI to update
-            let result = unsafe { screen_recorder_update_pip_config(c_config.as_ptr()) };
-
-            if result == 0 {
-                println!("✅ [VIDEO] PiP configuration updated successfully");
-                Ok(())
-            } else {
-                Err(format!(
-                    "Failed to update PiP configuration (error code: {})",
-                    result
-                ))
-            }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            Err("PiP only supported on macOS".to_string())
-        }
-    }
-}
-
-impl Drop for VideoRecorder {
-    fn drop(&mut self) {
-        #[cfg(target_os = "macos")]
-        {
-            if let Some(recorder) = self.swift_recorder.take() {
-                println!("🗑️  Cleaning up video recorder");
-                unsafe {
-                    screen_recorder_stop(recorder);
-                    screen_recorder_destroy(recorder);
-                }
-            }
-
-            if let Some(compositor) = self.pip_compositor.take() {
-                println!("🗑️  Cleaning up PiP compositor");
-                unsafe {
-                    pip_compositor_destroy(compositor);
-                }
-            }
-        }
-    }
-}
+// VideoRecorder struct REMOVED - migrated to recording/ module
+// All functionality now uses SwiftRecordingSession from recording/ module
 
 // ============================================================================
 // Enumeration Functions
@@ -633,53 +153,125 @@ impl Drop for VideoRecorder {
 // Tauri Commands
 // ============================================================================
 
-/// Tauri command to start video recording
+/// Tauri command to start a simple single-source recording
+/// This is a simplified API for basic use cases - migrated to use recording/ module
 #[tauri::command]
 pub async fn start_video_recording(
     session_id: String,
     output_path: String,
     quality: Option<VideoQuality>,
-    recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
+    display_id: Option<u32>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let mut recorder = recorder
-        .lock()
-        .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
-    let quality = quality.unwrap_or_default();
-    let path = PathBuf::from(output_path);
+    use crate::SessionManager;
+    use crate::recording::SwiftRecordingSession;
 
-    recorder.start_recording(session_id, path, quality)
+    // Reject new operations during shutdown (Fix #13)
+    if crate::shutdown::is_shutting_down() {
+        return Err("Application is shutting down - cannot start new recording".to_string());
+    }
+
+    let manager = app_handle.state::<SessionManager>();
+
+    // Parse quality
+    let quality_preset = quality.unwrap_or_default();
+    let (width, height, fps) = (
+        quality_preset.width as i32,
+        quality_preset.height as i32,
+        quality_preset.fps as i32,
+    );
+
+    // Create recording session (defaults to capturing main display)
+    let mut session = SwiftRecordingSession::new(&output_path, width, height, fps)
+        .map_err(|e| format!("Failed to create recording session: {}", e))?;
+
+    // Add display (use provided display_id or default to 0)
+    let display_to_use = display_id.unwrap_or(0);
+    println!("🖥️ [VIDEO] Adding display ID: {}", display_to_use);
+    session.add_display(display_to_use)
+        .map_err(|e| format!("Failed to add display {}: {}", display_to_use, e))?;
+
+    // Start recording
+    session.start().await
+        .map_err(|e| format!("Failed to start recording: {}", e))?;
+
+    // Store in SessionManager
+    {
+        let mut sessions = manager.sessions.lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+        sessions.insert(session_id.clone(), std::sync::Arc::new(session));
+    }
+
+    println!("✅ [VIDEO] Started recording session: {}", session_id);
+    Ok(())
 }
 
-/// Tauri command to stop video recording
+/// Tauri command to stop a recording session - migrated to use SessionManager
 #[tauri::command]
 pub async fn stop_video_recording(
-    recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
+    session_id: String,
+    app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
-    let mut recorder = recorder
-        .lock()
-        .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
-    let path = recorder.stop_recording()?;
-    Ok(path.to_string_lossy().to_string())
+    use crate::SessionManager;
+
+    let manager = app_handle.state::<SessionManager>();
+
+    // Remove session from manager
+    let session_arc = {
+        let mut sessions = manager.sessions.lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+        sessions.remove(&session_id)
+            .ok_or_else(|| format!("Session not found: {}", session_id))?
+    };
+
+    // Try to get exclusive ownership to call stop explicitly
+    match std::sync::Arc::try_unwrap(session_arc) {
+        Ok(mut session) => {
+            println!("🛑 [VIDEO] Stopping recording session: {}", session_id);
+            session.stop().await
+                .map_err(|e| format!("Failed to stop recording: {}", e))?;
+
+            Ok("Recording stopped successfully".to_string())
+        }
+        Err(arc) => {
+            println!("⚠️  [VIDEO] Multiple references to session exist, relying on Drop");
+            // Put it back if there are other references
+            let mut sessions = manager.sessions.lock()
+                .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+            sessions.insert(session_id, arc);
+            Err("Cannot stop session with multiple references".to_string())
+        }
+    }
 }
 
-/// Tauri command to check if currently recording
+/// Tauri command to check if currently recording - migrated to use SessionManager
 #[tauri::command]
-pub async fn is_recording(recorder: State<'_, Arc<Mutex<VideoRecorder>>>) -> Result<bool, String> {
-    let recorder = recorder
-        .lock()
-        .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
-    Ok(recorder.is_recording())
+pub async fn is_recording(
+    session_id: String,
+    app_handle: tauri::AppHandle,
+) -> Result<bool, String> {
+    use crate::SessionManager;
+
+    let manager = app_handle.state::<SessionManager>();
+    let sessions = manager.sessions.lock()
+        .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+
+    Ok(sessions.contains_key(&session_id))
 }
 
-/// Tauri command to get current session ID if recording
+/// Tauri command to get current recording session - migrated to use SessionManager
 #[tauri::command]
 pub async fn get_current_recording_session(
-    recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
+    app_handle: tauri::AppHandle,
 ) -> Result<Option<String>, String> {
-    let recorder = recorder
-        .lock()
-        .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
-    Ok(recorder.current_session_id())
+    use crate::SessionManager;
+
+    let manager = app_handle.state::<SessionManager>();
+    let sessions = manager.sessions.lock()
+        .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+
+    // Return first session ID if any exist
+    Ok(sessions.keys().next().map(|s| s.clone()))
 }
 
 /// Tauri command to get video duration in seconds
@@ -716,7 +308,7 @@ pub async fn generate_video_thumbnail(
         let thumbnail_ptr = unsafe { screen_recorder_generate_thumbnail(c_path.as_ptr(), time) };
 
         if thumbnail_ptr.is_null() {
-            return Err("Failed to generate thumbnail".to_string());
+            return Err("Failed to generate thumbnail: Swift returned null pointer".to_string());
         }
 
         // Convert C string to Rust String
@@ -725,6 +317,11 @@ pub async fn generate_video_thumbnail(
         // Free the C string (allocated by Swift's strdup)
         unsafe {
             libc::free(thumbnail_ptr as *mut libc::c_void);
+        }
+
+        // Check if Swift returned an error message instead of thumbnail data
+        if thumbnail.starts_with("ERROR:") {
+            return Err(thumbnail.trim_start_matches("ERROR:").trim().to_string());
         }
 
         Ok(thumbnail)
@@ -736,206 +333,531 @@ pub async fn generate_video_thumbnail(
     }
 }
 
-/// Tauri command to start video recording with advanced configuration
+/// Tauri command to check if video file is ready for reading
 #[tauri::command]
-pub async fn start_video_recording_advanced(
-    session_id: String,
-    output_path: String,
-    config: crate::types::VideoRecordingConfig,
-    recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
-) -> Result<(), String> {
-    let mut recorder = recorder
-        .lock()
-        .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
-    let path = PathBuf::from(output_path);
-
-    recorder.start_recording_with_config(session_id, path, config)
-}
-
-/// Tauri command to enumerate all displays
-#[tauri::command]
-pub async fn enumerate_displays() -> Result<Vec<crate::types::DisplayInfo>, String> {
+pub async fn is_video_ready(video_path: String) -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
-        println!("[VIDEO] enumerate_displays called");
-        unsafe {
-            let json_ptr = screen_recorder_enumerate_displays();
-            if json_ptr.is_null() {
-                return Err("Failed to enumerate displays".to_string());
-            }
+        let c_path = CString::new(video_path.clone()).map_err(|_| "Invalid video path")?;
 
-            let json_str = std::ffi::CStr::from_ptr(json_ptr)
-                .to_str()
-                .map_err(|e| format!("Invalid UTF-8: {}", e))?;
+        let is_ready = unsafe { screen_recorder_is_video_ready(c_path.as_ptr()) };
 
-            let mut displays: Vec<crate::types::DisplayInfo> = serde_json::from_str(json_str)
-                .map_err(|e| format!("Failed to parse display info: {}", e))?;
+        println!("🔍 [VIDEO READY CHECK] {}: {}", video_path, if is_ready { "READY" } else { "NOT READY" });
 
-            // Free the C string
-            libc::free(json_ptr as *mut libc::c_void);
-
-            // Capture thumbnail for each display
-            for display in &mut displays {
-                let display_id_cstr = std::ffi::CString::new(display.display_id.clone())
-                    .map_err(|e| format!("Invalid display ID: {}", e))?;
-
-                let thumbnail_ptr =
-                    screen_recorder_capture_display_thumbnail(display_id_cstr.as_ptr());
-                if !thumbnail_ptr.is_null() {
-                    if let Ok(thumbnail_str) = std::ffi::CStr::from_ptr(thumbnail_ptr).to_str() {
-                        display.thumbnail_data_uri = Some(thumbnail_str.to_string());
-                    }
-                    libc::free(thumbnail_ptr as *mut libc::c_void);
-                }
-            }
-
-            Ok(displays)
-        }
+        Ok(is_ready)
     }
 
     #[cfg(not(target_os = "macos"))]
     {
-        Err("Display enumeration only supported on macOS".to_string())
+        Err("Video readiness check only supported on macOS".to_string())
     }
+}
+
+// DEPRECATED: start_video_recording_advanced command removed
+// Use start_multi_source_recording instead for advanced recording scenarios
+
+/// Tauri command to enumerate all displays
+#[tauri::command]
+pub async fn enumerate_displays() -> Result<Vec<crate::types::DisplayInfo>, String> {
+    use crate::recording::enumerate_displays as enumerate;
+
+    enumerate().await
+        .map_err(|e| format!("Failed to enumerate displays: {}", e))
 }
 
 /// Tauri command to enumerate all windows
 #[tauri::command]
 pub async fn enumerate_windows() -> Result<Vec<crate::types::WindowInfo>, String> {
-    #[cfg(target_os = "macos")]
-    {
-        println!("[VIDEO] enumerate_windows called");
-        unsafe {
-            let json_ptr = screen_recorder_enumerate_windows();
-            if json_ptr.is_null() {
-                return Err("Failed to enumerate windows".to_string());
-            }
+    use crate::recording::enumerate_windows as enumerate;
 
-            let json_str = std::ffi::CStr::from_ptr(json_ptr)
-                .to_str()
-                .map_err(|e| format!("Invalid UTF-8: {}", e))?;
-
-            let mut windows: Vec<crate::types::WindowInfo> = serde_json::from_str(json_str)
-                .map_err(|e| format!("Failed to parse window info: {}", e))?;
-
-            // Free the C string
-            libc::free(json_ptr as *mut libc::c_void);
-
-            // Capture thumbnail for each window
-            for window in &mut windows {
-                let window_id_cstr = std::ffi::CString::new(window.window_id.clone())
-                    .map_err(|e| format!("Invalid window ID: {}", e))?;
-
-                let thumbnail_ptr =
-                    screen_recorder_capture_window_thumbnail(window_id_cstr.as_ptr());
-                if !thumbnail_ptr.is_null() {
-                    if let Ok(thumbnail_str) = std::ffi::CStr::from_ptr(thumbnail_ptr).to_str() {
-                        window.thumbnail_data_uri = Some(thumbnail_str.to_string());
-                    }
-                    libc::free(thumbnail_ptr as *mut libc::c_void);
-                }
-            }
-
-            Ok(windows)
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        Err("Window enumeration only supported on macOS".to_string())
-    }
+    enumerate().await
+        .map_err(|e| format!("Failed to enumerate windows: {}", e))
 }
 
 /// Tauri command to enumerate all webcams
 #[tauri::command]
 pub async fn enumerate_webcams() -> Result<Vec<crate::types::WebcamInfo>, String> {
-    #[cfg(target_os = "macos")]
-    {
-        use std::ffi::CStr;
+    use crate::recording::enumerate_webcams as enumerate;
 
-        println!("[VIDEO] Enumerating webcams via Swift FFI...");
-
-        // Call Swift FFI function
-        let json_ptr = unsafe { screen_recorder_enumerate_webcams() };
-
-        if json_ptr.is_null() {
-            return Err("Failed to enumerate webcams".to_string());
-        }
-
-        // Convert C string to Rust String
-        let json_string = unsafe { CStr::from_ptr(json_ptr).to_string_lossy().into_owned() };
-
-        // Free the C string allocated by Swift
-        unsafe {
-            libc::free(json_ptr as *mut libc::c_void);
-        }
-
-        // Parse JSON
-        let webcams: Vec<crate::types::WebcamInfo> = serde_json::from_str(&json_string)
-            .map_err(|e| format!("Failed to parse webcam JSON: {}", e))?;
-
-        println!("[VIDEO] Found {} webcam(s)", webcams.len());
-        Ok(webcams)
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        Err("Webcam enumeration only supported on macOS".to_string())
-    }
+    enumerate().await
+        .map_err(|e| format!("Failed to enumerate webcams: {}", e))
 }
 
-/// Tauri command to switch display during recording
+/// Tauri command to switch display during recording - migrated to use switch_recording_source
 #[tauri::command]
 pub async fn switch_display(
     display_id: String,
-    recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
+    session_id: String,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
+    // Delegate to switch_recording_source with proper parameters
+    // Assumes we're switching FROM a display to another display
+    switch_recording_source(
+        session_id,
+        "0".to_string(),  // Old display ID (placeholder - actual ID doesn't matter for display->display switch)
+        "display".to_string(),
+        display_id,
+        app_handle,
+    ).await
+}
+
+/// Tauri command to update PiP configuration during recording
+/// NOTE: This command is deprecated - PiP config should be set at session creation time
+#[tauri::command]
+pub async fn update_webcam_mode(
+    _pip_config: crate::types::PiPConfig,
+    _session_id: String,
+    _app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    // PiP configuration is not dynamically updateable in the new architecture
+    // It must be set when creating the recording session
+    Err("Dynamic PiP configuration updates not supported. Please restart recording with new PiP settings.".to_string())
+}
+
+/// Tauri command to pause an active multi-source recording session
+#[tauri::command]
+pub async fn pause_recording(
+    session_id: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::SessionManager;
+
+    let manager = app_handle.state::<SessionManager>();
+
+    // Clone the Arc to avoid holding the mutex across await
+    let session = {
+        let sessions = manager.sessions.lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+        sessions.get(&session_id)
+            .cloned()
+            .ok_or_else(|| format!("Session not found: {}", session_id))?
+    };
+
+    session.pause().await
+        .map_err(|e| format!("Failed to pause recording: {}", e))
+}
+
+/// Tauri command to resume a paused multi-source recording session
+#[tauri::command]
+pub async fn resume_recording(
+    session_id: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::SessionManager;
+
+    let manager = app_handle.state::<SessionManager>();
+
+    // Clone the Arc to avoid holding the mutex across await
+    let session = {
+        let sessions = manager.sessions.lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+        sessions.get(&session_id)
+            .cloned()
+            .ok_or_else(|| format!("Session not found: {}", session_id))?
+    };
+
+    session.resume().await
+        .map_err(|e| format!("Failed to resume recording: {}", e))
+}
+
+/// Tauri command to check if a recording session is paused
+#[tauri::command]
+pub fn is_recording_paused(
+    session_id: String,
+    app_handle: tauri::AppHandle,
+) -> Result<bool, String> {
+    use crate::SessionManager;
+
+    let manager = app_handle.state::<SessionManager>();
+
+    // Access session from manager (borrow, don't clone)
+    let sessions = manager.sessions.lock()
+        .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+
+    let session = sessions.get(&session_id)
+        .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+    Ok(session.is_paused())
+}
+
+/// Tauri command to switch a source in an active recording
+#[tauri::command]
+pub async fn switch_recording_source(
+    session_id: String,
+    old_source_id: String,
+    source_type: String,  // "display", "window", "webcam"
+    new_source_id: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::SessionManager;
+    use crate::recording::SourceType;
+
+    let manager = app_handle.state::<SessionManager>();
+
+    // Clone the Arc to avoid holding the mutex across await
+    let session = {
+        let sessions = manager.sessions.lock()
+            .map_err(|e| format!("Failed to lock sessions: {}", e))?;
+        sessions.get(&session_id)
+            .cloned()
+            .ok_or_else(|| format!("Session not found: {}", session_id))?
+    };
+
+    let src_type = match source_type.as_str() {
+        "display" => SourceType::Display,
+        "window" => SourceType::Window,
+        "webcam" => SourceType::Webcam,
+        _ => return Err(format!("Invalid source type: {}", source_type)),
+    };
+
+    session.switch_source(&old_source_id, src_type, &new_source_id).await
+        .map_err(|e| format!("Failed to switch source: {}", e))
+}
+
+// ============================================================================
+// Multi-Source Recording API (Task 2.9 - Phase 2)
+// ============================================================================
+
+use crate::recording::{CompositorType, RecordingStats, SwiftRecordingSession};
+
+/// Tauri command to start multi-source recording
+///
+/// This is the new API that supports recording from multiple displays/windows simultaneously
+/// with configurable composition.
+///
+/// # Arguments
+/// * `session_id` - Unique identifier for this recording session
+/// * `output_path` - Path where the video file will be saved
+/// * `width` - Output video width in pixels
+/// * `height` - Output video height in pixels
+/// * `fps` - Output video frame rate
+/// * `display_ids` - Optional array of display IDs to record (CGDirectDisplayID values)
+/// * `window_ids` - Optional array of window IDs to record (CGWindowID values)
+/// * `compositor_type` - Layout type: "passthrough", "grid", or "sidebyside"
+#[tauri::command]
+pub async fn start_multi_source_recording(
+    app_handle: tauri::AppHandle,
+    session_id: String,
+    output_path: String,
+    width: i32,
+    height: i32,
+    fps: i32,
+    display_ids: Option<Vec<u32>>,
+    window_ids: Option<Vec<u32>>,
+    webcam_device_ids: Option<Vec<String>>,
+    compositor_type: Option<String>,
+) -> Result<(), String> {
+    // Reject new operations during shutdown (Fix #13)
+    if crate::shutdown::is_shutting_down() {
+        return Err("Application is shutting down - cannot start new recording".to_string());
+    }
+
     #[cfg(target_os = "macos")]
     {
-        let recorder = recorder
-            .lock()
-            .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
+        println!("🎬 [Multi-Source] Starting recording for session: {}", session_id);
+        println!("   Output: {}", output_path);
+        println!("   Resolution: {}x{} @ {}fps", width, height, fps);
+        println!("   Displays: {:?}", display_ids);
+        println!("   Windows: {:?}", window_ids);
+        println!("   Webcams: {:?}", webcam_device_ids);
+        println!("   Compositor: {:?}", compositor_type);
 
-        if !recorder.is_recording() {
-            return Err("Not currently recording".to_string());
+        // Validate parameters
+        if width <= 0 || height <= 0 || fps <= 0 {
+            return Err("Invalid parameters: width, height, and fps must be > 0".to_string());
         }
 
-        // Get current config to ensure we're in display mode
-        let config = recorder
-            .recording_config
-            .lock()
-            .map_err(|e| format!("Failed to lock config: {}", e))?;
+        // Validate that at least one source is specified
+        let has_displays = display_ids.as_ref().map_or(false, |ids| !ids.is_empty());
+        let has_windows = window_ids.as_ref().map_or(false, |ids| !ids.is_empty());
+        let has_webcams = webcam_device_ids.as_ref().map_or(false, |ids| !ids.is_empty());
 
-        if let Some(cfg) = config.as_ref() {
-            if cfg.source_type != crate::types::VideoSourceType::Display {
-                return Err("Can only switch display when in display recording mode".to_string());
+        if !has_displays && !has_windows && !has_webcams {
+            return Err("At least one display, window, or webcam must be specified".to_string());
+        }
+
+        // Create recording session
+        let mut session = SwiftRecordingSession::new(&output_path, width, height, fps)
+            .map_err(|e| format!("Failed to create recording session: {:?}", e))?;
+
+        // Add display sources
+        if let Some(displays) = display_ids {
+            for display_id in displays {
+                session.add_display(display_id)
+                    .map_err(|e| format!("Failed to add display {}: {:?}", display_id, e))?;
             }
-        } else {
-            return Err("No recording config found".to_string());
         }
 
-        println!("[VIDEO] Switching to display: {}", display_id);
+        // Add window sources
+        if let Some(windows) = window_ids {
+            for window_id in windows {
+                session.add_window(window_id)
+                    .map_err(|e| format!("Failed to add window {}: {:?}", window_id, e))?;
+            }
+        }
 
-        // For now, return an error indicating this needs Swift implementation
-        // The Swift side needs to implement hot-swapping of display capture
-        Err("Display hot-swap not yet implemented in Swift bridge. Please stop and restart recording with new display.".to_string())
+        // Add webcam sources
+        if let Some(webcam_devices) = webcam_device_ids {
+            for device_id in webcam_devices {
+                session.add_webcam(&device_id)
+                    .map_err(|e| format!("Failed to add webcam {}: {:?}", device_id, e))?;
+            }
+        }
+
+        // Set compositor type
+        let compositor = match compositor_type.as_deref() {
+            Some("grid") => CompositorType::Grid,
+            Some("sidebyside") => CompositorType::SideBySide,
+            Some("passthrough") | None => CompositorType::Passthrough,
+            Some(other) => return Err(format!("Invalid compositor type: {}", other)),
+        };
+
+        session.set_compositor(compositor)
+            .map_err(|e| format!("Failed to set compositor: {:?}", e))?;
+
+        // Start recording
+        session.start().await
+            .map_err(|e| format!("Failed to start recording: {:?}", e))?;
+
+        // Store session in global manager (Wave 1.2 - Phase 2)
+        let manager = app_handle.state::<crate::SessionManager>();
+        manager.insert(session_id.clone(), session);
+        println!("✅ [Multi-Source] Recording started successfully - session stored in manager: {}", session_id);
+        Ok(())
     }
 
     #[cfg(not(target_os = "macos"))]
     {
-        Err("Display switching only supported on macOS".to_string())
+        Err("Multi-source recording only supported on macOS".to_string())
     }
 }
 
-/// Tauri command to update PiP configuration during recording
+/// Tauri command to add a source to an active recording
+///
+/// Note: Currently not supported - sources must be added before calling start()
 #[tauri::command]
-pub async fn update_webcam_mode(
-    pip_config: crate::types::PiPConfig,
-    recorder: State<'_, Arc<Mutex<VideoRecorder>>>,
+pub async fn add_recording_source(
+    _session_id: String,
+    _source_type: String,
+    _source_id: String,
 ) -> Result<(), String> {
-    let mut recorder = recorder
-        .lock()
-        .map_err(|e| format!("Failed to lock video recorder: {}", e))?;
+    #[cfg(target_os = "macos")]
+    {
+        // This would require:
+        // 1. A global session manager to track active sessions
+        // 2. Support in Swift for hot-adding sources (currently not implemented)
+        Err("Adding sources to active recording not yet implemented. Please specify all sources when calling start_multi_source_recording.".to_string())
+    }
 
-    recorder.update_pip_config(pip_config)
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Multi-source recording only supported on macOS".to_string())
+    }
+}
+
+/// Tauri command to remove a source from an active recording
+///
+/// Note: Currently not supported - sources cannot be removed after start()
+#[tauri::command]
+pub async fn remove_recording_source(
+    _session_id: String,
+    _source_id: String,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        // This would require:
+        // 1. A global session manager to track active sessions
+        // 2. Support in Swift for hot-removing sources (currently not implemented)
+        Err("Removing sources from active recording not yet implemented.".to_string())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Multi-source recording only supported on macOS".to_string())
+    }
+}
+
+/// Tauri command to get recording statistics
+#[tauri::command]
+pub async fn get_recording_stats(
+    app_handle: tauri::AppHandle,
+    session_id: String,
+) -> Result<RecordingStats, String> {
+    #[cfg(target_os = "macos")]
+    {
+        println!("📊 [RUST] Getting stats for session: {}", session_id);
+
+        let manager = app_handle.state::<crate::SessionManager>();
+
+        match manager.get_stats(&session_id) {
+            Some(stats) => {
+                println!("✅ [RUST] Stats found: processed={}, dropped={}, recording={}",
+                    stats.frames_processed, stats.frames_dropped, stats.is_recording);
+                Ok(stats)
+            }
+            None => {
+                println!("❌ [RUST] Session not found: {}", session_id);
+                Err(format!("Session not found: {}", session_id))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Recording stats only available on macOS".to_string())
+    }
+}
+
+/// Tauri command to stop multi-source recording
+///
+/// Stops recording and removes the session from the global manager
+#[tauri::command]
+pub async fn stop_multi_source_recording(
+    app_handle: tauri::AppHandle,
+    session_id: String,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        println!("🛑 [Multi-Source] Stopping recording for session: {}", session_id);
+
+        let manager = app_handle.state::<crate::SessionManager>();
+
+        // Remove session from manager
+        match manager.remove(&session_id) {
+            Some(session_arc) => {
+                // Try to get exclusive ownership to call stop()
+                match Arc::try_unwrap(session_arc) {
+                    Ok(mut session) => {
+                        // We have exclusive ownership - explicitly stop
+                        session.stop().await
+                            .map_err(|e| format!("Failed to stop recording: {:?}", e))?;
+                        drop(session);  // Ensure cleanup
+                    }
+                    Err(_arc) => {
+                        // Still have other references - Drop will handle cleanup
+                        println!("⚠️ [Multi-Source] Session has multiple references, Drop will clean up");
+                    }
+                }
+                println!("✅ [Multi-Source] Recording stopped and session removed from manager: {}", session_id);
+                Ok(())
+            }
+            None => {
+                println!("❌ [Multi-Source] Session not found: {}", session_id);
+                Err(format!("Session not found: {}", session_id))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Multi-source recording only supported on macOS".to_string())
+    }
+}
+
+// ============================================================================
+// Video/Audio Merging API (Background Enrichment Plan - Task 7)
+// ============================================================================
+
+use crate::recording::{VideoAudioMerger, ExportQuality, MergeResult};
+
+/// Tauri command to merge video and audio files into single optimized MP4
+///
+/// This is the primary entry point for the background enrichment system to
+/// merge video and audio files after a session ends.
+///
+/// # Arguments
+/// * `video_path` - Path to video file (MP4, MOV)
+/// * `audio_path` - Path to audio file (MP3, WAV, M4A, AAC)
+/// * `output_path` - Path for output MP4 file
+/// * `quality` - Export quality: "low" | "medium" | "high"
+///
+/// # Returns
+/// `MergeResult` containing output path, duration, file size, and compression ratio
+///
+/// # Example
+/// ```typescript
+/// const result = await invoke('merge_video_and_audio', {
+///   videoPath: '/path/to/video.mp4',
+///   audioPath: '/path/to/audio.mp3',
+///   outputPath: '/path/to/output.mp4',
+///   quality: 'medium'
+/// });
+/// ```
+#[tauri::command]
+pub async fn merge_video_and_audio(
+    video_path: String,
+    audio_path: String,
+    output_path: String,
+    quality: String, // "low" | "medium" | "high"
+) -> Result<MergeResult, String> {
+    println!("🎬 [MERGE COMMAND] Starting merge");
+    println!("  Video: {}", video_path);
+    println!("  Audio: {}", audio_path);
+    println!("  Output: {}", output_path);
+    println!("  Quality: {}", quality);
+
+    // Parse quality string to enum
+    let quality_enum = match quality.to_lowercase().as_str() {
+        "low" => ExportQuality::Low,
+        "medium" => ExportQuality::Medium,
+        "high" => ExportQuality::High,
+        _ => {
+            println!("⚠️  [MERGE COMMAND] Invalid quality '{}', defaulting to Medium", quality);
+            ExportQuality::Medium
+        }
+    };
+
+    println!("  Parsed quality: {} ({})", quality_enum.display_name(), quality_enum as i32);
+
+    // Execute merge (async)
+    let result = VideoAudioMerger::merge(
+        &video_path,
+        &audio_path,
+        &output_path,
+        quality_enum,
+        None, // No progress callback for now (Task 6 will add this)
+    )
+    .await
+    .map_err(|e| {
+        println!("❌ [MERGE COMMAND] Failed: {}", e);
+        format!("Merge failed: {}", e)
+    })?;
+
+    println!("✅ [MERGE COMMAND] Success!");
+    println!("  Output: {}", result.output_path);
+    println!("  Size: {} bytes ({:.1} MB)", result.file_size, result.file_size as f64 / 1_048_576.0);
+    println!("  Duration: {:.1}s", result.duration);
+    println!("  Compression: {:.1}% of input", result.compression_ratio * 100.0);
+
+    Ok(result)
+}
+
+/// Tauri command to query merge progress
+///
+/// Returns the current progress of an ongoing merge operation as a percentage (0.0-1.0).
+///
+/// # Implementation Notes
+/// This is currently a stub that returns 0.0. The Swift VideoAudioMerger does support
+/// progress reporting via callbacks, but we need to:
+/// 1. Store active merge operations in a global map (similar to SessionManager)
+/// 2. Update progress via the callback provided to VideoAudioMerger::merge()
+/// 3. Query that map from this command
+///
+/// For now, this returns 0.0 to satisfy the API contract. Task 6 will implement
+/// full progress tracking.
+///
+/// # Returns
+/// Progress as a float from 0.0 (starting) to 1.0 (complete)
+///
+/// # Example
+/// ```typescript
+/// const progress = await invoke('get_merge_progress');
+/// console.log(`Merge is ${progress * 100}% complete`);
+/// ```
+#[tauri::command]
+pub async fn get_merge_progress() -> Result<f64, String> {
+    // TODO: Query Swift merger progress
+    // For now: return 0.0 (not implemented)
+    // This will be implemented in Task 6 when we add BackgroundMediaProcessor
+    Ok(0.0)
 }

@@ -42,11 +42,14 @@ export function DisplayMultiSelect({
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Auto-select first display if none selected and displays available
+  // Note: Intentionally omit `onChange` from deps to prevent infinite loops
+  // The onChange callback can change on every parent render, triggering unwanted re-selections
   useEffect(() => {
     if (selectedDisplayIds.length === 0 && displays.length > 0) {
       onChange([displays[0].displayId]);
     }
-  }, [displays, selectedDisplayIds, onChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displays, selectedDisplayIds]);
 
   // Live preview refresh every 5 seconds
   useEffect(() => {

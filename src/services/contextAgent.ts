@@ -42,8 +42,8 @@ export class ContextAgentService {
     }
   }
 
-  setApiKey(apiKey: string) {
-    invoke('set_claude_api_key', { apiKey });
+  async setApiKey(apiKey: string): Promise<void> {
+    await invoke('set_claude_api_key', { apiKey });
     this.hasApiKey = true;
   }
 

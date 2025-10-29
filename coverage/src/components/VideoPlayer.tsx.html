@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/415</span>
+                <span class='fraction'>0/412</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/415</span>
+                <span class='fraction'>0/412</span>
             </div>
         
             
@@ -606,7 +606,9 @@
 <a name='L541'></a><a href='#L541'>541</a>
 <a name='L542'></a><a href='#L542'>542</a>
 <a name='L543'></a><a href='#L543'>543</a>
-<a name='L544'></a><a href='#L544'>544</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L544'></a><a href='#L544'>544</a>
+<a name='L545'></a><a href='#L545'>545</a>
+<a name='L546'></a><a href='#L546'>546</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -717,22 +719,12 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -743,6 +735,20 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -756,12 +762,10 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1161,7 +1165,7 @@
 <span class="cstat-no" title="statement not covered" >import { convertFileSrc } from '@tauri-apps/api/core';</span>
 import type { Session, Attachment, SessionScreenshot, VideoChapter } from '../types';
 <span class="cstat-no" title="statement not covered" >import { videoStorageService } from '../services/videoStorageService';</span>
-<span class="cstat-no" title="statement not covered" >import { attachmentStorage } from '../services/attachmentStorage';</span>
+<span class="cstat-no" title="statement not covered" >import { getCAStorage } from '../services/storage/ContentAddressableStorage';</span>
 <span class="cstat-no" title="statement not covered" >import { getGlassClasses, RADIUS, SCALE, TRANSITIONS, SHADOWS } from '../design-system/theme';</span>
 &nbsp;
 interface VideoPlayerProps {
@@ -1257,64 +1261,66 @@ interface ChapterChipProps {
 <span class="cstat-no" title="statement not covered" >      }</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      try {</span>
-<span class="cstat-no" title="statement not covered" >        console.log('🎥 [VIDEO PLAYER] Loading video attachment:', session.video.fullVideoAttachmentId);</span>
+<span class="cstat-no" title="statement not covered" >        console.log('🎥 [VIDEO PLAYER] Loading video from file system');</span>
 &nbsp;
-        // Get attachment from storage
-<span class="cstat-no" title="statement not covered" >        const attachment = await attachmentStorage.getAttachment(session.video.fullVideoAttachmentId);</span>
+        // Videos are stored on file system (NOT in CAS - too large)
+        // Primary: Use direct file path (current architecture)
+        // Fallback: Try CAS for legacy videos (backwards compatibility)
 &nbsp;
-<span class="cstat-no" title="statement not covered" >        if (!attachment) {</span>
-<span class="cstat-no" title="statement not covered" >          const errorMsg = `Video attachment not found in storage. The video file may have been deleted or the attachment ID is invalid.\n\nAttachment ID: ${session.video.fullVideoAttachmentId}`;</span>
-<span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER]', errorMsg);</span>
-<span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER] Session ID:', session.id);</span>
-<span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER] This may indicate data corruption or missing attachment metadata');</span>
-<span class="cstat-no" title="statement not covered" >          setError(errorMsg);</span>
-<span class="cstat-no" title="statement not covered" >          setIsLoading(false);</span>
-<span class="cstat-no" title="statement not covered" >          return;</span>
+<span class="cstat-no" title="statement not covered" >        let videoPath: string | null = null;</span>
+&nbsp;
+        // Try direct file path first (modern videos)
+<span class="cstat-no" title="statement not covered" >        if (session.video.path) {</span>
+<span class="cstat-no" title="statement not covered" >          console.log('🎥 [VIDEO PLAYER] Using direct file path:', session.video.path);</span>
+<span class="cstat-no" title="statement not covered" >          videoPath = session.video.path;</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+        // Fallback: Try CAS for legacy videos
+<span class="cstat-no" title="statement not covered" >        else if (session.video.hash) {</span>
+<span class="cstat-no" title="statement not covered" >          console.log('🎥 [VIDEO PLAYER] Fallback: Trying CAS lookup for legacy video');</span>
+<span class="cstat-no" title="statement not covered" >          try {</span>
+<span class="cstat-no" title="statement not covered" >            const caStorage = await getCAStorage();</span>
+<span class="cstat-no" title="statement not covered" >            const attachment = await caStorage.loadAttachment(session.video.hash);</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >            if (attachment?.path) {</span>
+<span class="cstat-no" title="statement not covered" >              console.log('🎥 [VIDEO PLAYER] Legacy video found in CAS');</span>
+<span class="cstat-no" title="statement not covered" >              videoPath = attachment.path;</span>
+<span class="cstat-no" title="statement not covered" >            }</span>
+<span class="cstat-no" title="statement not covered" >          } catch (casError) {</span>
+<span class="cstat-no" title="statement not covered" >            console.warn('⚠️ [VIDEO PLAYER] CAS lookup failed:', casError);</span>
+<span class="cstat-no" title="statement not covered" >          }</span>
 <span class="cstat-no" title="statement not covered" >        }</span>
 &nbsp;
-        // Convert file path to Tauri asset URL
-<span class="cstat-no" title="statement not covered" >        console.log('🎥 [VIDEO PLAYER] Attachment found:', {</span>
-<span class="cstat-no" title="statement not covered" >          id: attachment.id,</span>
-<span class="cstat-no" title="statement not covered" >          path: attachment.path,</span>
-<span class="cstat-no" title="statement not covered" >          size: attachment.size,</span>
-<span class="cstat-no" title="statement not covered" >          mimeType: attachment.mimeType,</span>
-<span class="cstat-no" title="statement not covered" >          type: attachment.type,</span>
-<span class="cstat-no" title="statement not covered" >        });</span>
-&nbsp;
-<span class="cstat-no" title="statement not covered" >        if (!attachment.path) {</span>
-<span class="cstat-no" title="statement not covered" >          const errorMsg = 'Video attachment has no file path. This indicates corrupted attachment data.';</span>
+<span class="cstat-no" title="statement not covered" >        if (!videoPath) {</span>
+<span class="cstat-no" title="statement not covered" >          const errorMsg = `Video file path not found.\n\nThis session's video may have been recorded with an older version or the file may have been deleted.\n\nSession ID: ${session.id}`;</span>
 <span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER]', errorMsg);</span>
-<span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER] Attachment:', attachment);</span>
 <span class="cstat-no" title="statement not covered" >          setError(errorMsg);</span>
 <span class="cstat-no" title="statement not covered" >          setIsLoading(false);</span>
 <span class="cstat-no" title="statement not covered" >          return;</span>
 <span class="cstat-no" title="statement not covered" >        }</span>
 &nbsp;
         // CRITICAL: Detect path corruption bug (attachment ID stored as path)
-<span class="cstat-no" title="statement not covered" >        if (attachment.path.startsWith('video-') &amp;&amp; !attachment.path.includes('/')) {</span>
-<span class="cstat-no" title="statement not covered" >          const errorMsg = `VIDEO PATH CORRUPTION DETECTED!\n\nThe attachment path contains an attachment ID instead of a file path.\n\nCorrupted path: ${attachment.path}\n\nThis is a known bug. Please restart the app to trigger automatic repair.`;</span>
+<span class="cstat-no" title="statement not covered" >        if (videoPath.startsWith('video-') &amp;&amp; !videoPath.includes('/')) {</span>
+<span class="cstat-no" title="statement not covered" >          const errorMsg = `VIDEO PATH CORRUPTION DETECTED!\n\nThe video path contains an attachment ID instead of a file path.\n\nCorrupted path: ${videoPath}\n\nThis is a known bug. Please restart the app to trigger automatic repair.`;</span>
 <span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER] CRITICAL BUG:', errorMsg);</span>
-<span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER] Attachment ID:', attachment.id);</span>
-<span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER] Corrupted path:', attachment.path);</span>
-<span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER] This should have been fixed on app startup by fixVideoAttachments');</span>
+<span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER] Corrupted path:', videoPath);</span>
 <span class="cstat-no" title="statement not covered" >          setError(errorMsg);</span>
 <span class="cstat-no" title="statement not covered" >          setIsLoading(false);</span>
 <span class="cstat-no" title="statement not covered" >          return;</span>
 <span class="cstat-no" title="statement not covered" >        }</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >        const url = await videoStorageService.getVideoUrl(attachment);</span>
+        // Convert file path to Tauri asset URL
+<span class="cstat-no" title="statement not covered" >        const url = convertFileSrc(videoPath);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        if (!url) {</span>
-<span class="cstat-no" title="statement not covered" >          const errorMsg = `Failed to convert file path to playable URL.\n\nFile path: ${attachment.path}\n\nThis may indicate:\n- File permissions issue\n- Invalid file path format\n- Tauri asset protocol configuration problem`;</span>
+<span class="cstat-no" title="statement not covered" >          const errorMsg = `Failed to convert file path to playable URL.\n\nFile path: ${videoPath}\n\nThis may indicate:\n- File permissions issue\n- Invalid file path format\n- Tauri asset protocol configuration problem`;</span>
 <span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER]', errorMsg);</span>
-<span class="cstat-no" title="statement not covered" >          console.error('❌ [VIDEO PLAYER] Check videoStorageService.getVideoUrl() logs for details');</span>
 <span class="cstat-no" title="statement not covered" >          setError(errorMsg);</span>
 <span class="cstat-no" title="statement not covered" >          setIsLoading(false);</span>
 <span class="cstat-no" title="statement not covered" >          return;</span>
 <span class="cstat-no" title="statement not covered" >        }</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        console.log('✅ [VIDEO PLAYER] Video URL loaded successfully');</span>
-<span class="cstat-no" title="statement not covered" >        console.log('📍 [VIDEO PLAYER] File path:', attachment.path);</span>
+<span class="cstat-no" title="statement not covered" >        console.log('📍 [VIDEO PLAYER] File path:', videoPath);</span>
 <span class="cstat-no" title="statement not covered" >        console.log('🔗 [VIDEO PLAYER] Asset URL:', url);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        setVideoUrl(url);</span>
@@ -1699,7 +1705,7 @@ interface ChapterChipProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-24T03:56:25.511Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

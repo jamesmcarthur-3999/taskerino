@@ -309,6 +309,6 @@ export class LazyLoader<T extends { id: string }> {
       ids.map(id => this.loadEntity(id))
     );
 
-    return entities.filter((e): e is T => e !== null);
+    return entities.filter((e): e is NonNullable<typeof e> => e !== null);
   }
 }

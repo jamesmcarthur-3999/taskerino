@@ -1,17 +1,65 @@
 /**
- * Hook for managing the delightful session starting experience
+ * @file useSessionStarting.ts - Session start flow with delightful countdown UX
  *
- * Coordinates:
- * - 3-second countdown animation (3 → 2 → 1 → Recording!)
- * - Button loading states
- * - Session creation
- * - Auto-navigation to active session view
+ * @overview
+ * Manages the complete session starting experience with a 3-second countdown animation
+ * that matches the delay before the first screenshot. Coordinates button states, session
+ * creation, and auto-navigation to the active session view.
+ *
+ * @responsibilities
+ * - **Countdown Animation**: 3 → 2 → 1 → Recording! (matches screenshot timing)
+ * - **Loading States**: Manages button disabled states during countdown
+ * - **Session Creation**: Dispatches session start action at countdown completion
+ * - **Auto-Navigation**: Triggers scroll to newly created session card
+ * - **Error Handling**: Shows notifications and resets state on failures
+ *
+ * @ux_flow
+ * 1. User clicks "Start Session" button
+ * 2. Hook shows countdown: 3 → 2 → 1 (1 second each)
+ * 3. Hook shows "Recording!" state briefly (500ms)
+ * 4. Session is created via context
+ * 5. Success notification shown
+ * 6. Auto-scroll flag set for SessionsZone to consume
+ * 7. SessionsZone scrolls to new session card
+ *
+ * @timing
+ * The 3-second countdown matches the first screenshot delay, so by the time the user
+ * sees "Recording!", the first screenshot is being captured.
+ *
+ * @usage
+ * ```typescript
+ * function StartSessionButton() {
+ *   const { isStarting, countdown, handleStartSession } = useSessionStarting();
+ *
+ *   return (
+ *     <button
+ *       onClick={() => handleStartSession({ name: "Work", ... })}
+ *       disabled={isStarting}
+ *     >
+ *       {countdown !== null ? countdown || 'Recording!' : 'Start Session'}
+ *     </button>
+ *   );
+ * }
+ * ```
+ *
+ * @side_effects
+ * - Updates SessionsContext via startSession()
+ * - Shows UI notifications via useUI()
+ * - Triggers auto-scroll in SessionsZone
+ *
+ * @migration_status
+ * ✅ MIGRATED to Phase 1 contexts (October 2025)
+ * - Now uses useActiveSession().startSession() from ActiveSessionContext
+ * - No longer uses deprecated SessionsContext
+ *
+ * @see {@link ../context/ActiveSessionContext.tsx} - Phase 1 active session management
+ * @see {@link ../components/SessionsZone.tsx} - Consumes auto-scroll flag
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useSessions } from '../context/SessionsContext';
+import { useActiveSession } from '../context/ActiveSessionContext';
 import { useUI } from '../context/UIContext';
-import type { Session } from '../types';
+import type { Session, SessionScreenshot } from '../types';
 
 interface SessionStartingState {
   isStarting: boolean;
@@ -21,7 +69,7 @@ interface SessionStartingState {
 }
 
 export function useSessionStarting() {
-  const { startSession, activeSessionId } = useSessions();
+  const { startSession, activeSessionId } = useActiveSession();
   const { addNotification } = useUI();
   const [state, setState] = useState<SessionStartingState>({
     isStarting: false,
@@ -81,7 +129,8 @@ export function useSessionStarting() {
       sessionData: Omit<
         Session,
         'id' | 'startTime' | 'screenshots' | 'extractedTaskIds' | 'extractedNoteIds'
-      >
+      >,
+      onScreenshotCaptured?: (screenshot: SessionScreenshot) => void | Promise<void>
     ): Promise<string> => {
       console.log('🎬 [Session Starting] Starting countdown for new session:', sessionData.name);
 
@@ -116,7 +165,7 @@ export function useSessionStarting() {
         // This tells the useEffect to watch for the new activeSessionId
         waitingForSessionRef.current = true;
 
-        startSession(sessionData);
+        await startSession(sessionData, onScreenshotCaptured);
 
         console.log('✅ [Session Starting] Session creation dispatched, waiting for activeSessionId update...');
 

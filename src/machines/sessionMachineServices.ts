@@ -1,12 +1,21 @@
-import { fromPromise } from 'xstate';
-import type { SessionRecordingConfig } from '../types';
+import { fromPromise, fromCallback } from 'xstate';
+import { invoke } from '@tauri-apps/api/core';
+import type { SessionRecordingConfig, Session, SessionScreenshot, SessionAudioSegment } from '../types';
 import type { RecordingServiceState } from './sessionMachine';
+import { screenshotCaptureService } from '../services/screenshotCaptureService';
+import { audioRecordingService } from '../services/audioRecordingService';
+import { videoRecordingService } from '../services/videoRecordingService';
+import { getPersistenceQueue } from '../services/storage/PersistenceQueue';
+import { validateAudioConfig, validateVideoConfig, validateAudioDeviceAvailability, fallbackToDefaultAudioDevices } from '../utils/sessionValidation';
 
 /**
  * Service: Validate session configuration
  *
  * Validates that the session configuration is valid and generates a session ID.
- * Ensures required fields are present and values are within acceptable ranges.
+ * Uses the centralized validation functions from sessionValidation.ts to ensure
+ * consistency across the entire application.
+ *
+ * @see /src/utils/sessionValidation.ts - Single source of truth for validation
  */
 export const validateConfig = fromPromise(
   async ({ input }: { input: { config: SessionRecordingConfig } }) => {
@@ -30,74 +39,67 @@ export const validateConfig = fromPromise(
       throw new Error('At least one recording type must be enabled');
     }
 
-    // Validate audio configuration if enabled
+    // Validate audio configuration if enabled (using centralized validation)
     if (config.audioConfig?.enabled) {
-      const validSourceTypes = ['microphone', 'system-audio', 'both'];
-      if (!validSourceTypes.includes(config.audioConfig.sourceType)) {
-        throw new Error(`Invalid audio source type: ${config.audioConfig.sourceType}`);
+      // Convert SessionRecordingConfig.audioConfig to AudioDeviceConfig format
+      const audioDeviceConfig = {
+        sourceType: config.audioConfig.sourceType,
+        micDeviceId: config.audioConfig.micDeviceId,
+        systemAudioDeviceId: config.audioConfig.systemAudioDeviceId,
+        balance: config.audioConfig.balance,
+        micVolume: config.audioConfig.micVolume,
+        systemVolume: config.audioConfig.systemVolume,
+      };
+
+      const audioValidation = validateAudioConfig(audioDeviceConfig);
+      if (!audioValidation.valid) {
+        throw new Error(`Audio config validation failed: ${audioValidation.errors.join(', ')}`);
       }
 
-      // Validate balance (0-100)
-      if (
-        config.audioConfig.balance !== undefined &&
-        (config.audioConfig.balance < 0 || config.audioConfig.balance > 100)
-      ) {
-        throw new Error('Audio balance must be between 0 and 100');
-      }
+      // Runtime device availability check
+      try {
+        const availableDevices = await audioRecordingService.getAudioDevices();
+        const availabilityValidation = validateAudioDeviceAvailability(audioDeviceConfig, availableDevices);
 
-      // Validate volumes (0.0-1.0)
-      if (
-        config.audioConfig.micVolume !== undefined &&
-        (config.audioConfig.micVolume < 0 || config.audioConfig.micVolume > 1)
-      ) {
-        throw new Error('Microphone volume must be between 0.0 and 1.0');
-      }
+        if (!availabilityValidation.valid) {
+          console.warn('[validateConfig] Audio device validation failed, attempting fallback to default devices');
 
-      if (
-        config.audioConfig.systemVolume !== undefined &&
-        (config.audioConfig.systemVolume < 0 || config.audioConfig.systemVolume > 1)
-      ) {
-        throw new Error('System audio volume must be between 0.0 and 1.0');
+          // Attempt to fallback to default devices
+          const fixedConfig = fallbackToDefaultAudioDevices(audioDeviceConfig, availableDevices);
+
+          if (fixedConfig) {
+            // Update config with fixed devices
+            console.log('[validateConfig] Successfully fell back to default devices');
+            config.audioConfig.micDeviceId = fixedConfig.micDeviceId;
+            config.audioConfig.systemAudioDeviceId = fixedConfig.systemAudioDeviceId;
+            config.audioConfig.sourceType = fixedConfig.sourceType;
+          } else {
+            // No fallback available - throw error
+            throw new Error(`Audio devices not available: ${availabilityValidation.errors.join(', ')}`);
+          }
+        }
+      } catch (error) {
+        console.error('[validateConfig] Failed to enumerate audio devices:', error);
+        throw new Error(`Failed to validate audio devices: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
-    // Validate video configuration if enabled
+    // Validate video configuration if enabled (using centralized validation)
     if (config.videoConfig?.enabled) {
-      const validSourceTypes = ['display', 'window', 'webcam', 'display-with-webcam'];
-      if (!validSourceTypes.includes(config.videoConfig.sourceType)) {
-        throw new Error(`Invalid video source type: ${config.videoConfig.sourceType}`);
-      }
+      // Convert SessionRecordingConfig.videoConfig to VideoRecordingConfig format
+      const videoRecordingConfig = {
+        sourceType: config.videoConfig.sourceType,
+        displayIds: config.videoConfig.displayIds,
+        windowIds: config.videoConfig.windowIds,
+        webcamDeviceId: config.videoConfig.webcamDeviceId,
+        quality: config.videoConfig.quality || 'medium' as const,
+        fps: config.videoConfig.fps || 30,
+        resolution: config.videoConfig.resolution,
+      };
 
-      // Validate that required IDs are present based on source type
-      if (
-        config.videoConfig.sourceType === 'display' &&
-        (!config.videoConfig.displayIds || config.videoConfig.displayIds.length === 0)
-      ) {
-        throw new Error('Display recording requires at least one display ID');
-      }
-
-      if (
-        config.videoConfig.sourceType === 'window' &&
-        (!config.videoConfig.windowIds || config.videoConfig.windowIds.length === 0)
-      ) {
-        throw new Error('Window recording requires at least one window ID');
-      }
-
-      // Validate FPS if specified
-      if (config.videoConfig.fps !== undefined) {
-        if (config.videoConfig.fps < 10 || config.videoConfig.fps > 60) {
-          throw new Error('Video FPS must be between 10 and 60');
-        }
-      }
-
-      // Validate resolution if specified
-      if (config.videoConfig.resolution) {
-        if (
-          config.videoConfig.resolution.width < 640 ||
-          config.videoConfig.resolution.height < 480
-        ) {
-          throw new Error('Video resolution must be at least 640x480');
-        }
+      const videoValidation = validateVideoConfig(videoRecordingConfig);
+      if (!videoValidation.valid) {
+        throw new Error(`Video config validation failed: ${videoValidation.errors.join(', ')}`);
       }
     }
 
@@ -131,9 +133,12 @@ export const checkPermissions = fromPromise(
       }
     }
 
-    // Check microphone permission if needed
-    if (config.audioConfig?.enabled) {
-      const hasMicPermission = await checkMicrophonePermission();
+    // Request microphone permission if needed (only for audio recording)
+    // This will proactively trigger the macOS permission dialog if not yet determined
+    const needsMicPermission = config.audioConfig?.enabled;
+
+    if (needsMicPermission) {
+      const hasMicPermission = await requestMicrophonePermission();
       if (!hasMicPermission) {
         missingPermissions.push('microphone');
       }
@@ -157,9 +162,17 @@ export const startRecordingServices = fromPromise(
   async ({
     input,
   }: {
-    input: { sessionId: string; config: SessionRecordingConfig }
+    input: {
+      sessionId: string;
+      config: SessionRecordingConfig;
+      session: Session;
+      callbacks: {
+        onScreenshotCapture?: (screenshot: SessionScreenshot) => Promise<void>;
+        onAudioSegment?: (segment: SessionAudioSegment) => void;
+      };
+    }
   }) => {
-    const { sessionId, config } = input;
+    const { sessionId, config, session, callbacks } = input;
 
     // Initialize recording state
     const recordingState: {
@@ -177,7 +190,7 @@ export const startRecordingServices = fromPromise(
     // Start screenshot service if enabled
     if (config.screenshotsEnabled) {
       try {
-        await startScreenshotService(sessionId);
+        await startScreenshotService(sessionId, session, callbacks.onScreenshotCapture);
         recordingState.screenshots = 'active';
       } catch (error) {
         recordingState.screenshots = 'error';
@@ -188,7 +201,7 @@ export const startRecordingServices = fromPromise(
     // Start audio service if enabled
     if (config.audioConfig?.enabled) {
       try {
-        await startAudioService(sessionId, config.audioConfig);
+        await startAudioService(sessionId, session, config.audioConfig, callbacks.onAudioSegment);
         recordingState.audio = 'active';
       } catch (error) {
         recordingState.audio = 'error';
@@ -199,7 +212,7 @@ export const startRecordingServices = fromPromise(
     // Start video service if enabled
     if (config.videoConfig?.enabled) {
       try {
-        await startVideoService(sessionId, config.videoConfig);
+        await startVideoService(sessionId, session, config.videoConfig);
         recordingState.video = 'active';
       } catch (error) {
         recordingState.video = 'error';
@@ -224,10 +237,36 @@ export const startRecordingServices = fromPromise(
 export const pauseRecordingServices = fromPromise(
   async ({ input }: { input: { sessionId: string } }) => {
     const { sessionId } = input;
-
-    // TODO: Implement actual pause logic
-    // For now, this is a stub that will be implemented in future tasks
     console.log(`[sessionMachine] Pausing recording services for session: ${sessionId}`);
+
+    const errors: string[] = [];
+
+    // Pause screenshot capture
+    try {
+      await screenshotCaptureService.pauseCapture();
+      console.log(`[sessionMachine] Screenshot service paused`);
+    } catch (error) {
+      console.error(`[sessionMachine] Failed to pause screenshot service:`, error);
+      errors.push(`Screenshot: ${error}`);
+    }
+
+    // Pause audio recording
+    try {
+      await audioRecordingService.pauseRecording();
+      console.log(`[sessionMachine] Audio service paused`);
+    } catch (error) {
+      console.error(`[sessionMachine] Failed to pause audio service:`, error);
+      errors.push(`Audio: ${error}`);
+    }
+
+    // Pause video recording
+    // Note: Video recording does not currently support pause/resume
+    // Video will continue recording during paused state
+    console.log(`[sessionMachine] Video service pause not supported (continues recording)`);
+
+    if (errors.length > 0) {
+      throw new Error(`Failed to pause services: ${errors.join(', ')}`);
+    }
 
     return {};
   }
@@ -239,12 +278,53 @@ export const pauseRecordingServices = fromPromise(
  * Resumes all paused recording services.
  */
 export const resumeRecordingServices = fromPromise(
-  async ({ input }: { input: { sessionId: string } }) => {
-    const { sessionId } = input;
+  async ({
+    input,
+  }: {
+    input: {
+      sessionId: string;
+      config: SessionRecordingConfig;
+      session: Session;
+      callbacks: {
+        onScreenshotCapture?: (screenshot: SessionScreenshot) => Promise<void>;
+        onAudioSegment?: (segment: SessionAudioSegment) => void;
+      };
+    }
+  }) => {
+    const { sessionId, config, session, callbacks } = input;
 
-    // TODO: Implement actual resume logic
-    // For now, this is a stub that will be implemented in future tasks
     console.log(`[sessionMachine] Resuming recording services for session: ${sessionId}`);
+
+    const services = [];
+
+    // Resume screenshots if enabled
+    if (config.screenshotsEnabled) {
+      console.log(`[sessionMachine] Resuming screenshot capture`);
+      services.push(
+        startScreenshotService(sessionId, session, callbacks.onScreenshotCapture)
+      );
+    }
+
+    // Resume audio if enabled
+    if (config.audioConfig?.enabled) {
+      console.log(`[sessionMachine] Resuming audio recording`);
+      services.push(
+        startAudioService(sessionId, session, config.audioConfig, callbacks.onAudioSegment)
+      );
+    }
+
+    // Resume video if enabled
+    if (config.videoConfig?.enabled) {
+      console.log(`[sessionMachine] Resuming video recording`);
+      services.push(
+        startVideoService(sessionId, session, config.videoConfig)
+      );
+    }
+
+    // Start all services in parallel
+    await Promise.all(services);
+
+    console.log(`[sessionMachine] ✅ All recording services resumed`);
 
     return {};
   }
@@ -258,10 +338,51 @@ export const resumeRecordingServices = fromPromise(
 export const stopRecordingServices = fromPromise(
   async ({ input }: { input: { sessionId: string } }) => {
     const { sessionId } = input;
-
-    // TODO: Implement actual stop logic
-    // For now, this is a stub that will be implemented in future tasks
     console.log(`[sessionMachine] Stopping recording services for session: ${sessionId}`);
+
+    const errors: string[] = [];
+
+    // Stop screenshot capture
+    try {
+      await screenshotCaptureService.stopCapture();
+      console.log(`[sessionMachine] Screenshot service stopped`);
+    } catch (error) {
+      console.error(`[sessionMachine] Failed to stop screenshot service:`, error);
+      errors.push(`Screenshot service: ${error}`);
+    }
+
+    // Stop audio recording (has 5s grace period for pending chunks)
+    try {
+      await audioRecordingService.stopRecording();
+      console.log(`[sessionMachine] Audio service stopped`);
+    } catch (error) {
+      console.error(`[sessionMachine] Failed to stop audio service:`, error);
+      errors.push(`Audio service: ${error}`);
+    }
+
+    // Stop video recording
+    try {
+      await videoRecordingService.stopRecording();
+      console.log(`[sessionMachine] Video service stopped`);
+    } catch (error) {
+      console.error(`[sessionMachine] Failed to stop video service:`, error);
+      errors.push(`Video service: ${error}`);
+    }
+
+    // Flush any pending storage writes
+    try {
+      const queue = getPersistenceQueue();
+      await queue.flush();
+      console.log(`[sessionMachine] Storage flushed`);
+    } catch (error) {
+      console.error(`[sessionMachine] Failed to flush storage:`, error);
+      errors.push(`Storage flush: ${error}`);
+    }
+
+    // Don't throw - allow session to complete even if cleanup has issues
+    if (errors.length > 0) {
+      console.warn(`[sessionMachine] Some services failed to stop cleanly:`, errors.join('; '));
+    }
 
     return {};
   }
@@ -271,22 +392,67 @@ export const stopRecordingServices = fromPromise(
  * Service: Monitor recording health
  *
  * Continuously monitors the health of all recording services while active.
- * This service runs in the background and can detect issues early.
+ * Checks permissions and service status every 10 seconds.
+ * Sends UPDATE_RECORDING_STATE events if issues are detected.
  */
-export const monitorRecordingHealth = fromPromise(
-  async ({ input }: { input: { sessionId: string } }) => {
-    const { sessionId } = input;
+export const monitorRecordingHealth = fromCallback(({ sendBack, input }: { sendBack: (event: { type: 'UPDATE_RECORDING_STATE'; updates: Partial<Record<string, string>> }) => void; input: { sessionId: string } }) => {
+  const { sessionId } = input;
+  console.log(`[sessionMachine] Starting health monitor for session: ${sessionId}`);
 
-    // TODO: Implement actual health monitoring
-    // For now, this is a stub that will be implemented in future tasks
-    console.log(`[sessionMachine] Monitoring recording health for session: ${sessionId}`);
+  // Monitor permissions and service health every 10 seconds
+  const monitorInterval = setInterval(async () => {
+    // Check screen recording permission
+    try {
+      const hasScreenPermission = await checkScreenRecordingPermission();
+      if (!hasScreenPermission) {
+        console.warn(`[sessionMachine] Screen recording permission lost`);
+        sendBack({
+          type: 'UPDATE_RECORDING_STATE',
+          updates: {
+            screenshots: 'error',
+            video: 'error'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('[sessionMachine] Permission check failed:', error);
+    }
 
-    // This would normally run continuously, checking service health
-    // and potentially sending UPDATE_RECORDING_STATE events if issues are detected
+    // Check microphone permission
+    try {
+      const hasMicPermission = await checkMicrophonePermission();
+      if (!hasMicPermission) {
+        console.warn(`[sessionMachine] Microphone permission lost`);
+        sendBack({
+          type: 'UPDATE_RECORDING_STATE',
+          updates: { audio: 'error' }
+        });
+      }
+    } catch (error) {
+      console.error('[sessionMachine] Permission check failed:', error);
+    }
 
-    return {};
-  }
-);
+    // Check service health
+    try {
+      const isScreenshotActive = screenshotCaptureService.isCapturing();
+      if (!isScreenshotActive) {
+        console.warn(`[sessionMachine] Screenshot service stopped`);
+        sendBack({
+          type: 'UPDATE_RECORDING_STATE',
+          updates: { screenshots: 'error' }
+        });
+      }
+    } catch (error) {
+      console.error('[sessionMachine] Service check failed:', error);
+    }
+  }, 10000);
+
+  // Cleanup function
+  return () => {
+    console.log(`[sessionMachine] Stopping health monitor`);
+    clearInterval(monitorInterval);
+  };
+});
 
 // ============================================================================
 // Helper Functions (Stubs for future implementation)
@@ -296,29 +462,56 @@ export const monitorRecordingHealth = fromPromise(
  * Check if the app has screen recording permission
  */
 async function checkScreenRecordingPermission(): Promise<boolean> {
-  // TODO: Implement actual permission check
-  // This would use Tauri commands to check macOS screen recording permission
-  console.log('[sessionMachine] Checking screen recording permission (stub)');
-  return true;
+  try {
+    return await invoke<boolean>('check_screen_recording_permission');
+  } catch (error) {
+    console.error('[sessionMachine] Failed to check screen recording permission:', error);
+    return false;
+  }
 }
 
 /**
  * Check if the app has microphone permission
  */
 async function checkMicrophonePermission(): Promise<boolean> {
-  // TODO: Implement actual permission check
-  // This would use Tauri commands to check microphone permission
-  console.log('[sessionMachine] Checking microphone permission (stub)');
-  return true;
+  try {
+    return await invoke<boolean>('check_microphone_permission');
+  } catch (error) {
+    console.error('[sessionMachine] Failed to check microphone permission:', error);
+    return false;
+  }
+}
+
+/**
+ * Request microphone permission proactively
+ * This will trigger the macOS permission dialog if permission hasn't been determined yet
+ */
+async function requestMicrophonePermission(): Promise<boolean> {
+  try {
+    return await invoke<boolean>('request_microphone_permission');
+  } catch (error) {
+    console.error('[sessionMachine] Failed to request microphone permission:', error);
+    return false;
+  }
 }
 
 /**
  * Start screenshot capture service
  */
-async function startScreenshotService(sessionId: string): Promise<void> {
-  // TODO: Integrate with actual screenshot service
-  // This would call screenshotCaptureService.startCapture()
-  console.log(`[sessionMachine] Starting screenshot service for session: ${sessionId} (stub)`);
+async function startScreenshotService(
+  sessionId: string,
+  session: Session,
+  onCapture?: (screenshot: SessionScreenshot) => Promise<void>
+): Promise<void> {
+  try {
+    // Wrap optional callback to match expected signature
+    const callback = onCapture || (async () => {});
+    await screenshotCaptureService.startCapture(session, callback);
+    console.log(`[sessionMachine] Screenshot service started for session: ${sessionId}`);
+  } catch (error) {
+    console.error(`[sessionMachine] Failed to start screenshot service:`, error);
+    throw error;
+  }
 }
 
 /**
@@ -326,13 +519,19 @@ async function startScreenshotService(sessionId: string): Promise<void> {
  */
 async function startAudioService(
   sessionId: string,
-  config: NonNullable<SessionRecordingConfig['audioConfig']>
+  session: Session,
+  config: NonNullable<SessionRecordingConfig['audioConfig']>,
+  onSegment?: (segment: SessionAudioSegment) => void
 ): Promise<void> {
-  // TODO: Integrate with actual audio service
-  // This would call audioRecordingService.startRecording()
-  console.log(
-    `[sessionMachine] Starting audio service for session: ${sessionId}, source: ${config.sourceType} (stub)`
-  );
+  try {
+    // Provide a default no-op callback if not specified
+    const callback = onSegment || (() => {});
+    await audioRecordingService.startRecording(session, callback);
+    console.log(`[sessionMachine] Audio service started for session: ${sessionId}`);
+  } catch (error) {
+    console.error(`[sessionMachine] Failed to start audio service:`, error);
+    throw error;
+  }
 }
 
 /**
@@ -340,13 +539,18 @@ async function startAudioService(
  */
 async function startVideoService(
   sessionId: string,
+  session: Session,
   config: NonNullable<SessionRecordingConfig['videoConfig']>
 ): Promise<void> {
-  // TODO: Integrate with actual video service
-  // This would call video recording Tauri commands
-  console.log(
-    `[sessionMachine] Starting video service for session: ${sessionId}, source: ${config.sourceType} (stub)`
-  );
+  try {
+    // The videoRecordingService.startRecording expects a Session object
+    // with videoRecording flag and videoConfig already set
+    await videoRecordingService.startRecording(session);
+    console.log(`[sessionMachine] Video service started for session: ${sessionId}`);
+  } catch (error) {
+    console.error(`[sessionMachine] Failed to start video service:`, error);
+    throw error;
+  }
 }
 
 /**

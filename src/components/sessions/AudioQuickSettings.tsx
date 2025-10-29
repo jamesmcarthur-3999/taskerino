@@ -2,7 +2,6 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Settings, Mic2, Volume2, ChevronDown } from 'lucide-react';
 import type { AudioDevice } from '../../types';
-import { AudioLevelMeter } from './AudioLevelMeter';
 import { getRadiusClass, TRANSITIONS, SHADOWS, COLOR_SCHEMES, getGlassmorphism } from '../../design-system/theme';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -27,6 +26,12 @@ interface AudioQuickSettingsProps {
   // Balance slider (when both enabled)
   micBalance: number; // 0-100, where 0 = all system audio, 100 = all mic
   onBalanceChange: (balance: number) => void;
+
+  // VAD threshold
+  vadEnabled: boolean;
+  onVadEnabledChange: (enabled: boolean) => void;
+  vadThreshold: number; // -50 to -20 dB
+  onVadThresholdChange: (threshold: number) => void;
 
   // Advanced modal
   onOpenAdvanced: () => void;
@@ -57,6 +62,10 @@ export function AudioQuickSettings({
   systemAudioDevices,
   micBalance,
   onBalanceChange,
+  vadEnabled,
+  onVadEnabledChange,
+  vadThreshold,
+  onVadThresholdChange,
   onOpenAdvanced,
 }: AudioQuickSettingsProps) {
   const { colorScheme } = useTheme();
@@ -153,14 +162,6 @@ export function AudioQuickSettings({
                           No microphone devices found
                         </div>
                       )}
-
-                      {/* Level Meter */}
-                      <AudioLevelMeter
-                        label="Microphone"
-                        deviceId={selectedMicDevice}
-                        muted={!micEnabled}
-                        compact={true}
-                      />
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -214,14 +215,6 @@ export function AudioQuickSettings({
                           No system audio devices found
                         </div>
                       )}
-
-                      {/* Level Meter */}
-                      <AudioLevelMeter
-                        label="System Audio"
-                        deviceId={selectedSystemAudioDevice}
-                        muted={!systemAudioEnabled}
-                        compact={true}
-                      />
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -244,6 +237,57 @@ export function AudioQuickSettings({
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* SECTION: VAD (Voice Activity Detection) */}
+            {(micEnabled || systemAudioEnabled) && (
+              <div className="space-y-3 pt-2 border-t-2 border-white/30">
+                {/* VAD Toggle */}
+                <div className="flex items-center justify-between pt-3">
+                  <div className="flex-1">
+                    <span className="text-sm font-semibold text-gray-900 block">Voice Activity Detection</span>
+                    <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                      Skip transcribing silent segments to save costs
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={vadEnabled}
+                    onChange={onVadEnabledChange}
+                    colorScheme={colorScheme}
+                  />
+                </div>
+
+                {/* VAD Threshold (only when enabled) */}
+                {vadEnabled && (
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-2">
+                      Voice Sensitivity
+                    </label>
+                    <div className="space-y-2">
+                      <input
+                        type="range"
+                        min={-50}
+                        max={-20}
+                        step={5}
+                        value={vadThreshold}
+                        onChange={(e) => onVadThresholdChange(Number(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                      />
+                      <div className="flex items-center justify-between text-xs">
+                        <span className={`font-medium ${vadThreshold <= -45 ? 'text-cyan-600' : 'text-gray-500'}`}>
+                          Sensitive ({vadThreshold} dB)
+                        </span>
+                        <span className={`font-medium ${vadThreshold >= -35 ? 'text-orange-600' : 'text-gray-500'}`}>
+                          Aggressive
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 leading-tight">
+                        Lower values catch quieter speech. Higher values filter more background noise.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Footer: Advanced Settings */}

@@ -26,6 +26,8 @@ interface RichTextEditorProps {
   editable?: boolean;
   minimal?: boolean; // Minimal toolbar for simple use cases
   maxHeight?: string; // Max height for the editor container (e.g., '400px', '50vh')
+  onFocus?: () => void; // Called when editor receives focus
+  onBlur?: () => void; // Called when editor loses focus
 }
 
 export function RichTextEditor({
@@ -37,6 +39,8 @@ export function RichTextEditor({
   editable = true,
   minimal = false,
   maxHeight,
+  onFocus,
+  onBlur,
 }: RichTextEditorProps) {
   const { colorScheme } = useTheme();
 
@@ -95,6 +99,12 @@ export function RichTextEditor({
     autofocus: autoFocus,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
+    },
+    onFocus: () => {
+      onFocus?.();
+    },
+    onBlur: () => {
+      onBlur?.();
     },
     editorProps: {
       attributes: {

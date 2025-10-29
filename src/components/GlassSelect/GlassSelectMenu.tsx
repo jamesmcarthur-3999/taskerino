@@ -6,7 +6,7 @@ import { GlassSelectOption } from './GlassSelectOption';
 import type { GlassSelectOption as Option } from './types';
 
 interface GlassSelectMenuProps<T> {
-  triggerRef: React.RefObject<HTMLElement>;
+  triggerRef: React.RefObject<HTMLElement | null>;
   options: Option<T>[];
   selectedValue: T;
   highlightedIndex: number;

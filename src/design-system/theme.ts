@@ -216,24 +216,25 @@ export const TRANSITIONS = {
 
 /**
  * Easing curves for natural motion
+ * Note: Using array format for Framer Motion compatibility
  */
 export const EASING = {
   // Standard easing functions
-  easeInOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
-  easeOut: 'cubic-bezier(0.0, 0, 0.2, 1)',
-  easeIn: 'cubic-bezier(0.4, 0, 1, 1)',
+  easeInOut: [0.4, 0, 0.2, 1],
+  easeOut: [0.0, 0, 0.2, 1],
+  easeIn: [0.4, 0, 1, 1],
 
   // Smooth, natural motion (recommended for most UI)
-  smooth: 'cubic-bezier(0.4, 0.0, 0.2, 1)',
+  smooth: [0.4, 0.0, 0.2, 1],
 
   // Snappy, responsive feel
-  snappy: 'cubic-bezier(0.4, 0.0, 0.6, 1)',
+  snappy: [0.4, 0.0, 0.6, 1],
 
   // Elastic, bouncy effect
-  elastic: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+  elastic: [0.34, 1.56, 0.64, 1],
 
   // Anticipation (slightly overshoots)
-  anticipate: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+  anticipate: [0.68, -0.55, 0.265, 1.55],
 } as const;
 
 /**

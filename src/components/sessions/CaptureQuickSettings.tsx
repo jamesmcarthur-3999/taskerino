@@ -36,6 +36,10 @@ interface CaptureQuickSettingsProps {
   onWebcamChange: (webcamId: string) => void;
   webcams: WebcamInfo[];
 
+  // Compositor settings (Wave 1.3)
+  compositor: 'passthrough' | 'grid' | 'sidebyside';
+  onCompositorChange: (compositor: 'passthrough' | 'grid' | 'sidebyside') => void;
+
   // Webcam PiP
   webcamPipEnabled: boolean;
   onWebcamPipToggle: (enabled: boolean) => void;
@@ -79,6 +83,8 @@ export function CaptureQuickSettings({
   selectedWebcam,
   onWebcamChange,
   webcams,
+  compositor,
+  onCompositorChange,
   webcamPipEnabled,
   onWebcamPipToggle,
   onOpenAdvanced,
@@ -298,7 +304,7 @@ export function CaptureQuickSettings({
                     <label className="text-xs font-semibold text-gray-600 mb-2 block">Live Preview</label>
                     <WebcamPreview
                       webcamDeviceId={selectedWebcam || webcams[0]?.deviceId}
-                      className="aspect-video"
+                      className="w-full aspect-video"
                     />
                   </div>
                 </motion.div>
@@ -324,6 +330,44 @@ export function CaptureQuickSettings({
               )
             )}
           </Section>
+
+          {/* SECTION: Multi-Source Compositor (Wave 1.3) - Only show if 2+ sources selected */}
+          {(selectedDisplayIds.length + selectedWindowIds.length) >= 2 && (
+            <Section label="Multi-Source Composition">
+              <RadioGroup
+                options={[
+                  {
+                    value: 'passthrough',
+                    label: 'Passthrough (Auto)',
+                    description: 'Backend decides best layout'
+                  },
+                  {
+                    value: 'grid',
+                    label: 'Grid Layout',
+                    description: 'Arrange sources in a grid (2x2, 3x3, etc.)'
+                  },
+                  {
+                    value: 'sidebyside',
+                    label: 'Side-by-Side',
+                    description: 'Horizontal arrangement'
+                  },
+                ]}
+                value={compositor}
+                onChange={(v) => onCompositorChange(v as 'passthrough' | 'grid' | 'sidebyside')}
+              />
+
+              {/* Compositor explanation */}
+              <div className="mt-2 p-3 bg-cyan-50/60 backdrop-blur-lg rounded-xl border border-cyan-200/60">
+                <p className="text-xs text-cyan-900">
+                  <strong>Tip:</strong> {
+                    compositor === 'passthrough' ? 'Backend will automatically choose the best layout based on source count and aspect ratios.' :
+                    compositor === 'grid' ? 'Sources will be arranged in a grid pattern (e.g., 2x2 for 4 sources).' :
+                    'Sources will be arranged horizontally from left to right.'
+                  }
+                </p>
+              </div>
+            </Section>
+          )}
 
           {/* SECTION: Webcam PiP */}
           {source !== 'webcam' && (

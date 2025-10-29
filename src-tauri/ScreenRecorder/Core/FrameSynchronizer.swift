@@ -26,8 +26,8 @@ public actor FrameSynchronizer {
     /// Timestamp tolerance in milliseconds (default: 16ms = one frame at 60fps)
     private var toleranceMs: Int
 
-    /// Expected source IDs
-    private let sourceIds: Set<String>
+    /// Expected source IDs (mutable to support hot-swapping)
+    private var sourceIds: Set<String>
 
     /// Statistics
     private var totalFramesReceived: Int = 0
@@ -127,6 +127,32 @@ public actor FrameSynchronizer {
             buffers[sourceId] = []
         }
         print("🗑️  [FrameSynchronizer] Cleared all buffers")
+    }
+
+    /// Add a new source to the synchronizer (for hot-swapping)
+    /// - Parameter sourceId: ID of the new source to add
+    public func addSource(_ sourceId: String) {
+        guard !sourceIds.contains(sourceId) else {
+            print("⚠️  [FrameSynchronizer] Source already exists: \(sourceId)")
+            return
+        }
+
+        sourceIds.insert(sourceId)
+        buffers[sourceId] = []
+        print("✅ [FrameSynchronizer] Added new source: \(sourceId)")
+    }
+
+    /// Remove a source from the synchronizer (for hot-swapping)
+    /// - Parameter sourceId: ID of the source to remove
+    public func removeSource(_ sourceId: String) {
+        guard sourceIds.contains(sourceId) else {
+            print("⚠️  [FrameSynchronizer] Source not found: \(sourceId)")
+            return
+        }
+
+        sourceIds.remove(sourceId)
+        buffers.removeValue(forKey: sourceId)
+        print("✅ [FrameSynchronizer] Removed source: \(sourceId)")
     }
 
     /// Get buffer statistics

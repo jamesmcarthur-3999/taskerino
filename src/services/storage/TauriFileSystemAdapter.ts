@@ -14,6 +14,11 @@ import { compressData, decompressData, isCompressed } from './compressionUtils';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import pako from 'pako';
+import { checkDiskSpaceForData, estimateDataSize, openStorageLocation } from '../diskSpaceService';
+import { StorageFullError } from '@/types/storage';
+import { toast } from 'sonner';
+import { safeStringify } from '../../utils/serializationUtils';
+import { isTauriApp } from './index';
 
 /**
  * Write-Ahead Log Entry
@@ -94,6 +99,7 @@ class TauriFileSystemTransaction implements StorageTransaction {
     type: 'save' | 'delete';
     key: string;
     value?: any;
+    previousValue?: any; // Captured for rollback
   }> = [];
 
   private committed = false;
@@ -107,6 +113,7 @@ class TauriFileSystemTransaction implements StorageTransaction {
 
   /**
    * Queue a save operation
+   * Will capture current value during commit for rollback support
    */
   save(key: string, value: any): void {
     if (this.committed) {
@@ -117,6 +124,7 @@ class TauriFileSystemTransaction implements StorageTransaction {
 
   /**
    * Queue a delete operation
+   * Will capture current value during commit for rollback support
    */
   delete(key: string): void {
     if (this.committed) {
@@ -133,15 +141,48 @@ class TauriFileSystemTransaction implements StorageTransaction {
       throw new Error('Transaction already committed or rolled back');
     }
 
-    // Mark as committed early to prevent new operations
-    this.committed = true;
-
     if (this.operations.length === 0) {
+      this.committed = true;
       return; // Nothing to commit
     }
 
+    // Step 0: Estimate total size and check disk space BEFORE starting transaction
+    try {
+      const totalSize = this.operations.reduce((sum, op) => {
+        if (op.type === 'save' && op.value) {
+          return sum + estimateDataSize(op.value);
+        }
+        return sum;
+      }, 0);
+
+      // Check disk space for entire transaction
+      await checkDiskSpaceForData({ size: totalSize });
+
+    } catch (error) {
+      if (error instanceof StorageFullError) {
+        // Transaction failed due to storage full
+        toast.error('Storage Full - Transaction Failed', {
+          description: `${error.message} No data was saved to prevent corruption.`,
+          duration: Infinity, // Don't auto-dismiss
+          action: {
+            label: 'Free Space',
+            onClick: async () => {
+              await openStorageLocation();
+            },
+          },
+        });
+      }
+      // Don't proceed with transaction - throw immediately
+      throw error;
+    }
+
+    // Step 1: Capture previous values for rollback
+    await this.capturePreviousValues();
+
     // Create temp directory for staging
-    const tempDir = `${this.basePath}/.tx-${Date.now()}`;
+    // NOTE: Changed from `.tx-` to `tx-temp-` prefix to avoid Tauri FS plugin security restrictions
+    // Tauri blocks paths starting with "." for security (hidden file protection)
+    const tempDir = `${this.basePath}/tx-temp-${Date.now()}`;
 
     // Track files written to final locations for rollback
     const writtenFiles: string[] = [];
@@ -150,13 +191,23 @@ class TauriFileSystemTransaction implements StorageTransaction {
       // Create temp directory
       await mkdir(tempDir, { baseDir: BaseDirectory.AppData, recursive: true });
 
-      // Prepare and write all changes to temp directory first
+      // Step 2: Prepare and write all changes to temp directory first
       for (const op of this.operations) {
         if (op.type === 'save') {
           const tempPath = `${tempDir}/${op.key}.json`;
 
           // Prepare data (compress, serialize)
-          const jsonData = JSON.stringify(op.value, null, 2);
+          // Preserve optional fields for session/attachment data (critical for hash, attachmentId, path, etc.)
+          const isSessionOrAttachment = op.key.includes('sessions/') || op.key.includes('session-') ||
+                                       op.key.includes('attachments-ca/') || op.key.includes('attachment');
+          const jsonData = safeStringify(op.value, {
+            maxDepth: 50,
+            removeUndefined: !isSessionOrAttachment, // Keep undefined fields in sessions/attachments
+            removeFunctions: true,
+            removeSymbols: true,
+            detectCircular: true,
+            logWarnings: false,
+          });
           const checksum = await calculateChecksum(jsonData);
 
           let compressedData: string;
@@ -178,6 +229,12 @@ class TauriFileSystemTransaction implements StorageTransaction {
           };
 
           const finalData = JSON.stringify(dataWithMeta, null, 2);
+
+          // Create parent directory in temp location if needed (for nested paths like sessions/{id}/screenshots/chunk-000)
+          const tempParentDir = tempPath.substring(0, tempPath.lastIndexOf('/'));
+          if (tempParentDir && tempParentDir !== tempDir) {
+            await mkdir(tempParentDir, { baseDir: BaseDirectory.AppData, recursive: true });
+          }
 
           // Write to temp location
           await writeTextFile(tempPath, finalData, {
@@ -225,6 +282,12 @@ class TauriFileSystemTransaction implements StorageTransaction {
             }
           }
 
+          // Create parent directory if it doesn't exist
+          const parentDir = finalPath.substring(0, finalPath.lastIndexOf('/'));
+          if (parentDir) {
+            await mkdir(parentDir, { baseDir: BaseDirectory.AppData, recursive: true });
+          }
+
           // Write to final location
           await writeTextFile(finalPath, content, {
             baseDir: BaseDirectory.AppData
@@ -245,7 +308,7 @@ class TauriFileSystemTransaction implements StorageTransaction {
 
       // Clean up temp directory
       try {
-        await remove(tempDir, { baseDir: BaseDirectory.AppData });
+        await remove(tempDir, { baseDir: BaseDirectory.AppData, recursive: true });
       } catch (cleanupError) {
         // Log but don't fail - transaction succeeded
         console.warn('Failed to clean up temp directory:', cleanupError);
@@ -253,36 +316,93 @@ class TauriFileSystemTransaction implements StorageTransaction {
 
       console.log(`💾 Transaction committed: ${this.operations.length} operations`);
 
+      // Mark as committed after successful execution
+      this.committed = true;
+
     } catch (error) {
-      // Rollback: remove temp directory AND any files written to final locations
+      // Rollback on error
       try {
-        await remove(tempDir, { baseDir: BaseDirectory.AppData });
-      } catch (rollbackError) {
-        console.warn('Failed to clean up temp directory after error:', rollbackError);
+        await remove(tempDir, { baseDir: BaseDirectory.AppData, recursive: true });
+      } catch (cleanupError) {
+        console.warn('Failed to clean up temp directory after error:', cleanupError);
       }
 
-      // Remove any files that were written to final locations before the error
-      for (const filePath of writtenFiles) {
-        try {
-          if (await exists(filePath, { baseDir: BaseDirectory.AppData })) {
-            await remove(filePath, { baseDir: BaseDirectory.AppData });
-          }
-        } catch (removeError) {
-          console.warn(`Failed to remove ${filePath} during rollback:`, removeError);
-        }
-      }
-
+      await this.rollback();
       throw error;
     }
   }
 
   /**
-   * Cancel all queued operations
+   * Capture previous values for all operations (for rollback)
+   */
+  private async capturePreviousValues(): Promise<void> {
+    for (const op of this.operations) {
+      const filePath = `${this.basePath}/${op.key}.json`;
+
+      try {
+        const fileExists = await exists(filePath, { baseDir: BaseDirectory.AppData });
+        if (fileExists) {
+          const content = await readTextFile(filePath, {
+            baseDir: BaseDirectory.AppData
+          });
+
+          // Parse to get the actual data
+          const parsed = JSON.parse(content);
+          op.previousValue = parsed; // Store entire record with metadata
+        }
+      } catch (error) {
+        console.warn(`Failed to capture previous value for ${op.key}:`, error);
+        // Continue anyway - rollback will still work for other operations
+      }
+    }
+  }
+
+  /**
+   * Rollback the transaction
+   * Restores previous state by reverting all operations
    */
   async rollback(): Promise<void> {
-    this.operations = [];
+    if (this.committed) {
+      return; // Already committed, can't rollback
+    }
+
     this.committed = true;
-    console.log('🔄 Transaction rolled back');
+
+    // If no previous values captured, just clear the queue
+    const hasPreviousValues = this.operations.some(op => op.previousValue !== undefined);
+    if (!hasPreviousValues) {
+      this.operations = [];
+      console.log('🔄 Transaction rolled back (no state to restore)');
+      return;
+    }
+
+    // Restore previous state
+    for (const op of this.operations) {
+      const filePath = `${this.basePath}/${op.key}.json`;
+
+      try {
+        if (op.previousValue) {
+          // Restore previous value
+          const restoredData = JSON.stringify(op.previousValue, null, 2);
+          await writeTextFile(filePath, restoredData, {
+            baseDir: BaseDirectory.AppData
+          });
+        } else if (op.type === 'save') {
+          // Was a new save with no previous value - delete it
+          const fileExists = await exists(filePath, { baseDir: BaseDirectory.AppData });
+          if (fileExists) {
+            await remove(filePath, { baseDir: BaseDirectory.AppData });
+          }
+        }
+        // For deletes with no previous value, nothing to restore
+      } catch (error) {
+        console.error(`Failed to rollback operation for ${op.key}:`, error);
+        // Continue with other operations
+      }
+    }
+
+    console.log(`🔄 Transaction rolled back: ${this.operations.length} operations reverted`);
+    this.operations = [];
   }
 
   /**
@@ -323,6 +443,23 @@ export class TauriFileSystemAdapter extends StorageAdapter {
         console.log('📁 Created backups directory');
       }
 
+      // Clean up orphaned temp directories from previous sessions
+      try {
+        const entries = await readDir(this.DB_DIR, { baseDir: BaseDirectory.AppData });
+        for (const entry of entries) {
+          if (entry.name?.startsWith('tx-temp-') && entry.isDirectory) {
+            await remove(`${this.DB_DIR}/${entry.name}`, {
+              baseDir: BaseDirectory.AppData,
+              recursive: true
+            });
+            console.log(`🧹 Cleaned up orphaned temp directory: ${entry.name}`);
+          }
+        }
+      } catch (cleanupError) {
+        // Don't fail initialization if cleanup fails
+        console.warn('Failed to cleanup orphaned temp directories:', cleanupError);
+      }
+
       this.initialized = true;
       console.log('✅ TauriFileSystemAdapter initialized');
     } catch (error) {
@@ -332,14 +469,207 @@ export class TauriFileSystemAdapter extends StorageAdapter {
   }
 
   /**
+   * Save data immediately without queuing (for critical shutdown data)
+   * WARNING: Bypasses write queue - use only for critical metadata that must persist immediately
+   *
+   * @param collection - Collection name
+   * @param data - Data to save
+   * @param skipBackup - Skip backup creation (use for session-index to avoid circular backup)
+   */
+  async saveImmediate<T>(collection: string, data: T, skipBackup: boolean = false): Promise<void> {
+    const startTime = Date.now();
+    console.log(`[TauriFS] SAVE IMMEDIATE START: ${collection}`);
+    await this.ensureInitialized();
+
+    try {
+      // Check disk space BEFORE starting write operation
+      try {
+        await checkDiskSpaceForData(data);
+      } catch (error) {
+        if (error instanceof StorageFullError) {
+          // Show user-friendly error with action button
+          toast.error('Storage Full', {
+            description: error.message,
+            duration: Infinity, // Don't auto-dismiss storage errors
+            action: {
+              label: 'Free Space',
+              onClick: async () => {
+                await openStorageLocation();
+              },
+            },
+          });
+        }
+        throw error; // Re-throw so caller knows write failed
+      }
+
+      // Preserve optional fields for session/attachment data (critical for hash, attachmentId, path, etc.)
+      const isSessionOrAttachment = collection.includes('sessions/') || collection.includes('session-') ||
+                                   collection.includes('attachments-ca/') || collection.includes('attachment');
+      const jsonData = safeStringify(data, {
+        maxDepth: 50,
+        removeUndefined: !isSessionOrAttachment, // Keep undefined fields in sessions/attachments
+        removeFunctions: true,
+        removeSymbols: true,
+        detectCircular: true,
+        logWarnings: false,
+      });
+      const path = `${this.DB_DIR}/${collection}.json`;
+      const tempPath = `${this.DB_DIR}/${collection}.tmp.json`;
+
+      // Calculate checksum for integrity
+      const checksum = await calculateChecksum(jsonData);
+
+      // 1. WRITE TO WAL FIRST (Write-Ahead Logging)
+      const walEntry: WALEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        timestamp: Date.now(),
+        operation: 'write',
+        collection,
+        data,
+        checksum,
+      };
+      await this.appendToWAL(walEntry);
+
+      // Compress the JSON data
+      let compressedData: string;
+      let compressionFailed = false;
+      try {
+        compressedData = await compressData(jsonData);
+      } catch (compressionError) {
+        console.warn(`⚠️  Compression failed for ${collection}, storing uncompressed:`, compressionError);
+        compressedData = jsonData;
+        compressionFailed = true;
+      }
+
+      // Add metadata
+      const dataWithMeta = {
+        version: 1,
+        checksum,
+        timestamp: Date.now(),
+        compressed: !compressionFailed,
+        data: compressedData
+      };
+
+      const finalData = JSON.stringify(dataWithMeta, null, 2);
+
+      // Ensure parent directory exists before writing
+      const parentDir = tempPath.substring(0, tempPath.lastIndexOf('/'));
+      if (parentDir && parentDir !== this.DB_DIR) {
+        await mkdir(parentDir, { baseDir: BaseDirectory.AppData, recursive: true });
+      }
+
+      // Write to temporary file first (atomic operation)
+      await writeTextFile(tempPath, finalData, {
+        baseDir: BaseDirectory.AppData
+      });
+
+      // If existing file exists, create a timestamped backup (skip for session-index to avoid circular backups)
+      if (!skipBackup && await exists(path, { baseDir: BaseDirectory.AppData })) {
+        try {
+          // Read existing file
+          const existingContent = await readTextFile(path, {
+            baseDir: BaseDirectory.AppData
+          });
+
+          // Create timestamped backup filename
+          const timestamp = Date.now();
+          const timestampedBackupPath = `${this.DB_DIR}/${collection}.${timestamp}.backup.json`;
+
+          // Write to timestamped backup
+          await writeTextFile(timestampedBackupPath, existingContent, {
+            baseDir: BaseDirectory.AppData
+          });
+
+          // Verify backup by reading it back and comparing
+          const verifyContent = await readTextFile(timestampedBackupPath, {
+            baseDir: BaseDirectory.AppData
+          });
+
+          if (verifyContent !== existingContent) {
+            throw new Error(`Backup verification failed for ${collection}: content mismatch after write`);
+          }
+
+          console.log(`✓ [IMMEDIATE] Backup created: ${collection}.${timestamp}.backup.json`);
+
+          // Rotate old backups (keep last 10) - non-critical, failures are logged but don't halt
+          await this.rotateBackups(collection, 10);
+        } catch (error) {
+          // CRITICAL: Backup failure must halt the save operation
+          throw new Error(`CRITICAL: Backup failed for ${collection}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      // Read back temp file to verify
+      const writtenContent = await readTextFile(tempPath, {
+        baseDir: BaseDirectory.AppData
+      });
+
+      if (!validateJSON(writtenContent)) {
+        throw new Error('Written data is not valid JSON');
+      }
+
+      // Move temp file to actual file (atomic on most systems)
+      await writeTextFile(path, writtenContent, {
+        baseDir: BaseDirectory.AppData
+      });
+
+      // Clean up temp file
+      try {
+        await remove(tempPath, { baseDir: BaseDirectory.AppData });
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [TauriFS] SAVE IMMEDIATE COMPLETE: ${collection} (${duration}ms, ${formatBytes(writtenContent.length)})`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [TauriFS] SAVE IMMEDIATE FAILED: ${collection} (${duration}ms):`, error);
+      throw new Error(`Failed to save ${collection} immediately: ${error}`);
+    }
+  }
+
+  /**
    * Save data to a collection using atomic writes
    */
   async save<T>(collection: string, data: T): Promise<void> {
+    const startTime = Date.now();
+    console.log(`[TauriFS] SAVE START: ${collection}`);
     await this.ensureInitialized();
 
     return this.writeQueue.enqueue(async () => {
       try {
-        const jsonData = JSON.stringify(data, null, 2);
+        // Check disk space BEFORE starting write operation
+        try {
+          await checkDiskSpaceForData(data);
+        } catch (error) {
+          if (error instanceof StorageFullError) {
+            // Show user-friendly error with action button
+            toast.error('Storage Full', {
+              description: error.message,
+              duration: Infinity, // Don't auto-dismiss storage errors
+              action: {
+                label: 'Free Space',
+                onClick: async () => {
+                  await openStorageLocation();
+                },
+              },
+            });
+          }
+          throw error; // Re-throw so caller knows write failed
+        }
+
+        // Preserve optional fields for session/attachment data (critical for hash, attachmentId, path, etc.)
+        const isSessionOrAttachment = collection.includes('sessions/') || collection.includes('session-') ||
+                                     collection.includes('attachments-ca/') || collection.includes('attachment');
+        const jsonData = safeStringify(data, {
+          maxDepth: 50,
+          removeUndefined: !isSessionOrAttachment, // Keep undefined fields in sessions/attachments
+          removeFunctions: true,
+          removeSymbols: true,
+          detectCircular: true,
+          logWarnings: false,
+        });
         const path = `${this.DB_DIR}/${collection}.json`;
         const tempPath = `${this.DB_DIR}/${collection}.tmp.json`;
         const backupPath = `${this.DB_DIR}/${collection}.backup.json`;
@@ -379,6 +709,12 @@ export class TauriFileSystemAdapter extends StorageAdapter {
         };
 
         const finalData = JSON.stringify(dataWithMeta, null, 2);
+
+        // Ensure parent directory exists before writing
+        const parentDir = tempPath.substring(0, tempPath.lastIndexOf('/'));
+        if (parentDir && parentDir !== this.DB_DIR) {
+          await mkdir(parentDir, { baseDir: BaseDirectory.AppData, recursive: true });
+        }
 
         // Write to temporary file first (atomic operation)
         await writeTextFile(tempPath, finalData, {
@@ -444,7 +780,8 @@ export class TauriFileSystemAdapter extends StorageAdapter {
           // Ignore cleanup errors
         }
 
-        console.log(`💾 Saved ${collection} (${formatBytes(writtenContent.length)})`);
+        const duration = Date.now() - startTime;
+        console.log(`✅ [TauriFS] SAVE COMPLETE: ${collection} (${duration}ms, ${formatBytes(writtenContent.length)})`);
 
         // 4. Checkpoint periodically (every 100 writes)
         this.writesSinceCheckpoint++;
@@ -453,7 +790,8 @@ export class TauriFileSystemAdapter extends StorageAdapter {
           this.writesSinceCheckpoint = 0;
         }
       } catch (error) {
-        console.error(`❌ Failed to save ${collection}:`, error);
+        const duration = Date.now() - startTime;
+        console.error(`❌ [TauriFS] SAVE FAILED: ${collection} (${duration}ms):`, error);
         throw new Error(`Failed to save ${collection}: ${error}`);
       }
     });
@@ -813,11 +1151,26 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     const backupPath = `${this.BACKUP_DIR}/${backupId}.json`;
 
     try {
-      if (await exists(backupPath, { baseDir: BaseDirectory.AppData })) {
+      // Try to check if file exists, but don't throw if it doesn't
+      let fileExists = false;
+      try {
+        fileExists = await exists(backupPath, { baseDir: BaseDirectory.AppData });
+      } catch (existsError) {
+        // File doesn't exist or can't check - that's fine, nothing to delete
+        return;
+      }
+
+      if (fileExists) {
         await remove(backupPath, { baseDir: BaseDirectory.AppData });
         console.log(`🗑️  Deleted backup: ${backupId}`);
       }
     } catch (error) {
+      // Only log as warning if it's a "file not found" error
+      if (error && typeof error === 'object' && 'message' in error &&
+          (error.message as string).includes('No such file or directory')) {
+        console.warn(`⚠️  Backup already deleted: ${backupId}`);
+        return; // Don't throw for missing files
+      }
       console.error('Failed to delete backup:', error);
       throw error;
     }
@@ -936,15 +1289,23 @@ export class TauriFileSystemAdapter extends StorageAdapter {
    */
   async isAvailable(): Promise<boolean> {
     try {
-      // Check if we're in a Tauri environment
-      if (typeof window === 'undefined' || !('__TAURI__' in window)) {
+      // Check if we're in a Tauri environment (using shared detection function)
+      if (!isTauriApp()) {
+        console.log('[TauriFS] Not in Tauri environment (isTauriApp() returned false)');
         return false;
       }
 
       // Try to access the file system
+      console.log('[TauriFS] In Tauri environment, attempting init()...');
       await this.init();
+      console.log('[TauriFS] ✅ Init successful!');
       return true;
-    } catch {
+    } catch (error) {
+      console.error('[TauriFS] ❌ Init failed:', error);
+      console.error('[TauriFS] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return false;
     }
   }
@@ -1032,7 +1393,15 @@ export class TauriFileSystemAdapter extends StorageAdapter {
    * WAL entries are written before actual file operations for crash recovery
    */
   private async appendToWAL(entry: WALEntry): Promise<void> {
-    const line = JSON.stringify(entry) + '\n';
+    // Use safeStringify to handle cyclic structures in WAL data
+    const line = safeStringify(entry, {
+      maxDepth: 50,
+      removeUndefined: false,
+      removeFunctions: true,
+      removeSymbols: true,
+      detectCircular: true,
+      logWarnings: false,
+    }) + '\n';
 
     try {
       // Check if WAL file exists
@@ -1148,7 +1517,15 @@ export class TauriFileSystemAdapter extends StorageAdapter {
    */
   private async replayWrite(entry: WALEntry): Promise<void> {
     const path = `${this.DB_DIR}/${entry.collection}.json`;
-    await writeTextFile(path, JSON.stringify(entry.data), {
+    // Use safeStringify to handle cyclic structures during WAL replay
+    await writeTextFile(path, safeStringify(entry.data, {
+      maxDepth: 50,
+      removeUndefined: false,
+      removeFunctions: true,
+      removeSymbols: true,
+      detectCircular: true,
+      logWarnings: false,
+    }), {
       baseDir: BaseDirectory.AppData
     });
     console.log(`[WAL] Replayed write: ${entry.collection}`);
@@ -1215,7 +1592,15 @@ export class TauriFileSystemAdapter extends StorageAdapter {
       // Directory might already exist, ignore
     }
 
-    const jsonData = JSON.stringify(entity);
+    // Use safeStringify to handle cyclic structures in entities
+    const jsonData = safeStringify(entity, {
+      maxDepth: 50,
+      removeUndefined: false,
+      removeFunctions: true,
+      removeSymbols: true,
+      detectCircular: true,
+      logWarnings: false,
+    });
     const checksum = await this.calculateSHA256(jsonData);
 
     // Write to WAL
@@ -1439,7 +1824,14 @@ export class TauriFileSystemAdapter extends StorageAdapter {
           operation: op.type === 'write' ? 'write' : 'delete',
           collection: op.collection,
           data: op.data,
-          checksum: op.data ? await calculateChecksum(JSON.stringify(op.data)) : undefined,
+          checksum: op.data ? await calculateChecksum(safeStringify(op.data, {
+            maxDepth: 50,
+            removeUndefined: false,
+            removeFunctions: true,
+            removeSymbols: true,
+            detectCircular: true,
+            logWarnings: false,
+          })) : undefined,
           transactionId: txId,
         };
         await this.appendToWAL(walEntry);
@@ -1609,8 +2001,15 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     // Use .json.gz extension for compressed files
     const filePath = `${dir}/${collection.slice(0, -1)}-${entity.id}.json.gz`;
 
-    // Serialize to JSON
-    const jsonData = JSON.stringify(entity);
+    // Serialize to JSON using safeStringify to handle cyclic structures
+    const jsonData = safeStringify(entity, {
+      maxDepth: 50,
+      removeUndefined: false,
+      removeFunctions: true,
+      removeSymbols: true,
+      detectCircular: true,
+      logWarnings: false,
+    });
 
     // Calculate checksum BEFORE compression (for data integrity)
     const checksum = await this.calculateSHA256(jsonData);

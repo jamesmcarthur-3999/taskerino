@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, Suspense, lazy } from 'react';
-import { Calendar, Clock, Activity, Tag, Download, Trash2, CheckSquare, FileText, BookOpen, CheckCircle2, AlertCircle, Target, Lightbulb, Plus, Music, Camera, RefreshCw, ChevronDown, Columns, Focus } from 'lucide-react';
+import { Calendar, Clock, Activity, Tag, Download, Trash2, CheckSquare, FileText, BookOpen, CheckCircle2, AlertCircle, Target, Lightbulb, Plus, Music, Camera, RefreshCw, ChevronDown, Columns, Focus, Settings } from 'lucide-react';
 import type { Session, Task, Note } from '../types';
 import { SessionActivityTimeline } from './SessionActivityTimeline';
 import { calculateActivityStats } from '../utils/activityUtils';
@@ -7,16 +7,21 @@ import { groupActivitiesIntoBlocks } from '../utils/activityUtils';
 import { useUI } from '../context/UIContext';
 import { useTasks } from '../context/TasksContext';
 import { useNotes } from '../context/NotesContext';
-import { useSessions } from '../context/SessionsContext';
+import { useSessionList } from '../context/SessionListContext';
 import { useEnrichmentContext } from '../context/EnrichmentContext';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
 import { generateId, stripHtmlTags } from '../utils/helpers';
 import { exportSessionJSON, exportSessionMarkdown } from '../utils/sessionExport';
 import { audioExportService } from '../services/audioExportService';
 import { InlineTagManager } from './InlineTagManager';
+import { CompanyPillManager } from './CompanyPillManager';
+import { ContactPillManager } from './ContactPillManager';
 import { RainbowBorderProgressIndicator } from './RainbowBorderProgressIndicator';
-import { sessionEnrichmentService } from '../services/sessionEnrichmentService';
+import { EnrichmentProgressModal } from './EnrichmentProgressModal';
+import { getBackgroundEnrichmentManager } from '../services/enrichment/BackgroundEnrichmentManager';
 import { getStorage } from '../services/storage';
+import { getChunkedStorage } from '../services/storage/ChunkedSessionStorage';
+import { useEntities } from '../context/EntitiesContext';
 import {
   ICON_SIZES,
   SHADOWS,
@@ -33,10 +38,19 @@ import {
   TRANSITIONS,
 } from '../design-system/theme';
 import { LoadingSpinner } from './LoadingSpinner';
+import { RelationshipPills } from './relationships/RelationshipPills';
+import { RelationshipModal } from './relationships/RelationshipModal';
+import { RelationshipCardSection } from './relationships/RelationshipCardSection';
+import { EntityType, RelationshipType } from '../types/relationships';
 
 // Lazy load SessionReview and CanvasView to reduce initial bundle size
 const SessionReview = lazy(() => import('./SessionReview').then(module => ({ default: module.SessionReview })));
 const CanvasView = lazy(() => import('./CanvasView').then(module => ({ default: module.CanvasView })));
+
+// Import SessionPreview for metadata preview mode
+import { SessionPreview } from './sessions/SessionPreview';
+
+type ViewMode = 'preview' | 'full';
 
 interface SessionDetailViewProps {
   session: Session;
@@ -57,12 +71,18 @@ export function SessionDetailView({
   isSidebarExpanded,
   onToggleSidebar,
 }: SessionDetailViewProps) {
+  // Two-mode system: preview (fast, metadata-only) vs full (complete session data)
+  // Auto-load full mode immediately (user doesn't want to click "Load Full Session" button)
+  const [mode, setMode] = useState<ViewMode>('full');
+  const [fullSession, setFullSession] = useState<Session | null>(null);
+  const [isLoadingFull, setIsLoadingFull] = useState(true);
   const { dispatch: uiDispatch, addNotification } = useUI();
   const { addTask } = useTasks();
   const { addNote } = useNotes();
-  const { sessions: allSessions, updateSession: updateSessionInContext } = useSessions();
+  const { sessions: allSessions, updateSession: updateSessionInContext } = useSessionList();
   const { getActiveEnrichment, startTracking, updateProgress, stopTracking } = useEnrichmentContext();
   const { scrollProgress, scrollY, isScrolled, registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
+  const { state: entitiesState } = useEntities();
 
   // Delayed progress for SessionDetailView animations (only active after header collapse at 150px)
   // Maps scrollY 150-300 to progress 0-1
@@ -79,38 +99,130 @@ export function SessionDetailView({
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
   const [showReEnrichMenu, setShowReEnrichMenu] = useState(false);
   const [isReEnriching, setIsReEnriching] = useState(false);
+
+  // Check enrichment status for UI state
+  const enrichmentStatus = currentSession.enrichmentStatus?.status || 'idle';
+  const isEnriching = enrichmentStatus === 'in-progress' || enrichmentStatus === 'waiting';
+  const enrichmentComplete = enrichmentStatus === 'completed';
+  const enrichmentFailed = enrichmentStatus === 'failed';
   const [pendingSeekTimestamp, setPendingSeekTimestamp] = useState<string | null>(null);
+  const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const exportMenuRef = React.useRef<HTMLDivElement>(null);
   const reEnrichMenuRef = React.useRef<HTMLDivElement>(null);
   const sessionReviewRef = React.useRef<any>(null);
 
+  // Load full session data (screenshots, audio, etc.) from ChunkedSessionStorage
+  useEffect(() => {
+    const loadFull = async () => {
+      try {
+        setIsLoadingFull(true);
+        const { getChunkedStorage } = await import('../services/storage/ChunkedSessionStorage');
+        const chunkedStorage = await getChunkedStorage();
+
+        const full = await chunkedStorage.loadFullSession(session.id);
+        if (full) {
+          setFullSession(full);
+          setCurrentSession(full); // Update currentSession with full data
+        } else {
+          // Fall back to metadata if full session not found
+          setFullSession(session);
+          setCurrentSession(session);
+        }
+      } catch (error) {
+        console.error('[SessionDetailView] Failed to load full session:', error);
+        // Fall back to metadata on error
+        setFullSession(session);
+        setCurrentSession(session);
+
+        addNotification({
+          type: 'warning',
+          title: 'Loading Issues',
+          message: 'Some session data may not be available',
+        });
+      } finally {
+        setIsLoadingFull(false);
+      }
+    };
+
+    loadFull();
+  }, [session.id]); // Re-load when session ID changes
+
+  // Listen for media processing completion and reload session
+  useEffect(() => {
+    const handleMediaProcessingComplete = async (event: { sessionId: string; optimizedPath: string }) => {
+      console.log('[SessionDetailView] media-processing-complete event received:', {
+        eventSessionId: event.sessionId,
+        currentSessionId: session.id,
+        matches: event.sessionId === session.id,
+        optimizedPath: event.optimizedPath
+      });
+
+      if (event.sessionId === session.id) {
+        console.log('[SessionDetailView] Media processing complete, reloading session...');
+        try {
+          const chunkedStorage = await getChunkedStorage();
+          const full = await chunkedStorage.loadFullSession(session.id);
+          if (full) {
+            console.log('[SessionDetailView] Loaded session from storage:', {
+              hasVideo: !!full.video,
+              optimizedPath: full.video?.optimizedPath,
+              videoId: full.video?.id
+            });
+            setFullSession(full);
+            setCurrentSession(full);
+            console.log('[SessionDetailView] ✅ Session reloaded with optimized media path:', full.video?.optimizedPath);
+          } else {
+            console.warn('[SessionDetailView] ⚠️ Failed to load full session from storage');
+          }
+        } catch (error) {
+          console.error('[SessionDetailView] ❌ Failed to reload session after media processing:', error);
+        }
+      }
+    };
+
+    // Import eventBus and set up listener
+    let unsubscribe: (() => void) | null = null;
+
+    (async () => {
+      const { eventBus } = await import('../utils/eventBus');
+      // on() returns an unsubscribe function
+      unsubscribe = eventBus.on('media-processing-complete', handleMediaProcessingComplete);
+    })();
+
+    // Return cleanup function
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [session.id]);
+
   // Get active enrichment for real-time tracking
   const activeEnrichment = getActiveEnrichment(currentSession.id);
 
-  // Sync currentSession when session ID changes OR when enrichment status changes
+  // Sync enrichment status from session prop (but don't overwrite full data!)
   useEffect(() => {
-    // Check if enrichment status changed
+    // Only sync enrichment status if it changed
     const enrichmentStatusChanged =
       session.enrichmentStatus?.status !== currentSession.enrichmentStatus?.status ||
       session.enrichmentStatus?.completedAt !== currentSession.enrichmentStatus?.completedAt;
 
-    if (session.id !== currentSession.id || enrichmentStatusChanged) {
-      console.log('[SessionDetailView] Session or enrichment status changed, syncing from prop', {
-        idChanged: session.id !== currentSession.id,
-        statusChanged: enrichmentStatusChanged,
+    if (enrichmentStatusChanged && fullSession) {
+      console.log('[SessionDetailView] Enrichment status changed, syncing status only', {
         newStatus: session.enrichmentStatus?.status,
         oldStatus: currentSession.enrichmentStatus?.status,
       });
-      setCurrentSession(session);
+      // Only update enrichment status, preserve full session data
+      setCurrentSession({
+        ...currentSession,
+        enrichmentStatus: session.enrichmentStatus,
+      });
     }
   }, [
-    session.id,
     session.enrichmentStatus?.status,
     session.enrichmentStatus?.completedAt,
-    currentSession.id,
-    currentSession.enrichmentStatus?.status,
-    currentSession.enrichmentStatus?.completedAt,
+    // Note: currentSession is NOT in dependencies - would cause infinite loop
+    // since we update currentSession inside this effect
+    fullSession,
   ]);
 
   const duration = useMemo(() => {
@@ -286,6 +398,12 @@ export function SessionDetailView({
     });
   };
 
+  // Compute allTags at top level (before early return) to avoid hook ordering violation
+  const allTags = useMemo(() =>
+    Array.from(new Set(allSessions.flatMap(s => s.tags || []))),
+    [allSessions]
+  );
+
   const handleClose = useCallback(() => {
     onClose();
   }, [onClose]);
@@ -426,10 +544,26 @@ export function SessionDetailView({
     });
   };
 
+  const handleCompaniesChange = (companyIds: string[]) => {
+    if (!currentSession) return;
+
+    updateSessionInContext(currentSession.id, {
+      companyIds,
+    });
+  };
+
+  const handleContactsChange = (contactIds: string[]) => {
+    if (!currentSession) return;
+
+    updateSessionInContext(currentSession.id, {
+      contactIds,
+    });
+  };
+
   const handleSessionUpdate = (updatedSession: Session) => {
     setCurrentSession(updatedSession);
     // Trigger sessions list refresh
-    updateSessionInContext(updatedSession);
+    updateSessionInContext(updatedSession.id, updatedSession);
     console.log('🎯 [SESSION DETAIL] Session updated after enrichment');
   };
 
@@ -452,56 +586,52 @@ export function SessionDetailView({
     setIsReEnriching(true);
 
     try {
-      const hasAudio = currentSession.audioSegments && currentSession.audioSegments.length > 0;
-      const hasVideo = currentSession.video?.fullVideoAttachmentId;
+      console.log('✨ [SESSION DETAIL] Queuing re-enrichment for session:', options);
 
-      console.log('✨ [SESSION DETAIL] Re-enriching session:', options);
-
-      // Start tracking enrichment progress (shows rainbow border)
-      startTracking(currentSession.id, currentSession.name);
-
-      const result = await sessionEnrichmentService.enrichSession(currentSession, {
-        includeAudio: options.audio ?? false,
-        includeVideo: options.video ?? false,
-        includeSummary: true,
-        forceRegenerate: true,
-        onProgress: (progress) => {
-          console.log(`✨ [SESSION DETAIL] ${progress.stage}: ${progress.message} (${progress.progress}%)`);
-          updateProgress(currentSession.id, progress); // Update EnrichmentContext for real-time UI updates
-        },
+      // Queue re-enrichment via BackgroundEnrichmentManager
+      const manager = await getBackgroundEnrichmentManager();
+      const jobId = await manager.enqueueSession({
+        sessionId: currentSession.id,
+        sessionName: currentSession.name,
+        priority: 'high', // User-initiated re-enrichment = high priority
+        options: {
+          includeAudio: options.audio ?? false,
+          includeVideo: options.video ?? false,
+          includeSummary: true,
+          includeCanvas: true,
+          forceRegenerate: true
+        }
       });
 
-      console.log('✅ [SESSION DETAIL] Re-enrichment complete:', result);
+      console.log('✅ [SESSION DETAIL] Re-enrichment queued with job ID:', jobId);
 
       addNotification({
-          type: 'success',
-          title: 'Re-enrichment Complete',
-          message: `Session re-enriched successfully. Cost: $${result.totalCost.toFixed(1)}`,
+          type: 'info',
+          title: 'Re-enrichment Queued',
+          message: 'Processing in background. Check status in top-right corner.',
       });
 
-      // Reload session from storage
+      // Reload session from storage to get updated enrichmentStatus
       const storage = await getStorage();
       const sessions = await storage.load<Session[]>('sessions') || [];
 
       if (Array.isArray(sessions)) {
         const freshSession = sessions.find((s) => s.id === currentSession.id);
         if (freshSession) {
-          console.log('✅ [SESSION DETAIL] Reloaded fresh session from storage after re-enrichment');
+          console.log('✅ [SESSION DETAIL] Reloaded session with updated enrichment status');
           setCurrentSession(freshSession);
-          updateSessionInContext(freshSession);
+          updateSessionInContext(freshSession.id, freshSession);
         }
       }
     } catch (error: any) {
-      console.error('❌ [SESSION DETAIL] Re-enrichment failed:', error);
+      console.error('❌ [SESSION DETAIL] Failed to queue re-enrichment:', error);
 
       addNotification({
           type: 'error',
           title: 'Re-enrichment Failed',
-          message: error.message || 'Failed to re-enrich session',
+          message: error.message || 'Failed to queue re-enrichment',
       });
     } finally {
-      // Stop tracking enrichment (hides rainbow border)
-      stopTracking(currentSession.id);
       setIsReEnriching(false);
     }
   };
@@ -541,6 +671,27 @@ export function SessionDetailView({
     };
   }, [registerScrollContainer, unregisterScrollContainer]);
 
+  // LOADING: Show spinner while loading full session data
+  if (isLoadingFull && !fullSession) {
+    return (
+      <div className={`h-full w-full ${BACKGROUND_GRADIENT.primary} ${getRadiusClass('card')} shadow-xl overflow-hidden relative flex items-center justify-center`}>
+        <LoadingSpinner size="lg" message="Loading session data..." />
+      </div>
+    );
+  }
+
+  // PREVIEW MODE: Show lightweight metadata preview
+  if (mode === 'preview') {
+    return (
+      <SessionPreview
+        sessionId={session.id}
+        onLoadFull={() => setMode('full')}
+      />
+    );
+  }
+
+  // FULL MODE: Show complete session detail view (use fullSession if available)
+  const displaySession = fullSession || session;
   return (
     <div className={`h-full w-full ${BACKGROUND_GRADIENT.primary} ${getRadiusClass('card')} shadow-xl overflow-hidden relative flex flex-col`}>
         {/* Rainbow border during enrichment */}
@@ -599,16 +750,43 @@ export function SessionDetailView({
                 <InlineTagManager
                   tags={currentSession.tags || []}
                   onTagsChange={(newTags) => {
-                    updateSessionInContext({
-                        ...currentSession,
+                    updateSessionInContext(currentSession.id, {
                         tags: newTags,
                     });
                   }}
-                  allTags={useMemo(() =>
-                    Array.from(new Set(allSessions.flatMap(s => s.tags || []))),
-                    [allSessions]
-                  )}
+                  allTags={allTags}
                   editable={true}
+                />
+              </div>
+            </div>
+
+            {/* Companies & Contacts - Combined Row - Hide completely when scrolled */}
+            <div
+              className="flex items-center gap-4 transition-all duration-300"
+              style={{
+                maxHeight: isScrolled ? '0px' : '48px',
+                opacity: isScrolled ? 0 : 1,
+                marginBottom: isScrolled ? '0px' : '6px',
+                overflow: isScrolled ? 'hidden' : 'visible',
+              }}
+            >
+              {/* Companies Section */}
+              <div className="flex-shrink-0 min-w-0">
+                <CompanyPillManager
+                  companyIds={currentSession.companyIds || []}
+                  onCompaniesChange={handleCompaniesChange}
+                  allCompanies={entitiesState.companies}
+                  editable={currentSession.status === 'completed'}
+                />
+              </div>
+
+              {/* Contacts Section */}
+              <div className="flex-shrink-0 min-w-0">
+                <ContactPillManager
+                  contactIds={currentSession.contactIds || []}
+                  onContactsChange={handleContactsChange}
+                  allContacts={entitiesState.contacts}
+                  editable={currentSession.status === 'completed'}
                 />
               </div>
             </div>
@@ -1296,31 +1474,32 @@ export function SessionDetailView({
                 </div>
               )}
 
-              {/* Extracted Items Summary */}
-              {((session.extractedTaskIds?.length || 0) > 0 || (session.extractedNoteIds?.length || 0) > 0) && (
-                <div className={`${getWarningGradient('light').container} ${getRadiusClass('modal')} p-8 shadow-xl`}>
-                  <h3 className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent mb-6">Extracted from this Session</h3>
+              {/* Extracted Items - New Relationships System */}
+              <div className="space-y-4">
+                <RelationshipCardSection
+                  entityId={currentSession.id}
+                  entityType={EntityType.SESSION}
+                  title="Related Tasks"
+                  filterTypes={[RelationshipType.TASK_SESSION]}
+                  maxVisible={8}
+                  variant="default"
+                  showActions={true}
+                  showExcerpts={false}
+                  onAddClick={() => setRelationshipModalOpen(true)}
+                />
 
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className={`${getInfoGradient('light').container} ${getRadiusClass('field')} p-5 shadow-md`}>
-                      <div className="text-sm font-semibold text-cyan-700 uppercase tracking-wide mb-3">
-                        Tasks Created
-                      </div>
-                      <div className="text-4xl font-bold text-cyan-700">
-                        {session.extractedTaskIds?.length || 0}
-                      </div>
-                    </div>
-                    <div className={`bg-gradient-to-br from-purple-500/20 to-violet-500/20 ${getRadiusClass('field')} p-5 border-2 border-purple-300/50 shadow-md`}>
-                      <div className="text-sm font-semibold text-purple-700 uppercase tracking-wide mb-3">
-                        Notes Captured
-                      </div>
-                      <div className="text-4xl font-bold text-purple-700">
-                        {session.extractedNoteIds?.length || 0}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+                <RelationshipCardSection
+                  entityId={currentSession.id}
+                  entityType={EntityType.SESSION}
+                  title="Related Notes"
+                  filterTypes={[RelationshipType.NOTE_SESSION]}
+                  maxVisible={8}
+                  variant="default"
+                  showActions={true}
+                  showExcerpts={false}
+                  onAddClick={() => setRelationshipModalOpen(true)}
+                />
+              </div>
             </div>
             </div>
           ) : activeView === 'review' ? (
@@ -1345,7 +1524,7 @@ export function SessionDetailView({
                     if (freshSession) {
                       setCurrentSession(freshSession);
                       // CRITICAL: Update SessionsContext so chapters persist when navigating away
-                      updateSessionInContext(freshSession);
+                      updateSessionInContext(freshSession.id, freshSession);
                     }
                   }
 
@@ -1394,14 +1573,24 @@ export function SessionDetailView({
           </div>
         </div>
       )}
+
+      {/* Relationship Modal */}
+      <RelationshipModal
+        open={relationshipModalOpen}
+        onClose={() => setRelationshipModalOpen(false)}
+        entityId={currentSession.id}
+        entityType={EntityType.SESSION}
+      />
+
+      {/* Enrichment Progress: Rainbow border only (no modal for auto-enrichment) */}
+      {/* The RainbowBorderProgressIndicator above is sufficient for showing enrichment progress */}
     </div>
   );
 }
 
 // Inline Category Manager Component - Click to edit categories inline
 function InlineCategoryManager({ session }: { session: Session }) {
-  const { sessions: allSessions } = useSessions();
-  const { updateSession } = useSessions();
+  const { sessions: allSessions, updateSession } = useSessionList();
   const [isEditing, setIsEditing] = useState(false);
   const [category, setCategory] = useState(session.category || '');
   const [subCategory, setSubCategory] = useState(session.subCategory || '');
@@ -1426,8 +1615,7 @@ function InlineCategoryManager({ session }: { session: Session }) {
   );
 
   const handleSave = () => {
-    updateSession({
-        ...session,
+    updateSession(session.id, {
         category: category.trim() || undefined,
         subCategory: subCategory.trim() || undefined,
     });

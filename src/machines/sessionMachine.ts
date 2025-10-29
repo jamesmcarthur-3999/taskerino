@@ -1,5 +1,5 @@
 import { setup, assign } from 'xstate';
-import type { SessionRecordingConfig } from '../types';
+import type { SessionRecordingConfig, Session, SessionScreenshot, SessionAudioSegment } from '../types';
 import * as services from './sessionMachineServices';
 
 /**
@@ -20,6 +20,11 @@ export type RecordingServiceState =
 export interface SessionMachineContext {
   sessionId: string | null;
   config: SessionRecordingConfig | null;
+  session: Session | null;
+  callbacks: {
+    onScreenshotCapture?: (screenshot: SessionScreenshot) => Promise<void>;
+    onAudioSegment?: (segment: SessionAudioSegment) => void;
+  } | null;
   startTime: number | null;
   errors: string[];
   recordingState: {
@@ -33,15 +38,29 @@ export interface SessionMachineContext {
  * Events that can be sent to the session state machine
  */
 export type SessionMachineEvent =
-  | { type: 'START'; config: SessionRecordingConfig }
+  | {
+      type: 'START';
+      config: SessionRecordingConfig;
+      session: Session;
+      callbacks: {
+        onScreenshotCapture?: (screenshot: SessionScreenshot) => Promise<void>;
+        onAudioSegment?: (segment: SessionAudioSegment) => void;
+      };
+    }
   | { type: 'PAUSE' }
   | { type: 'RESUME' }
   | { type: 'END' }
+  | { type: 'PERSIST_COMPLETE' }
   | { type: 'RETRY' }
   | { type: 'DISMISS' }
+  | { type: 'RESET' }
   | {
       type: 'UPDATE_RECORDING_STATE';
       updates: Partial<SessionMachineContext['recordingState']>
+    }
+  | {
+      type: 'ERROR';
+      error: string;
     };
 
 /**
@@ -64,6 +83,9 @@ export const sessionMachine = setup({
   types: {} as {
     context: SessionMachineContext;
     events: SessionMachineEvent;
+    value: 'idle' | 'validating' | 'checking_permissions' | 'starting'
+         | 'active' | 'pausing' | 'paused' | 'resuming' | 'ending'
+         | 'persisting' | 'completed' | 'error';
   },
   actors: {
     validateConfig: services.validateConfig,
@@ -81,6 +103,8 @@ export const sessionMachine = setup({
   context: {
     sessionId: null,
     config: null,
+    session: null,
+    callbacks: null,
     startTime: null,
     errors: [],
     recordingState: {
@@ -101,9 +125,26 @@ export const sessionMachine = setup({
           target: 'validating',
           actions: assign({
             config: ({ event }) => event.config,
+            session: ({ event }) => event.session,
+            callbacks: ({ event }) => event.callbacks,
             errors: () => [],
             sessionId: () => null,
             startTime: () => null,
+          }),
+        },
+        RESET: {
+          // No-op: already in idle state, just ensure clean context
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
           }),
         },
       },
@@ -114,6 +155,23 @@ export const sessionMachine = setup({
      * Ensures the config has required fields and valid values
      */
     validating: {
+      on: {
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+      },
       invoke: {
         src: 'validateConfig',
         input: ({ context }) => ({ config: context.config! }),
@@ -137,6 +195,23 @@ export const sessionMachine = setup({
      * Checks for screen recording and microphone permissions as needed
      */
     checking_permissions: {
+      on: {
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+      },
       invoke: {
         src: 'checkPermissions',
         input: ({ context }) => ({
@@ -160,11 +235,36 @@ export const sessionMachine = setup({
      * Starts screenshot, audio, and video recording based on config
      */
     starting: {
+      on: {
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+        ERROR: {
+          target: 'error',
+          actions: assign({
+            errors: ({ event }) => [event.error],
+          }),
+        },
+      },
       invoke: {
         src: 'startRecordingServices',
         input: ({ context }) => ({
           sessionId: context.sessionId!,
           config: context.config!,
+          session: context.session!,
+          callbacks: context.callbacks!,
         }),
         onDone: {
           target: 'active',
@@ -190,6 +290,27 @@ export const sessionMachine = setup({
       on: {
         PAUSE: 'pausing',
         END: 'ending',
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+        ERROR: {
+          target: 'error',
+          actions: assign({
+            errors: ({ event }) => [event.error],
+          }),
+        },
         UPDATE_RECORDING_STATE: {
           actions: assign({
             recordingState: ({ context, event }) => ({
@@ -214,6 +335,23 @@ export const sessionMachine = setup({
      * Temporary suspension of recording
      */
     pausing: {
+      on: {
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+      },
       invoke: {
         src: 'pauseRecordingServices',
         input: ({ context }) => ({
@@ -237,6 +375,21 @@ export const sessionMachine = setup({
       on: {
         RESUME: 'resuming',
         END: 'ending',
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
       },
     },
 
@@ -245,10 +398,30 @@ export const sessionMachine = setup({
      * Transitioning back to active state
      */
     resuming: {
+      on: {
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+      },
       invoke: {
         src: 'resumeRecordingServices',
         input: ({ context }) => ({
           sessionId: context.sessionId!,
+          config: context.config!,
+          session: context.session!,
+          callbacks: context.callbacks!,
         }),
         onDone: 'active',
         onError: {
@@ -265,13 +438,30 @@ export const sessionMachine = setup({
      * Gracefully shutting down recording
      */
     ending: {
+      on: {
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+      },
       invoke: {
         src: 'stopRecordingServices',
         input: ({ context }) => ({
           sessionId: context.sessionId!,
         }),
         onDone: {
-          target: 'completed',
+          target: 'persisting',
           actions: assign({
             recordingState: () => ({
               screenshots: 'stopped' as const,
@@ -290,11 +480,50 @@ export const sessionMachine = setup({
     },
 
     /**
+     * PERSISTING - Waiting for storage operations to complete
+     * Ensures all data is written before marking session complete
+     */
+    persisting: {
+      on: {
+        PERSIST_COMPLETE: {
+          target: 'completed',
+        },
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+      },
+    },
+
+    /**
      * COMPLETED - Session finished successfully
-     * Terminal state - session lifecycle complete
+     * Automatically transitions back to idle to allow starting new sessions
      */
     completed: {
-      type: 'final',
+      always: {
+        target: 'idle',
+        actions: assign({
+          sessionId: null,
+          config: null,
+          errors: () => [],
+          recordingState: () => ({
+            screenshots: 'idle',
+            audio: 'idle',
+            video: 'idle',
+          }),
+        }),
+      },
     },
 
     /**
@@ -303,8 +532,51 @@ export const sessionMachine = setup({
      */
     error: {
       on: {
-        RETRY: 'idle',
-        DISMISS: 'idle',
+        RETRY: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+        DISMISS: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
+        RESET: {
+          target: 'idle',
+          actions: assign({
+            sessionId: null,
+            config: null,
+            session: null,
+            callbacks: null,
+            errors: () => [],
+            recordingState: () => ({
+              screenshots: 'idle',
+              audio: 'idle',
+              video: 'idle',
+            }),
+          }),
+        },
       },
     },
   },

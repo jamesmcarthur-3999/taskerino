@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/297</span>
+                <span class='fraction'>0/304</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/297</span>
+                <span class='fraction'>0/304</span>
             </div>
         
             
@@ -582,7 +582,16 @@
 <a name='L517'></a><a href='#L517'>517</a>
 <a name='L518'></a><a href='#L518'>518</a>
 <a name='L519'></a><a href='#L519'>519</a>
-<a name='L520'></a><a href='#L520'>520</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L520'></a><a href='#L520'>520</a>
+<a name='L521'></a><a href='#L521'>521</a>
+<a name='L522'></a><a href='#L522'>522</a>
+<a name='L523'></a><a href='#L523'>523</a>
+<a name='L524'></a><a href='#L524'>524</a>
+<a name='L525'></a><a href='#L525'>525</a>
+<a name='L526'></a><a href='#L526'>526</a>
+<a name='L527'></a><a href='#L527'>527</a>
+<a name='L528'></a><a href='#L528'>528</a>
+<a name='L529'></a><a href='#L529'>529</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -724,7 +733,12 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -768,8 +782,12 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1223,7 +1241,7 @@ interface SchedulerState {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    if (this.state.isActive) {</span>
 <span class="cstat-no" title="statement not covered" >      console.warn('⚠️  [ADAPTIVE SCHEDULER] Already active, stopping previous session');</span>
-<span class="cstat-no" title="statement not covered" >      this.stopScheduling();</span>
+<span class="cstat-no" title="statement not covered" >      await this.stopScheduling();</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
     // Increment runId to invalidate any in-flight async operations
@@ -1243,6 +1261,11 @@ interface SchedulerState {
 <span class="cstat-no" title="statement not covered" >      this.log('✅ Activity monitoring started');</span>
 <span class="cstat-no" title="statement not covered" >    } catch (error) {</span>
 <span class="cstat-no" title="statement not covered" >      console.error('❌ [ADAPTIVE SCHEDULER] Failed to start activity monitoring:', error);</span>
+      // Reset state and throw to prevent broken scheduler
+<span class="cstat-no" title="statement not covered" >      await this.stopScheduling();</span>
+<span class="cstat-no" title="statement not covered" >      throw new Error(</span>
+<span class="cstat-no" title="statement not covered" >        'Activity monitoring required for adaptive mode. Please check screen recording permissions in System Settings &gt; Privacy &amp; Security &gt; Screen Recording.'</span>
+<span class="cstat-no" title="statement not covered" >      );</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
     // Check if still the same run after async operation
@@ -1269,7 +1292,7 @@ interface SchedulerState {
   /**
    * Stop adaptive screenshot scheduling
    */
-<span class="cstat-no" title="statement not covered" >  stopScheduling(): void {</span>
+<span class="cstat-no" title="statement not covered" >  async stopScheduling(): Promise&lt;void&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    this.log('🛑 Stopping adaptive screenshot scheduling');</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    if (this.state.timeoutId) {</span>
@@ -1287,9 +1310,13 @@ interface SchedulerState {
 <span class="cstat-no" title="statement not covered" >    this.state.onCaptureTriggered = null;</span>
 &nbsp;
     // Stop activity monitoring in Rust
-<span class="cstat-no" title="statement not covered" >    invoke('stop_activity_monitoring').catch((error) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >    try {</span>
+<span class="cstat-no" title="statement not covered" >      await invoke('stop_activity_monitoring');</span>
+<span class="cstat-no" title="statement not covered" >      this.log('✅ Activity monitoring stopped');</span>
+<span class="cstat-no" title="statement not covered" >    } catch (error) {</span>
 <span class="cstat-no" title="statement not covered" >      console.error('❌ [ADAPTIVE SCHEDULER] Failed to stop activity monitoring:', error);</span>
-<span class="cstat-no" title="statement not covered" >    });</span>
+      // Non-fatal, but log for debugging
+<span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    this.log(`📊 Session stats: ${this.state.captureCount} screenshots captured`);</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
@@ -1627,7 +1654,7 @@ interface SchedulerState {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-24T03:56:25.511Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

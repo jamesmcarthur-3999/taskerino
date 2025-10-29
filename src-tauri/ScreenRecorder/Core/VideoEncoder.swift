@@ -252,7 +252,17 @@ public class VideoEncoder {
             await writer.finishWriting()
 
             if writer.status == .completed {
-                print("✅ [VideoEncoder] Video saved: \(outputURL.path)")
+                print("✅ [VideoEncoder] Video finishWriting() completed")
+
+                // CRITICAL: Wait for OS to release file lock and flush buffers
+                // Even though finishWriting() returned, the OS may still be:
+                // 1. Flushing write buffers to disk
+                // 2. Finalizing the MP4 moov atom
+                // 3. Releasing file handles
+                // Without this delay, thumbnail generation will fail with "Cannot Open"
+                print("⏳ [VideoEncoder] Waiting 500ms for OS file flush...")
+                try await Task.sleep(nanoseconds: 500_000_000) // 500ms
+                print("✅ [VideoEncoder] Video saved and flushed: \(outputURL.path)")
             } else if let error = writer.error {
                 throw VideoEncoderError.encodingFailed(error)
             }

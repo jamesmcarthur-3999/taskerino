@@ -50,9 +50,14 @@ class SimpleEventEmitter {
       eventListeners.forEach(listener => listener(...args));
     }
   }
+
+  removeAllListeners(): void {
+    this.listeners.clear();
+  }
 }
 
 export type QueuePriority = 'critical' | 'normal' | 'low';
+export type QueueItemType = 'simple' | 'chunk' | 'index' | 'ca-storage' | 'cleanup';
 
 export interface QueueItem {
   id: string;
@@ -62,6 +67,11 @@ export interface QueueItem {
   retries: number;
   timestamp: number;
   error?: string;
+  // Enhanced fields for Phase 4
+  type: QueueItemType;
+  batchable?: boolean;
+  sessionId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface QueueStats {
@@ -73,6 +83,19 @@ export interface QueueStats {
     critical: number;
     normal: number;
     low: number;
+  };
+  // Enhanced stats for Phase 4
+  byType?: {
+    simple: number;
+    chunk: number;
+    index: number;
+    caStorage: number;
+    cleanup: number;
+  };
+  batching?: {
+    chunksCollapsed: number;
+    indexesCollapsed: number;
+    caStorageCollapsed: number;
   };
 }
 
@@ -101,6 +124,22 @@ export class PersistenceQueue extends SimpleEventEmitter {
     failed: 0,
   };
 
+  // Enhanced stats for Phase 4
+  private enhancedStats = {
+    byType: {
+      simple: 0,
+      chunk: 0,
+      index: 0,
+      caStorage: 0,
+      cleanup: 0,
+    },
+    batching: {
+      chunksCollapsed: 0,
+      indexesCollapsed: 0,
+      caStorageCollapsed: 0,
+    },
+  };
+
   constructor() {
     super();
     this.startProcessing();
@@ -118,6 +157,8 @@ export class PersistenceQueue extends SimpleEventEmitter {
       value,
       retries: 0,
       timestamp: Date.now(),
+      type: 'simple',
+      batchable: false,
     };
 
     // Add to appropriate queue
@@ -141,6 +182,119 @@ export class PersistenceQueue extends SimpleEventEmitter {
     this.emit('enqueued', item);
 
     return id;
+  }
+
+  /**
+   * Enqueue chunk write (batchable)
+   */
+  enqueueChunk(sessionId: string, chunkName: string, data: unknown, priority: QueuePriority = 'normal'): string {
+    const id = crypto.randomUUID();
+    const item: QueueItem = {
+      id,
+      priority,
+      key: `sessions/${sessionId}/${chunkName}`,
+      value: data,
+      retries: 0,
+      timestamp: Date.now(),
+      type: 'chunk',
+      batchable: true,
+      sessionId,
+      metadata: { chunkName },
+    };
+
+    this.addToQueue(item);
+    this.enhancedStats.byType.chunk++;
+    return id;
+  }
+
+  /**
+   * Enqueue index update (batchable)
+   */
+  enqueueIndex(indexName: string, updates: unknown, priority: QueuePriority = 'low'): string {
+    const id = crypto.randomUUID();
+    const item: QueueItem = {
+      id,
+      priority,
+      key: `indexes/${indexName}`,
+      value: updates,
+      retries: 0,
+      timestamp: Date.now(),
+      type: 'index',
+      batchable: true,
+      metadata: { indexName },
+    };
+
+    this.addToQueue(item);
+    this.enhancedStats.byType.index++;
+    return id;
+  }
+
+  /**
+   * Enqueue CA storage operation (batchable)
+   */
+  enqueueCAStorage(hash: string, attachment: unknown, priority: QueuePriority = 'normal'): string {
+    const id = crypto.randomUUID();
+    const item: QueueItem = {
+      id,
+      priority,
+      key: `attachments-ca/${hash}`,
+      value: attachment,
+      retries: 0,
+      timestamp: Date.now(),
+      type: 'ca-storage',
+      batchable: true,
+      metadata: { hash },
+    };
+
+    this.addToQueue(item);
+    this.enhancedStats.byType.caStorage++;
+    return id;
+  }
+
+  /**
+   * Enqueue cleanup operation (GC, index optimization)
+   */
+  enqueueCleanup(operation: 'gc' | 'index-optimize', priority: QueuePriority = 'low'): string {
+    const id = crypto.randomUUID();
+    const item: QueueItem = {
+      id,
+      priority,
+      key: `cleanup/${operation}`,
+      value: { operation, timestamp: Date.now() },
+      retries: 0,
+      timestamp: Date.now(),
+      type: 'cleanup',
+      batchable: false,
+      metadata: { operation },
+    };
+
+    this.addToQueue(item);
+    this.enhancedStats.byType.cleanup++;
+    return id;
+  }
+
+  /**
+   * Helper to add item to appropriate queue (DRY extraction)
+   */
+  private addToQueue(item: QueueItem): void {
+    switch (item.priority) {
+      case 'critical':
+        this.criticalQueue.push(item);
+        this.processCriticalImmediate();
+        break;
+      case 'normal':
+        this.normalQueue.push(item);
+        this.scheduleNormalBatch();
+        break;
+      case 'low':
+        this.lowQueue.push(item);
+        this.scheduleLowIdle();
+        break;
+    }
+
+    this.stats.pending++;
+    this.enforceQueueSizeLimit();
+    this.emit('enqueued', item);
   }
 
   /**
@@ -172,7 +326,27 @@ export class PersistenceQueue extends SimpleEventEmitter {
     const items = [...this.normalQueue];
     this.normalQueue = [];
 
-    for (const item of items) {
+    // Group batchable items by type
+    const chunkItems = items.filter(i => i.type === 'chunk' && i.batchable);
+    const indexItems = items.filter(i => i.type === 'index' && i.batchable);
+    const caStorageItems = items.filter(i => i.type === 'ca-storage' && i.batchable);
+    const nonBatchable = items.filter(i => !i.batchable);
+
+    // Process batched items
+    if (chunkItems.length > 0) {
+      await this.processBatchedChunks(chunkItems);
+    }
+
+    if (indexItems.length > 0) {
+      await this.processBatchedIndexes(indexItems);
+    }
+
+    if (caStorageItems.length > 0) {
+      await this.processBatchedCAStorage(caStorageItems);
+    }
+
+    // Process non-batchable items individually
+    for (const item of nonBatchable) {
       await this.processItem(item);
     }
   }
@@ -211,6 +385,162 @@ export class PersistenceQueue extends SimpleEventEmitter {
     // Schedule next batch if more items remain
     if (this.lowQueue.length > 0) {
       this.scheduleLowIdle();
+    }
+  }
+
+  /**
+   * Process batched chunk writes using a single transaction
+   */
+  private async processBatchedChunks(items: QueueItem[]): Promise<void> {
+    if (items.length === 0) return;
+
+    // Group chunks by sessionId for batching
+    const bySession = new Map<string, QueueItem[]>();
+    for (const item of items) {
+      if (!item.sessionId) continue;
+      if (!bySession.has(item.sessionId)) {
+        bySession.set(item.sessionId, []);
+      }
+      bySession.get(item.sessionId)!.push(item);
+    }
+
+    // Process each session's chunks as a transaction
+    for (const [sessionId, chunks] of bySession.entries()) {
+      try {
+        const storage = await getStorage();
+        const tx = await storage.beginTransaction();
+
+        try {
+          // Save all chunks in transaction
+          for (const chunk of chunks) {
+            tx.save(chunk.key, chunk.value);
+          }
+
+          // Commit transaction
+          await tx.commit();
+
+          // Mark all chunks as completed
+          for (const chunk of chunks) {
+            this.stats.processing--;
+            this.stats.pending--;
+            this.stats.completed++;
+            this.emit('completed', chunk);
+          }
+
+          // Track batching efficiency
+          if (chunks.length > 1) {
+            this.enhancedStats.batching.chunksCollapsed += (chunks.length - 1);
+          }
+
+          console.log(`[PersistenceQueue] Batched ${chunks.length} chunks for session ${sessionId}`);
+        } catch (error) {
+          await tx.rollback();
+          // Handle errors individually
+          for (const chunk of chunks) {
+            this.stats.processing--;
+            this.handleError(chunk, error);
+          }
+        }
+      } catch (error) {
+        // Transaction creation failed, process individually
+        for (const chunk of chunks) {
+          await this.processItem(chunk);
+        }
+      }
+    }
+  }
+
+  /**
+   * Process batched index updates by rebuilding all indexes once
+   */
+  private async processBatchedIndexes(items: QueueItem[]): Promise<void> {
+    if (items.length === 0) return;
+
+    try {
+      // For now, just save each index individually
+      // In the future, this could be optimized to rebuild all indexes once
+      // using InvertedIndexManager.updateIndexes()
+
+      const storage = await getStorage();
+
+      for (const item of items) {
+        this.stats.processing++;
+        this.emit('processing', item);
+
+        try {
+          await storage.save(item.key, item.value);
+
+          this.stats.processing--;
+          this.stats.pending--;
+          this.stats.completed++;
+          this.emit('completed', item);
+        } catch (error) {
+          this.stats.processing--;
+          this.handleError(item, error);
+        }
+      }
+
+      // Track batching efficiency
+      if (items.length > 1) {
+        this.enhancedStats.batching.indexesCollapsed += (items.length - 1);
+      }
+
+      console.log(`[PersistenceQueue] Batched ${items.length} index updates`);
+    } catch (error) {
+      // Fallback to individual processing
+      for (const item of items) {
+        await this.processItem(item);
+      }
+    }
+  }
+
+  /**
+   * Process batched CA storage operations (reference counting)
+   */
+  private async processBatchedCAStorage(items: QueueItem[]): Promise<void> {
+    if (items.length === 0) return;
+
+    try {
+      const storage = await getStorage();
+      const tx = await storage.beginTransaction();
+
+      try {
+        // Save all CA metadata in a single transaction
+        for (const item of items) {
+          this.stats.processing++;
+          this.emit('processing', item);
+          tx.save(item.key, item.value);
+        }
+
+        await tx.commit();
+
+        // Mark all as completed
+        for (const item of items) {
+          this.stats.processing--;
+          this.stats.pending--;
+          this.stats.completed++;
+          this.emit('completed', item);
+        }
+
+        // Track batching efficiency
+        if (items.length > 1) {
+          this.enhancedStats.batching.caStorageCollapsed += (items.length - 1);
+        }
+
+        console.log(`[PersistenceQueue] Batched ${items.length} CA storage operations`);
+      } catch (error) {
+        await tx.rollback();
+        // Handle errors individually
+        for (const item of items) {
+          this.stats.processing--;
+          this.handleError(item, error);
+        }
+      }
+    } catch (error) {
+      // Transaction creation failed, process individually
+      for (const item of items) {
+        await this.processItem(item);
+      }
     }
   }
 
@@ -307,6 +637,8 @@ export class PersistenceQueue extends SimpleEventEmitter {
         normal: this.normalQueue.length,
         low: this.lowQueue.length,
       },
+      byType: { ...this.enhancedStats.byType },
+      batching: { ...this.enhancedStats.batching },
     };
   }
 

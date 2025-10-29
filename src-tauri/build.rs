@@ -14,10 +14,19 @@ fn compile_swift_module() {
     println!("cargo:rerun-if-changed=ScreenRecorder/ScreenRecorder.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/PiPCompositor.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/ScreenRecorder.h");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Permissions/RecordingError.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/Core/FrameSynchronizer.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/Core/FrameCompositor.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/Core/RecordingSource.swift");
     println!("cargo:rerun-if-changed=ScreenRecorder/Core/VideoEncoder.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Core/RecordingSession.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Compositors/PassthroughCompositor.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Compositors/GridCompositor.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Compositors/SideBySideCompositor.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Sources/DisplaySource.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Sources/WindowSource.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/Sources/WebcamSource.swift");
+    println!("cargo:rerun-if-changed=ScreenRecorder/VideoAudioMerger.swift");
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let target = env::var("TARGET").unwrap();
@@ -46,12 +55,21 @@ fn compile_swift_module() {
             &format!("{}/libScreenRecorder.dylib", out_dir),
             "-emit-objc-header-path",
             &format!("{}/ScreenRecorder-Swift.h", out_dir),
+            "ScreenRecorder/Permissions/RecordingError.swift",
             "ScreenRecorder/ScreenRecorder.swift",
             "ScreenRecorder/PiPCompositor.swift",
             "ScreenRecorder/Core/FrameSynchronizer.swift",
             "ScreenRecorder/Core/FrameCompositor.swift",
             "ScreenRecorder/Core/RecordingSource.swift",
             "ScreenRecorder/Core/VideoEncoder.swift",
+            "ScreenRecorder/Core/RecordingSession.swift",
+            "ScreenRecorder/Compositors/PassthroughCompositor.swift",
+            "ScreenRecorder/Compositors/GridCompositor.swift",
+            "ScreenRecorder/Compositors/SideBySideCompositor.swift",
+            "ScreenRecorder/Sources/DisplaySource.swift",
+            "ScreenRecorder/Sources/WindowSource.swift",
+            "ScreenRecorder/Sources/WebcamSource.swift",
+            "ScreenRecorder/VideoAudioMerger.swift",
             "-target",
             &format!("{}-apple-macosx12.3", arch),
             "-O", // Optimization

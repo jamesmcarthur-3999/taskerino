@@ -843,6 +843,479 @@ self.onmessage = async (e) => {
 
 ---
 
+## Background Enrichment System (Tasks 11-15)
+
+**Status**: Production-ready (October 2025)
+
+The Background Enrichment System provides persistent, background-powered session processing that survives app restarts.
+
+### Architecture Overview
+
+```
+Session End → BackgroundEnrichmentManager → PersistentEnrichmentQueue → Processing
+                                                        ↓
+                                         BackgroundMediaProcessor (2-stage)
+                                                        ↓
+                              Audio Concatenation (5s) + Video/Audio Merge (30s)
+                                                        ↓
+                                         Session.video.optimizedPath saved
+                                                        ↓
+                                         Enrichment Pipeline Triggered
+                                                        ↓
+                              Audio Review → Video Chaptering → Summary Generation
+```
+
+### Core Components
+
+#### 1. BackgroundEnrichmentManager
+
+**Location**: `src/services/enrichment/BackgroundEnrichmentManager.ts`
+**Lines**: 582
+**Purpose**: High-level orchestration API
+
+```typescript
+interface BackgroundEnrichmentManager {
+  // Lifecycle
+  initialize(): Promise<void>;
+  shutdown(): Promise<void>;
+
+  // Job Management
+  enqueueSession(params: EnqueueSessionParams): Promise<string>;
+  markMediaProcessingComplete(sessionId: string, optimizedPath?: string): Promise<void>;
+  getJobStatus(jobId: string): Promise<EnrichmentJob | null>;
+  getQueueStatus(): Promise<QueueStatus>;
+  cancelJob(jobId: string): Promise<void>;
+
+  // Events (forwarded to UI)
+  // - job-enqueued, job-started, job-progress, job-completed, job-failed, job-cancelled
+}
+
+interface EnqueueSessionParams {
+  sessionId: string;
+  sessionName: string;
+  priority?: 'high' | 'normal' | 'low';
+  options?: EnrichmentOptions;
+}
+```
+
+**Integration**:
+- Called from `ActiveSessionContext.endSession()`
+- Initialized in `App.tsx` on mount
+- Queried by `EnrichmentStatusIndicator` for UI updates
+
+#### 2. PersistentEnrichmentQueue
+
+**Location**: `src/services/enrichment/PersistentEnrichmentQueue.ts`
+**Lines**: 1,128
+**Purpose**: IndexedDB-backed persistent job queue
+
+**IndexedDB Schema**:
+```typescript
+Database: taskerino-enrichment-queue
+Version: 1
+
+Object Store: enrichment_jobs
+  keyPath: 'id'
+  indexes:
+    - status (non-unique)
+    - sessionId (unique)
+    - priority (non-unique)
+    - createdAt (non-unique)
+```
+
+**Job Lifecycle**:
+```
+pending → processing → completed
+              ↓
+           failed → (retry 3x with exponential backoff) → failed (permanent)
+              ↓
+          cancelled
+```
+
+**Recovery on App Restart**:
+```typescript
+async initialize() {
+  // 1. Open IndexedDB
+  await this.openDatabase();
+
+  // 2. Load all jobs
+  const jobs = await this.loadAllJobs();
+
+  // 3. Reset crashed jobs (stuck in 'processing')
+  const crashedJobs = jobs.filter(j => j.status === 'processing');
+  await Promise.all(crashedJobs.map(j =>
+    this.updateJob(j.id, { status: 'pending' })
+  ));
+
+  // 4. Resume processing from highest priority pending job
+  this.startProcessingLoop();
+}
+```
+
+**Concurrency Control**:
+- Max 5 concurrent jobs
+- Priority queue (high → normal → low)
+- Error isolation (one failure doesn't block others)
+
+**Retry Strategy**:
+```typescript
+// Exponential backoff
+const delays = [0, 1000, 2000, 4000]; // 0s, 1s, 2s, 4s
+const delay = delays[Math.min(job.attempts, delays.length - 1)];
+await sleep(delay);
+await this.retryJob(job.id);
+```
+
+#### 3. BackgroundMediaProcessor
+
+**Location**: `src/services/enrichment/BackgroundMediaProcessor.ts`
+**Lines**: 411
+**Purpose**: Two-stage media optimization
+
+**Stage 1: Audio Concatenation (0-50%)**
+```typescript
+// Concatenate WAV segments → single MP3
+async concatenateAudio(
+  sessionId: string,
+  audioSegments: SessionAudioSegment[],
+  onProgress: (progress: number) => void
+): Promise<string> {
+  // Use audioConcatenationService
+  const concatenatedPath = await audioConcatenationService.concatenateAndSave(
+    sessionId,
+    audioSegments,
+    (segmentProgress) => {
+      onProgress(segmentProgress); // 0-100 mapped to 0-50 by caller
+    }
+  );
+
+  return concatenatedPath; // e.g., /sessions/{id}/audio-concatenated.mp3
+}
+```
+
+**Duration**: ~5 seconds for 30-minute session
+**Output**: Single MP3 file (~10MB)
+
+**Stage 2: Video/Audio Merge (50-100%)**
+```typescript
+// Merge video + audio → optimized MP4
+async mergeVideoAndAudio(
+  sessionId: string,
+  videoPath: string | null,
+  audioPath: string | null,
+  onProgress: (progress: number) => void
+): Promise<string | undefined> {
+  const outputPath = `${appDataDir}/sessions/${sessionId}/video-optimized.mp4`;
+
+  // Call Tauri command (wraps Swift AVFoundation)
+  const result = await invoke('merge_video_audio', {
+    sessionId,
+    videoPath,
+    audioPath,
+    outputPath,
+    compressionLevel: 0.4, // 60% size reduction
+    onProgress // Progress callback from native side
+  });
+
+  return outputPath;
+}
+```
+
+**Duration**: ~30 seconds for 30-minute session
+**Output**: Optimized MP4 (~200MB, was 500MB)
+**Encoding**: H.264 video + AAC audio
+
+**Complete Processing Flow**:
+```typescript
+interface MediaProcessingJob {
+  sessionId: string;
+  sessionName: string;
+  videoPath: string | null;
+  audioSegments: SessionAudioSegment[];
+  onProgress: (stage: 'concatenating' | 'merging', progress: number) => void;
+  onComplete: (optimizedVideoPath: string | undefined) => void;
+  onError: (error: Error) => void;
+}
+
+async process(job: MediaProcessingJob) {
+  // Stage 1: Audio (0-50%)
+  const audioPath = await this.concatenateAudio(...);
+  job.onProgress('concatenating', 50);
+
+  // Stage 2: Video (50-100%)
+  const optimizedPath = await this.mergeVideoAndAudio(...);
+  job.onProgress('merging', 100);
+
+  // Complete
+  job.onComplete(optimizedPath);
+}
+```
+
+#### 4. SessionProcessingScreen
+
+**Location**: `src/components/sessions/SessionProcessingScreen.tsx`
+**Lines**: 456
+**Purpose**: Real-time progress UI
+
+**Event Subscription**:
+```typescript
+useEffect(() => {
+  // Subscribe to media processing events
+  const unsubscribeProgress = eventBus.on('media-processing-progress', (event) => {
+    if (event.sessionId === sessionId) {
+      setStage(event.stage); // 'concatenating' | 'merging'
+      setProgress(event.progress); // 0-100
+    }
+  });
+
+  const unsubscribeComplete = eventBus.on('media-processing-complete', (event) => {
+    if (event.sessionId === sessionId) {
+      setStage('complete');
+      // Auto-navigate after 2 seconds
+      setTimeout(() => navigate('/sessions'), 2000);
+    }
+  });
+
+  return () => {
+    unsubscribeProgress();
+    unsubscribeComplete();
+  };
+}, [sessionId]);
+```
+
+**UI States**:
+- **Concatenating**: "🎵 Combining Audio" (0-50%)
+- **Merging**: "🎬 Optimizing Video" (50-100%)
+- **Complete**: "✨ Complete!" (100%, show "View Session" button)
+
+### Integration Flow
+
+**Session End → Enrichment**:
+
+```typescript
+// 1. ActiveSessionContext.endSession()
+async endSession() {
+  // Stop recording
+  await stopScreenshots();
+  await stopAudioRecording();
+  await stopVideoRecording();
+
+  // Enqueue enrichment
+  const manager = await getBackgroundEnrichmentManager();
+  const jobId = await manager.enqueueSession({
+    sessionId: session.id,
+    sessionName: session.name,
+    options: { includeAudio: true, includeVideo: true }
+  });
+
+  // Navigate to processing screen
+  navigate('/sessions/processing', { state: { sessionId: session.id } });
+
+  // Start background media processing
+  const processor = BackgroundMediaProcessor.getInstance();
+  await processor.process({
+    sessionId: session.id,
+    sessionName: session.name,
+    videoPath: session.video?.path,
+    audioSegments: session.audioSegments,
+    onProgress: (stage, progress) => {
+      eventBus.emit('media-processing-progress', { sessionId, stage, progress });
+    },
+    onComplete: async (optimizedPath) => {
+      // Save optimized path to session
+      await chunkedStorage.updateSession(session.id, {
+        'video.optimizedPath': optimizedPath
+      });
+
+      // Mark media processing complete (triggers enrichment)
+      await manager.markMediaProcessingComplete(session.id, optimizedPath);
+
+      // Emit completion event
+      eventBus.emit('media-processing-complete', { sessionId });
+    },
+    onError: (error) => {
+      eventBus.emit('media-processing-error', { sessionId, error: error.message });
+    }
+  });
+}
+```
+
+**Timeline**:
+```
+T+0s:    User clicks "End Session"
+T+0s:    Stop recording services
+T+0.5s:  Navigate to SessionProcessingScreen
+T+0.5s:  Start BackgroundMediaProcessor
+T+5s:    Audio concatenation complete (50%)
+T+35s:   Video/audio merge complete (100%)
+T+35s:   Save optimizedPath to session
+T+35s:   Mark media processing complete
+T+35s:   Queue detects pending job, starts enrichment
+T+37s:   Auto-navigate to session detail (or user clicks)
+T+37-60s: Enrichment continues in background
+T+60s:   Enrichment complete, show notification
+```
+
+### UnifiedMediaPlayer Integration
+
+**Dual-Path Playback**:
+
+```typescript
+function UnifiedMediaPlayer({ session }: Props) {
+  // Check for optimized video
+  if (session.video?.optimizedPath) {
+    // NEW: Optimized path (instant playback)
+    console.log('✅ Using optimized pre-merged video');
+    return (
+      <video
+        src={convertFileSrc(session.video.optimizedPath)}
+        controls
+        className="w-full h-full"
+      />
+    );
+  }
+
+  // LEGACY: Old sessions (runtime concatenation)
+  console.log('⚠️  Using legacy audio/video sync');
+  return <LegacyMediaPlayer session={session} />;
+}
+```
+
+**Benefits of Optimized Path**:
+- **Instant playback**: No 2-3 second audio concatenation delay
+- **No sync logic**: Single file, no audio/video coordination needed
+- **Smaller files**: 60% size reduction (500MB → 200MB)
+- **Simpler code**: ~500 lines removed from UnifiedMediaPlayer
+
+### Event Bus API
+
+**Media Processing Events**:
+```typescript
+// Progress update
+eventBus.emit('media-processing-progress', {
+  sessionId: string;
+  stage: 'concatenating' | 'merging';
+  progress: number; // 0-100
+  message?: string;
+});
+
+// Complete
+eventBus.emit('media-processing-complete', {
+  sessionId: string;
+  optimizedVideoPath?: string;
+});
+
+// Error
+eventBus.emit('media-processing-error', {
+  sessionId: string;
+  error: string;
+});
+```
+
+**Enrichment Events**:
+```typescript
+// Job lifecycle
+eventBus.emit('job-enqueued', { job: EnrichmentJob });
+eventBus.emit('job-started', { job: EnrichmentJob });
+eventBus.emit('job-progress', { job: EnrichmentJob, progress: number, stage: string });
+eventBus.emit('job-completed', { job: EnrichmentJob, result: EnrichmentResult });
+eventBus.emit('job-failed', { job: EnrichmentJob, error: string });
+eventBus.emit('job-cancelled', { job: EnrichmentJob });
+```
+
+### Performance Characteristics
+
+| Operation | Duration | Notes |
+|-----------|----------|-------|
+| Audio concatenation | ~5s | 30-min session, 50 WAV segments |
+| Video/audio merge | ~30s | 500MB → 200MB (60% reduction) |
+| Total processing | ~35-40s | End-to-end (audio + video) |
+| Queue initialization | ~100ms | IndexedDB load + recovery |
+| Job status query | ~10ms | Single IndexedDB read |
+| Optimized playback | <1s | Instant load (vs 2-3s legacy) |
+
+### Storage Impact
+
+**Before Optimization** (Original):
+```
+video.mp4 (original):     500MB
+audio-segments/ (WAV):     50MB
+screenshots/ (PNG):        20MB
+TOTAL:                    570MB
+```
+
+**After Optimization**:
+```
+video-optimized.mp4:      200MB  (H.264 + AAC)
+audio-concatenated.mp3:    10MB  (kept for AI processing)
+screenshots/ (PNG):        20MB
+TOTAL:                    230MB  (60% reduction)
+```
+
+### Error Handling
+
+**Retry Strategy**:
+```typescript
+// Automatic retry with exponential backoff
+interface RetryConfig {
+  maxAttempts: 3;
+  delays: [0, 1000, 2000, 4000]; // 0s, 1s, 2s, 4s
+}
+
+async retryJob(job: EnrichmentJob) {
+  if (job.attempts >= job.maxAttempts) {
+    await this.updateJob(job.id, { status: 'failed' });
+    return;
+  }
+
+  const delay = this.delays[Math.min(job.attempts, this.delays.length - 1)];
+  await sleep(delay);
+
+  await this.updateJob(job.id, {
+    status: 'pending',
+    attempts: job.attempts + 1
+  });
+
+  // Re-queue for processing
+  this.processNextJob();
+}
+```
+
+**Job Cancellation**:
+```typescript
+async cancelJob(jobId: string) {
+  const job = await this.getJob(jobId);
+  if (!job) return;
+
+  // Update status
+  await this.updateJob(jobId, { status: 'cancelled' });
+
+  // Stop processing if active
+  if (this.activeJobs.has(jobId)) {
+    const processor = BackgroundMediaProcessor.getInstance();
+    await processor.cancelJob(job.sessionId);
+  }
+
+  // Emit event
+  eventBus.emit('job-cancelled', { job });
+}
+```
+
+### Testing
+
+**Test Coverage**:
+- **Background Enrichment E2E**: 10 tests (full lifecycle, restart recovery, error retry)
+- **UnifiedMediaPlayer Integration**: 15 tests (dual-path logic, legacy fallback)
+- **Complete Lifecycle E2E**: 3 tests (MASTER test: session end → enrichment → playback)
+- **Total**: 28 test cases across 1,986 lines of test code
+
+**Test Files**:
+- `src/services/enrichment/__tests__/background-enrichment-e2e.test.ts`
+- `src/components/__tests__/UnifiedMediaPlayer.integration.test.tsx`
+- `src/__tests__/e2e/background-enrichment-lifecycle.test.tsx`
+
+---
+
 ## Review System
 
 ### Progressive Audio Loading

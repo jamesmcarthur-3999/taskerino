@@ -33,9 +33,19 @@ export function WebcamPreview({ webcamDeviceId, className = '' }: WebcamPreviewP
         }
 
         // Request webcam access
+        // Only use deviceId constraint if we have a valid non-empty device ID
+        const hasValidDeviceId = webcamDeviceId && webcamDeviceId.trim() !== '';
+
+        console.log(`🎥 [WEBCAM PREVIEW] Starting webcam with deviceId:`, {
+          webcamDeviceId,
+          hasValidDeviceId,
+        });
+
+        // Use 'ideal' instead of 'exact' to gracefully fall back if device unavailable
+        // This prevents OverconstrainedError when device ID is stale or device disconnected
         const constraints: MediaStreamConstraints = {
-          video: webcamDeviceId
-            ? { deviceId: { exact: webcamDeviceId } }
+          video: hasValidDeviceId
+            ? { deviceId: { ideal: webcamDeviceId } }
             : true,
           audio: false,
         };
@@ -48,11 +58,34 @@ export function WebcamPreview({ webcamDeviceId, className = '' }: WebcamPreviewP
           return;
         }
 
+        // Log which camera was actually selected
+        const videoTrack = stream.getVideoTracks()[0];
+        const actualDeviceId = videoTrack?.getSettings().deviceId;
+        const actualLabel = videoTrack?.label;
+        console.log(`✅ [WEBCAM PREVIEW] Webcam started:`, {
+          requested: webcamDeviceId,
+          actual: actualDeviceId,
+          label: actualLabel,
+          matchesRequested: actualDeviceId === webcamDeviceId
+        });
+
         streamRef.current = stream;
 
         // Attach stream to video element
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          console.log(`📺 [WEBCAM PREVIEW] Stream attached to video element`, {
+            videoElement: videoRef.current,
+            stream,
+            tracks: stream.getTracks().length
+          });
+
+          // Force video to play (some browsers need this)
+          videoRef.current.play().catch(err => {
+            console.warn('⚠️ [WEBCAM PREVIEW] Video play() failed (might be autoplay policy):', err);
+          });
+        } else {
+          console.error('❌ [WEBCAM PREVIEW] Video ref is null, cannot attach stream');
         }
 
         setIsLoading(false);
@@ -68,6 +101,9 @@ export function WebcamPreview({ webcamDeviceId, className = '' }: WebcamPreviewP
             setError('Camera permission denied');
           } else if (err.name === 'NotReadableError') {
             setError('Webcam in use by another app');
+          } else if (err.name === 'OverconstrainedError') {
+            console.error('❌ [WEBCAM PREVIEW] OverconstrainedError - invalid deviceId:', webcamDeviceId);
+            setError('Selected camera not available');
           } else {
             setError('Failed to access webcam');
           }
@@ -91,34 +127,52 @@ export function WebcamPreview({ webcamDeviceId, className = '' }: WebcamPreviewP
     };
   }, [webcamDeviceId]);
 
-  if (error) {
-    return (
-      <div className={`flex flex-col items-center justify-center bg-gray-100 rounded-xl ${className}`}>
-        <AlertCircle size={32} className="text-red-500 mb-2" />
-        <p className="text-sm font-medium text-gray-700">{error}</p>
-        <p className="text-xs text-gray-500 mt-1">Check camera permissions in System Settings</p>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className={`flex flex-col items-center justify-center bg-gray-100 rounded-xl ${className}`}>
-        <Camera size={32} className="text-gray-400 mb-2 animate-pulse" />
-        <p className="text-sm font-medium text-gray-600">Loading webcam...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className={`relative overflow-hidden rounded-xl ${className}`}>
+    <div className={`relative overflow-hidden rounded-xl bg-black ${className}`}>
+      {/* Always render video element so ref is available */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="w-full h-full object-cover"
+        className={`w-full h-full object-cover ${isLoading || error ? 'hidden' : ''}`}
+        style={{
+          minHeight: '200px',
+          transform: 'scaleX(-1)' // Mirror the video (common for front-facing cameras)
+        }}
+        onLoadedMetadata={(e) => {
+          const video = e.currentTarget;
+          console.log('🎬 [WEBCAM PREVIEW] Video metadata loaded:', {
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+            readyState: video.readyState,
+            paused: video.paused
+          });
+        }}
+        onPlaying={() => {
+          console.log('▶️ [WEBCAM PREVIEW] Video is now playing');
+        }}
+        onError={(e) => {
+          console.error('❌ [WEBCAM PREVIEW] Video element error:', e);
+        }}
       />
+
+      {/* Error overlay */}
+      {error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100">
+          <AlertCircle size={32} className="text-red-500 mb-2" />
+          <p className="text-sm font-medium text-gray-700">{error}</p>
+          <p className="text-xs text-gray-500 mt-1">Check camera permissions in System Settings</p>
+        </div>
+      )}
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100">
+          <Camera size={32} className="text-gray-400 mb-2 animate-pulse" />
+          <p className="text-sm font-medium text-gray-600">Loading webcam...</p>
+        </div>
+      )}
     </div>
   );
 }

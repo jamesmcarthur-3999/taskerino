@@ -73,6 +73,8 @@ export default function TasksZone() {
   const [filterPriority, setFilterPriority] = useState<'all' | 'urgent' | 'high' | 'medium' | 'low'>('all');
   const [filterDueDate, setFilterDueDate] = useState<'all' | 'overdue' | 'today' | 'week'>('all');
   const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
 
   // Bulk selection state
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
@@ -107,9 +109,27 @@ export default function TasksZone() {
         if (!hasMatchingTag) return false;
       }
 
+      // Company filter
+      if (selectedCompanyIds.length > 0) {
+        if (!task.companyIds || task.companyIds.length === 0) return false;
+        const hasMatchingCompany = task.companyIds.some(companyId =>
+          selectedCompanyIds.includes(companyId)
+        );
+        if (!hasMatchingCompany) return false;
+      }
+
+      // Contact filter
+      if (selectedContactIds.length > 0) {
+        if (!task.contactIds || task.contactIds.length === 0) return false;
+        const hasMatchingContact = task.contactIds.some(contactId =>
+          selectedContactIds.includes(contactId)
+        );
+        if (!hasMatchingContact) return false;
+      }
+
       return true;
     });
-  }, [tasksState.tasks, showCompleted, filterPriority, filterDueDate, filterTags]);
+  }, [tasksState.tasks, showCompleted, filterPriority, filterDueDate, filterTags, selectedCompanyIds, selectedContactIds]);
 
 
   const handleToggleTask = (taskId: string) => {
@@ -220,6 +240,22 @@ export default function TasksZone() {
     } else {
       setFilterTags([...filterTags, tagId]);
     }
+  };
+
+  const handleToggleCompany = (companyId: string) => {
+    setSelectedCompanyIds(prev =>
+      prev.includes(companyId)
+        ? prev.filter(id => id !== companyId)
+        : [...prev, companyId]
+    );
+  };
+
+  const handleToggleContact = (contactId: string) => {
+    setSelectedContactIds(prev =>
+      prev.includes(contactId)
+        ? prev.filter(id => id !== contactId)
+        : [...prev, contactId]
+    );
   };
 
   const handleCreateNewTask = (initialStatus?: Task['status']) => {
@@ -640,7 +676,7 @@ export default function TasksZone() {
               }
               filters={{
                 active: showFilters,
-                count: [!showCompleted, filterPriority !== 'all', filterDueDate !== 'all', filterTags.length > 0].filter(Boolean).length,
+                count: [!showCompleted, filterPriority !== 'all', filterDueDate !== 'all', filterTags.length > 0, selectedCompanyIds.length > 0, selectedContactIds.length > 0].filter(Boolean).length,
                 onToggle: () => setShowFilters(!showFilters),
                 panel: showFilters ? (
                   <StandardFilterPanel
@@ -681,6 +717,26 @@ export default function TasksZone() {
                         onToggle: (id) => setFilterDueDate(id as typeof filterDueDate),
                         multiSelect: false,
                       },
+                      ...(entitiesState.companies.length > 0 ? [{
+                        title: 'COMPANIES',
+                        items: entitiesState.companies.map(company => ({
+                          id: company.id,
+                          label: company.name,
+                        })),
+                        selectedIds: selectedCompanyIds,
+                        onToggle: handleToggleCompany,
+                        multiSelect: true,
+                      }] : []),
+                      ...(entitiesState.contacts.length > 0 ? [{
+                        title: 'CONTACTS',
+                        items: entitiesState.contacts.map(contact => ({
+                          id: contact.id,
+                          label: contact.name,
+                        })),
+                        selectedIds: selectedContactIds,
+                        onToggle: handleToggleContact,
+                        multiSelect: true,
+                      }] : []),
                       ...(topTags.length > 0 ? [{
                         title: 'TAGS',
                         items: topTags.map(tag => ({
@@ -697,6 +753,8 @@ export default function TasksZone() {
                       setFilterPriority('all');
                       setFilterDueDate('all');
                       setFilterTags([]);
+                      setSelectedCompanyIds([]);
+                      setSelectedContactIds([]);
                     }}
                   />
                 ) : undefined,
@@ -951,15 +1009,17 @@ export default function TasksZone() {
                 setSelectedTaskIds(newSet);
               }}
               onMarkComplete={() => {
-                selectedTaskIds.forEach(id => {
-                  tasksDispatch({ type: 'UPDATE_TASK', payload: { id, done: true } });
+                tasksDispatch({
+                  type: 'BATCH_UPDATE_TASKS',
+                  payload: { ids: Array.from(selectedTaskIds), updates: { done: true } }
                 });
                 setSelectedTaskIds(new Set());
                 setBulkSelectMode(false);
               }}
               onMarkIncomplete={() => {
-                selectedTaskIds.forEach(id => {
-                  tasksDispatch({ type: 'UPDATE_TASK', payload: { id, done: false } });
+                tasksDispatch({
+                  type: 'BATCH_UPDATE_TASKS',
+                  payload: { ids: Array.from(selectedTaskIds), updates: { done: false } }
                 });
                 setSelectedTaskIds(new Set());
                 setBulkSelectMode(false);
@@ -1057,7 +1117,7 @@ export default function TasksZone() {
               ]}
               filters={{
                 active: showFilters,
-                count: [!showCompleted, filterPriority !== 'all', filterDueDate !== 'all', filterTags.length > 0].filter(Boolean).length,
+                count: [!showCompleted, filterPriority !== 'all', filterDueDate !== 'all', filterTags.length > 0, selectedCompanyIds.length > 0, selectedContactIds.length > 0].filter(Boolean).length,
                 onToggle: () => setShowFilters(!showFilters),
                 panel: showFilters ? (
                   <StandardFilterPanel
@@ -1098,6 +1158,26 @@ export default function TasksZone() {
                         onToggle: (id) => setFilterDueDate(id as typeof filterDueDate),
                         multiSelect: false,
                       },
+                      ...(entitiesState.companies.length > 0 ? [{
+                        title: 'COMPANIES',
+                        items: entitiesState.companies.map(company => ({
+                          id: company.id,
+                          label: company.name,
+                        })),
+                        selectedIds: selectedCompanyIds,
+                        onToggle: handleToggleCompany,
+                        multiSelect: true,
+                      }] : []),
+                      ...(entitiesState.contacts.length > 0 ? [{
+                        title: 'CONTACTS',
+                        items: entitiesState.contacts.map(contact => ({
+                          id: contact.id,
+                          label: contact.name,
+                        })),
+                        selectedIds: selectedContactIds,
+                        onToggle: handleToggleContact,
+                        multiSelect: true,
+                      }] : []),
                       ...(topTags.length > 0 ? [{
                         title: 'TAGS',
                         items: topTags.map(tag => ({
@@ -1114,6 +1194,8 @@ export default function TasksZone() {
                       setFilterPriority('all');
                       setFilterDueDate('all');
                       setFilterTags([]);
+                      setSelectedCompanyIds([]);
+                      setSelectedContactIds([]);
                     }}
                   />
                 ) : undefined,

@@ -81,8 +81,8 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
   const rowVirtualizer = useVirtualizer({
     count: sortedTimelineItems.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 300, // Estimated height per item (will vary)
-    overscan: 5, // Render 5 items above/below viewport for smooth scrolling
+    estimateSize: () => 200, // Let the virtualizer measure actual sizes dynamically
+    overscan: 5,
   });
 
   const toggleExpanded = (screenshotId: string) => {
@@ -497,7 +497,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
                 key={contextItem.id}
                 data-index={virtualRow.index}
                 ref={rowVirtualizer.measureElement}
-                className="flex gap-4 absolute top-0 left-0 w-full pb-4"
+                className="flex gap-4 absolute top-0 left-0 w-full mb-3"
                 style={{
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
@@ -538,7 +538,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
                 key={segment.id}
                 data-index={virtualRow.index}
                 ref={rowVirtualizer.measureElement}
-                className="flex gap-4 absolute top-0 left-0 w-full pb-4"
+                className="flex gap-4 absolute top-0 left-0 w-full mb-3"
                 style={{
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
@@ -567,7 +567,7 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
               key={screenshot.id}
               data-index={virtualRow.index}
               ref={rowVirtualizer.measureElement}
-              className="flex gap-4 absolute top-0 left-0 w-full pb-4"
+              className="flex gap-4 absolute top-0 left-0 w-full mb-3"
               style={{
                 transform: `translateY(${virtualRow.start}px)`,
               }}

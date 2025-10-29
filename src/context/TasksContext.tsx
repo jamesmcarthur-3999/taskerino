@@ -4,6 +4,8 @@ import type { Task, ManualTaskData } from '../types';
 import { getStorage } from '../services/storage';
 import { generateId } from '../utils/helpers';
 import { QueryEngine, type QueryFilter, type QuerySort } from '../services/storage/QueryEngine';
+import { useRelationships } from './RelationshipContext';
+import { EntityType, RelationshipType } from '../types/relationships';
 
 // Tasks State
 interface TasksState {
@@ -114,6 +116,12 @@ const TasksContext = createContext<{
 
   // Query Engine Methods (Phase 3.3)
   queryTasks: (filters: QueryFilter[], sort?: QuerySort, limit?: number) => Promise<Task[]>;
+
+  // Relationship helper methods (Phase C2)
+  linkTaskToNote: (taskId: string, noteId: string) => Promise<void>;
+  unlinkTaskFromNote: (taskId: string, noteId: string) => Promise<void>;
+  linkTaskToSession: (taskId: string, sessionId: string) => Promise<void>;
+  unlinkTaskFromSession: (taskId: string, sessionId: string) => Promise<void>;
 } | null>(null);
 
 // Provider
@@ -121,6 +129,15 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(tasksReducer, defaultState);
   const [hasLoaded, setHasLoaded] = React.useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get relationship context (may not be available during initial render)
+  let relationshipsContext;
+  try {
+    relationshipsContext = useRelationships();
+  } catch {
+    // RelationshipContext not available yet - that's OK during migration
+    relationshipsContext = null;
+  }
 
   // Load from storage on mount
   useEffect(() => {
@@ -184,8 +201,95 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     return result.entities;
   }, []);
 
+  // Relationship helper methods (Phase C2)
+  const linkTaskToNote = React.useCallback(async (taskId: string, noteId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[TasksContext] RelationshipContext not available - skipping linkTaskToNote');
+      return;
+    }
+
+    try {
+      await relationshipsContext.addRelationship({
+        sourceType: EntityType.TASK,
+        sourceId: taskId,
+        targetType: EntityType.NOTE,
+        targetId: noteId,
+        type: RelationshipType.TASK_NOTE,
+        metadata: { source: 'manual', createdAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      console.error('[TasksContext] Failed to link task to note:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const unlinkTaskFromNote = React.useCallback(async (taskId: string, noteId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[TasksContext] RelationshipContext not available - skipping unlinkTaskFromNote');
+      return;
+    }
+
+    try {
+      const relationships = relationshipsContext.getRelationships(taskId, RelationshipType.TASK_NOTE);
+      const rel = relationships.find(r => r.targetId === noteId);
+      if (rel) {
+        await relationshipsContext.removeRelationship(rel.id);
+      }
+    } catch (error) {
+      console.error('[TasksContext] Failed to unlink task from note:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const linkTaskToSession = React.useCallback(async (taskId: string, sessionId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[TasksContext] RelationshipContext not available - skipping linkTaskToSession');
+      return;
+    }
+
+    try {
+      await relationshipsContext.addRelationship({
+        sourceType: EntityType.TASK,
+        sourceId: taskId,
+        targetType: EntityType.SESSION,
+        targetId: sessionId,
+        type: RelationshipType.TASK_SESSION,
+        metadata: { source: 'manual', createdAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      console.error('[TasksContext] Failed to link task to session:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const unlinkTaskFromSession = React.useCallback(async (taskId: string, sessionId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[TasksContext] RelationshipContext not available - skipping unlinkTaskFromSession');
+      return;
+    }
+
+    try {
+      const relationships = relationshipsContext.getRelationships(taskId, RelationshipType.TASK_SESSION);
+      const rel = relationships.find(r => r.targetId === sessionId);
+      if (rel) {
+        await relationshipsContext.removeRelationship(rel.id);
+      }
+    } catch (error) {
+      console.error('[TasksContext] Failed to unlink task from session:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
   return (
-    <TasksContext.Provider value={{ state, dispatch, queryTasks }}>
+    <TasksContext.Provider value={{
+      state,
+      dispatch,
+      queryTasks,
+      linkTaskToNote,
+      unlinkTaskFromNote,
+      linkTaskToSession,
+      unlinkTaskFromSession,
+    }}>
       {children}
     </TasksContext.Provider>
   );
@@ -198,13 +302,79 @@ export function useTasks() {
     throw new Error('useTasks must be used within TasksProvider');
   }
 
+  // Get relationship context for enhanced task operations
+  let relationshipsContext;
+  try {
+    relationshipsContext = useRelationships();
+  } catch {
+    relationshipsContext = null;
+  }
+
   // Helper methods
-  const addTask = (task: Task) => {
+  const addTask = async (task: Task) => {
+    // Add task to state
     context.dispatch({ type: 'ADD_TASK', payload: task });
+
+    // Create relationships if specified and RelationshipContext is available
+    if (relationshipsContext) {
+      try {
+        // Link to note if specified
+        if (task.noteId) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.TASK,
+            sourceId: task.id,
+            targetType: EntityType.NOTE,
+            targetId: task.noteId,
+            type: RelationshipType.TASK_NOTE,
+            metadata: { source: 'manual', createdAt: new Date().toISOString() },
+          });
+        }
+
+        // Link to session if specified
+        if (task.sourceSessionId) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.TASK,
+            sourceId: task.id,
+            targetType: EntityType.SESSION,
+            targetId: task.sourceSessionId,
+            type: RelationshipType.TASK_SESSION,
+            metadata: {
+              source: task.createdBy === 'ai' ? 'ai' : 'manual',
+              createdAt: new Date().toISOString()
+            },
+          });
+        }
+
+        // Mark task as using relationship system
+        if (!task.relationshipVersion) {
+          const updatedTask = { ...task, relationshipVersion: 1 };
+          context.dispatch({ type: 'UPDATE_TASK', payload: updatedTask });
+        }
+      } catch (error) {
+        console.error('[TasksContext] Failed to create task relationships:', error);
+      }
+    }
   };
 
   const updateTask = (task: Task) => {
     context.dispatch({ type: 'UPDATE_TASK', payload: task });
+  };
+
+  const deleteTask = async (taskId: string) => {
+    // Delete relationships first if RelationshipContext is available
+    if (relationshipsContext) {
+      try {
+        const relationships = relationshipsContext.getRelationships(taskId);
+        for (const rel of relationships) {
+          await relationshipsContext.removeRelationship(rel.id);
+        }
+      } catch (error) {
+        console.error('[TasksContext] Failed to delete task relationships:', error);
+      }
+    }
+
+    // Delete task from state
+    context.dispatch({ type: 'DELETE_TASK', payload: taskId });
   };
 
   const createManualTask = (data: ManualTaskData) => {
@@ -215,6 +385,7 @@ export function useTasks() {
     ...context,
     addTask,
     updateTask,
+    deleteTask,
     createManualTask,
   };
 }

@@ -42,6 +42,9 @@ interface SessionsTopBarProps {
   updateVideo: (enabled: boolean) => void;
   updateInterval: (interval: number) => void;
 
+  // Active session updates (for hot-swapping)
+  updateActiveSession: (updates: Partial<Session>) => void;
+
   // Filter/Sort/Select state
   sortBy: 'date-desc' | 'date-asc' | 'duration-desc' | 'duration-asc';
   onSortChange: (sortBy: 'date-desc' | 'date-asc' | 'duration-desc' | 'duration-asc') => void;
@@ -51,6 +54,12 @@ interface SessionsTopBarProps {
   onCategoriesChange: (categories: string[]) => void;
   onSubCategoriesChange: (subCategories: string[]) => void;
   onTagsChange: (tags: string[]) => void;
+  selectedCompanyIds: string[];
+  selectedContactIds: string[];
+  onCompanyIdsChange: (companyIds: string[]) => void;
+  onContactIdsChange: (contactIds: string[]) => void;
+  companies: Array<{ id: string; name: string }>;
+  contacts: Array<{ id: string; name: string }>;
   bulkSelectMode: boolean;
   selectedSessionIds: Set<string>;
   onBulkSelectModeChange: (enabled: boolean) => void;
@@ -85,6 +94,7 @@ export function SessionsTopBar({
   updateAudio,
   updateVideo,
   updateInterval,
+  updateActiveSession,
   sortBy,
   onSortChange,
   selectedCategories,
@@ -93,6 +103,12 @@ export function SessionsTopBar({
   onCategoriesChange,
   onSubCategoriesChange,
   onTagsChange,
+  selectedCompanyIds,
+  selectedContactIds,
+  onCompanyIdsChange,
+  onContactIdsChange,
+  companies,
+  contacts,
   bulkSelectMode,
   selectedSessionIds,
   onBulkSelectModeChange,
@@ -121,6 +137,25 @@ export function SessionsTopBar({
   const [showAdvancedCaptureModal, setShowAdvancedCaptureModal] = useState(false);
   const [showAdvancedAudioModal, setShowAdvancedAudioModal] = useState(false);
 
+  // Load devices when audio settings opens (lazy loading strategy)
+  // Devices are NOT loaded on mount to prevent UI freezing waiting for macOS permissions
+  // Instead, they're loaded on-demand when user opens audio modals
+  useEffect(() => {
+    if ((showAudioQuickSettings || showAdvancedAudioModal) && onLoadDevices) {
+      console.log('🎤 [SESSIONS TOPBAR] Audio modal opened, loading devices...');
+      onLoadDevices();
+    }
+  }, [showAudioQuickSettings, showAdvancedAudioModal, onLoadDevices]);
+
+  // Load devices when capture settings opens (lazy loading strategy)
+  // Ensures displays, windows, and webcams are enumerated before showing preview
+  useEffect(() => {
+    if ((showCaptureQuickSettings || showAdvancedCaptureModal) && onLoadDevices) {
+      console.log('🎥 [SESSIONS TOPBAR] Capture modal opened, loading devices...');
+      onLoadDevices();
+    }
+  }, [showCaptureQuickSettings, showAdvancedCaptureModal, onLoadDevices]);
+
   // CAPTURE SETTINGS STATE
   // Video settings
   const [videoEnabled, setVideoEnabled] = useState(currentSettings.videoRecording || false);
@@ -133,8 +168,6 @@ export function SessionsTopBar({
     currentSettings.screenshotInterval === -1 ? 'adaptive' : 'fixed'
   );
   const [screenshotInterval, setScreenshotInterval] = useState(currentSettings.screenshotInterval === -1 ? 1 : currentSettings.screenshotInterval);
-  const [screenshotFormat, setScreenshotFormat] = useState<'png' | 'jpg' | 'webp'>('png');
-  const [screenshotQuality, setScreenshotQuality] = useState(90);
 
   // Source settings
   const [captureSource, setCaptureSource] = useState<'screen' | 'window' | 'webcam'>('screen');
@@ -149,11 +182,8 @@ export function SessionsTopBar({
   const [pipCustomPosition, setPipCustomPosition] = useState<{ x: number; y: number }>({ x: 10, y: 10 });
   const [pipBorderEnabled, setPipBorderEnabled] = useState(true);
 
-  // Advanced video settings
-  const [codec, setCodec] = useState<'h264' | 'h265' | 'vp9'>('h264');
-  const [bitrate, setBitrate] = useState(5000);
-  const [storageLocation, setStorageLocation] = useState('~/Taskerino/sessions');
-  const [fileNamingPattern, setFileNamingPattern] = useState('session-{date}-{time}');
+  // Compositor settings (Wave 1.3)
+  const [compositor, setCompositor] = useState<'passthrough' | 'grid' | 'sidebyside'>('passthrough');
 
   // AUDIO SETTINGS STATE
   // Device selection
@@ -175,8 +205,10 @@ export function SessionsTopBar({
   const [autoLevelingEnabled, setAutoLevelingEnabled] = useState(true);
   const [compressionEnabled, setCompressionEnabled] = useState(false);
   const [compressionThreshold, setCompressionThreshold] = useState(-20);
-  const [sampleRate, setSampleRate] = useState<44100 | 48000 | 96000>(48000);
-  const [bitDepth, setBitDepth] = useState<16 | 24 | 32>(24);
+
+  // VAD (Voice Activity Detection)
+  const [vadEnabled, setVadEnabled] = useState(false); // Default disabled for testing
+  const [vadThreshold, setVadThreshold] = useState(-45); // -50 to -20 dB
 
   // Per-app audio routing
   const [perAppAudioEnabled, setPerAppAudioEnabled] = useState(false);
@@ -184,6 +216,174 @@ export function SessionsTopBar({
   const [availableApps] = useState<Array<{ bundleId: string; name: string; icon?: string }>>([
     // TODO: Populate from Tauri command
   ]);
+
+  // ============================================================================
+  // SETTINGS SYNC: Keep quick settings in sync with active session config
+  // ============================================================================
+
+  // Sync quick settings state with active session when it changes
+  useEffect(() => {
+    if (!activeSession) return;
+
+    console.log('🔄 [TOP BAR] Syncing quick settings with active session config');
+
+    // Sync video/capture settings
+    if (activeSession.videoConfig) {
+      const config = activeSession.videoConfig;
+
+      // Sync source type
+      if (config.displayIds && config.displayIds.length > 0) {
+        setCaptureSource('screen');
+        setSelectedDisplayIds(config.displayIds);
+      } else if (config.windowIds && config.windowIds.length > 0) {
+        setCaptureSource('window');
+        setSelectedWindowIds(config.windowIds);
+      } else if (config.webcamDeviceId) {
+        setCaptureSource('webcam');
+        setSelectedWebcam(config.webcamDeviceId);
+      }
+
+      // Sync webcam for PiP/overlay
+      if (config.webcamDeviceId && config.displayIds) {
+        setSelectedWebcam(config.webcamDeviceId);
+      }
+    }
+
+    // Sync audio settings
+    if (activeSession.audioConfig) {
+      const config = activeSession.audioConfig;
+      if (config.micDeviceId) {
+        setSelectedMicDevice(config.micDeviceId);
+      }
+      if (config.systemAudioDeviceId) {
+        setSelectedSystemAudioDevice(config.systemAudioDeviceId);
+      }
+      if (config.balance !== undefined) {
+        setMicBalance(config.balance);
+      }
+    }
+
+    // Sync recording toggles
+    setVideoEnabled(activeSession.videoRecording || false);
+    setMicEnabled(activeSession.audioRecording || false);
+  }, [activeSession]);
+
+  // ============================================================================
+  // HOT-SWAPPING: Watch for device changes during active recording
+  // ============================================================================
+
+  // Hot-swap displays when selectedDisplayIds changes during active session
+  useEffect(() => {
+    if (!activeSession || !activeSession.videoRecording) return;
+
+    const oldDisplays = activeSession.videoConfig?.displayIds || [];
+    const newDisplays = selectedDisplayIds;
+
+    // Only hot-swap if there's actually a change
+    if (oldDisplays.length > 0 && newDisplays.length > 0 && oldDisplays[0] !== newDisplays[0]) {
+      console.log(`🔄 [TOP BAR] Hot-swapping display: ${oldDisplays[0]} → ${newDisplays[0]}`);
+
+      videoRecordingService.switchSource(oldDisplays[0], 'display', newDisplays[0])
+        .then(() => {
+          // Update session config
+          updateActiveSession({
+            videoConfig: {
+              ...activeSession.videoConfig,
+              displayIds: newDisplays,
+            }
+          });
+          console.log(`✅ [TOP BAR] Display hot-swap successful`);
+        })
+        .catch((error) => {
+          console.error(`❌ [TOP BAR] Display hot-swap failed:`, error);
+        });
+    }
+  }, [selectedDisplayIds, activeSession, updateActiveSession]);
+
+  // Hot-swap webcams when selectedWebcam changes during active session
+  useEffect(() => {
+    if (!activeSession || !activeSession.videoRecording) return;
+
+    const oldWebcam = activeSession.videoConfig?.webcamDeviceId;
+    const newWebcam = selectedWebcam;
+
+    // Only hot-swap if there's actually a change
+    if (oldWebcam && newWebcam && oldWebcam !== newWebcam) {
+      console.log(`🔄 [TOP BAR] Hot-swapping webcam: ${oldWebcam} → ${newWebcam}`);
+
+      videoRecordingService.switchSource(oldWebcam, 'webcam', newWebcam)
+        .then(() => {
+          // Update session config
+          updateActiveSession({
+            videoConfig: {
+              ...activeSession.videoConfig,
+              webcamDeviceId: newWebcam,
+            }
+          });
+          console.log(`✅ [TOP BAR] Webcam hot-swap successful`);
+        })
+        .catch((error) => {
+          console.error(`❌ [TOP BAR] Webcam hot-swap failed:`, error);
+        });
+    }
+  }, [selectedWebcam, activeSession, updateActiveSession]);
+
+  // Hot-swap audio devices when selection changes during active session
+  useEffect(() => {
+    if (!activeSession || !activeSession.audioRecording) return;
+
+    const oldConfig = activeSession.audioConfig;
+    const newMicDevice = selectedMicDevice;
+    const newSystemAudioDevice = selectedSystemAudioDevice;
+
+    // Check if microphone device changed
+    if (oldConfig?.micDeviceId && newMicDevice && oldConfig.micDeviceId !== newMicDevice) {
+      console.log(`🔄 [TOP BAR] Hot-swapping microphone: ${oldConfig.micDeviceId} → ${newMicDevice}`);
+
+      audioRecordingService.setMixConfig({
+        ...oldConfig,
+        micDeviceId: newMicDevice,
+      })
+        .then(() => {
+          updateActiveSession({
+            audioConfig: {
+              ...oldConfig,
+              micDeviceId: newMicDevice,
+            }
+          });
+          console.log(`✅ [TOP BAR] Microphone hot-swap successful`);
+        })
+        .catch((error) => {
+          console.error(`❌ [TOP BAR] Microphone hot-swap failed:`, error);
+        });
+    }
+
+    // Check if system audio device changed
+    if (oldConfig?.systemAudioDeviceId && newSystemAudioDevice && oldConfig.systemAudioDeviceId !== newSystemAudioDevice) {
+      console.log(`🔄 [TOP BAR] Hot-swapping system audio: ${oldConfig.systemAudioDeviceId} → ${newSystemAudioDevice}`);
+
+      audioRecordingService.setMixConfig({
+        ...oldConfig,
+        systemAudioDeviceId: newSystemAudioDevice,
+      })
+        .then(() => {
+          updateActiveSession({
+            audioConfig: {
+              ...oldConfig,
+              systemAudioDeviceId: newSystemAudioDevice,
+            }
+          });
+          console.log(`✅ [TOP BAR] System audio hot-swap successful`);
+        })
+        .catch((error) => {
+          console.error(`❌ [TOP BAR] System audio hot-swap failed:`, error);
+        });
+    }
+  }, [selectedMicDevice, selectedSystemAudioDevice, activeSession, updateActiveSession]);
+
+  // ============================================================================
+  // END HOT-SWAPPING
+  // ============================================================================
 
   // Get semantic gradients from design system
   const warningGradient = getWarningGradient('light');
@@ -208,6 +408,40 @@ export function SessionsTopBar({
     });
 
     const sections = [];
+
+    // Add Companies filter section (if companies exist)
+    if (companies.length > 0) {
+      sections.push({
+        title: 'COMPANIES',
+        items: companies.map(c => ({ id: c.id, label: c.name })),
+        selectedIds: selectedCompanyIds,
+        onToggle: (id: string) => {
+          if (selectedCompanyIds.includes(id)) {
+            onCompanyIdsChange(selectedCompanyIds.filter(c => c !== id));
+          } else {
+            onCompanyIdsChange([...selectedCompanyIds, id]);
+          }
+        },
+        multiSelect: true,
+      });
+    }
+
+    // Add Contacts filter section (if contacts exist)
+    if (contacts.length > 0) {
+      sections.push({
+        title: 'CONTACTS',
+        items: contacts.map(c => ({ id: c.id, label: c.name })),
+        selectedIds: selectedContactIds,
+        onToggle: (id: string) => {
+          if (selectedContactIds.includes(id)) {
+            onContactIdsChange(selectedContactIds.filter(c => c !== id));
+          } else {
+            onContactIdsChange([...selectedContactIds, id]);
+          }
+        },
+        multiSelect: true,
+      });
+    }
 
     if (uniqueCategories.size > 0) {
       sections.push({
@@ -258,9 +492,9 @@ export function SessionsTopBar({
     }
 
     return sections;
-  }, [sessions, selectedCategories, selectedSubCategories, selectedTags, onCategoriesChange, onSubCategoriesChange, onTagsChange]);
+  }, [sessions, companies, contacts, selectedCategories, selectedSubCategories, selectedTags, selectedCompanyIds, selectedContactIds, onCategoriesChange, onSubCategoriesChange, onTagsChange, onCompanyIdsChange, onContactIdsChange]);
 
-  const activeFilterCount = selectedCategories.length + selectedSubCategories.length + selectedTags.length;
+  const activeFilterCount = selectedCategories.length + selectedSubCategories.length + selectedTags.length + selectedCompanyIds.length + selectedContactIds.length;
 
   // Permission request handlers
   const handleRequestScreenPermission = async () => {
@@ -387,6 +621,8 @@ export function SessionsTopBar({
         balance: micBalance,
         micVolume: micGain / 100,
         systemVolume: systemAudioGain / 100,
+        vadEnabled, // Voice Activity Detection enable/disable
+        vadThreshold, // VAD threshold in dB (-50 to -20)
       };
     }
 
@@ -419,20 +655,65 @@ export function SessionsTopBar({
           break;
       }
 
-      sessionData.videoConfig = {
-        sourceType: captureSource === 'screen' ? 'display' : captureSource === 'window' ? 'window' : 'webcam',
-        displayIds: captureSource === 'screen' && selectedDisplayIds.length > 0 ? selectedDisplayIds : undefined,
-        windowIds: captureSource === 'window' && selectedWindowIds.length > 0 ? selectedWindowIds : undefined,
-        webcamDeviceId: captureSource === 'webcam' && selectedWebcam ? selectedWebcam : undefined,
-        quality: videoQuality === 'custom' ? 'medium' : videoQuality,
-        fps,
-        resolution,
-        pipConfig: webcamPipEnabled ? {
-          enabled: true,
-          position: pipPosition === 'custom' ? 'bottom-right' : pipPosition,
-          size: pipSize === 'custom' ? 'small' : pipSize,
-        } : undefined,
-      };
+      // Check if we need multi-source recording (Wave 1.3)
+      const totalSources =
+        (captureSource === 'screen' ? selectedDisplayIds.length : 0) +
+        (captureSource === 'window' ? selectedWindowIds.length : 0);
+
+      const isMultiSource = totalSources >= 2 ||
+        (captureSource === 'screen' && selectedDisplayIds.length > 1) ||
+        (captureSource === 'window' && selectedWindowIds.length > 1);
+
+      if (isMultiSource) {
+        // Use multi-source recording config
+        console.log('🎬 [START SESSION] Multi-source recording detected:', {
+          displayIds: selectedDisplayIds,
+          windowIds: selectedWindowIds,
+          compositor
+        });
+
+        // Map displays and windows to RecordingSource[]
+        const sources: Array<{type: 'display' | 'window' | 'webcam'; id: string; name?: string}> = [
+          ...selectedDisplayIds.map(id => ({
+            type: 'display' as const,
+            id,
+            name: displays.find(d => d.displayId === id)?.displayName
+          })),
+          ...selectedWindowIds.map(id => ({
+            type: 'window' as const,
+            id,
+            name: windows.find(w => w.windowId === id)?.title
+          }))
+        ];
+
+        // Store multi-source config in session
+        sessionData.videoConfig = {
+          sourceType: 'multi-source',
+          multiSourceConfig: {
+            sources,
+            compositor
+          },
+          quality: videoQuality === 'custom' ? 'medium' : videoQuality,
+          fps,
+          resolution,
+        };
+      } else {
+        // Single-source recording (existing code - UNCHANGED)
+        sessionData.videoConfig = {
+          sourceType: captureSource === 'screen' ? 'display' : captureSource === 'window' ? 'window' : 'webcam',
+          displayIds: captureSource === 'screen' && selectedDisplayIds.length > 0 ? selectedDisplayIds : undefined,
+          windowIds: captureSource === 'window' && selectedWindowIds.length > 0 ? selectedWindowIds : undefined,
+          webcamDeviceId: captureSource === 'webcam' && selectedWebcam ? selectedWebcam : undefined,
+          quality: videoQuality === 'custom' ? 'medium' : videoQuality,
+          fps,
+          resolution,
+          pipConfig: webcamPipEnabled ? {
+            enabled: true,
+            position: pipPosition === 'custom' ? 'bottom-right' : pipPosition,
+            size: pipSize === 'custom' ? 'small' : pipSize,
+          } : undefined,
+        };
+      }
     }
 
     // Call startSession with the complete configuration
@@ -840,6 +1121,8 @@ export function SessionsTopBar({
           selectedWebcam={selectedWebcam}
           onWebcamChange={setSelectedWebcam}
           webcams={webcams}
+          compositor={compositor}
+          onCompositorChange={setCompositor}
           webcamPipEnabled={webcamPipEnabled}
           onWebcamPipToggle={setWebcamPipEnabled}
           onOpenAdvanced={() => setShowAdvancedCaptureModal(true)}
@@ -886,6 +1169,10 @@ export function SessionsTopBar({
           systemAudioDevices={audioDevices.filter(d => d.deviceType === 'Output')}
           micBalance={micBalance}
           onBalanceChange={setMicBalance}
+          vadEnabled={vadEnabled}
+          onVadEnabledChange={setVadEnabled}
+          vadThreshold={vadThreshold}
+          onVadThresholdChange={setVadThreshold}
           onOpenAdvanced={() => setShowAdvancedAudioModal(true)}
         />
       </div>
@@ -917,6 +1204,8 @@ export function SessionsTopBar({
                 onCategoriesChange([]);
                 onSubCategoriesChange([]);
                 onTagsChange([]);
+                onCompanyIdsChange([]);
+                onContactIdsChange([]);
               }}
             />
           )}
@@ -1084,20 +1373,6 @@ export function SessionsTopBar({
       <AdvancedCaptureModal
         show={showAdvancedCaptureModal}
         onClose={() => setShowAdvancedCaptureModal(false)}
-        quality={videoQuality}
-        onQualityChange={setVideoQuality}
-        customResolution={customResolution}
-        onCustomResolutionChange={setCustomResolution}
-        customFrameRate={customFrameRate}
-        onCustomFrameRateChange={setCustomFrameRate}
-        codec={codec}
-        onCodecChange={setCodec}
-        bitrate={bitrate}
-        onBitrateChange={setBitrate}
-        screenshotFormat={screenshotFormat}
-        onScreenshotFormatChange={setScreenshotFormat}
-        screenshotQuality={screenshotQuality}
-        onScreenshotQualityChange={setScreenshotQuality}
         pipPosition={pipPosition}
         onPipPositionChange={setPipPosition}
         pipSize={pipSize}
@@ -1109,10 +1384,6 @@ export function SessionsTopBar({
         displays={displays}
         selectedDisplayIds={selectedDisplayIds}
         onDisplayIdsChange={setSelectedDisplayIds}
-        storageLocation={storageLocation}
-        onStorageLocationChange={setStorageLocation}
-        fileNamingPattern={fileNamingPattern}
-        onFileNamingPatternChange={setFileNamingPattern}
       />
 
       {/* Advanced Audio Modal */}
@@ -1144,10 +1415,6 @@ export function SessionsTopBar({
         onCompressionToggle={setCompressionEnabled}
         compressionThreshold={compressionThreshold}
         onCompressionThresholdChange={setCompressionThreshold}
-        sampleRate={sampleRate}
-        onSampleRateChange={setSampleRate}
-        bitDepth={bitDepth}
-        onBitDepthChange={setBitDepth}
       />
     </>
   );

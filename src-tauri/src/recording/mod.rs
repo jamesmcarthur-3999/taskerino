@@ -46,6 +46,7 @@
 mod error;
 mod ffi;
 mod session;
+mod video_audio_merger;
 
 #[cfg(test)]
 mod tests;
@@ -54,6 +55,12 @@ mod tests;
 #[allow(unused_imports)] // Will be used by video_recording.rs
 pub use error::FFIError;
 #[allow(unused_imports)] // Will be used by video_recording.rs
-pub use ffi::SwiftRecorderHandle;
+pub use ffi::{
+    enumerate_displays, enumerate_webcams, enumerate_windows,
+    CompositorType, RecordingStats, RecordingSessionError, SourceType, SwiftRecorderHandle,
+    SwiftRecordingSession,
+};
 #[allow(unused_imports)] // Will be used by video_recording.rs
 pub use session::{RecordingConfig, RecordingSession, VideoQuality};
+#[allow(unused_imports)] // Will be used by video_recording.rs
+pub use video_audio_merger::{ExportQuality, MergeError, MergeResult, VideoAudioMerger};

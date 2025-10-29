@@ -9,7 +9,7 @@
 // import Anthropic from '@anthropic-ai/sdk';
 import type { Session, VideoFrame } from '../types';
 import { videoFrameExtractor } from './videoFrameExtractor';
-import { attachmentStorage } from './attachmentStorage';
+import { getCAStorage } from './storage/ContentAddressableStorage';
 import { getStorage } from './storage';
 
 export interface VideoAnalysisRequest {
@@ -60,10 +60,10 @@ class VideoAnalysisAgent {
       throw new Error('Session has no video recording');
     }
 
-    // 2. Get video path
-    const videoAttachment = await attachmentStorage.getAttachment(
-      session.video.fullVideoAttachmentId
-    );
+    // 2. Get video path (Phase 4: Use hash if available)
+    const caStorage = await getCAStorage();
+    const identifier = session.video.hash || session.video.fullVideoAttachmentId;
+    const videoAttachment = await caStorage.loadAttachment(identifier);
     if (!videoAttachment?.path) {
       throw new Error('Video file not found');
     }

@@ -6,7 +6,7 @@ import { useEffect, type RefObject } from 'react';
  * @param handler - Callback function to execute when clicking outside
  */
 export function useClickOutside(
-  refs: Array<RefObject<HTMLElement>>,
+  refs: Array<RefObject<HTMLElement | null>>,
   handler: () => void
 ) {
   useEffect(() => {

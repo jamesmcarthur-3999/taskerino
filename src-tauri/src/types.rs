@@ -32,56 +32,6 @@ pub struct AudioDevice {
     pub channels: u16,
 }
 
-/// Audio source type
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum AudioSourceType {
-    Microphone,
-    SystemAudio,
-    Both,
-}
-
-/// Audio mix configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AudioMixConfig {
-    /// Microphone device ID (optional)
-    #[serde(rename = "micDeviceId")]
-    pub mic_device_id: Option<String>,
-
-    /// System audio device ID (optional)
-    #[serde(rename = "systemAudioDeviceId")]
-    pub system_audio_device_id: Option<String>,
-
-    /// Audio source type
-    #[serde(rename = "sourceType")]
-    pub source_type: AudioSourceType,
-
-    /// Balance between mic and system audio (0-100)
-    /// 0 = all mic, 100 = all system, 50 = equal
-    pub balance: Option<u8>,
-
-    /// Microphone volume (0.0-1.0)
-    #[serde(rename = "micVolume")]
-    pub mic_volume: Option<f32>,
-
-    /// System audio volume (0.0-1.0)
-    #[serde(rename = "systemVolume")]
-    pub system_volume: Option<f32>,
-}
-
-impl Default for AudioMixConfig {
-    fn default() -> Self {
-        Self {
-            mic_device_id: None,
-            system_audio_device_id: None,
-            source_type: AudioSourceType::Microphone,
-            balance: Some(50),
-            mic_volume: Some(1.0),
-            system_volume: Some(1.0),
-        }
-    }
-}
-
 /// Display information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisplayInfo {
@@ -228,63 +178,6 @@ pub struct VideoResolution {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_audio_source_type_serialization() {
-        // Verify AudioSourceType serializes with kebab-case
-        let microphone = AudioSourceType::Microphone;
-        let json = serde_json::to_string(&microphone).unwrap();
-        assert_eq!(json, r#""microphone""#);
-
-        let system_audio = AudioSourceType::SystemAudio;
-        let json = serde_json::to_string(&system_audio).unwrap();
-        assert_eq!(json, r#""system-audio""#);
-
-        let both = AudioSourceType::Both;
-        let json = serde_json::to_string(&both).unwrap();
-        assert_eq!(json, r#""both""#);
-    }
-
-    #[test]
-    fn test_audio_mix_config_serialization() {
-        // Verify AudioMixConfig serializes with camelCase
-        let config = AudioMixConfig {
-            mic_device_id: Some("mic-123".to_string()),
-            system_audio_device_id: Some("sys-456".to_string()),
-            source_type: AudioSourceType::Both,
-            balance: Some(50),
-            mic_volume: Some(0.8),
-            system_volume: Some(0.7),
-        };
-
-        let json = serde_json::to_string(&config).unwrap();
-        assert!(json.contains(r#""micDeviceId":"mic-123""#));
-        assert!(json.contains(r#""systemAudioDeviceId":"sys-456""#));
-        assert!(json.contains(r#""sourceType":"both""#));
-        assert!(json.contains(r#""micVolume":0.8"#));
-        assert!(json.contains(r#""systemVolume":0.7"#));
-    }
-
-    #[test]
-    fn test_audio_mix_config_deserialization() {
-        // Verify AudioMixConfig deserializes from TypeScript JSON
-        let json = r#"{
-            "micDeviceId": "mic-123",
-            "systemAudioDeviceId": "sys-456",
-            "sourceType": "both",
-            "balance": 50,
-            "micVolume": 0.8,
-            "systemVolume": 0.7
-        }"#;
-
-        let config: AudioMixConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.mic_device_id, Some("mic-123".to_string()));
-        assert_eq!(config.system_audio_device_id, Some("sys-456".to_string()));
-        assert_eq!(config.source_type, AudioSourceType::Both);
-        assert_eq!(config.balance, Some(50));
-        assert_eq!(config.mic_volume, Some(0.8));
-        assert_eq!(config.system_volume, Some(0.7));
-    }
 
     #[test]
     fn test_video_source_type_serialization() {

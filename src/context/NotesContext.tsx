@@ -5,6 +5,8 @@ import { getStorage } from '../services/storage';
 import { generateId } from '../utils/helpers';
 import { useEntities } from './EntitiesContext';
 import { QueryEngine, type QueryFilter, type QuerySort } from '../services/storage/QueryEngine';
+import { useRelationships } from './RelationshipContext';
+import { EntityType, RelationshipType } from '../types/relationships';
 
 // Notes State
 interface NotesState {
@@ -68,6 +70,14 @@ const NotesContext = createContext<{
 
   // Query Engine Methods (Phase 3.3)
   queryNotes: (filters: QueryFilter[], sort?: QuerySort, limit?: number) => Promise<Note[]>;
+
+  // Relationship helper methods (Phase C2)
+  linkNoteToTopic: (noteId: string, topicId: string) => Promise<void>;
+  unlinkNoteFromTopic: (noteId: string, topicId: string) => Promise<void>;
+  linkNoteToCompany: (noteId: string, companyId: string) => Promise<void>;
+  unlinkNoteFromCompany: (noteId: string, companyId: string) => Promise<void>;
+  linkNoteToContact: (noteId: string, contactId: string) => Promise<void>;
+  unlinkNoteFromContact: (noteId: string, contactId: string) => Promise<void>;
 } | null>(null);
 
 // Provider
@@ -78,6 +88,15 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
   // Access EntitiesContext for cross-context updates
   const entitiesContext = useEntities();
+
+  // Get relationship context (may not be available during initial render)
+  let relationshipsContext;
+  try {
+    relationshipsContext = useRelationships();
+  } catch {
+    // RelationshipContext not available yet - that's OK during migration
+    relationshipsContext = null;
+  }
 
   // Load from storage on mount
   useEffect(() => {
@@ -124,8 +143,8 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     };
   }, [hasLoaded, state.notes]);
 
-  // ADD_NOTE with entity noteCount updates
-  const addNote = (note: Note) => {
+  // ADD_NOTE with entity noteCount updates and relationship creation
+  const addNote = async (note: Note) => {
     dispatch({ type: 'ADD_NOTE', payload: note });
 
     // Update entity noteCounts
@@ -189,6 +208,70 @@ export function NotesProvider({ children }: { children: ReactNode }) {
         });
       }
     });
+
+    // Create relationships if RelationshipContext is available
+    if (relationshipsContext) {
+      try {
+        // Create relationships for topics
+        for (const topicId of linkedTopicIds) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.TOPIC,
+            targetId: topicId,
+            type: RelationshipType.NOTE_TOPIC,
+            metadata: { source: 'manual', createdAt: new Date().toISOString() },
+          });
+        }
+
+        // Create relationships for companies
+        for (const companyId of linkedCompanyIds) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.COMPANY,
+            targetId: companyId,
+            type: RelationshipType.NOTE_COMPANY,
+            metadata: { source: 'manual', createdAt: new Date().toISOString() },
+          });
+        }
+
+        // Create relationships for contacts
+        for (const contactId of linkedContactIds) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.CONTACT,
+            targetId: contactId,
+            type: RelationshipType.NOTE_CONTACT,
+            metadata: { source: 'manual', createdAt: new Date().toISOString() },
+          });
+        }
+
+        // Create relationship to source session if specified
+        if (note.sourceSessionId) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.SESSION,
+            targetId: note.sourceSessionId,
+            type: RelationshipType.NOTE_SESSION,
+            metadata: {
+              source: 'manual', // Notes are created manually, even if from sessions
+              createdAt: new Date().toISOString()
+            },
+          });
+        }
+
+        // Mark note as using relationship system
+        if (!note.relationshipVersion) {
+          const updatedNote = { ...note, relationshipVersion: 1 };
+          dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+        }
+      } catch (error) {
+        console.error('[NotesContext] Failed to create note relationships:', error);
+      }
+    }
   };
 
   // UPDATE_NOTE - simple dispatch without entity updates
@@ -196,10 +279,22 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'UPDATE_NOTE', payload: note });
   };
 
-  // DELETE_NOTE with entity noteCount updates
-  const deleteNote = (id: string) => {
+  // DELETE_NOTE with entity noteCount updates and relationship cascade deletion
+  const deleteNote = async (id: string) => {
     const deletedNote = state.notes.find(n => n.id === id);
     if (!deletedNote) return;
+
+    // Delete relationships first if RelationshipContext is available
+    if (relationshipsContext) {
+      try {
+        const relationships = relationshipsContext.getRelationships(id);
+        for (const rel of relationships) {
+          await relationshipsContext.removeRelationship(rel.id);
+        }
+      } catch (error) {
+        console.error('[NotesContext] Failed to delete note relationships:', error);
+      }
+    }
 
     dispatch({ type: 'DELETE_NOTE', payload: id });
 
@@ -469,8 +564,141 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     return result.entities;
   }, []);
 
+  // Relationship helper methods (Phase C2)
+  const linkNoteToTopic = React.useCallback(async (noteId: string, topicId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping linkNoteToTopic');
+      return;
+    }
+
+    try {
+      await relationshipsContext.addRelationship({
+        sourceType: EntityType.NOTE,
+        sourceId: noteId,
+        targetType: EntityType.TOPIC,
+        targetId: topicId,
+        type: RelationshipType.NOTE_TOPIC,
+        metadata: { source: 'manual', createdAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      console.error('[NotesContext] Failed to link note to topic:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const unlinkNoteFromTopic = React.useCallback(async (noteId: string, topicId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping unlinkNoteFromTopic');
+      return;
+    }
+
+    try {
+      const relationships = relationshipsContext.getRelationships(noteId, RelationshipType.NOTE_TOPIC);
+      const rel = relationships.find(r => r.targetId === topicId);
+      if (rel) {
+        await relationshipsContext.removeRelationship(rel.id);
+      }
+    } catch (error) {
+      console.error('[NotesContext] Failed to unlink note from topic:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const linkNoteToCompany = React.useCallback(async (noteId: string, companyId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping linkNoteToCompany');
+      return;
+    }
+
+    try {
+      await relationshipsContext.addRelationship({
+        sourceType: EntityType.NOTE,
+        sourceId: noteId,
+        targetType: EntityType.COMPANY,
+        targetId: companyId,
+        type: RelationshipType.NOTE_COMPANY,
+        metadata: { source: 'manual', createdAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      console.error('[NotesContext] Failed to link note to company:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const unlinkNoteFromCompany = React.useCallback(async (noteId: string, companyId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping unlinkNoteFromCompany');
+      return;
+    }
+
+    try {
+      const relationships = relationshipsContext.getRelationships(noteId, RelationshipType.NOTE_COMPANY);
+      const rel = relationships.find(r => r.targetId === companyId);
+      if (rel) {
+        await relationshipsContext.removeRelationship(rel.id);
+      }
+    } catch (error) {
+      console.error('[NotesContext] Failed to unlink note from company:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const linkNoteToContact = React.useCallback(async (noteId: string, contactId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping linkNoteToContact');
+      return;
+    }
+
+    try {
+      await relationshipsContext.addRelationship({
+        sourceType: EntityType.NOTE,
+        sourceId: noteId,
+        targetType: EntityType.CONTACT,
+        targetId: contactId,
+        type: RelationshipType.NOTE_CONTACT,
+        metadata: { source: 'manual', createdAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      console.error('[NotesContext] Failed to link note to contact:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const unlinkNoteFromContact = React.useCallback(async (noteId: string, contactId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping unlinkNoteFromContact');
+      return;
+    }
+
+    try {
+      const relationships = relationshipsContext.getRelationships(noteId, RelationshipType.NOTE_CONTACT);
+      const rel = relationships.find(r => r.targetId === contactId);
+      if (rel) {
+        await relationshipsContext.removeRelationship(rel.id);
+      }
+    } catch (error) {
+      console.error('[NotesContext] Failed to unlink note from contact:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
   return (
-    <NotesContext.Provider value={{ state, dispatch, addNote, updateNote, deleteNote, batchAddNotes, createManualNote, queryNotes }}>
+    <NotesContext.Provider value={{
+      state,
+      dispatch,
+      addNote,
+      updateNote,
+      deleteNote,
+      batchAddNotes,
+      createManualNote,
+      queryNotes,
+      linkNoteToTopic,
+      unlinkNoteFromTopic,
+      linkNoteToCompany,
+      unlinkNoteFromCompany,
+      linkNoteToContact,
+      unlinkNoteFromContact,
+    }}>
       {children}
     </NotesContext.Provider>
   );

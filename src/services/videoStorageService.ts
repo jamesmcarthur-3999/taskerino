@@ -9,7 +9,7 @@
  */
 
 import type { Attachment, Session, SessionVideo } from '../types';
-import { attachmentStorage } from './attachmentStorage';
+import { getCAStorage } from './storage/ContentAddressableStorage';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { stat } from '@tauri-apps/plugin-fs';
 
@@ -72,10 +72,24 @@ class VideoStorageService {
       throw new Error(`CRITICAL BUG: attachment.path is invalid before save: ${attachment.path}`);
     }
 
-    await attachmentStorage.saveAttachment(attachment);
-    console.log(`✅ [VIDEO STORAGE] Video attachment created: ${attachment.id}`);
+    // VIDEO FILES: Do NOT save to CA storage (too large, already on disk)
+    // Video attachments only store metadata (path, duration, size)
+    // The actual video file remains on disk at attachment.path
+
+    // Generate a stable hash based on the file path for reference tracking
+    // (NOT content-addressable since we're not storing the video content)
+    const encoder = new TextEncoder();
+    const data = encoder.encode(filePath + sessionId);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    attachment.hash = hash;
+
+    console.log(`✅ [VIDEO STORAGE] Video attachment created: ${attachment.id} (hash: ${hash.substring(0, 8)}...)`);
     console.log(`✅ [VIDEO STORAGE] Attachment path: ${attachment.path}`);
     console.log(`✅ [VIDEO STORAGE] Path validation: ${attachment.path?.includes('/') ? 'VALID (contains /)' : 'INVALID (no / found)'}`);
+    console.log(`🎥 [VIDEO STORAGE] Video file remains on disk (not stored in CA storage)`);
 
     return attachment;
   }
@@ -105,16 +119,43 @@ class VideoStorageService {
         console.error('❌ [VIDEO STORAGE] Failed to get video duration:', error);
       }
 
+      // Wait for video file to be ready for reading (moov atom finalized)
+      console.log('🔍 [VIDEO STORAGE] Checking if video is ready for thumbnail generation...');
+      let isReady = false;
+      const maxAttempts = 20; // 20 attempts * 500ms = 10 seconds max wait
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          isReady = await invoke<boolean>('is_video_ready', { videoPath: filePath });
+          if (isReady) {
+            console.log(`✅ [VIDEO STORAGE] Video is ready (attempt ${attempt}/${maxAttempts})`);
+            break;
+          }
+
+          if (attempt < maxAttempts) {
+            console.log(`⏳ [VIDEO STORAGE] Video not ready yet, waiting 500ms (attempt ${attempt}/${maxAttempts})...`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        } catch (error) {
+          console.error(`❌ [VIDEO STORAGE] Failed to check video readiness (attempt ${attempt}):`, error);
+          break;
+        }
+      }
+
       // Generate thumbnail at 1 second into video
       let thumbnail: string | undefined;
-      try {
-        thumbnail = await invoke<string>('generate_video_thumbnail', {
-          videoPath: filePath,
-          time: 1.0
-        });
-        console.log(`🖼️ [VIDEO STORAGE] Generated thumbnail (${thumbnail?.length || 0} chars)`);
-      } catch (error) {
-        console.error('❌ [VIDEO STORAGE] Failed to generate thumbnail:', error);
+      if (isReady) {
+        try {
+          thumbnail = await invoke<string>('generate_video_thumbnail', {
+            videoPath: filePath,
+            time: 1.0
+          });
+          console.log(`🖼️ [VIDEO STORAGE] Generated thumbnail (${thumbnail?.length || 0} chars)`);
+        } catch (error) {
+          console.error('❌ [VIDEO STORAGE] Failed to generate thumbnail:', error);
+        }
+      } else {
+        console.error('❌ [VIDEO STORAGE] Video file not ready after 10 seconds - skipping thumbnail generation');
       }
 
       return {
@@ -150,33 +191,33 @@ class VideoStorageService {
   }
 
   /**
-   * Get video attachment by ID
+   * Get video attachment by ID or hash (Phase 4)
    */
-  async getVideoAttachment(attachmentId: string): Promise<Attachment | undefined> {
-    const attachment = await attachmentStorage.getAttachment(attachmentId);
+  async getVideoAttachment(identifier: string): Promise<Attachment | undefined> {
+    const caStorage = await getCAStorage();
+    const attachment = await caStorage.loadAttachment(identifier);
     return attachment ?? undefined;
   }
 
   /**
-   * Delete video file and attachment
+   * Delete video file (videos are NOT in CA storage - they're disk files)
    */
-  async deleteVideo(attachmentId: string): Promise<void> {
+  async deleteVideo(filePath: string, sessionId: string, attachmentId: string): Promise<void> {
     console.log(`🗑️  [VIDEO STORAGE] Deleting video: ${attachmentId}`);
+    console.log(`🗑️  [VIDEO STORAGE] File path: ${filePath}`);
 
-    const attachment = await attachmentStorage.getAttachment(attachmentId);
+    // Video files are stored on disk, not in CA storage
+    // Delete the actual file from disk using Tauri fs
+    // TODO: Implement file deletion when ready
+    // await invoke('delete_file', { path: filePath });
 
-    if (attachment?.path) {
-      // TODO: Delete file from disk using Tauri fs
-      // await invoke('delete_file', { path: attachment.path });
-      console.log(`🗑️  [VIDEO STORAGE] File path: ${attachment.path}`);
-    }
-
-    await attachmentStorage.deleteAttachment(attachmentId);
-    console.log(`✅ [VIDEO STORAGE] Video deleted: ${attachmentId}`);
+    console.log(`✅ [VIDEO STORAGE] Video marked for deletion: ${attachmentId}`);
+    console.log(`⚠️  [VIDEO STORAGE] Note: File deletion not yet implemented`);
   }
 
   /**
    * Get total storage size for session video
+   * Videos are stored on disk, so we use the file system to get size
    */
   async getSessionVideoSize(session: Session): Promise<number> {
     if (!session.video) {
@@ -185,22 +226,27 @@ class VideoStorageService {
 
     let totalSize = 0;
 
-    // Full video size
-    if (session.video.fullVideoAttachmentId) {
-      const attachment = await attachmentStorage.getAttachment(
-        session.video.fullVideoAttachmentId
-      );
-      if (attachment) {
-        totalSize += attachment.size;
+    // Get video file path from session
+    // Video metadata should have the file path stored
+    if (session.video.path) {
+      try {
+        const fileStats = await stat(session.video.path);
+        totalSize += fileStats.size;
+      } catch (error) {
+        console.error('❌ [VIDEO STORAGE] Failed to get video file size:', error);
       }
     }
 
     // Chunk sizes (if chunking is implemented)
     if (session.video.chunks) {
       for (const chunk of session.video.chunks) {
-        const attachment = await attachmentStorage.getAttachment(chunk.attachmentId);
-        if (attachment) {
-          totalSize += attachment.size;
+        if (chunk.path) {
+          try {
+            const fileStats = await stat(chunk.path);
+            totalSize += fileStats.size;
+          } catch (error) {
+            console.error('❌ [VIDEO STORAGE] Failed to get chunk file size:', error);
+          }
         }
       }
     }

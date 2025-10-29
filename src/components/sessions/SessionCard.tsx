@@ -1,12 +1,13 @@
 import React from 'react';
-import { Trash2, Sparkles } from 'lucide-react';
+import { Trash2, Sparkles, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Session } from '../../types';
 import { useSessionList } from '../../context/SessionListContext';
 import { useUI } from '../../context/UIContext';
 import { useTasks } from '../../context/TasksContext';
 import { InlineTagManager } from '../InlineTagManager';
 import { tagUtils } from '../../utils/tagUtils';
-import { getSuccessGradient, getInfoGradient, getGlassClasses } from '../../design-system/theme';
+import { getSuccessGradient, getInfoGradient, getGlassClasses, getWarningGradient, getDangerGradient } from '../../design-system/theme';
+import { useEnrichmentContext } from '../../context/EnrichmentContext';
 
 interface SessionCardProps {
   session: Session;
@@ -32,8 +33,15 @@ export function SessionCard({
   const { sessions, updateSession, deleteSession } = useSessionList();
   const { addNotification } = useUI();
   const { dispatch: tasksDispatch } = useTasks();
+  const { getActiveEnrichment } = useEnrichmentContext();
   const startDate = new Date(session.startTime);
   const endDate = session.endTime ? new Date(session.endTime) : null;
+
+  // Check if session is being enriched
+  const enrichmentStatus = session.enrichmentStatus?.status || 'idle';
+  const activeEnrichment = getActiveEnrichment(session.id);
+  const isEnriching = enrichmentStatus === 'in-progress' || enrichmentStatus === 'waiting' || !!activeEnrichment;
+  const enrichmentFailed = enrichmentStatus === 'failed';
 
   // Handler to extract all recommended tasks from summary
   const handleExtractAllTasks = (e: React.MouseEvent) => {
@@ -119,6 +127,8 @@ export function SessionCard({
   // Get semantic gradients from design system
   const successGradient = getSuccessGradient('light');
   const infoGradient = getInfoGradient('light');
+  const warningGradient = getWarningGradient('light');
+  const dangerGradient = getDangerGradient('light');
 
   return (
     <div
@@ -130,14 +140,34 @@ export function SessionCard({
           ? `${infoGradient.container} border-cyan-400 shadow-lg`
           : isViewing
           ? `${getGlassClasses('medium')} border-cyan-400/80 shadow-lg shadow-cyan-200/20 ring-2 ring-cyan-400/30`
+          : isEnriching
+          ? `${warningGradient.container} border-amber-300/60 shadow-md`
+          : enrichmentFailed
+          ? `${dangerGradient.container} border-red-300/60`
           : `${getGlassClasses('subtle')} hover:bg-white/60 hover:border-cyan-300/60`
       }`}
     >
-      {/* NEW badge for newly completed sessions */}
-      {isNewlyCompleted && (
+      {/* Status badges (top-right) */}
+      {isNewlyCompleted && !isEnriching && !enrichmentFailed && (
         <div className={`absolute top-3 right-3 px-2.5 py-1 ${getSuccessGradient('strong').container} text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1`}>
           <Sparkles size={12} />
           <span>NEW</span>
+        </div>
+      )}
+
+      {/* Enriching badge */}
+      {isEnriching && (
+        <div className="absolute top-3 right-3 px-2.5 py-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1">
+          <Loader2 size={12} className="animate-spin" />
+          <span>ENRICHING</span>
+        </div>
+      )}
+
+      {/* Failed badge */}
+      {enrichmentFailed && (
+        <div className="absolute top-3 right-3 px-2.5 py-1 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1">
+          <AlertCircle size={12} />
+          <span>FAILED</span>
         </div>
       )}
       {/* Checkbox - Shows in bulk select mode */}

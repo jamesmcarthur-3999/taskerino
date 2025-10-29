@@ -1,26 +1,152 @@
+/**
+ * @file App.tsx - Root application component for Taskerino
+ *
+ * @overview
+ * This is the main entry point for the Taskerino application. It orchestrates the entire
+ * application architecture including provider hierarchy, initialization flow, zone-based
+ * navigation, and graceful shutdown handling.
+ *
+ * @architecture
+ *
+ * **Provider Hierarchy** (outermost to innermost):
+ * 1. SettingsProvider - User settings and AI configuration (Claude, OpenAI API keys)
+ * 2. UIProvider - UI state, preferences, onboarding, active tab management
+ * 3. ScrollAnimationProvider - Coordinated scroll-driven animations across zones
+ * 4. RelationshipProvider - Entity relationship management (companies, contacts)
+ * 5. EntitiesProvider - Core entities (companies, contacts, topics)
+ * 6. NotesProvider - Note CRUD operations and filtering
+ * 7. TasksProvider - Task CRUD, subtasks, filtering
+ * 8. EnrichmentProvider - Post-session AI enrichment pipeline
+ * 9. SessionListProvider - Session CRUD, filtering, sorting (Phase 1)
+ * 10. ActiveSessionProvider - Active session lifecycle management (Phase 1)
+ * 11. RecordingProvider - Recording service management (screenshots, audio, video) (Phase 1)
+ * 12. [REMOVED] SessionsProvider - Replaced with Phase 1 contexts:
+ *     - SessionListProvider (session CRUD, filtering)
+ *     - ActiveSessionProvider (active session lifecycle)
+ *     - RecordingProvider (recording services)
+ * 13. AppProvider - DEPRECATED - Migrating to specialized contexts
+ *
+ * @zones
+ * The application uses a **six-zone navigation model** with lazy-loaded zone components:
+ *
+ * 1. **Capture Zone** - Universal input for quick note capture with AI processing
+ *    - Auto-detects topics using fuzzy matching
+ *    - Merges similar notes (30% similarity threshold)
+ *    - Extracts tasks with priority inference
+ *
+ * 2. **Tasks Zone** - Interactive task management with multiple views
+ *    - Views: List, Kanban, Table
+ *    - Filters: Status, priority, tags, due date
+ *    - Double-click for quick edit
+ *
+ * 3. **Library Zone** - Browse organized notes by topic
+ *    - Rich entity cards with topic detection
+ *    - Relationship tracking (companies, contacts)
+ *    - Full-text search with highlighting
+ *
+ * 4. **Sessions Zone** - Work session tracking with AI-powered insights
+ *    - Adaptive screenshot scheduling (curiosity-driven)
+ *    - Audio recording with Whisper transcription
+ *    - Video recording with ScreenCaptureKit (macOS)
+ *    - AI-generated summaries and insights
+ *    - Phase 4 storage: Chunked sessions, content-addressable attachments
+ *
+ * 5. **Assistant Zone** - Chat with Ned, the AI assistant
+ *    - Tool execution capabilities (search, CRUD, session queries)
+ *    - Permission system (forever, session, always-ask)
+ *    - Streaming responses with thinking display
+ *
+ * 6. **Profile Zone** - Settings, API configuration, user preferences
+ *    - API key management (secure Tauri storage)
+ *    - Zoom controls (50% - 200%)
+ *    - Storage metrics and cache management
+ *
+ * @initialization
+ * The app initialization flow (in AppContent):
+ *
+ * 1. **API Key Migration** - Migrates keys from localStorage to Tauri secure storage
+ * 2. **WAL Recovery** - Recovers from write-ahead log if app crashed
+ * 3. **Index Building** - Builds/rebuilds indexes if stale (>7 days):
+ *    - Date, topic, tag, full-text, category, sub-category, status indexes
+ * 4. **API Key Loading** - Loads Claude and OpenAI API keys from secure storage
+ * 5. **Service Initialization** - Configures AI services with loaded keys
+ * 6. **Orphaned Session Check** - Detects and recovers active sessions from HMR or crashes
+ * 7. **Background Enrichment** - Initializes BackgroundEnrichmentManager and resumes pending jobs
+ *
+ * @performance
+ * - **Lazy Loading**: All zone components are lazy-loaded via React.lazy()
+ * - **Error Boundaries**: Each zone wrapped in ErrorBoundary for isolation
+ * - **Suspense**: ZoneLoadingFallback shown during lazy component loading
+ * - **Browser Zoom**: Native browser zoom applied to document.body (50-200%)
+ * - **Phase 4 Storage**: Metadata-only loading (<1ms), progressive chunking, LRU cache
+ *
+ * @persistence
+ * - **Startup Backup** - Automatic backup created on app launch
+ * - **Hourly Backups** - Automatic backups every 60 minutes
+ * - **Shutdown Backup** - Backup created during graceful shutdown
+ * - **Graceful Shutdown Flow**:
+ *   1. Flush PersistenceQueue (ensures all enqueued saves complete)
+ *   2. Create shutdown backup
+ *   3. Flush storage adapter (IndexedDB transactions, file writes)
+ *
+ * @context_dependencies
+ * - **Sessions Rewrite (Phase 1)**: New contexts available:
+ *   - useSessionList() - Session CRUD, filtering, sorting
+ *   - useActiveSession() - Active session lifecycle
+ *   - useRecording() - Recording service management
+ * - **Deprecated Contexts** (DO NOT USE):
+ *   - useSessions() from SessionsContext - Use Phase 1 contexts instead
+ *   - useApp() from AppContext - Migrating to specialized contexts
+ *
+ * @navigation
+ * Two navigation systems:
+ * 1. **Top Navigation Island** - Fixed tabs at top, expands for search/commands
+ * 2. **Space Sub Menus** - Scroll-driven morphing menus within each zone
+ *
+ * @keyboard_shortcuts
+ * - CMD+K / CTRL+K - Command palette (search, navigate, create)
+ * - CMD+Enter - Submit capture in Capture Zone
+ * - CMD+Plus / CMD+Minus - Zoom in/out
+ * - CMD+0 - Reset zoom to 100%
+ *
+ * @onboarding
+ * Progressive feature introduction via tooltips:
+ * - Tooltip #7: Command Palette (after 5 activities)
+ * - Tooltip #8: Keyboard Shortcuts (after 10 activities)
+ *
+ * @see {@link ./context/SessionListContext.tsx} - Session list management (Phase 1)
+ * @see {@link ./context/ActiveSessionContext.tsx} - Active session lifecycle (Phase 1)
+ * @see {@link ./context/RecordingContext.tsx} - Recording service management (Phase 1)
+ * @see {@link ./services/storage/ChunkedSessionStorage.ts} - Phase 4 chunked storage
+ * @see {@link ./services/storage/PersistenceQueue.ts} - Background persistence queue
+ * @see {@link ../CLAUDE.md} - Complete architecture documentation
+ */
+
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen, emit } from '@tauri-apps/api/event';
 import { AppProvider, useApp } from './context/AppContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { UIProvider, useUI } from './context/UIContext';
+import { RelationshipProvider } from './context/RelationshipContext';
 import { EntitiesProvider } from './context/EntitiesContext';
 import { NotesProvider } from './context/NotesContext';
 import { TasksProvider } from './context/TasksContext';
 import { EnrichmentProvider } from './context/EnrichmentContext';
-import { SessionsProvider } from './context/SessionsContext';
 import { SessionListProvider } from './context/SessionListContext';
-import { ActiveSessionProvider } from './context/ActiveSessionContext';
+import { ActiveSessionProvider, useActiveSession } from './context/ActiveSessionContext';
 import { RecordingProvider } from './context/RecordingContext';
 import { ScrollAnimationProvider } from './contexts/ScrollAnimationContext';
 import { TopNavigation } from './components/TopNavigation';
 import { ReferencePanel } from './components/ReferencePanel';
 import { QuickTaskModal } from './components/QuickTaskModal';
+import { SessionRecoveryModal } from './components/SessionRecoveryModal';
 import { TaskDetailSidebar } from './components/TaskDetailSidebar';
 import { NoteDetailSidebar } from './components/NoteDetailSidebar';
-import { WelcomeFlow } from './components/WelcomeFlow';
 import { FloatingControls } from './components/FloatingControls';
 import { NedOverlay } from './components/NedOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import type { Session } from './types';
 import { FeatureTooltip } from './components/FeatureTooltip';
 import { QueueMonitor } from './components/dev/QueueMonitor';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -30,8 +156,9 @@ import { nedService } from './services/nedService';
 import { contextAgent } from './services/contextAgent';
 import { sessionsQueryAgent } from './services/sessionsQueryAgent';
 import { migrateApiKeysToTauri } from './utils/apiKeyMigration';
-import { getStorage } from './services/storage';
+import { getStorage, isTauriApp } from './services/storage';
 import { getPersistenceQueue } from './services/storage/PersistenceQueue';
+import { getBackgroundEnrichmentManager } from './services/enrichment/BackgroundEnrichmentManager';
 
 // Lazy load zone components for better performance
 const CaptureZone = lazy(() => import('./components/CaptureZone'));
@@ -52,7 +179,10 @@ function ZoneLoadingFallback() {
   );
 }
 
-function MainApp() {
+function MainApp({ orphanedSession, setOrphanedSession }: {
+  orphanedSession: Session | null;
+  setOrphanedSession: (session: Session | null) => void;
+}) {
   const { state, dispatch } = useApp();
   const { state: uiState, dispatch: uiDispatch } = useUI();
 
@@ -178,6 +308,10 @@ function MainApp() {
       {/* Global Overlays */}
       <ReferencePanel />
       <QuickTaskModal />
+      <SessionRecoveryModal
+        session={orphanedSession}
+        onClose={() => setOrphanedSession(null)}
+      />
       <FloatingControls />
       <NedOverlay />
       <QueueMonitor />
@@ -258,16 +392,19 @@ function MainApp() {
 
 function AppContent() {
   const { state, dispatch } = useApp();
+  const { state: uiState, dispatch: uiDispatch } = useUI();
+  const { activeSession } = useActiveSession();
   const [isReady, setIsReady] = useState(false);
-  const [hasApiKeys, setHasApiKeys] = useState(false);
+  const [orphanedSession, setOrphanedSession] = useState<Session | null>(null);
 
   useEffect(() => {
     const initializeApp = async () => {
       try {
         // Add 10 second timeout
-        const timeoutId = setTimeout(() => {
+        const timeoutId = setTimeout(async () => {
           console.warn('Initialization timeout - forcing ready state');
           setIsReady(true);
+          // Note: app-ready event removed (no splash screen)
         }, 10000);
 
         // Run migration from localStorage to Tauri secure storage
@@ -286,51 +423,6 @@ function AppContent() {
           } catch (error) {
             console.error('[APP] WAL recovery failed:', error);
             // Continue anyway - recovery failure shouldn't block app startup
-          }
-        }
-
-        // Check if per-entity file migration is needed
-        const migrationFlag = await storage.load<boolean>('__migration_per_entity_complete');
-        if (!migrationFlag) {
-          console.log('[APP] Running per-entity file migration...');
-          try {
-            const { migrateToPerEntityFiles } = await import('./migrations/splitCollections');
-            await migrateToPerEntityFiles();
-            await storage.save('__migration_per_entity_complete', true);
-            console.log('[APP] Per-entity file migration complete');
-          } catch (error) {
-            console.error('[APP] Per-entity file migration failed:', error);
-            // Continue anyway - migration failure shouldn't block app startup
-            // User can retry by deleting the flag or re-running migration manually
-          }
-        }
-
-        // Add version field to sessions for optimistic locking
-        const hasVersionMigration = await storage.load<boolean>('__migration_version_field');
-        if (!hasVersionMigration) {
-          console.log('[APP] Running version field migration...');
-          try {
-            await (storage as any).addVersionField?.('sessions');
-            await storage.save('__migration_version_field', true);
-            console.log('[APP] Version field migration complete');
-          } catch (error) {
-            console.error('[APP] Version field migration failed:', error);
-            // Continue anyway - migration failure shouldn't block app startup
-          }
-        }
-
-        // Migrate to compressed storage
-        const hasCompressionMigration = await storage.load<boolean>('__migration_compressed_storage');
-        if (!hasCompressionMigration) {
-          console.log('[APP] Running compression migration...');
-          try {
-            const { migrateToCompressed } = await import('./migrations/migrateToCompressed');
-            await migrateToCompressed();
-            await storage.save('__migration_compressed_storage', true);
-            console.log('[APP] Compression migration complete');
-          } catch (error) {
-            console.error('[APP] Compression migration failed:', error);
-            // Continue anyway - app can still work with uncompressed files
           }
         }
 
@@ -367,10 +459,10 @@ function AppContent() {
         try {
           const savedClaudeKey = await invoke<string | null>('get_claude_api_key');
           if (savedClaudeKey) {
-            claudeService.setApiKey(savedClaudeKey);
-            sessionsAgentService.setApiKey(savedClaudeKey);
+            await claudeService.setApiKey(savedClaudeKey);
+            await sessionsAgentService.setApiKey(savedClaudeKey);
             await nedService.setApiKey(savedClaudeKey);
-            contextAgent.setApiKey(savedClaudeKey);
+            await contextAgent.setApiKey(savedClaudeKey);
             await sessionsQueryAgent.setApiKey(savedClaudeKey);
           }
 
@@ -378,25 +470,148 @@ function AppContent() {
           const savedOpenAIKey = await invoke<string | null>('get_openai_api_key');
           if (savedOpenAIKey) {
             const { openAIService } = await import('./services/openAIService');
-            openAIService.setApiKey(savedOpenAIKey);
+            await openAIService.setApiKey(savedOpenAIKey);
           }
-
-          // Set hasApiKeys flag based on whether we have both required keys
-          setHasApiKeys(!!savedClaudeKey && !!savedOpenAIKey);
         } catch (error) {
           console.error('Failed to load API keys:', error);
           // Continue anyway
         }
 
+        // Check for orphaned active session (from hot reload, crash, or improper shutdown)
+        try {
+          console.log('[APP] Checking for orphaned active session...');
+          const storage = await getStorage();
+          let foundHMRSession = false;
+
+          // First check sessionStorage for HMR recovery (dev only, takes priority)
+          const hmrSessionId = sessionStorage.getItem('hmr_activeSessionId');
+          if (hmrSessionId) {
+            console.log('[APP] Found HMR-preserved activeSessionId:', hmrSessionId);
+            sessionStorage.removeItem('hmr_activeSessionId'); // Clear after reading
+
+            const { getChunkedStorage } = await import('./services/storage/ChunkedSessionStorage');
+            const chunkedStorage = await getChunkedStorage();
+            const session = await chunkedStorage.loadFullSession(hmrSessionId);
+
+            if (session && session.status === 'active') {
+              console.log('[APP] Orphaned active session detected (HMR):', session.name);
+              setOrphanedSession(session);
+              foundHMRSession = true;
+            } else {
+              console.log('[APP] HMR session found but not active (status:', session?.status, ')');
+            }
+          }
+
+          // If no HMR recovery, check settings for persisted activeSessionId
+          const settings = await storage.load<Record<string, unknown>>('settings');
+
+          if (!foundHMRSession && settings?.activeSessionId && typeof settings.activeSessionId === 'string') {
+            console.log('[APP] Found activeSessionId in settings:', settings.activeSessionId);
+
+            const { getChunkedStorage } = await import('./services/storage/ChunkedSessionStorage');
+            const chunkedStorage = await getChunkedStorage();
+            const session = await chunkedStorage.loadFullSession(settings.activeSessionId);
+
+            if (session && session.status === 'active') {
+              console.log('[APP] Orphaned active session detected:', session.name);
+              setOrphanedSession(session);
+            } else {
+              console.log('[APP] Session found but not active (status:', session?.status, '), cleaning up...');
+              // Clean up stale activeSessionId
+              await storage.save('settings', { ...settings, activeSessionId: undefined });
+            }
+          } else {
+            console.log('[APP] No active session found in settings');
+          }
+        } catch (error) {
+          console.error('[APP] Failed to check for orphaned session:', error);
+          // Continue anyway - non-critical
+        }
+
+        // Initialize BackgroundEnrichmentManager and resume pending jobs
+        try {
+          console.log('[APP] Initializing BackgroundEnrichmentManager...');
+          const manager = await getBackgroundEnrichmentManager();
+
+          // Initialize the manager (opens IndexedDB, sets up event listeners)
+          await manager.initialize();
+          console.log('[APP] ✓ BackgroundEnrichmentManager initialized');
+
+          // Get all jobs from the queue
+          const queue = manager.getQueue();
+          if (queue) {
+            const allJobs = await queue.getAllJobs();
+
+            // Filter for pending and failed jobs that can be retried
+            const pendingJobs = allJobs.filter(job => job.status === 'pending');
+            const failedJobs = allJobs.filter(job => job.status === 'failed');
+
+            console.log(`[APP] Found ${pendingJobs.length} pending jobs and ${failedJobs.length} failed jobs from previous session`);
+
+            // Resume pending jobs (they'll be processed automatically by the queue)
+            if (pendingJobs.length > 0) {
+              console.log('[APP] Pending jobs will be processed automatically by the queue');
+              for (const job of pendingJobs) {
+                console.log(`[APP] - Pending job: ${job.sessionName} (${job.sessionId})`);
+              }
+            }
+
+            // Optionally log failed jobs (user can manually retry these)
+            if (failedJobs.length > 0) {
+              console.log('[APP] Failed jobs (manual retry required):');
+              for (const job of failedJobs) {
+                console.log(`[APP] - Failed job: ${job.sessionName} (${job.sessionId}) - Error: ${job.error}`);
+              }
+            }
+
+            if (pendingJobs.length === 0 && failedJobs.length === 0) {
+              console.log('[APP] No pending or failed enrichment jobs to resume');
+            }
+          } else {
+            console.warn('[APP] Queue not available (manager not properly initialized)');
+          }
+
+          console.log('[APP] ✓ BackgroundEnrichmentManager ready');
+        } catch (error) {
+          console.error('[APP] Failed to initialize BackgroundEnrichmentManager:', error);
+          // Non-fatal error - app should still work, just enrichment won't auto-resume
+        }
+
         clearTimeout(timeoutId);
         setIsReady(true);
+
+        // Note: app-ready event removed (no splash screen)
+        console.log('[APP] ✅ Initialization complete');
       } catch (error) {
         console.error('Initialization failed:', error);
         setIsReady(true); // ALWAYS set ready
+        // Note: app-ready event removed (no splash screen)
       }
     };
     initializeApp();
   }, []);
+
+  // HMR state preservation for development (Phase 2)
+  // Save activeSessionId to sessionStorage before hot reload
+  useEffect(() => {
+    if (import.meta.hot) {
+      // Register dispose handler - runs before module is replaced
+      const disposeHandler = import.meta.hot.dispose(() => {
+        if (activeSession?.id) {
+          console.log('[HMR] Saving activeSessionId to sessionStorage:', activeSession.id);
+          sessionStorage.setItem('hmr_activeSessionId', activeSession.id);
+        } else {
+          console.log('[HMR] No active session to save');
+          sessionStorage.removeItem('hmr_activeSessionId');
+        }
+      });
+
+      // Cleanup
+      return () => {
+        // HMR dispose handlers are automatically cleaned up by Vite
+      };
+    }
+  }, [activeSession]);
 
   // Automatic backup on startup
   useEffect(() => {
@@ -426,35 +641,59 @@ function AppContent() {
   }, []); // Empty deps = run once on mount (dispatch is stable)
 
   // Graceful shutdown: flush queue, create backup, and flush pending writes on app close
+  // CRITICAL: Tauri handles this via WindowEvent::CloseRequested (src-tauri/src/lib.rs lines 1077-1140)
+  // The Rust backend intercepts window close, emits 'shutdown-requested', waits for 'shutdown-complete'
   useEffect(() => {
-    const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
-      try {
-        // Step 1: Flush persistence queue first (ensures all enqueued saves complete)
-        console.log('[APP] Flushing persistence queue...');
-        const queue = getPersistenceQueue();
-        await queue.shutdown();
-        console.log('[APP] ✓ Persistence queue flushed');
+    // Tauri: Use shutdown-requested event (synchronous shutdown guaranteed by Rust backend)
+    if (isTauriApp()) {
+      let unlisten: (() => void) | null = null;
 
-        // Step 2: Create shutdown backup
-        console.log('[APP] Creating shutdown backup...');
-        const storage = await getStorage();
-        await storage.createBackup();
-        console.log('[APP] ✓ Shutdown backup created');
+      listen('shutdown-requested', async () => {
+        console.log('[APP] Received shutdown-requested from Tauri (backend blocked window close)');
 
-        // Step 3: Flush any remaining pending writes
-        console.log('[APP] Flushing pending writes before shutdown...');
-        await storage.shutdown();
-        console.log('[APP] Graceful shutdown complete');
-      } catch (error) {
-        console.error('[APP] Failed during shutdown:', error);
-      }
-    };
+        try {
+          // Step 1: Flush persistence queue first (ensures all enqueued saves complete)
+          console.log('[APP] Flushing persistence queue...');
+          const queue = getPersistenceQueue();
+          await queue.shutdown();
+          console.log('[APP] ✓ Persistence queue flushed');
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+          // Step 2: Create shutdown backup
+          console.log('[APP] Creating shutdown backup...');
+          const storage = await getStorage();
+          await storage.createBackup();
+          console.log('[APP] ✓ Shutdown backup created');
 
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
+          // Step 3: Flush any remaining pending writes
+          console.log('[APP] Flushing pending writes before shutdown...');
+          await storage.shutdown();
+          console.log('[APP] ✓ Graceful shutdown complete');
+
+          // Notify Tauri we're done (backend will unblock and close window)
+          await emit('shutdown-complete');
+          console.log('[APP] Emitted shutdown-complete to Tauri');
+        } catch (error) {
+          console.error('[APP] Failed during shutdown:', error);
+          // Still emit complete even on error to allow app to close
+          await emit('shutdown-complete');
+        }
+      }).then(fn => {
+        unlisten = fn;
+      });
+
+      return () => {
+        if (unlisten) {
+          unlisten();
+        }
+      };
+    }
+
+    // Web: NO beforeunload handler (causes data loss due to async limitations)
+    // Browser shutdown is best-effort only - hourly backups protect against data loss
+    else {
+      console.log('[APP] Running in browser - shutdown flush not supported (use Tauri app for guaranteed persistence)');
+      // No cleanup needed for browser mode
+    }
   }, []);
 
   // Hourly automatic backups
@@ -477,42 +716,6 @@ function AppContent() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleWelcomeComplete = async (name: string, anthropicKey: string, openAIKey: string) => {
-    // Save Anthropic API key to Tauri secure storage
-    await invoke('set_claude_api_key', { apiKey: anthropicKey });
-    claudeService.setApiKey(anthropicKey);
-    sessionsAgentService.setApiKey(anthropicKey);
-    await nedService.setApiKey(anthropicKey);
-    contextAgent.setApiKey(anthropicKey);
-    await sessionsQueryAgent.setApiKey(anthropicKey);
-
-    // Save OpenAI API key to Tauri secure storage
-    await invoke('set_openai_api_key', { apiKey: openAIKey });
-    const { openAIService } = await import('./services/openAIService');
-    openAIService.setApiKey(openAIKey);
-
-    // Update hasApiKeys flag
-    setHasApiKeys(true);
-
-    // Save user name
-    dispatch({ type: 'UPDATE_USER_PROFILE', payload: { name } });
-
-    // Mark onboarding as complete
-    dispatch({ type: 'COMPLETE_ONBOARDING' });
-
-    // Show notification
-    dispatch({
-      type: 'ADD_NOTIFICATION',
-      payload: {
-        type: 'success',
-        title: `Welcome, ${name}!`,
-        message: 'You\'re all set! Start by capturing your first note.',
-        autoDismiss: true,
-        dismissAfter: 5000,
-      },
-    });
-  };
-
   // Loading state
   if (!isReady) {
     return (
@@ -522,18 +725,8 @@ function AppContent() {
     );
   }
 
-  // Check if onboarding should be shown
-  // Show welcome flow if onboarding is not completed AND we don't have API keys
-  // This prevents showing onboarding during hot reloads when we already have keys
-  const needsOnboarding = !state.ui.onboarding.completed && !hasApiKeys;
-
-  // Show welcome flow for users who need onboarding
-  if (needsOnboarding) {
-    return <WelcomeFlow onComplete={handleWelcomeComplete} />;
-  }
-
   // Main app
-  return <MainApp />;
+  return <MainApp orphanedSession={orphanedSession} setOrphanedSession={setOrphanedSession} />;
 }
 
 export default function App() {
@@ -541,28 +734,30 @@ export default function App() {
     <SettingsProvider>
       <UIProvider>
         <ScrollAnimationProvider>
-          <EntitiesProvider>
-            <NotesProvider>
-              <TasksProvider>
-                <EnrichmentProvider>
-                  {/* NEW: Split session contexts for better maintainability */}
-                  <SessionListProvider>
-                    <ActiveSessionProvider>
+          {/* Phase C2: Add RelationshipProvider before EntitiesProvider so entities can use relationships */}
+          <RelationshipProvider>
+            <EntitiesProvider>
+              <NotesProvider>
+                <TasksProvider>
+                  <EnrichmentProvider>
+                    {/* NEW: Split session contexts for better maintainability */}
+                    {/* Provider Hierarchy (Phase 1): RecordingProvider ABOVE ActiveSessionProvider */}
+                    {/* ActiveSessionContext uses useRecording(), so RecordingProvider must wrap it */}
+                    <SessionListProvider>
                       <RecordingProvider>
-                        {/* OLD: Keep SessionsProvider for backward compatibility during migration */}
-                        <SessionsProvider>
+                        <ActiveSessionProvider>
                           {/* OLD AppProvider - TODO: Remove once all components are migrated (13 remaining) */}
                           <AppProvider>
                             <AppContent />
                           </AppProvider>
-                        </SessionsProvider>
+                        </ActiveSessionProvider>
                       </RecordingProvider>
-                    </ActiveSessionProvider>
-                  </SessionListProvider>
-                </EnrichmentProvider>
-              </TasksProvider>
-            </NotesProvider>
-          </EntitiesProvider>
+                    </SessionListProvider>
+                  </EnrichmentProvider>
+                </TasksProvider>
+              </NotesProvider>
+            </EntitiesProvider>
+          </RelationshipProvider>
         </ScrollAnimationProvider>
       </UIProvider>
     </SettingsProvider>

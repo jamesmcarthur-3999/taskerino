@@ -780,7 +780,16 @@
 <a name='L715'></a><a href='#L715'>715</a>
 <a name='L716'></a><a href='#L716'>716</a>
 <a name='L717'></a><a href='#L717'>717</a>
-<a name='L718'></a><a href='#L718'>718</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L718'></a><a href='#L718'>718</a>
+<a name='L719'></a><a href='#L719'>719</a>
+<a name='L720'></a><a href='#L720'>720</a>
+<a name='L721'></a><a href='#L721'>721</a>
+<a name='L722'></a><a href='#L722'>722</a>
+<a name='L723'></a><a href='#L723'>723</a>
+<a name='L724'></a><a href='#L724'>724</a>
+<a name='L725'></a><a href='#L725'>725</a>
+<a name='L726'></a><a href='#L726'>726</a>
+<a name='L727'></a><a href='#L727'>727</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -846,6 +855,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -903,20 +913,31 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1325,7 +1346,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1333,8 +1354,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1347,10 +1368,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1551,6 +1569,7 @@ export interface EnrichmentProgressModalProps {
   onComplete: (result: EnrichmentResult) =&gt; void;
   onError: (error: any) =&gt; void;
   onCancel: () =&gt; void;
+  onClose?: () =&gt; void; // Optional - for closing modal (may be disabled during enrichment)
 }
 &nbsp;
 interface StageProgress {
@@ -1630,9 +1649,20 @@ interface StageProgress {
 <span class="cstat-no" title="statement not covered" >    return () =&gt; clearInterval(interval);</span>
 <span class="cstat-no" title="statement not covered" >  }, [isProcessing, startTime, overallProgress]);</span>
 &nbsp;
-  // Start enrichment when modal opens
+  // Start enrichment when modal opens (ONLY if not already in progress)
 <span class="cstat-no" title="statement not covered" >  useEffect(() =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    if (isOpen &amp;&amp; !isProcessing &amp;&amp; !isComplete &amp;&amp; !hasError) {</span>
+      // Check if enrichment is already in progress (e.g., from auto-enrichment)
+      // If so, don't start a new one to avoid lock contention
+<span class="cstat-no" title="statement not covered" >      const enrichmentInProgress = session.enrichmentStatus?.status === 'in-progress';</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >      if (enrichmentInProgress) {</span>
+<span class="cstat-no" title="statement not covered" >        console.log('[EnrichmentProgressModal] Enrichment already in progress, not starting a new one');</span>
+        // Close the modal - auto-enrichment will handle it
+<span class="cstat-no" title="statement not covered" >        onCancel();</span>
+<span class="cstat-no" title="statement not covered" >        return;</span>
+<span class="cstat-no" title="statement not covered" >      }</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      startEnrichment();</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >  }, [isOpen]);</span>
@@ -2042,7 +2072,7 @@ interface StageProgress {
 <span class="cstat-no" title="statement not covered" >                        &lt;CheckCircle className={`w-4 h-4 ${successGradient.iconColor}`} /&gt;</span>
                         Audio analysis complete
 <span class="cstat-no" title="statement not covered" >                      &lt;/span&gt;</span>
-<span class="cstat-no" title="statement not covered" >                      &lt;span className="text-gray-600"&gt;${result.audio.cost.toFixed(1)}&lt;/span&gt;</span>
+                      {/* Cost removed - tracked in backend only */}
 <span class="cstat-no" title="statement not covered" >                    &lt;/div&gt;</span>
                   )}
 <span class="cstat-no" title="statement not covered" >                  {result.video?.completed &amp;&amp; (</span>
@@ -2051,7 +2081,7 @@ interface StageProgress {
 <span class="cstat-no" title="statement not covered" >                        &lt;CheckCircle className={`w-4 h-4 ${successGradient.iconColor}`} /&gt;</span>
                         Video chapters generated
 <span class="cstat-no" title="statement not covered" >                      &lt;/span&gt;</span>
-<span class="cstat-no" title="statement not covered" >                      &lt;span className="text-gray-600"&gt;${result.video.cost.toFixed(1)}&lt;/span&gt;</span>
+                      {/* Cost removed - tracked in backend only */}
 <span class="cstat-no" title="statement not covered" >                    &lt;/div&gt;</span>
                   )}
 <span class="cstat-no" title="statement not covered" >                  {result.summary?.completed &amp;&amp; (</span>
@@ -2064,10 +2094,7 @@ interface StageProgress {
                   )}
 <span class="cstat-no" title="statement not covered" >                &lt;/div&gt;</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >                &lt;div className="mt-4 pt-4 border-t border-green-200/50 flex items-center justify-between"&gt;</span>
-<span class="cstat-no" title="statement not covered" >                  &lt;span className={`text-sm font-semibold ${successGradient.textPrimary}`}&gt;Total Cost&lt;/span&gt;</span>
-<span class="cstat-no" title="statement not covered" >                  &lt;span className={`text-lg font-bold ${successGradient.textPrimary}`}&gt;${result.totalCost.toFixed(1)}&lt;/span&gt;</span>
-<span class="cstat-no" title="statement not covered" >                &lt;/div&gt;</span>
+                {/* Cost breakdown removed - violates NO COST UI philosophy */}
 &nbsp;
 <span class="cstat-no" title="statement not covered" >                {result.warnings.length &gt; 0 &amp;&amp; (</span>
 <span class="cstat-no" title="statement not covered" >                  &lt;div className="mt-4 space-y-1"&gt;</span>
@@ -2221,7 +2248,7 @@ interface StageProgress {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-24T03:56:25.511Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

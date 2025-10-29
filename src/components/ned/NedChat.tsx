@@ -13,7 +13,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { useUI } from '../../context/UIContext';
 import { useNotes } from '../../context/NotesContext';
 import { useTasks } from '../../context/TasksContext';
-import { useSessions } from '../../context/SessionsContext';
+import { useSessionList } from '../../context/SessionListContext';
 import { useEntities } from '../../context/EntitiesContext';
 import { nedService } from '../../services/nedService';
 import { contextAgent } from '../../services/contextAgent';
@@ -75,7 +75,7 @@ export const NedChat: React.FC = () => {
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { state: notesState } = useNotes();
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
-  const { sessions, setActiveSession } = useSessions();
+  const { sessions } = useSessionList();
   const { state: entitiesState } = useEntities();
 
   const messages = uiState.nedConversation?.messages || [];
@@ -193,7 +193,7 @@ export const NedChat: React.FC = () => {
       userProfile: settingsState.userProfile,
       learnings: settingsState.learnings,
       nedSettings: settingsState.nedSettings,
-      activeSessionId: null, // TODO: get from SessionsContext
+      activeSessionId: null, // TODO: get from useActiveSession() hook (Phase 1)
       nedConversation: uiState.nedConversation,
     } as any;
 
@@ -600,10 +600,13 @@ export const NedChat: React.FC = () => {
     }
   };
 
-  // Session actions
+  // Session actions - Navigate to sessions tab
+  // Note: Session selection is now managed locally in SessionsZone
+  // User will need to click the session after navigating to the tab
   const handleSessionView = (sessionId: string) => {
     uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'sessions' });
-    setActiveSession(sessionId);
+    // TODO: Add mechanism to pass selectedSessionId to SessionsZone via URL params or UI context
+    console.log('[NedChat] Navigating to sessions tab for session:', sessionId);
   };
 
   // Ask Ned handler - append to input or send directly

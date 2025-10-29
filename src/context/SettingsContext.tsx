@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { getStorage } from '../services/storage';
 
@@ -60,12 +60,69 @@ interface NedSettings {
   };
 }
 
+/**
+ * Session Recording Defaults
+ *
+ * User-customizable defaults for session recording.
+ * Merged from sessionDefaults.ts for centralized configuration.
+ */
+interface SessionRecordingDefaults {
+  // Video defaults
+  video: {
+    codec: 'h264' | 'h265' | 'vp9';
+    bitrate: number; // kbps
+    resolution: 'native' | { width: number; height: number };
+    frameRate: number;
+  };
+
+  // Screenshot defaults
+  screenshot: {
+    format: 'png' | 'jpg' | 'webp';
+    quality: number; // 0-100
+  };
+
+  // Audio defaults
+  audio: {
+    sampleRate: number; // Hz
+    bitDepth: 16 | 24;
+  };
+
+  // PiP defaults
+  pip: {
+    position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+    size: 'small' | 'medium' | 'large';
+    borderEnabled: boolean;
+  };
+
+  // Audio recording advanced settings
+  audioRecording: {
+    micGain: number; // 0-200 (100 = unity)
+    systemAudioGain: number; // 0-200 (100 = unity)
+    micNoiseReduction: boolean;
+    micEchoCancellation: boolean;
+    autoLeveling: boolean;
+    compression: boolean;
+    compressionThreshold: number; // dB
+    perAppAudioEnabled: boolean;
+    vadThreshold: number; // -50 to -20 dB, default -45
+  };
+
+  // Last-used device selections (for restoring on next session)
+  lastUsedDevices: {
+    micDeviceId?: string;
+    systemAudioDeviceId?: string;
+    webcamDeviceId?: string;
+    displayIds?: string[];
+  };
+}
+
 interface SettingsState {
   aiSettings: AISettings;
   learningSettings: LearningSettings;
   userProfile: UserProfile;
   learnings: UserLearnings;
   nedSettings: NedSettings;
+  sessionRecordingDefaults: SessionRecordingDefaults;
 }
 
 type SettingsAction =
@@ -73,6 +130,7 @@ type SettingsAction =
   | { type: 'UPDATE_LEARNING_SETTINGS'; payload: Partial<LearningSettings> }
   | { type: 'UPDATE_USER_PROFILE'; payload: Partial<UserProfile> }
   | { type: 'UPDATE_NED_SETTINGS'; payload: Partial<NedSettings> }
+  | { type: 'UPDATE_SESSION_RECORDING_DEFAULTS'; payload: Partial<SessionRecordingDefaults> }
   | { type: 'GRANT_NED_PERMISSION'; payload: { toolName: string; level: 'forever' | 'session' | 'always-ask'; sessionOnly?: boolean } }
   | { type: 'REVOKE_NED_PERMISSION'; payload: { toolName: string; sessionOnly?: boolean } }
   | { type: 'CLEAR_SESSION_PERMISSIONS' }
@@ -124,6 +182,44 @@ const defaultState: SettingsState = {
       estimatedCost: 0,
     },
   },
+  sessionRecordingDefaults: {
+    video: {
+      codec: 'h264',
+      bitrate: 5000, // kbps
+      resolution: 'native',
+      frameRate: 30,
+    },
+    screenshot: {
+      format: 'webp',
+      quality: 80,
+    },
+    audio: {
+      sampleRate: 48000, // Hz
+      bitDepth: 16,
+    },
+    pip: {
+      position: 'bottom-right',
+      size: 'medium',
+      borderEnabled: true,
+    },
+    audioRecording: {
+      micGain: 100, // Unity gain (no change)
+      systemAudioGain: 100, // Unity gain (no change)
+      micNoiseReduction: false,
+      micEchoCancellation: false,
+      autoLeveling: false,
+      compression: false,
+      compressionThreshold: -20, // dB
+      perAppAudioEnabled: false,
+      vadThreshold: -45, // dB (-50 = very sensitive, -40 = normal, -30 = aggressive)
+    },
+    lastUsedDevices: {
+      micDeviceId: undefined,
+      systemAudioDeviceId: undefined,
+      webcamDeviceId: undefined,
+      displayIds: undefined,
+    },
+  },
 };
 
 // Reducer (copied logic from AppContext reducer)
@@ -140,6 +236,22 @@ function settingsReducer(state: SettingsState, action: SettingsAction): Settings
 
     case 'UPDATE_NED_SETTINGS':
       return { ...state, nedSettings: { ...state.nedSettings, ...action.payload } };
+
+    case 'UPDATE_SESSION_RECORDING_DEFAULTS':
+      return {
+        ...state,
+        sessionRecordingDefaults: {
+          ...state.sessionRecordingDefaults,
+          ...action.payload,
+          // Ensure nested objects are merged properly
+          video: action.payload.video ? { ...state.sessionRecordingDefaults.video, ...action.payload.video } : state.sessionRecordingDefaults.video,
+          screenshot: action.payload.screenshot ? { ...state.sessionRecordingDefaults.screenshot, ...action.payload.screenshot } : state.sessionRecordingDefaults.screenshot,
+          audio: action.payload.audio ? { ...state.sessionRecordingDefaults.audio, ...action.payload.audio } : state.sessionRecordingDefaults.audio,
+          pip: action.payload.pip ? { ...state.sessionRecordingDefaults.pip, ...action.payload.pip } : state.sessionRecordingDefaults.pip,
+          audioRecording: action.payload.audioRecording ? { ...state.sessionRecordingDefaults.audioRecording, ...action.payload.audioRecording } : state.sessionRecordingDefaults.audioRecording,
+          lastUsedDevices: action.payload.lastUsedDevices ? { ...state.sessionRecordingDefaults.lastUsedDevices, ...action.payload.lastUsedDevices } : state.sessionRecordingDefaults.lastUsedDevices,
+        },
+      };
 
     case 'GRANT_NED_PERMISSION': {
       const { toolName, level, sessionOnly } = action.payload;
@@ -240,6 +352,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
               userProfile: settings.userProfile || defaultState.userProfile,
               learnings: settings.learnings || defaultState.learnings,
               nedSettings: settings.nedSettings || defaultState.nedSettings,
+              sessionRecordingDefaults: settings.sessionRecordingDefaults || defaultState.sessionRecordingDefaults,
             },
           });
         }
@@ -269,6 +382,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           userProfile: state.userProfile,
           learnings: state.learnings,
           nedSettings: state.nedSettings,
+          sessionRecordingDefaults: state.sessionRecordingDefaults,
         });
         console.log('Settings saved to storage');
       } catch (error) {
@@ -297,4 +411,60 @@ export function useSettings() {
     throw new Error('useSettings must be used within SettingsProvider');
   }
   return context;
+}
+
+// ============================================================================
+// Helper Hooks for Session Recording Defaults
+// ============================================================================
+
+/**
+ * Hook for managing session recording defaults
+ * Provides convenient methods for updating recording settings
+ */
+export function useSessionRecordingDefaults() {
+  const { state, dispatch } = useSettings();
+
+  const updateAudioRecordingDefaults = useCallback((updates: Partial<SessionRecordingDefaults['audioRecording']>) => {
+    dispatch({
+      type: 'UPDATE_SESSION_RECORDING_DEFAULTS',
+      payload: {
+        audioRecording: updates as SessionRecordingDefaults['audioRecording'],
+      } as Partial<SessionRecordingDefaults>,
+    });
+  }, [dispatch]);
+
+  const updateLastUsedDevices = useCallback((updates: Partial<SessionRecordingDefaults['lastUsedDevices']>) => {
+    dispatch({
+      type: 'UPDATE_SESSION_RECORDING_DEFAULTS',
+      payload: {
+        lastUsedDevices: updates,
+      },
+    });
+  }, [dispatch]);
+
+  const updateVideoDefaults = useCallback((updates: Partial<SessionRecordingDefaults['video']>) => {
+    dispatch({
+      type: 'UPDATE_SESSION_RECORDING_DEFAULTS',
+      payload: {
+        video: updates as SessionRecordingDefaults['video'],
+      } as Partial<SessionRecordingDefaults>,
+    });
+  }, [dispatch]);
+
+  const updatePipDefaults = useCallback((updates: Partial<SessionRecordingDefaults['pip']>) => {
+    dispatch({
+      type: 'UPDATE_SESSION_RECORDING_DEFAULTS',
+      payload: {
+        pip: updates as SessionRecordingDefaults['pip'],
+      } as Partial<SessionRecordingDefaults>,
+    });
+  }, [dispatch]);
+
+  return {
+    sessionRecordingDefaults: state.sessionRecordingDefaults,
+    updateAudioRecordingDefaults,
+    updateLastUsedDevices,
+    updateVideoDefaults,
+    updatePipDefaults,
+  };
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTasks } from '../context/TasksContext';
-import { useSessions } from '../context/SessionsContext';
+import { useActiveSession } from '../context/ActiveSessionContext';
 import { useUI } from '../context/UIContext';
 import { X, Calendar, Flag, Zap } from 'lucide-react';
 import type { Task } from '../types';
@@ -29,7 +29,7 @@ export function QuickTaskFromSession({
   suggestedContext,
 }: QuickTaskFromSessionProps) {
   const { addTask } = useTasks();
-  const { addExtractedTask } = useSessions();
+  const { addExtractedTask } = useActiveSession();
   const { addNotification } = useUI();
   const [title, setTitle] = useState(suggestedAction);
   const [priority, setPriority] = useState<Task['priority']>(suggestedPriority || 'medium');
@@ -78,7 +78,7 @@ export function QuickTaskFromSession({
     addTask(newTask);
 
     // Add task ID to session's extractedTaskIds
-    addExtractedTask(sessionId, newTask.id);
+    addExtractedTask(newTask.id);
 
     addNotification({
       type: 'success',

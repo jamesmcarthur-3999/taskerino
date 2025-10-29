@@ -63,9 +63,8 @@ impl From<Session> for SessionSummary {
                 .map(|a| a.len())
                 .unwrap_or(0),
             has_video: session.video.is_some(),
-            has_notes: session.notes.is_some() && !session.notes.as_ref().unwrap().is_empty(),
-            has_transcript: session.transcript.is_some()
-                && !session.transcript.as_ref().unwrap().is_empty(),
+            has_notes: session.notes.as_ref().map_or(false, |n| !n.is_empty()),
+            has_transcript: session.transcript.as_ref().map_or(false, |t| !t.is_empty()),
         }
     }
 }

@@ -23,7 +23,7 @@ interface StandardFilterPanelProps {
   showClearButton?: boolean;
   title?: string;
   className?: string;
-  buttonRef?: React.RefObject<HTMLElement>;
+  buttonRef?: React.RefObject<HTMLElement | null>;
   searchable?: boolean;
   searchPlaceholder?: string;
 }

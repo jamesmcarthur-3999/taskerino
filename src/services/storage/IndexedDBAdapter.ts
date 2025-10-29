@@ -10,6 +10,7 @@ import type { StorageInfo, BackupInfo } from './StorageAdapter';
 import type { StorageTransaction } from './types';
 import JSZip from 'jszip';
 import { compressData, decompressData, isCompressed } from './compressionUtils';
+import { safeStringify, deepSanitize, diagnoseJSONIssues } from '../../utils/serializationUtils';
 
 interface StoredCollection {
   name: string;
@@ -89,6 +90,7 @@ class IndexedDBTransaction implements StorageTransaction {
     type: 'save' | 'delete';
     key: string;
     value?: any;
+    previousValue?: any; // Captured for rollback
   }> = [];
 
   private committed = false;
@@ -104,6 +106,7 @@ class IndexedDBTransaction implements StorageTransaction {
 
   /**
    * Queue a save operation
+   * Captures current value for rollback support
    */
   save(key: string, value: any): void {
     if (this.committed) {
@@ -114,6 +117,7 @@ class IndexedDBTransaction implements StorageTransaction {
 
   /**
    * Queue a delete operation
+   * Captures current value for rollback support
    */
   delete(key: string): void {
     if (this.committed) {
@@ -130,14 +134,15 @@ class IndexedDBTransaction implements StorageTransaction {
       throw new Error('Transaction already committed or rolled back');
     }
 
-    // Mark as committed early to prevent new operations
-    this.committed = true;
-
     if (this.operations.length === 0) {
+      this.committed = true;
       return; // Nothing to commit
     }
 
-    // Prepare all data first (compress, serialize, etc.)
+    // Step 1: Capture previous values for all operations (for rollback)
+    await this.capturePreviousValues();
+
+    // Step 2: Prepare all data (compress, serialize, etc.)
     const preparedOps: Array<{
       type: 'save' | 'delete';
       key: string;
@@ -146,8 +151,36 @@ class IndexedDBTransaction implements StorageTransaction {
 
     for (const op of this.operations) {
       if (op.type === 'save') {
-        // Serialize and compress
-        const jsonString = JSON.stringify(op.value);
+        // Validate value is not undefined (JSON.stringify(undefined) returns undefined, not a string!)
+        if (op.value === undefined) {
+          console.error(`[IndexedDBAdapter] Cannot save undefined value for key: ${op.key}`);
+          continue; // Skip this operation
+        }
+
+        // Serialize with automatic sanitization if needed
+        let jsonString: string;
+        try {
+          // Preserve optional fields for session/attachment data (critical for hash, attachmentId, path, etc.)
+          const isSessionOrAttachment = op.key.includes('sessions/') || op.key.includes('session-') ||
+                                       op.key.includes('attachments-ca/') || op.key.includes('attachment');
+          jsonString = safeStringify(op.value, {
+            maxDepth: 50,
+            removeUndefined: !isSessionOrAttachment, // Keep undefined fields in sessions/attachments
+            removeFunctions: true,
+            removeSymbols: true,
+            detectCircular: true,
+            logWarnings: true,
+          });
+        } catch (error) {
+          console.error(`[IndexedDBAdapter] Failed to stringify value for key: ${op.key}`, {
+            error: error instanceof Error ? error.message : String(error),
+            valueType: typeof op.value,
+            constructor: op.value?.constructor?.name,
+            issues: diagnoseJSONIssues(op.value),
+          });
+          continue; // Skip this operation
+        }
+
         let storedData: string;
 
         try {
@@ -170,45 +203,135 @@ class IndexedDBTransaction implements StorageTransaction {
       }
     }
 
-    // Execute all operations in a single IDBTransaction
+    // Step 3: Execute all operations in a single IDBTransaction
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = this.db.transaction([this.storeName], 'readwrite');
+        const store = tx.objectStore(this.storeName);
+
+        // Queue all operations
+        for (const op of preparedOps) {
+          if (op.type === 'save' && op.record) {
+            store.put(op.record);
+          } else if (op.type === 'delete') {
+            store.delete(op.key);
+          }
+        }
+
+        // Wait for transaction to complete
+        tx.oncomplete = () => {
+          console.log(`💾 Transaction committed: ${this.operations.length} operations`);
+          resolve();
+        };
+
+        tx.onerror = () => {
+          console.error('Transaction failed:', tx.error);
+          reject(new Error(`Transaction failed: ${tx.error}`));
+        };
+
+        tx.onabort = () => {
+          console.error('Transaction aborted');
+          reject(new Error('Transaction aborted'));
+        };
+      });
+
+      // Mark as committed after successful execution
+      this.committed = true;
+
+    } catch (error) {
+      // Rollback on error
+      await this.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Capture previous values for all operations (for rollback)
+   * This enables true rollback to restore the state before the transaction
+   */
+  private async capturePreviousValues(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const tx = this.db.transaction([this.storeName], 'readwrite');
+      const tx = this.db.transaction([this.storeName], 'readonly');
       const store = tx.objectStore(this.storeName);
 
-      // Queue all operations
-      for (const op of preparedOps) {
-        if (op.type === 'save' && op.record) {
-          store.put(op.record);
-        } else if (op.type === 'delete') {
-          store.delete(op.key);
-        }
+      let completed = 0;
+      const total = this.operations.length;
+
+      for (const op of this.operations) {
+        const request = store.get(op.key);
+
+        request.onsuccess = () => {
+          const result = request.result as StoredCollection | undefined;
+          if (result) {
+            // Store the entire record (includes compressed data)
+            op.previousValue = result;
+          }
+
+          completed++;
+          if (completed === total) {
+            resolve();
+          }
+        };
+
+        request.onerror = () => {
+          console.warn(`Failed to capture previous value for ${op.key}:`, request.error);
+          // Continue anyway - rollback will still work for other operations
+          completed++;
+          if (completed === total) {
+            resolve();
+          }
+        };
       }
-
-      // Wait for transaction to complete
-      tx.oncomplete = () => {
-        console.log(`💾 Transaction committed: ${this.operations.length} operations`);
-        resolve();
-      };
-
-      tx.onerror = () => {
-        console.error('Transaction failed:', tx.error);
-        reject(new Error(`Transaction failed: ${tx.error}`));
-      };
-
-      tx.onabort = () => {
-        console.error('Transaction aborted');
-        reject(new Error('Transaction aborted'));
-      };
     });
   }
 
   /**
-   * Cancel all queued operations
+   * Rollback the transaction
+   * Restores previous state by reverting all operations
    */
   async rollback(): Promise<void> {
-    this.operations = [];
+    if (this.committed) {
+      return; // Already committed, can't rollback
+    }
+
     this.committed = true;
-    console.log('🔄 Transaction rolled back');
+
+    // If no previous values captured, just clear the queue
+    const hasPreviousValues = this.operations.some(op => op.previousValue !== undefined);
+    if (!hasPreviousValues) {
+      this.operations = [];
+      console.log('🔄 Transaction rolled back (no state to restore)');
+      return;
+    }
+
+    // Restore previous state
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction([this.storeName], 'readwrite');
+      const store = tx.objectStore(this.storeName);
+
+      for (const op of this.operations) {
+        if (op.previousValue) {
+          // Restore previous value
+          store.put(op.previousValue);
+        } else if (op.type === 'save') {
+          // Was a new save with no previous value - delete it
+          store.delete(op.key);
+        }
+        // For deletes with no previous value, nothing to restore
+      }
+
+      tx.oncomplete = () => {
+        console.log(`🔄 Transaction rolled back: ${this.operations.length} operations reverted`);
+        this.operations = [];
+        resolve();
+      };
+
+      tx.onerror = () => {
+        console.error('Rollback failed:', tx.error);
+        this.operations = [];
+        reject(new Error(`Rollback failed: ${tx.error}`));
+      };
+    });
   }
 
   /**
@@ -272,15 +395,138 @@ export class IndexedDBAdapter extends StorageAdapter {
   }
 
   /**
+   * Save data immediately without queuing (for critical shutdown data)
+   * WARNING: Bypasses write queue - use only for critical metadata that must persist immediately
+   *
+   * @param collection - Collection name
+   * @param data - Data to save
+   */
+  async saveImmediate<T>(collection: string, data: T): Promise<void> {
+    const startTime = Date.now();
+    await this.ensureInitialized();
+
+    try {
+      // Validate data is not undefined
+      if (data === undefined) {
+        throw new Error(`Cannot save undefined data for collection: ${collection}`);
+      }
+
+      // Serialize to JSON with automatic sanitization
+      let jsonString: string;
+      try {
+        // Preserve optional fields for session/attachment data (critical for hash, attachmentId, path, etc.)
+        const isSessionOrAttachment = collection.includes('sessions/') || collection.includes('session-') ||
+                                     collection.includes('attachments-ca/') || collection.includes('attachment');
+        jsonString = safeStringify(data, {
+          maxDepth: 50,
+          removeUndefined: !isSessionOrAttachment, // Keep undefined fields in sessions/attachments
+          removeFunctions: true,
+          removeSymbols: true,
+          detectCircular: true,
+          logWarnings: true,
+        });
+      } catch (stringifyError) {
+        // Provide detailed error information
+        const issues = diagnoseJSONIssues(data);
+        console.error(`[IndexedDBAdapter] Failed to stringify collection: ${collection}`, {
+          error: stringifyError instanceof Error ? stringifyError.message : String(stringifyError),
+          dataType: typeof data,
+          constructor: (data as any)?.constructor?.name,
+          issues: issues.slice(0, 10), // Show first 10 issues
+          totalIssues: issues.length,
+        });
+        throw new Error(
+          `JSON.stringify failed for collection: ${collection}. ` +
+          `Reason: ${stringifyError instanceof Error ? stringifyError.message : String(stringifyError)}. ` +
+          `Found ${issues.length} issue(s). First few: ${issues.slice(0, 3).join(', ')}`
+        );
+      }
+
+      // Compress the JSON data
+      let storedData: string;
+      try {
+        const compressed = await compressData(jsonString);
+        storedData = compressed; // Store as compressed string
+      } catch (compressionError) {
+        console.warn(`⚠️  Compression failed for ${collection}, storing uncompressed JSON:`, compressionError);
+        storedData = jsonString; // Fallback to uncompressed JSON string
+      }
+
+      return new Promise<void>((resolve, reject) => {
+        const transaction = this.db!.transaction([this.COLLECTIONS_STORE], 'readwrite');
+        const store = transaction.objectStore(this.COLLECTIONS_STORE);
+
+        const record: StoredCollection = {
+          name: collection,
+          data: storedData,
+          timestamp: Date.now()
+        };
+
+        const request = store.put(record);
+
+        request.onsuccess = () => {
+          const duration = Date.now() - startTime;
+          resolve();
+        };
+
+        request.onerror = () => {
+          const duration = Date.now() - startTime;
+          console.error(`❌ [IndexedDB] SAVE IMMEDIATE FAILED: ${collection} (${duration}ms):`, request.error);
+          reject(new Error(`Failed to save ${collection}: ${request.error}`));
+        };
+      });
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [IndexedDB] SAVE IMMEDIATE FAILED: ${collection} (${duration}ms):`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Save data to a collection
    */
   async save<T>(collection: string, data: T): Promise<void> {
+    const startTime = Date.now();
+    console.log(`[IndexedDB] SAVE START: ${collection}`);
     await this.ensureInitialized();
 
     return this.writeQueue.enqueue(async () => {
       try {
-        // Serialize to JSON
-        const jsonString = JSON.stringify(data);
+        // Validate data is not undefined
+        if (data === undefined) {
+          throw new Error(`Cannot save undefined data for collection: ${collection}`);
+        }
+
+        // Serialize to JSON with automatic sanitization
+        let jsonString: string;
+        try {
+          // Preserve optional fields for session/attachment data (critical for hash, attachmentId, path, etc.)
+          const isSessionOrAttachment = collection.includes('sessions/') || collection.includes('session-') ||
+                                       collection.includes('attachments-ca/') || collection.includes('attachment');
+          jsonString = safeStringify(data, {
+            maxDepth: 50,
+            removeUndefined: !isSessionOrAttachment, // Keep undefined fields in sessions/attachments
+            removeFunctions: true,
+            removeSymbols: true,
+            detectCircular: true,
+            logWarnings: true,
+          });
+        } catch (stringifyError) {
+          // Provide detailed error information
+          const issues = diagnoseJSONIssues(data);
+          console.error(`[IndexedDBAdapter] Failed to stringify collection: ${collection}`, {
+            error: stringifyError instanceof Error ? stringifyError.message : String(stringifyError),
+            dataType: typeof data,
+            constructor: (data as any)?.constructor?.name,
+            issues: issues.slice(0, 10), // Show first 10 issues
+            totalIssues: issues.length,
+          });
+          throw new Error(
+            `JSON.stringify failed for collection: ${collection}. ` +
+            `Reason: ${stringifyError instanceof Error ? stringifyError.message : String(stringifyError)}. ` +
+            `Found ${issues.length} issue(s). First few: ${issues.slice(0, 3).join(', ')}`
+          );
+        }
 
         // Compress the JSON data
         let storedData: string;
@@ -305,17 +551,20 @@ export class IndexedDBAdapter extends StorageAdapter {
           const request = store.put(record);
 
           request.onsuccess = () => {
-            console.log(`💾 Saved ${collection} to IndexedDB`);
+            const duration = Date.now() - startTime;
+            console.log(`✅ [IndexedDB] SAVE COMPLETE: ${collection} (${duration}ms, ${storedData.length} bytes)`);
             resolve();
           };
 
           request.onerror = () => {
-            console.error(`Failed to save ${collection}:`, request.error);
+            const duration = Date.now() - startTime;
+            console.error(`❌ [IndexedDB] SAVE FAILED: ${collection} (${duration}ms):`, request.error);
             reject(new Error(`Failed to save ${collection}: ${request.error}`));
           };
         });
       } catch (error) {
-        console.error(`Failed to save ${collection}:`, error);
+        const duration = Date.now() - startTime;
+        console.error(`❌ [IndexedDB] SAVE FAILED (outer): ${collection} (${duration}ms):`, error);
         throw error;
       }
     });
@@ -344,7 +593,6 @@ export class IndexedDBAdapter extends StorageAdapter {
           try {
             // Check if data is compressed
             if (typeof result.data === 'string' && isCompressed(result.data)) {
-              console.log(`📦 Decompressing ${collection}...`);
               const decompressed = await decompressData(result.data);
               const parsed = JSON.parse(decompressed);
               resolve(parsed as T);

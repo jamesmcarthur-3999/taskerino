@@ -492,7 +492,8 @@
 <a name='L427'></a><a href='#L427'>427</a>
 <a name='L428'></a><a href='#L428'>428</a>
 <a name='L429'></a><a href='#L429'>429</a>
-<a name='L430'></a><a href='#L430'>430</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L430'></a><a href='#L430'>430</a>
+<a name='L431'></a><a href='#L431'>431</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -844,8 +845,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -857,13 +856,19 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -883,7 +888,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -897,18 +901,16 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -930,7 +932,7 @@
 &nbsp;
 import type { Session, VideoChapter, SessionScreenshot, SessionAudioSegment, SessionContextItem, VideoFrame } from '../types';
 <span class="cstat-no" title="statement not covered" >import { videoFrameExtractor } from './videoFrameExtractor';</span>
-<span class="cstat-no" title="statement not covered" >import { attachmentStorage } from './attachmentStorage';</span>
+<span class="cstat-no" title="statement not covered" >import { getCAStorage } from './storage/ContentAddressableStorage';</span>
 <span class="cstat-no" title="statement not covered" >import { getStorage } from './storage';</span>
 <span class="cstat-no" title="statement not covered" >import { invoke } from '@tauri-apps/api/core';</span>
 import type {
@@ -979,17 +981,17 @@ export interface ChapterProposal {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    if (hasVideo) {</span>
       // Use video frames (existing logic with adaptive sampling)
-<span class="cstat-no" title="statement not covered" >      const videoAttachment = await this.getVideoAttachment(session.video!.fullVideoAttachmentId!);</span>
-<span class="cstat-no" title="statement not covered" >      if (!videoAttachment?.path) {</span>
-<span class="cstat-no" title="statement not covered" >        throw new Error('Video file path not found');</span>
+<span class="cstat-no" title="statement not covered" >      const videoPath = session.video!.path;</span>
+<span class="cstat-no" title="statement not covered" >      if (!videoPath) {</span>
+<span class="cstat-no" title="statement not covered" >        throw new Error('Video file path not found in session.video');</span>
 <span class="cstat-no" title="statement not covered" >      }</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      const duration = videoAttachment.duration || 0;</span>
+<span class="cstat-no" title="statement not covered" >      const duration = session.video!.duration || 0;</span>
 <span class="cstat-no" title="statement not covered" >      const interval = this.getAdaptiveFrameInterval(duration);</span>
 <span class="cstat-no" title="statement not covered" >      console.log(`📊 [CHAPTERING] Using adaptive video sampling: ${interval}s interval for ${duration}s video (${Math.ceil(duration / interval)} frames)`);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      frames = await videoFrameExtractor.extractFramesAtInterval(</span>
-<span class="cstat-no" title="statement not covered" >        videoAttachment.path,</span>
+<span class="cstat-no" title="statement not covered" >        videoPath,</span>
 <span class="cstat-no" title="statement not covered" >        duration,</span>
 <span class="cstat-no" title="statement not covered" >        interval</span>
 <span class="cstat-no" title="statement not covered" >      );</span>
@@ -1268,22 +1270,19 @@ Return ONLY the JSON array, no other text.`;
 <span class="cstat-no" title="statement not covered" >      createdAt: new Date().toISOString()</span>
 <span class="cstat-no" title="statement not covered" >    }));</span>
 &nbsp;
-    // Get storage and load sessions
-<span class="cstat-no" title="statement not covered" >    const storage = await getStorage();</span>
-<span class="cstat-no" title="statement not covered" >    const sessions = await storage.load&lt;Session[]&gt;('sessions');</span>
+    // Save using ChunkedStorage for efficient updates
+<span class="cstat-no" title="statement not covered" >    const { getChunkedStorage } = await import('./storage/ChunkedSessionStorage');</span>
+<span class="cstat-no" title="statement not covered" >    const { getInvertedIndexManager } = await import('./storage/InvertedIndexManager');</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >    if (!sessions || !Array.isArray(sessions)) {</span>
-<span class="cstat-no" title="statement not covered" >      throw new Error('Failed to load sessions from storage');</span>
-<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" >    const chunkedStorage = await getChunkedStorage();</span>
 &nbsp;
-    // Find the session by ID
-<span class="cstat-no" title="statement not covered" >    const sessionIndex = sessions.findIndex(s =&gt; s.id === sessionId);</span>
-<span class="cstat-no" title="statement not covered" >    if (sessionIndex === -1) {</span>
+    // Load full session to update
+<span class="cstat-no" title="statement not covered" >    const session = await chunkedStorage.loadFullSession(sessionId);</span>
+<span class="cstat-no" title="statement not covered" >    if (!session) {</span>
 <span class="cstat-no" title="statement not covered" >      throw new Error(`Session ${sessionId} not found`);</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
     // Update the session's video chapters
-<span class="cstat-no" title="statement not covered" >    const session = sessions[sessionIndex];</span>
 <span class="cstat-no" title="statement not covered" >    if (!session.video) {</span>
 <span class="cstat-no" title="statement not covered" >      throw new Error(`Session ${sessionId} has no video data`);</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
@@ -1291,8 +1290,15 @@ Return ONLY the JSON array, no other text.`;
     // Update chapters while preserving other video data
 <span class="cstat-no" title="statement not covered" >    session.video.chapters = videoChapters;</span>
 &nbsp;
-    // Save back to storage
-<span class="cstat-no" title="statement not covered" >    await storage.save('sessions', sessions);</span>
+    // Save updated session
+<span class="cstat-no" title="statement not covered" >    await chunkedStorage.saveFullSession(session);</span>
+&nbsp;
+    // Update search index (requires metadata, not full session)
+<span class="cstat-no" title="statement not covered" >    const indexManager = await getInvertedIndexManager();</span>
+<span class="cstat-no" title="statement not covered" >    const metadata = await chunkedStorage.loadMetadata(session.id);</span>
+<span class="cstat-no" title="statement not covered" >    if (metadata) {</span>
+<span class="cstat-no" title="statement not covered" >      await indexManager.updateIndexes(metadata);</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    console.log(`✅ [CHAPTERING] Saved ${videoChapters.length} chapters to session ${sessionId}`);</span>
 <span class="cstat-no" title="statement not covered" >    return videoChapters;</span>
@@ -1311,9 +1317,11 @@ Return ONLY the JSON array, no other text.`;
       // Calculate relative timestamp from session start
 <span class="cstat-no" title="statement not covered" >      const timestamp = (new Date(screenshot.timestamp).getTime() - sessionStart) / 1000;</span>
 &nbsp;
-      // Load screenshot data
+      // Load screenshot data (Phase 4: Use hash if available)
 <span class="cstat-no" title="statement not covered" >      try {</span>
-<span class="cstat-no" title="statement not covered" >        const attachment = await attachmentStorage.getAttachment(screenshot.attachmentId);</span>
+<span class="cstat-no" title="statement not covered" >        const caStorage = await getCAStorage();</span>
+<span class="cstat-no" title="statement not covered" >        const identifier = screenshot.hash || screenshot.attachmentId;</span>
+<span class="cstat-no" title="statement not covered" >        const attachment = await caStorage.loadAttachment(identifier);</span>
 <span class="cstat-no" title="statement not covered" >        if (attachment?.thumbnail) {</span>
 <span class="cstat-no" title="statement not covered" >          frames.push({</span>
 <span class="cstat-no" title="statement not covered" >            timestamp,</span>
@@ -1342,11 +1350,6 @@ Return ONLY the JSON array, no other text.`;
 <span class="cstat-no" title="statement not covered" >    const seconds = Math.floor(ms / 1000);</span>
 <span class="cstat-no" title="statement not covered" >    return this.formatTime(seconds);</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
-&nbsp;
-<span class="cstat-no" title="statement not covered" >  private async getVideoAttachment(attachmentId: string) {</span>
-<span class="cstat-no" title="statement not covered" >    const attachment = await attachmentStorage.getAttachment(attachmentId);</span>
-<span class="cstat-no" title="statement not covered" >    return attachment ?? undefined;</span>
-<span class="cstat-no" title="statement not covered" >  }</span>
 <span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >export const videoChapteringService = new VideoChapteringService();</span>
@@ -1357,7 +1360,7 @@ Return ONLY the JSON array, no other text.`;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-24T03:56:25.511Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

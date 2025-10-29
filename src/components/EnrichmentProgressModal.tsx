@@ -1,6 +1,39 @@
 /**
  * Enrichment Progress Modal
  *
+ * @deprecated This component is deprecated and should NOT be used for new features.
+ *
+ * **REASON FOR DEPRECATION:**
+ * This component uses direct `sessionEnrichmentService.enrichSession()` calls which:
+ * - Blocks the UI during enrichment
+ * - Does NOT persist jobs to queue (lost on app restart)
+ * - Does NOT use the BackgroundEnrichmentManager system
+ *
+ * **REPLACEMENT:**
+ * Use `EnrichmentPanel` (src/components/enrichment/EnrichmentPanel.tsx) which:
+ * - Uses BackgroundEnrichmentManager for all enrichment
+ * - Queues jobs to PersistentEnrichmentQueue (survives restart)
+ * - Non-blocking background processing
+ * - Better UX with queue status and job management
+ *
+ * **MIGRATION:**
+ * Instead of calling this modal, use:
+ * ```typescript
+ * import { getBackgroundEnrichmentManager } from '../services/enrichment/BackgroundEnrichmentManager';
+ *
+ * const manager = await getBackgroundEnrichmentManager();
+ * await manager.enqueueSession({
+ *   sessionId: session.id,
+ *   sessionName: session.name,
+ *   priority: 'high',
+ *   options: { includeAudio: true, includeVideo: true, includeSummary: true }
+ * });
+ * ```
+ *
+ * This component will be removed in a future version.
+ *
+ * ---
+ *
  * Full-screen modal displaying real-time progress for comprehensive session enrichment.
  * Shows dual progress for audio + video processing with detailed stage tracking.
  *
@@ -52,6 +85,7 @@ export interface EnrichmentProgressModalProps {
   onComplete: (result: EnrichmentResult) => void;
   onError: (error: any) => void;
   onCancel: () => void;
+  onClose?: () => void; // Optional - for closing modal (may be disabled during enrichment)
 }
 
 interface StageProgress {
@@ -131,9 +165,20 @@ export function EnrichmentProgressModal({
     return () => clearInterval(interval);
   }, [isProcessing, startTime, overallProgress]);
 
-  // Start enrichment when modal opens
+  // Start enrichment when modal opens (ONLY if not already in progress)
   useEffect(() => {
     if (isOpen && !isProcessing && !isComplete && !hasError) {
+      // Check if enrichment is already in progress (e.g., from auto-enrichment)
+      // If so, don't start a new one to avoid lock contention
+      const enrichmentInProgress = session.enrichmentStatus?.status === 'in-progress';
+
+      if (enrichmentInProgress) {
+        console.log('[EnrichmentProgressModal] Enrichment already in progress, not starting a new one');
+        // Close the modal - auto-enrichment will handle it
+        onCancel();
+        return;
+      }
+
       startEnrichment();
     }
   }, [isOpen]);
@@ -543,7 +588,7 @@ export function EnrichmentProgressModal({
                         <CheckCircle className={`w-4 h-4 ${successGradient.iconColor}`} />
                         Audio analysis complete
                       </span>
-                      <span className="text-gray-600">${result.audio.cost.toFixed(1)}</span>
+                      {/* Cost removed - tracked in backend only */}
                     </div>
                   )}
                   {result.video?.completed && (
@@ -552,7 +597,7 @@ export function EnrichmentProgressModal({
                         <CheckCircle className={`w-4 h-4 ${successGradient.iconColor}`} />
                         Video chapters generated
                       </span>
-                      <span className="text-gray-600">${result.video.cost.toFixed(1)}</span>
+                      {/* Cost removed - tracked in backend only */}
                     </div>
                   )}
                   {result.summary?.completed && (
@@ -565,10 +610,7 @@ export function EnrichmentProgressModal({
                   )}
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-green-200/50 flex items-center justify-between">
-                  <span className={`text-sm font-semibold ${successGradient.textPrimary}`}>Total Cost</span>
-                  <span className={`text-lg font-bold ${successGradient.textPrimary}`}>${result.totalCost.toFixed(1)}</span>
-                </div>
+                {/* Cost breakdown removed - violates NO COST UI philosophy */}
 
                 {result.warnings.length > 0 && (
                   <div className="mt-4 space-y-1">

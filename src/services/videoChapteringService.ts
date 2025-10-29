@@ -7,7 +7,7 @@
 
 import type { Session, VideoChapter, SessionScreenshot, SessionAudioSegment, SessionContextItem, VideoFrame } from '../types';
 import { videoFrameExtractor } from './videoFrameExtractor';
-import { attachmentStorage } from './attachmentStorage';
+import { getCAStorage } from './storage/ContentAddressableStorage';
 import { getStorage } from './storage';
 import { invoke } from '@tauri-apps/api/core';
 import type {
@@ -56,17 +56,17 @@ class VideoChapteringService {
 
     if (hasVideo) {
       // Use video frames (existing logic with adaptive sampling)
-      const videoAttachment = await this.getVideoAttachment(session.video!.fullVideoAttachmentId!);
-      if (!videoAttachment?.path) {
-        throw new Error('Video file path not found');
+      const videoPath = session.video!.path;
+      if (!videoPath) {
+        throw new Error('Video file path not found in session.video');
       }
 
-      const duration = videoAttachment.duration || 0;
+      const duration = session.video!.duration || 0;
       const interval = this.getAdaptiveFrameInterval(duration);
       console.log(`📊 [CHAPTERING] Using adaptive video sampling: ${interval}s interval for ${duration}s video (${Math.ceil(duration / interval)} frames)`);
 
       frames = await videoFrameExtractor.extractFramesAtInterval(
-        videoAttachment.path,
+        videoPath,
         duration,
         interval
       );
@@ -345,22 +345,19 @@ Return ONLY the JSON array, no other text.`;
       createdAt: new Date().toISOString()
     }));
 
-    // Get storage and load sessions
-    const storage = await getStorage();
-    const sessions = await storage.load<Session[]>('sessions');
+    // Save using ChunkedStorage for efficient updates
+    const { getChunkedStorage } = await import('./storage/ChunkedSessionStorage');
+    const { getInvertedIndexManager } = await import('./storage/InvertedIndexManager');
 
-    if (!sessions || !Array.isArray(sessions)) {
-      throw new Error('Failed to load sessions from storage');
-    }
+    const chunkedStorage = await getChunkedStorage();
 
-    // Find the session by ID
-    const sessionIndex = sessions.findIndex(s => s.id === sessionId);
-    if (sessionIndex === -1) {
+    // Load full session to update
+    const session = await chunkedStorage.loadFullSession(sessionId);
+    if (!session) {
       throw new Error(`Session ${sessionId} not found`);
     }
 
     // Update the session's video chapters
-    const session = sessions[sessionIndex];
     if (!session.video) {
       throw new Error(`Session ${sessionId} has no video data`);
     }
@@ -368,8 +365,15 @@ Return ONLY the JSON array, no other text.`;
     // Update chapters while preserving other video data
     session.video.chapters = videoChapters;
 
-    // Save back to storage
-    await storage.save('sessions', sessions);
+    // Save updated session
+    await chunkedStorage.saveFullSession(session);
+
+    // Update search index (requires metadata, not full session)
+    const indexManager = await getInvertedIndexManager();
+    const metadata = await chunkedStorage.loadMetadata(session.id);
+    if (metadata) {
+      await indexManager.updateIndexes(metadata);
+    }
 
     console.log(`✅ [CHAPTERING] Saved ${videoChapters.length} chapters to session ${sessionId}`);
     return videoChapters;
@@ -388,9 +392,11 @@ Return ONLY the JSON array, no other text.`;
       // Calculate relative timestamp from session start
       const timestamp = (new Date(screenshot.timestamp).getTime() - sessionStart) / 1000;
 
-      // Load screenshot data
+      // Load screenshot data (Phase 4: Use hash if available)
       try {
-        const attachment = await attachmentStorage.getAttachment(screenshot.attachmentId);
+        const caStorage = await getCAStorage();
+        const identifier = screenshot.hash || screenshot.attachmentId;
+        const attachment = await caStorage.loadAttachment(identifier);
         if (attachment?.thumbnail) {
           frames.push({
             timestamp,
@@ -418,11 +424,6 @@ Return ONLY the JSON array, no other text.`;
   private formatDuration(ms: number): string {
     const seconds = Math.floor(ms / 1000);
     return this.formatTime(seconds);
-  }
-
-  private async getVideoAttachment(attachmentId: string) {
-    const attachment = await attachmentStorage.getAttachment(attachmentId);
-    return attachment ?? undefined;
   }
 }
 

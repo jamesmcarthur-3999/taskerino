@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Eye, Flag } from 'lucide-react';
 import type { Session, SessionScreenshot } from '../types';
-import { attachmentStorage } from '../services/attachmentStorage';
+import { getCAStorage } from '../services/storage/ContentAddressableStorage';
 import { ScreenshotViewer } from './ScreenshotViewer';
 import { useLazyImage } from '../hooks/useLazyImage';
 import { getGlassClasses, RADIUS, TRANSITIONS } from '../design-system/theme';
@@ -107,15 +107,16 @@ export function ScreenshotScrubber({
       return;
     }
 
-    // Load from storage
+    // Load from storage (Phase 4: Content-Addressable Storage)
     const loadImage = async () => {
       setLoading(true);
       try {
-        const attachment = await attachmentStorage.getAttachment(currentScreenshot.attachmentId);
+        const caStorage = await getCAStorage();
+        const attachment = await caStorage.loadAttachment(currentScreenshot.hash!);
 
         if (attachment?.base64) {
           // Cache it
-          imageCache.current.set(currentScreenshot.attachmentId, attachment.base64);
+          imageCache.current.set(currentScreenshot.hash!, attachment.base64);
           setCurrentScreenshotImage(attachment.base64);
         }
       } catch (error) {
@@ -133,17 +134,18 @@ export function ScreenshotScrubber({
     if (!currentScreenshot) return;
 
     const currentIndex = screenshots.indexOf(currentScreenshot);
-    const preloadIds = [
-      screenshots[currentIndex - 1]?.attachmentId,
-      screenshots[currentIndex + 1]?.attachmentId,
+    const preloadHashes = [
+      screenshots[currentIndex - 1]?.hash,
+      screenshots[currentIndex + 1]?.hash,
     ].filter(Boolean);
 
-    preloadIds.forEach(async (id) => {
-      if (id && !imageCache.current.has(id)) {
+    preloadHashes.forEach(async (hash) => {
+      if (hash && !imageCache.current.has(hash)) {
         try {
-          const attachment = await attachmentStorage.getAttachment(id);
+          const caStorage = await getCAStorage();
+          const attachment = await caStorage.loadAttachment(hash);
           if (attachment?.base64) {
-            imageCache.current.set(id, attachment.base64);
+            imageCache.current.set(hash, attachment.base64);
           }
         } catch (error) {
           // Silent fail for preload

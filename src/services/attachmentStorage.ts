@@ -16,12 +16,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import type { Attachment, AttachmentRef } from '../types';
 import { getStorage } from './storage';
-
-interface CacheEntry {
-  attachment: Attachment;
-  size: number;
-  lastAccessed: number;
-}
+import { LRUCache } from './storage/LRUCache';
 
 interface CacheStats {
   hits: number;
@@ -34,25 +29,21 @@ interface CacheStats {
 class AttachmentStorageService {
   private readonly ATTACHMENTS_DIR = 'attachments';
 
-  // LRU Cache configuration
-  private readonly CACHE_MAX_SIZE = 100 * 1024 * 1024; // 100MB
-  private readonly MAX_CACHE_AGE = 10 * 60 * 1000; // 10 minutes
-  private cache: Map<string, CacheEntry> = new Map();
-  private cacheSize = 0;
-  private cacheHits = 0;
-  private cacheMisses = 0;
-  private cleanupInterval: ReturnType<typeof setInterval>;
+  // LRU Cache (Phase 4 integration)
+  private cache: LRUCache<string, Attachment>;
 
   /**
-   * Initialize cache with periodic cleanup
+   * Initialize cache with Phase 4 LRUCache
    */
   constructor() {
-    // Clean up stale cache entries every 5 minutes
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupStaleEntries();
-    }, 5 * 60 * 1000);
+    // Initialize LRU cache with 50 attachments max, 100MB size limit, 5 min TTL
+    this.cache = new LRUCache<string, Attachment>({
+      maxSizeBytes: 100 * 1024 * 1024, // 100MB
+      maxItems: 50, // Maximum 50 attachments
+      ttl: 5 * 60 * 1000, // 5 minutes
+    });
 
-    console.log('💾 AttachmentStorageService initialized with LRU cache (100MB limit)');
+    console.log('💾 AttachmentStorageService initialized with LRU cache (50 items, 100MB limit)');
   }
 
   /**
@@ -202,138 +193,52 @@ class AttachmentStorageService {
   }
 
   /**
-   * Estimate memory size of an attachment (in bytes)
-   */
-  private estimateSize(attachment: Attachment): number {
-    let size = 0;
-
-    // Base64 data is the largest contributor
-    if (attachment.base64) {
-      size += attachment.base64.length * 2; // UTF-16 in JavaScript
-    }
-
-    // Thumbnail data
-    if (attachment.thumbnail) {
-      size += attachment.thumbnail.length * 2;
-    }
-
-    // Metadata (approximate)
-    size += JSON.stringify({
-      id: attachment.id,
-      type: attachment.type,
-      name: attachment.name,
-      mimeType: attachment.mimeType,
-    }).length * 2;
-
-    return size;
-  }
-
-  /**
-   * Evict least recently used cache entries until size is under limit
-   */
-  private evictLRU(): void {
-    if (this.cacheSize <= this.CACHE_MAX_SIZE) {
-      return;
-    }
-
-    // Sort entries by lastAccessed (oldest first)
-    const entries = Array.from(this.cache.entries())
-      .sort((a, b) => a[1].lastAccessed - b[1].lastAccessed);
-
-    // Evict oldest entries until we're under the limit
-    for (const [id, entry] of entries) {
-      if (this.cacheSize <= this.CACHE_MAX_SIZE * 0.8) {
-        // Keep cache at 80% after eviction to reduce thrashing
-        break;
-      }
-
-      this.cache.delete(id);
-      this.cacheSize -= entry.size;
-      console.log(`🗑️  Evicted attachment ${id} from cache (${Math.round(entry.size / 1024)}KB)`);
-    }
-  }
-
-  /**
-   * Add attachment to cache
+   * Add attachment to Phase 4 LRU cache
    */
   private addToCache(attachment: Attachment): void {
-    const size = this.estimateSize(attachment);
-
-    // Don't cache if single item is larger than max size
-    if (size > this.CACHE_MAX_SIZE) {
-      console.warn(`⚠️  Attachment ${attachment.id} too large to cache (${Math.round(size / 1024 / 1024)}MB)`);
-      return;
-    }
-
-    // Remove existing entry if present
-    this.removeFromCache(attachment.id);
-
-    // Add to cache
-    this.cache.set(attachment.id, {
-      attachment,
-      size,
-      lastAccessed: Date.now(),
-    });
-
-    this.cacheSize += size;
-
-    // Evict if necessary
-    this.evictLRU();
-
-    console.log(`💾 Cached attachment ${attachment.id} (${Math.round(size / 1024)}KB, cache: ${Math.round(this.cacheSize / 1024 / 1024)}MB)`);
+    this.cache.set(attachment.id, attachment);
+    console.log(`💾 Cached attachment ${attachment.id}`);
   }
 
   /**
-   * Get attachment from cache
+   * Get attachment from Phase 4 LRU cache
    */
   private getFromCache(id: string): Attachment | null {
-    const entry = this.cache.get(id);
-
-    if (entry) {
-      // Update last accessed time
-      entry.lastAccessed = Date.now();
-      this.cacheHits++;
+    const attachment = this.cache.get(id);
+    if (attachment) {
       console.log(`✅ Cache HIT for attachment ${id}`);
-      return entry.attachment;
+      return attachment;
     }
-
-    this.cacheMisses++;
     console.log(`❌ Cache MISS for attachment ${id}`);
     return null;
   }
 
   /**
-   * Remove attachment from cache
+   * Remove attachment from Phase 4 LRU cache
    */
   private removeFromCache(id: string): void {
-    const entry = this.cache.get(id);
-    if (entry) {
-      this.cache.delete(id);
-      this.cacheSize -= entry.size;
-    }
+    this.cache.delete(id);
   }
 
   /**
-   * Clear entire cache
+   * Clear entire Phase 4 LRU cache
    */
   clearCache(): void {
     this.cache.clear();
-    this.cacheSize = 0;
-    this.cacheHits = 0;
-    this.cacheMisses = 0;
     console.log('🗑️  Cache cleared');
   }
 
   /**
-   * Get cache statistics
+   * Get cache statistics from Phase 4 LRU cache
    */
   getCacheStats(): CacheStats {
+    const stats = this.cache.getStats();
     return {
-      hits: this.cacheHits,
-      misses: this.cacheMisses,
-      currentSize: this.cacheSize,
-      maxSize: this.CACHE_MAX_SIZE,
-      entryCount: this.cache.size,
+      hits: stats.hits,
+      misses: stats.misses,
+      currentSize: stats.size,
+      maxSize: stats.maxSize,
+      entryCount: stats.items,
     };
   }
 
@@ -685,34 +590,6 @@ class AttachmentStorageService {
   }
 
   /**
-   * Remove entries that haven't been accessed recently
-   * Called periodically by cleanup interval
-   */
-  private cleanupStaleEntries(): void {
-    const now = Date.now();
-    const staleIds: string[] = [];
-
-    for (const [id, entry] of this.cache.entries()) {
-      if (now - entry.lastAccessed > this.MAX_CACHE_AGE) {
-        staleIds.push(id);
-      }
-    }
-
-    for (const id of staleIds) {
-      const entry = this.cache.get(id);
-      if (entry) {
-        this.cache.delete(id);
-        this.cacheSize -= entry.size;
-        console.log(`⏰ Removed stale entry ${id} (${Math.round(entry.size / 1024)}KB)`);
-      }
-    }
-
-    if (staleIds.length > 0) {
-      console.log(`🧹 Cleaned up ${staleIds.length} stale cache entries`);
-    }
-  }
-
-  /**
    * Rebuild attachment references from existing attachments
    * Used for recovery or migrating from non-deduplicated storage
    */
@@ -868,12 +745,39 @@ class AttachmentStorageService {
   }
 
   /**
-   * Destroy service and cleanup interval
+   * Scan for orphaned attachments for a specific session
+   * Returns attachment IDs that exist in storage but aren't referenced in the session
+   *
+   * @param sessionId - Session ID to scan for orphaned attachments
+   * @returns Array of orphaned attachment IDs
+   */
+  async scanForOrphans(sessionId: string): Promise<string[]> {
+    try {
+      const storage = await getStorage();
+      const attachments = await storage.load<Attachment[]>('attachments') || [];
+
+      // Find all attachments that might be related to this session
+      // This is a defensive scan - we look for attachments with the session ID in the name/path
+      const orphanedIds: string[] = [];
+
+      for (const attachment of attachments) {
+        // Check if attachment name or path contains the session ID
+        if (attachment.name?.includes(sessionId) || attachment.path?.includes(sessionId)) {
+          orphanedIds.push(attachment.id);
+        }
+      }
+
+      return orphanedIds;
+    } catch (error) {
+      console.error('[Attachment] Failed to scan for orphans:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Destroy service (Phase 4 LRUCache handles its own cleanup)
    */
   destroy(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-    }
     this.clearCache();
     console.log('💾 AttachmentStorageService destroyed');
   }

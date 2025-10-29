@@ -25,9 +25,9 @@ export default function LibraryZone() {
   const { state: tasksState } = useTasks();
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { registerScrollContainer, unregisterScrollContainer, scrollY } = useScrollAnimation();
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | undefined>();
-  const [selectedContactId, setSelectedContactId] = useState<string | undefined>();
-  const [selectedTopicId, setSelectedTopicId] = useState<string | undefined>();
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<('call' | 'email' | 'thought' | 'other')[]>([]);
   const [selectedSentiments, setSelectedSentiments] = useState<('positive' | 'neutral' | 'negative')[]>([]);
@@ -221,27 +221,27 @@ export default function LibraryZone() {
   const displayedNotes = useMemo(() => {
     let notes = notesState.notes;
 
-    // Filter by company
-    if (selectedCompanyId) {
+    // Filter by companies (multi-select)
+    if (selectedCompanyIds.length > 0) {
       notes = notes.filter(note =>
-        note.companyIds?.includes(selectedCompanyId) ||
-        (note.topicId === selectedCompanyId) // Legacy support
+        note.companyIds?.some(id => selectedCompanyIds.includes(id)) ||
+        (note.topicId && selectedCompanyIds.includes(note.topicId)) // Legacy support
       );
     }
 
-    // Filter by contact
-    if (selectedContactId) {
+    // Filter by contacts (multi-select)
+    if (selectedContactIds.length > 0) {
       notes = notes.filter(note =>
-        note.contactIds?.includes(selectedContactId) ||
-        (note.topicId === selectedContactId) // Legacy support
+        note.contactIds?.some(id => selectedContactIds.includes(id)) ||
+        (note.topicId && selectedContactIds.includes(note.topicId)) // Legacy support
       );
     }
 
-    // Filter by topic
-    if (selectedTopicId) {
+    // Filter by topics (multi-select)
+    if (selectedTopicIds.length > 0) {
       notes = notes.filter(note =>
-        note.topicIds?.includes(selectedTopicId) ||
-        (note.topicId === selectedTopicId) // Legacy support
+        note.topicIds?.some(id => selectedTopicIds.includes(id)) ||
+        (note.topicId && selectedTopicIds.includes(note.topicId)) // Legacy support
       );
     }
 
@@ -292,7 +292,7 @@ export default function LibraryZone() {
     });
 
     return sorted;
-  }, [notesState.notes, selectedCompanyId, selectedContactId, selectedTopicId, selectedTags, selectedSources, selectedSentiments, searchQuery, noteSortBy]);
+  }, [notesState.notes, selectedCompanyIds, selectedContactIds, selectedTopicIds, selectedTags, selectedSources, selectedSentiments, searchQuery, noteSortBy]);
 
   // Auto-select first note when displayedNotes changes
   useEffect(() => {
@@ -300,6 +300,30 @@ export default function LibraryZone() {
       setSelectedNoteIdForInline(displayedNotes[0].id);
     }
   }, [displayedNotes, selectedNoteIdForInline]);
+
+  const toggleCompany = useCallback((companyId: string) => {
+    setSelectedCompanyIds(prev =>
+      prev.includes(companyId)
+        ? prev.filter(id => id !== companyId)
+        : [...prev, companyId]
+    );
+  }, []);
+
+  const toggleContact = useCallback((contactId: string) => {
+    setSelectedContactIds(prev =>
+      prev.includes(contactId)
+        ? prev.filter(id => id !== contactId)
+        : [...prev, contactId]
+    );
+  }, []);
+
+  const toggleTopic = useCallback((topicId: string) => {
+    setSelectedTopicIds(prev =>
+      prev.includes(topicId)
+        ? prev.filter(id => id !== topicId)
+        : [...prev, topicId]
+    );
+  }, []);
 
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags(prev =>
@@ -309,7 +333,7 @@ export default function LibraryZone() {
     );
   }, []);
 
-  const activeFiltersCount = (selectedCompanyId ? 1 : 0) + (selectedContactId ? 1 : 0) + (selectedTopicId ? 1 : 0) + selectedTags.length + selectedSources.length + selectedSentiments.length + (searchQuery ? 1 : 0);
+  const activeFiltersCount = selectedCompanyIds.length + selectedContactIds.length + selectedTopicIds.length + selectedTags.length + selectedSources.length + selectedSentiments.length + (searchQuery ? 1 : 0);
 
   const handleNoteClick = useCallback((noteId: string, e: React.MouseEvent) => {
     // If Cmd/Ctrl is held, open in modal instead
@@ -376,9 +400,9 @@ export default function LibraryZone() {
                 filters={{
                   active: showFilters,
                   count: [
-                    selectedCompanyId ? 1 : 0,
-                    selectedContactId ? 1 : 0,
-                    selectedTopicId ? 1 : 0,
+                    selectedCompanyIds.length,
+                    selectedContactIds.length,
+                    selectedTopicIds.length,
                     selectedTags.length,
                   ].reduce((a, b) => a + b, 0),
                   onToggle: () => setShowFilters(!showFilters),
@@ -389,23 +413,23 @@ export default function LibraryZone() {
                         {
                           title: 'COMPANIES',
                           items: sortedCompanies.map(c => ({ id: c.id, label: c.name })),
-                          selectedIds: selectedCompanyId ? [selectedCompanyId] : [],
-                          onToggle: (id) => setSelectedCompanyId(id === selectedCompanyId ? undefined : id),
-                          multiSelect: false,
+                          selectedIds: selectedCompanyIds,
+                          onToggle: toggleCompany,
+                          multiSelect: true,
                         },
                         {
                           title: 'CONTACTS',
                           items: sortedContacts.map(c => ({ id: c.id, label: c.name })),
-                          selectedIds: selectedContactId ? [selectedContactId] : [],
-                          onToggle: (id) => setSelectedContactId(id === selectedContactId ? undefined : id),
-                          multiSelect: false,
+                          selectedIds: selectedContactIds,
+                          onToggle: toggleContact,
+                          multiSelect: true,
                         },
                         {
                           title: 'TOPICS',
                           items: sortedTopics.map(t => ({ id: t.id, label: t.name })),
-                          selectedIds: selectedTopicId ? [selectedTopicId] : [],
-                          onToggle: (id) => setSelectedTopicId(id === selectedTopicId ? undefined : id),
-                          multiSelect: false,
+                          selectedIds: selectedTopicIds,
+                          onToggle: toggleTopic,
+                          multiSelect: true,
                         },
                         {
                           title: 'TAGS',
@@ -416,9 +440,9 @@ export default function LibraryZone() {
                         },
                       ]}
                       onClearAll={() => {
-                        setSelectedCompanyId(undefined);
-                        setSelectedContactId(undefined);
-                        setSelectedTopicId(undefined);
+                        setSelectedCompanyIds([]);
+                        setSelectedContactIds([]);
+                        setSelectedTopicIds([]);
                         setSelectedTags([]);
                         setSelectedSources([]);
                         setSelectedSentiments([]);
@@ -512,9 +536,9 @@ export default function LibraryZone() {
                 filters={{
                   active: showFilters,
                   count: [
-                    selectedCompanyId ? 1 : 0,
-                    selectedContactId ? 1 : 0,
-                    selectedTopicId ? 1 : 0,
+                    selectedCompanyIds.length,
+                    selectedContactIds.length,
+                    selectedTopicIds.length,
                     selectedTags.length,
                   ].reduce((a, b) => a + b, 0),
                   onToggle: () => setShowFilters(!showFilters),
@@ -525,22 +549,22 @@ export default function LibraryZone() {
                         {
                           title: 'COMPANIES',
                           items: sortedCompanies.map(c => ({ id: c.id, label: c.name })),
-                          selectedIds: selectedCompanyId ? [selectedCompanyId] : [],
-                          onToggle: (id) => setSelectedCompanyId(id === selectedCompanyId ? undefined : id),
+                          selectedIds: selectedCompanyIds,
+                          onToggle: (id) => setSelectedCompanyIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
                           multiSelect: false,
                         },
                         {
                           title: 'CONTACTS',
                           items: sortedContacts.map(c => ({ id: c.id, label: c.name })),
-                          selectedIds: selectedContactId ? [selectedContactId] : [],
-                          onToggle: (id) => setSelectedContactId(id === selectedContactId ? undefined : id),
+                          selectedIds: selectedContactIds,
+                          onToggle: (id) => setSelectedContactIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
                           multiSelect: false,
                         },
                         {
                           title: 'TOPICS',
                           items: sortedTopics.map(t => ({ id: t.id, label: t.name })),
-                          selectedIds: selectedTopicId ? [selectedTopicId] : [],
-                          onToggle: (id) => setSelectedTopicId(id === selectedTopicId ? undefined : id),
+                          selectedIds: selectedTopicIds,
+                          onToggle: (id) => setSelectedTopicIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
                           multiSelect: false,
                         },
                         {

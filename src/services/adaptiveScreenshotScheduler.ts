@@ -120,7 +120,7 @@ export class AdaptiveScreenshotScheduler {
 
     if (this.state.isActive) {
       console.warn('⚠️  [ADAPTIVE SCHEDULER] Already active, stopping previous session');
-      this.stopScheduling();
+      await this.stopScheduling();
     }
 
     // Increment runId to invalidate any in-flight async operations
@@ -140,6 +140,11 @@ export class AdaptiveScreenshotScheduler {
       this.log('✅ Activity monitoring started');
     } catch (error) {
       console.error('❌ [ADAPTIVE SCHEDULER] Failed to start activity monitoring:', error);
+      // Reset state and throw to prevent broken scheduler
+      await this.stopScheduling();
+      throw new Error(
+        'Activity monitoring required for adaptive mode. Please check screen recording permissions in System Settings > Privacy & Security > Screen Recording.'
+      );
     }
 
     // Check if still the same run after async operation
@@ -166,7 +171,7 @@ export class AdaptiveScreenshotScheduler {
   /**
    * Stop adaptive screenshot scheduling
    */
-  stopScheduling(): void {
+  async stopScheduling(): Promise<void> {
     this.log('🛑 Stopping adaptive screenshot scheduling');
 
     if (this.state.timeoutId) {
@@ -184,9 +189,13 @@ export class AdaptiveScreenshotScheduler {
     this.state.onCaptureTriggered = null;
 
     // Stop activity monitoring in Rust
-    invoke('stop_activity_monitoring').catch((error) => {
+    try {
+      await invoke('stop_activity_monitoring');
+      this.log('✅ Activity monitoring stopped');
+    } catch (error) {
       console.error('❌ [ADAPTIVE SCHEDULER] Failed to stop activity monitoring:', error);
-    });
+      // Non-fatal, but log for debugging
+    }
 
     this.log(`📊 Session stats: ${this.state.captureCount} screenshots captured`);
   }

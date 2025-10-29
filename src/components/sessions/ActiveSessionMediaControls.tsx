@@ -123,16 +123,35 @@ export function ActiveSessionMediaControls({
         pipConfig: undefined,
       });
     } else if (mode.mode === 'standalone') {
+      // Ensure webcamDeviceId is set (use existing or default to first available)
+      const webcamDeviceId = videoConfig.webcamDeviceId || (webcams.length > 0 ? webcams[0].deviceId : undefined);
+
+      if (!webcamDeviceId) {
+        console.warn('⚠️ [Media Controls] Cannot switch to webcam mode: no webcam devices available');
+        // TODO: Show error toast to user
+        return;
+      }
+
       onVideoConfigChange({
         ...videoConfig,
         sourceType: 'webcam',
+        webcamDeviceId,
         pipConfig: undefined,
       });
     } else {
-      // PiP mode
+      // PiP mode - ensure webcamDeviceId is set
+      const webcamDeviceId = videoConfig.webcamDeviceId || (webcams.length > 0 ? webcams[0].deviceId : undefined);
+
+      if (!webcamDeviceId) {
+        console.warn('⚠️ [Media Controls] Cannot switch to PiP mode: no webcam devices available');
+        // TODO: Show error toast to user
+        return;
+      }
+
       onVideoConfigChange({
         ...videoConfig,
         sourceType: 'display-with-webcam',
+        webcamDeviceId,
         pipConfig: mode.pipConfig ? {
           enabled: true,
           position: mode.pipConfig.position,
@@ -140,7 +159,7 @@ export function ActiveSessionMediaControls({
         } : undefined,
       });
     }
-  }, [videoConfig, onVideoConfigChange]);
+  }, [videoConfig, onVideoConfigChange, webcams]);
 
   // Derive webcam mode from videoConfig - MEMOIZED to avoid recalculation on every render
   const webcamMode = useMemo((): WebcamMode => {

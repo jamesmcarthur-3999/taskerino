@@ -1,27 +1,423 @@
 import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import type { AIProcessResult, Task, Attachment, ProcessingJob, Topic, Note } from '../types';
+import type { CaptureResult, RefinementRequest, RefinementResponse } from '../types/captureProcessing';
 import { useSettings } from '../context/SettingsContext';
 import { useUI } from '../context/UIContext';
 import { useEntities } from '../context/EntitiesContext';
 import { useNotes } from '../context/NotesContext';
 import { useTasks } from '../context/TasksContext';
-import { useSessions } from '../context/SessionsContext';
+import { useSessionList } from '../context/SessionListContext';
 import { createTopic, createNote, extractHashtags, combineTags, getTimeBasedGreeting, generateId } from '../utils/helpers';
-import { CheckCircle2, FileText, Plus, Home, Brain, Upload, X, Image as ImageIcon, Paperclip, Loader2, ArrowRight, Clock, AlertCircle, CheckSquare } from 'lucide-react';
+import { CheckCircle2, FileText, Plus, Home, Brain, Upload, X, Image as ImageIcon, Paperclip, Loader2, ArrowRight, Clock, AlertCircle, CheckSquare, Eye, EyeOff, Check, ExternalLink, Lock } from 'lucide-react';
 import { RichTextEditor } from './RichTextEditor';
 import { ResultsReview } from './ResultsReview';
+import { CaptureReview } from './capture/CaptureReview';
+import { QuickTaskConfirmation } from './capture/QuickTaskConfirmation';
 import { LearningService } from '../services/learningService';
 import { fileStorage } from '../services/fileStorageService';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { backgroundProcessor } from '../services/backgroundProcessor';
 import { Button } from './Button';
 import { FeatureTooltip } from './FeatureTooltip';
+import { SarcasticQuote } from './SarcasticQuote';
+import { GreetingHeader } from './GreetingHeader';
+import { CaptureBoxTooltip, KeyboardShortcutsTooltip, useTooltipTriggers } from './OnboardingTooltips';
 import { RADIUS, ICON_SIZES, SHADOWS, getGlassmorphism, getGlassClasses, getRadiusClass, getInfoGradient } from '../design-system/theme';
+import { validateOpenAIKey, validateAnthropicKey } from '../utils/validation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { claudeService } from '../services/claudeService';
+import { sessionsAgentService } from '../services/sessionsAgentService';
+import { nedService } from '../services/nedService';
+import { contextAgent } from '../services/contextAgent';
+import { sessionsQueryAgent } from '../services/sessionsQueryAgent';
 
 type CaptureState = 'idle' | 'processing' | 'review' | 'complete';
 
 interface ExtendedJob extends ProcessingJob {
   _autoSave?: boolean;
+}
+
+type ApiSetupTab = 'openai' | 'anthropic';
+
+interface KeyState {
+  value: string;
+  isValid: boolean;
+  error: string;
+  showPassword: boolean;
+}
+
+// Inline API Key Input Component
+function ApiKeyInput({ onComplete }: { onComplete: () => void }) {
+  const [activeTab, setActiveTab] = useState<ApiSetupTab>('openai');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [openAIState, setOpenAIState] = useState<KeyState>({
+    value: '',
+    isValid: false,
+    error: '',
+    showPassword: false,
+  });
+
+  const [anthropicState, setAnthropicState] = useState<KeyState>({
+    value: '',
+    isValid: false,
+    error: '',
+    showPassword: false,
+  });
+
+  const canSave = openAIState.isValid && anthropicState.isValid;
+
+  // Real-time validation for OpenAI key
+  useEffect(() => {
+    if (!openAIState.value.trim()) {
+      setOpenAIState(prev => ({ ...prev, isValid: false, error: '' }));
+      return;
+    }
+
+    const validation = validateOpenAIKey(openAIState.value);
+    setOpenAIState(prev => ({
+      ...prev,
+      isValid: validation.isValid,
+      error: validation.error || '',
+    }));
+  }, [openAIState.value]);
+
+  // Real-time validation for Anthropic key
+  useEffect(() => {
+    if (!anthropicState.value.trim()) {
+      setAnthropicState(prev => ({ ...prev, isValid: false, error: '' }));
+      return;
+    }
+
+    const validation = validateAnthropicKey(anthropicState.value);
+    setAnthropicState(prev => ({
+      ...prev,
+      isValid: validation.isValid,
+      error: validation.error || '',
+    }));
+  }, [anthropicState.value]);
+
+  const handleSave = async () => {
+    if (!canSave || isSaving) return;
+
+    setIsSaving(true);
+
+    try {
+      // Save both API keys
+      await invoke('set_openai_api_key', { apiKey: openAIState.value.trim() });
+      await invoke('set_claude_api_key', { apiKey: anthropicState.value.trim() });
+
+      // Configure services
+      const savedClaudeKey = await invoke<string | null>('get_claude_api_key');
+      if (savedClaudeKey) {
+        await claudeService.setApiKey(savedClaudeKey);
+        await sessionsAgentService.setApiKey(savedClaudeKey);
+        await nedService.setApiKey(savedClaudeKey);
+        await contextAgent.setApiKey(savedClaudeKey);
+        await sessionsQueryAgent.setApiKey(savedClaudeKey);
+      }
+
+      const savedOpenAIKey = await invoke<string | null>('get_openai_api_key');
+      if (savedOpenAIKey) {
+        const { openAIService } = await import('../services/openAIService');
+        await openAIService.setApiKey(savedOpenAIKey);
+      }
+
+      onComplete();
+    } catch (error) {
+      console.error('[ApiKeyInput] Failed to save API keys:', error);
+      setIsSaving(false);
+    }
+  };
+
+  const [[activeTabIndex, direction], setActiveTabIndex] = useState([0, 0]);
+
+  const handleTabChange = (tab: ApiSetupTab) => {
+    const newIndex = tab === 'openai' ? 0 : 1;
+    const dir = newIndex > activeTabIndex ? 1 : -1;
+    setActiveTabIndex([newIndex, dir]);
+    setActiveTab(tab);
+  };
+
+  const tabContentVariants = {
+    enter: (direction: number) => ({
+      x: direction > 0 ? 20 : -20,
+      opacity: 0,
+    }),
+    center: {
+      x: 0,
+      opacity: 1,
+      transition: {
+        duration: 0.3,
+        ease: [0.4, 0, 0.2, 1],
+      },
+    },
+    exit: (direction: number) => ({
+      x: direction < 0 ? 20 : -20,
+      opacity: 0,
+      transition: {
+        duration: 0.2,
+        ease: [0.4, 0, 1, 1],
+      },
+    }),
+  };
+
+  return (
+    <div className={`${getGlassClasses('strong')} ${getRadiusClass('card')} overflow-hidden`}>
+      {/* Header */}
+      <div className="p-6 pb-4 border-b-2 border-white/30">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500">
+            <Lock className="w-5 h-5 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+            API Keys Required
+          </h2>
+        </div>
+        <p className="text-sm text-gray-600 ml-11">
+          Configure both API keys to unlock Taskerino's AI features
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b-2 border-white/30 px-6">
+        <button
+          onClick={() => handleTabChange('openai')}
+          className={`flex-1 py-3 text-sm font-medium transition-all relative ${
+            activeTab === 'openai'
+              ? 'text-purple-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          OpenAI
+          {activeTab === 'openai' && (
+            <motion.div
+              layoutId="activeApiTab"
+              className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-600 to-blue-600"
+              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+            />
+          )}
+          {openAIState.isValid && (
+            <Check className="w-4 h-4 text-green-500 absolute top-3 right-4" />
+          )}
+        </button>
+        <button
+          onClick={() => handleTabChange('anthropic')}
+          className={`flex-1 py-3 text-sm font-medium transition-all relative ${
+            activeTab === 'anthropic'
+              ? 'text-purple-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Anthropic
+          {activeTab === 'anthropic' && (
+            <motion.div
+              layoutId="activeApiTab"
+              className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-600 to-blue-600"
+              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+            />
+          )}
+          {anthropicState.isValid && (
+            <Check className="w-4 h-4 text-green-500 absolute top-3 right-4" />
+          )}
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      <div className="p-6 min-h-[320px]">
+        <AnimatePresence mode="wait" custom={direction}>
+          {activeTab === 'openai' && (
+            <motion.div
+              key="openai"
+              custom={direction}
+              variants={tabContentVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              className="space-y-4"
+            >
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  OpenAI API Key
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Used for Whisper transcription and GPT-4o audio analysis
+                </p>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={openAIState.showPassword ? 'text' : 'password'}
+                  value={openAIState.value}
+                  onChange={(e) => setOpenAIState(prev => ({ ...prev, value: e.target.value }))}
+                  placeholder="sk-..."
+                  className={`w-full px-4 pr-20 py-3 ${getGlassClasses('medium')} border ${
+                    openAIState.error
+                      ? 'border-red-400'
+                      : openAIState.isValid
+                      ? 'border-green-400'
+                      : 'border-white/60'
+                  } ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm text-gray-900 placeholder:text-gray-500`}
+                />
+
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                  {openAIState.value.trim() && (
+                    <div className="flex items-center">
+                      {openAIState.isValid ? (
+                        <Check className="w-5 h-5 text-green-500" />
+                      ) : openAIState.error ? (
+                        <X className="w-5 h-5 text-red-500" />
+                      ) : null}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setOpenAIState(prev => ({ ...prev, showPassword: !prev.showPassword }))}
+                    className="text-gray-500 hover:text-gray-700 transition-colors focus:outline-none"
+                    tabIndex={-1}
+                  >
+                    {openAIState.showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {openAIState.error && (
+                <motion.p
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-sm text-red-600"
+                >
+                  {openAIState.error}
+                </motion.p>
+              )}
+
+              <div className="text-sm text-gray-600 space-y-2">
+                <p>Your API key should start with "sk-"</p>
+                <a
+                  href="https://platform.openai.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-700 transition-colors"
+                >
+                  Get your OpenAI API key
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'anthropic' && (
+            <motion.div
+              key="anthropic"
+              custom={direction}
+              variants={tabContentVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              className="space-y-4"
+            >
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  Anthropic API Key
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Used for Claude Sonnet 4.5 processing and analysis
+                </p>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={anthropicState.showPassword ? 'text' : 'password'}
+                  value={anthropicState.value}
+                  onChange={(e) => setAnthropicState(prev => ({ ...prev, value: e.target.value }))}
+                  placeholder="sk-ant-..."
+                  className={`w-full px-4 pr-20 py-3 ${getGlassClasses('medium')} border ${
+                    anthropicState.error
+                      ? 'border-red-400'
+                      : anthropicState.isValid
+                      ? 'border-green-400'
+                      : 'border-white/60'
+                  } ${getRadiusClass('field')} focus:ring-2 focus:ring-purple-500 focus:border-purple-400 transition-all shadow-sm text-gray-900 placeholder:text-gray-500`}
+                />
+
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                  {anthropicState.value.trim() && (
+                    <div className="flex items-center">
+                      {anthropicState.isValid ? (
+                        <Check className="w-5 h-5 text-green-500" />
+                      ) : anthropicState.error ? (
+                        <X className="w-5 h-5 text-red-500" />
+                      ) : null}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAnthropicState(prev => ({ ...prev, showPassword: !prev.showPassword }))}
+                    className="text-gray-500 hover:text-gray-700 transition-colors focus:outline-none"
+                    tabIndex={-1}
+                  >
+                    {anthropicState.showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {anthropicState.error && (
+                <motion.p
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-sm text-red-600"
+                >
+                  {anthropicState.error}
+                </motion.p>
+              )}
+
+              <div className="text-sm text-gray-600 space-y-2">
+                <p>Your API key should start with "sk-ant-"</p>
+                <a
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-700 transition-colors"
+                >
+                  Get your Anthropic API key
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Footer */}
+      <div className="px-6 py-5 border-t-2 border-white/30">
+        <Button
+          onClick={handleSave}
+          disabled={!canSave || isSaving}
+          variant="primary"
+          size="lg"
+          fullWidth
+          className="font-semibold"
+        >
+          {isSaving ? 'Saving...' : 'Save & Continue'}
+        </Button>
+
+        {!canSave && (
+          <p className="text-xs text-gray-500 mt-3 text-center">
+            Both API keys are required to continue
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function LiveTime() {
@@ -183,17 +579,44 @@ export default function CaptureZone() {
   const { state: entitiesState, addTopic } = useEntities();
   const { state: notesState, addNote, updateNote } = useNotes();
   const { state: tasksState, addTask } = useTasks();
-  const { sessions } = useSessions();
+  const { sessions } = useSessionList();
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragActive, setDragActive] = useState(false);
-  const [results, setResults] = useState<AIProcessResult | null>(null);
+  const [results, setResults] = useState<CaptureResult | null>(null);
+  const [showQuickConfirm, setShowQuickConfirm] = useState(false);
+  const [quickConfirmTask, setQuickConfirmTask] = useState<AIProcessResult['tasks'][0] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [autoSave, setAutoSave] = useState(true);
   const [extractTasks, setExtractTasks] = useState(true);
   const [showBackgroundTooltip, setShowBackgroundTooltip] = useState(false);
+  const [isCaptureInputFocused, setIsCaptureInputFocused] = useState(false);
+
+  // API key state
+  const [hasApiKeys, setHasApiKeys] = useState(false);
+  const [isCheckingKeys, setIsCheckingKeys] = useState(true);
+
+  // Get tooltip trigger helper
+  const { markFirstCaptureComplete } = useTooltipTriggers();
+
+  // Check for API keys on mount
+  useEffect(() => {
+    const checkApiKeys = async () => {
+      try {
+        const openAIKey = await invoke<string | null>('get_openai_api_key');
+        const claudeKey = await invoke<string | null>('get_claude_api_key');
+        setHasApiKeys(!!openAIKey && !!claudeKey);
+      } catch (error) {
+        console.error('Failed to check API keys:', error);
+        setHasApiKeys(false);
+      } finally {
+        setIsCheckingKeys(false);
+      }
+    };
+    checkApiKeys();
+  }, []);
 
   // Watch for pending review job ID from notifications
   useEffect(() => {
@@ -274,6 +697,47 @@ export default function CaptureZone() {
       }
     };
   }, []);
+
+  // Helper functions for Capture Zone 3.0 (defined at component level for accessibility)
+  const generateDefaultSummary = (result: AIProcessResult): string => {
+    const userName = 'there'; // Could be from settings
+    const taskCount = result.tasks?.length || 0;
+    const noteCount = result.notes?.length || 0;
+
+    if (taskCount > 0 && noteCount > 0) {
+      return `Hey ${userName}, I found ${taskCount} ${taskCount === 1 ? 'task' : 'tasks'} and created ${noteCount} ${noteCount === 1 ? 'note' : 'notes'}.`;
+    } else if (taskCount > 0) {
+      return `Hey ${userName}, I found ${taskCount} ${taskCount === 1 ? 'task' : 'tasks'} from your capture.`;
+    } else if (noteCount > 0) {
+      return `Hey ${userName}, I created ${noteCount} ${noteCount === 1 ? 'note' : 'notes'}.`;
+    }
+    return `Hey ${userName}, I've processed your capture.`;
+  };
+
+  const wrapInCaptureResult = (aiResult: AIProcessResult, plainText: string, attachments: Attachment[]): CaptureResult => {
+    return {
+      ...aiResult,
+      aiSummary: (aiResult as any).aiSummary || generateDefaultSummary(aiResult),
+      modelUsed: 'claude-haiku-4.5',
+      processingTimeMs: 0, // backgroundProcessor doesn't track timing yet
+      conversationContext: {
+        modelUsed: 'claude-haiku-4.5',
+        messages: [
+          { role: 'user', content: plainText },
+          { role: 'assistant', content: JSON.stringify(aiResult) },
+        ],
+        originalCapture: plainText,
+        originalAttachments: attachments,
+        iterationCount: 0,
+      },
+    };
+  };
+
+  const shouldShowQuickConfirmation = (result: CaptureResult, originalText: string) => {
+    return result.tasks?.length === 1
+      && (result.notes?.length ?? 0) === 0
+      && originalText.length < 100;
+  };
 
   // Background processor callbacks
   useEffect(() => {
@@ -398,29 +862,49 @@ export default function CaptureZone() {
           }
         });
       } else {
-        // Show completion notification for manual review
-        const taskCount = job.result?.tasks.length || 0;
-        const topicCount = job.result?.detectedTopics.length || 0;
+        // Wrap result in CaptureResult for new review UI
+        const wrappedResult = wrapInCaptureResult(job.result!, job.input, []);
 
-        uiDispatch({
-          type: 'ADD_NOTIFICATION',
-          payload: {
-            type: 'success',
-            title: 'Processing Complete!',
-            message: `Found ${taskCount} tasks and ${topicCount} topics.`,
-            action: {
-              label: 'Review Now',
-              onClick: () => {
-                // Use job data directly from closure to avoid race condition
-                // with async state updates (fixes stuck loading issue)
-                setResults(job.result!);
-                setCurrentJobId(job.id);
-                setCaptureState('review');
-                uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'capture' });
+        // Check if we should show quick confirmation for single task
+        if (shouldShowQuickConfirmation(wrappedResult, job.input)) {
+          // Show quick task confirmation inline
+          setQuickConfirmTask(wrappedResult.tasks![0]);
+          setShowQuickConfirm(true);
+          setCurrentJobId(job.id);
+
+          uiDispatch({
+            type: 'ADD_NOTIFICATION',
+            payload: {
+              type: 'success',
+              title: 'Task Created!',
+              message: 'Review and confirm your task below.',
+            }
+          });
+        } else {
+          // Show completion notification for manual review
+          const taskCount = job.result?.tasks.length || 0;
+          const topicCount = job.result?.detectedTopics.length || 0;
+
+          uiDispatch({
+            type: 'ADD_NOTIFICATION',
+            payload: {
+              type: 'success',
+              title: 'Processing Complete!',
+              message: `Found ${taskCount} tasks and ${topicCount} topics.`,
+              action: {
+                label: 'Review Now',
+                onClick: () => {
+                  // Use job data directly from closure to avoid race condition
+                  // with async state updates (fixes stuck loading issue)
+                  setResults(wrappedResult);
+                  setCurrentJobId(job.id);
+                  setCaptureState('review');
+                  uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'capture' });
+                },
               },
-            },
-          }
-        });
+            }
+          });
+        }
       }
     });
 
@@ -488,6 +972,9 @@ export default function CaptureZone() {
 
     // Track capture stat
     uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'captureCount' });
+
+    // Mark first capture complete for tooltip
+    markFirstCaptureComplete();
 
     // Clear input immediately
     setInputText('');
@@ -653,6 +1140,169 @@ export default function CaptureZone() {
     setCaptureState('complete');
   };
 
+  // New handlers for Capture Zone 3.0
+
+  const handleQuickTaskConfirm = async (task: AIProcessResult['tasks'][0]) => {
+    // Create and save the task
+    const taskWithMeta: Task = {
+      id: generateId(),
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      dueDate: task.dueDate,
+      dueTime: task.dueTime,
+      tags: task.tags || [],
+      done: false,
+      status: 'todo',
+      createdBy: 'ai',
+      createdAt: new Date().toISOString(),
+      sourceExcerpt: task.sourceExcerpt,
+      subtasks: task.suggestedSubtasks?.map((title, idx) => ({
+        id: `${generateId()}-${idx}`,
+        title,
+        done: false,
+        createdAt: new Date().toISOString(),
+      })),
+    };
+
+    addTask(taskWithMeta);
+    uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'taskCount' });
+
+    // Remove job from queue
+    if (currentJobId) {
+      uiDispatch({ type: 'REMOVE_PROCESSING_JOB', payload: currentJobId });
+      setCurrentJobId(null);
+    }
+
+    // Clear quick confirmation state
+    setShowQuickConfirm(false);
+    setQuickConfirmTask(null);
+
+    // Show success
+    uiDispatch({
+      type: 'ADD_NOTIFICATION',
+      payload: {
+        type: 'success',
+        title: 'Task Saved!',
+        message: `"${task.title}" has been added to your tasks.`,
+      }
+    });
+  };
+
+  const handleQuickTaskDiscard = () => {
+    // Remove job from queue
+    if (currentJobId) {
+      uiDispatch({ type: 'REMOVE_PROCESSING_JOB', payload: currentJobId });
+      setCurrentJobId(null);
+    }
+
+    // Clear quick confirmation state
+    setShowQuickConfirm(false);
+    setQuickConfirmTask(null);
+  };
+
+  const handleSaveFromNewReview = async (editedResult: CaptureResult) => {
+    if (!editedResult) return;
+
+    // Save topics
+    const topicIdMap = new Map<string, string>();
+    editedResult.detectedTopics.forEach(detected => {
+      if (detected.existingTopicId) {
+        topicIdMap.set(detected.name, detected.existingTopicId);
+      } else {
+        const newTopic = createTopic(detected.name);
+        addTopic(newTopic);
+        topicIdMap.set(detected.name, newTopic.id);
+      }
+    });
+
+    // Save notes (if any)
+    const createdNotes: typeof notesState.notes = [];
+    if (editedResult.notes) {
+      editedResult.notes.forEach(noteResult => {
+        const topicId = topicIdMap.get(noteResult.topicName) || noteResult.topicId;
+        const hashtagsFromSource = extractHashtags(noteResult.sourceText || '');
+        const hashtagsFromContent = extractHashtags(noteResult.content);
+        const allTags = combineTags(noteResult.tags || [], editedResult.keyTopics, hashtagsFromSource, hashtagsFromContent);
+
+        const newNote = createNote(
+          topicId,
+          noteResult.content,
+          noteResult.summary,
+          {
+            tags: allTags,
+            sourceText: noteResult.sourceText,
+            metadata: {
+              sentiment: noteResult.sentiment || editedResult.sentiment,
+              keyPoints: noteResult.keyPoints || [noteResult.summary],
+              relatedTopics: noteResult.relatedTopics,
+            },
+          }
+        );
+        if (noteResult.source) {
+          newNote.source = noteResult.source;
+        }
+        addNote(newNote);
+        uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'noteCount' });
+        createdNotes.push(newNote);
+      });
+    }
+
+    // Save tasks (if any)
+    if (editedResult.tasks) {
+      const primaryNoteId = createdNotes.length > 0 ? createdNotes[0].id : undefined;
+      editedResult.tasks.forEach(task => {
+        const taskWithMeta: Task = {
+          id: generateId(),
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          dueDate: task.dueDate,
+          dueTime: task.dueTime,
+          topicId: task.topicId,
+          noteId: primaryNoteId,
+          tags: task.tags || [],
+          done: false,
+          status: 'todo',
+          createdBy: 'ai',
+          createdAt: new Date().toISOString(),
+          sourceNoteId: primaryNoteId,
+          sourceExcerpt: task.sourceExcerpt,
+          subtasks: task.suggestedSubtasks?.map((title, idx) => ({
+            id: `${generateId()}-${idx}`,
+            title,
+            done: false,
+            createdAt: new Date().toISOString(),
+          })),
+        };
+        addTask(taskWithMeta);
+        uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'taskCount' });
+      });
+    }
+
+    // Remove job from queue
+    if (currentJobId) {
+      uiDispatch({ type: 'REMOVE_PROCESSING_JOB', payload: currentJobId });
+      setCurrentJobId(null);
+    }
+
+    // Clear state
+    setResults(null);
+    setCaptureState('complete');
+  };
+
+  const handleRefineCapture = async (request: RefinementRequest): Promise<RefinementResponse> => {
+    try {
+      return await claudeService.refineCapture(request);
+    } catch (error) {
+      console.error('Failed to refine capture:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during refinement',
+      };
+    }
+  };
+
   const handleReset = () => {
     setCaptureState('idle');
     setInputText('');
@@ -799,27 +1449,77 @@ export default function CaptureZone() {
       <div className="fixed inset-0 bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-teal-500/20 animate-gradient will-change-transform pointer-events-none" />
       <div className="fixed inset-0 bg-gradient-to-tl from-blue-500/10 via-cyan-500/10 to-teal-500/10 animate-gradient-reverse will-change-transform pointer-events-none" />
 
-      {/* Content - with flexible spacing */}
-      <div className="relative z-10 w-full max-w-3xl mx-auto px-8 py-12 min-h-full flex flex-col">
-        {/* Flexible top spacer - grows when there's space */}
-        <div className="flex-grow min-h-[10vh]" />
+      {/* Review Page (full zone takeover) */}
+      {captureState === 'review' && results && (
+        <div className="relative z-10 h-full w-full">
+          <CaptureReview
+            result={results}
+            onSave={handleSaveFromNewReview}
+            onCancel={() => {
+              setCaptureState('idle');
+              setResults(null);
+            }}
+            onRefine={handleRefineCapture}
+          />
+        </div>
+      )}
+
+      {/* Normal Capture Content - with max-w-3xl constraint */}
+      {captureState !== 'review' && (
+        <div className="relative z-10 w-full max-w-3xl mx-auto px-8 py-12 min-h-full flex flex-col">
+          {/* Flexible top spacer - grows when there's space */}
+          <div className="flex-grow min-h-[10vh]" />
 
         {captureState === 'idle' && (
           <div className="transform transition-all duration-300 ease-out flex-shrink-0">
-            {/* Time Display */}
-            {settingsState.userProfile.name && <LiveTime />}
+            {/* Live Time Display */}
+            <LiveTime />
 
-            {/* Greeting */}
-            {settingsState.userProfile.name && (
-              <div className="text-center mb-8">
-                <h1 className="text-5xl font-bold text-gray-800/90" style={{ fontFamily: 'system-ui, -apple-system, sans-serif', fontWeight: 700, letterSpacing: '-0.02em' }}>
-                  Good {getTimeBasedGreeting()}, {settingsState.userProfile.name}
-                </h1>
+            {/* Greeting Header - Combined greeting with inline name editing */}
+            <div className="text-center mb-8">
+              <GreetingHeader />
+            </div>
+
+            {/* AI-Generated Sarcastic Quote */}
+            {settingsState.userProfile.name && <SarcasticQuote />}
+
+            {/* Loading State */}
+            {isCheckingKeys && (
+              <div className={`${getGlassClasses('strong')} ${getRadiusClass('card')} p-12 text-center`}>
+                <Loader2 size={ICON_SIZES.xl} className="text-cyan-600 animate-spin mx-auto mb-4" />
+                <p className="text-gray-600 font-medium">Checking API keys...</p>
               </div>
             )}
 
-            {/* Frosted Glass Capture Box with Drag-Drop */}
-            <div
+            {/* API Key Setup - Shown when no keys */}
+            {!isCheckingKeys && !hasApiKeys && (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key="api-setup"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <ApiKeyInput onComplete={() => {
+                    setHasApiKeys(true);
+                    uiDispatch({ type: 'COMPLETE_ONBOARDING' });
+                  }} />
+                </motion.div>
+              </AnimatePresence>
+            )}
+
+            {/* Normal Capture Input - Shown when keys exist */}
+            {!isCheckingKeys && hasApiKeys && (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key="capture-input"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {/* Frosted Glass Capture Box with Drag-Drop */}
+                  <div
               className={`relative ${getGlassClasses('strong')} ${getRadiusClass('card')} overflow-hidden`}
               onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
               onDragLeave={() => setDragActive(false)}
@@ -847,6 +1547,8 @@ export default function CaptureZone() {
                   autoFocus
                   minimal={false}
                   maxHeight="400px"
+                  onFocus={() => setIsCaptureInputFocused(true)}
+                  onBlur={() => setIsCaptureInputFocused(false)}
                 />
               </div>
 
@@ -1057,7 +1759,8 @@ export default function CaptureZone() {
                           <div className="flex gap-2">
                             <Button
                               onClick={() => {
-                                setResults(job.result!);
+                                const wrappedResult = wrapInCaptureResult(job.result!, job.input, []);
+                                setResults(wrappedResult);
                                 setCurrentJobId(job.id);
                                 setCaptureState('review');
                               }}
@@ -1123,22 +1826,27 @@ export default function CaptureZone() {
                 ))}
               </div>
             )}
+
+                  {/* Onboarding Tooltips */}
+                  <CaptureBoxTooltip isCaptureInputFocused={isCaptureInputFocused} />
+                  <KeyboardShortcutsTooltip />
+                </motion.div>
+              </AnimatePresence>
+            )}
           </div>
         )}
 
         {/* Processing UI removed - now handled in background */}
 
-        {captureState === 'review' && results && (
-          <div className="h-full w-full overflow-y-auto">
-            <ResultsReview
-              results={results}
-              onSave={handleSaveFromReview}
-              onCancel={() => {
-                setCaptureState('idle');
-                setResults(null);
-              }}
-            />
-          </div>
+        {/* Quick Task Confirmation (inline, below capture input) */}
+        {showQuickConfirm && quickConfirmTask && (
+          <QuickTaskConfirmation
+            task={quickConfirmTask}
+            processingTimeMs={results?.processingTimeMs || 0}
+            onConfirm={handleQuickTaskConfirm}
+            onEdit={(editedTask) => setQuickConfirmTask(editedTask)}
+            onDiscard={handleQuickTaskDiscard}
+          />
         )}
 
         {captureState === 'complete' && (
@@ -1201,9 +1909,10 @@ export default function CaptureZone() {
           </div>
         )}
 
-        {/* Flexible bottom spacer - balances top spacing */}
-        <div className="flex-grow min-h-[10vh]" />
-      </div>
+          {/* Flexible bottom spacer - balances top spacing */}
+          <div className="flex-grow min-h-[10vh]" />
+        </div>
+      )}
     </div>
   );
 }

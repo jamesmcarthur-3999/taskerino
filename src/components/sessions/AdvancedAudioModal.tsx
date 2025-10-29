@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mic, Volume2, Settings2, Sliders } from 'lucide-react';
 import type { AudioDevice } from '../../types';
 import { GlassSelect } from '../GlassSelect';
+import { validateAudioConfig, type ValidationResult } from '../../utils/sessionValidation';
 
 interface AdvancedAudioModalProps {
   show: boolean;
@@ -41,22 +42,17 @@ interface AdvancedAudioModalProps {
   onCompressionToggle: (enabled: boolean) => void;
   compressionThreshold: number; // dB
   onCompressionThresholdChange: (threshold: number) => void;
-
-  // Sample rate & format
-  sampleRate: 44100 | 48000 | 96000;
-  onSampleRateChange: (rate: 44100 | 48000 | 96000) => void;
-  bitDepth: 16 | 24 | 32;
-  onBitDepthChange: (depth: 16 | 24 | 32) => void;
 }
 
 /**
- * AdvancedAudioModal - Full-screen modal for power-user audio settings
+ * AdvancedAudioModal - Simplified audio settings
  *
  * Design Philosophy:
- * - Tabbed layout for organization (Microphone, System Audio, Processing, Routing)
- * - Professional audio controls (gain, compression, etc.)
- * - Per-app audio routing for macOS
- * - Modular structure for easy modification
+ * - Focus on essential controls: Device selection, gain, effects
+ * - We handle technical details (sample rate, bit depth) automatically
+ * - Professional audio controls (gain, compression, noise reduction)
+ * - Per-app audio routing for macOS (advanced feature)
+ * - Users shouldn't worry about encoding settings
  */
 export function AdvancedAudioModal({
   show,
@@ -86,12 +82,55 @@ export function AdvancedAudioModal({
   onCompressionToggle,
   compressionThreshold,
   onCompressionThresholdChange,
-  sampleRate,
-  onSampleRateChange,
-  bitDepth,
-  onBitDepthChange,
 }: AdvancedAudioModalProps) {
   const [activeTab, setActiveTab] = useState<'mic' | 'system' | 'processing' | 'routing'>('mic');
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
+  // Handle save: validate settings, call onChange callbacks, then close
+  const handleSave = () => {
+    // Build audio config for validation
+    const audioConfig = {
+      sourceType: (selectedMicDevice && selectedSystemAudioDevice ? 'both' :
+                   selectedMicDevice ? 'microphone' :
+                   selectedSystemAudioDevice ? 'system-audio' : 'microphone') as 'microphone' | 'system-audio' | 'both',
+      micDeviceId: selectedMicDevice,
+      systemAudioDeviceId: selectedSystemAudioDevice,
+      balance: 50, // Default balance, not exposed in this modal
+      micVolume: micGain / 100, // Convert 0-200 gain to 0-2 volume
+      systemVolume: systemAudioGain / 100, // Convert 0-200 gain to 0-2 volume
+    };
+
+    // Validate using centralized validation
+    const validation: ValidationResult = validateAudioConfig(audioConfig);
+
+    if (!validation.valid) {
+      setValidationErrors(validation.errors);
+      return; // Don't close if validation fails
+    }
+
+    // Validation passed - now call all onChange callbacks to persist settings
+    // Note: These callbacks should already be called during user interaction,
+    // but we ensure they're all applied here before closing the modal
+    if (selectedMicDevice) {
+      onMicDeviceChange(selectedMicDevice);
+    }
+    if (selectedSystemAudioDevice) {
+      onSystemAudioDeviceChange(selectedSystemAudioDevice);
+    }
+    onMicGainChange(micGain);
+    onSystemAudioGainChange(systemAudioGain);
+    onMicNoiseReductionToggle(micNoiseReduction);
+    onMicEchoCancellationToggle(micEchoCancellation);
+    onAutoLevelingToggle(autoLevelingEnabled);
+    onCompressionToggle(compressionEnabled);
+    onCompressionThresholdChange(compressionThreshold);
+    onPerAppAudioToggle(perAppAudioEnabled);
+    onSelectedAppsChange(selectedApps);
+
+    // Clear errors and close
+    setValidationErrors([]);
+    onClose();
+  };
 
   if (!show) return null;
 
@@ -194,10 +233,6 @@ export function AdvancedAudioModal({
                 onCompressionToggle={onCompressionToggle}
                 compressionThreshold={compressionThreshold}
                 onCompressionThresholdChange={onCompressionThresholdChange}
-                sampleRate={sampleRate}
-                onSampleRateChange={onSampleRateChange}
-                bitDepth={bitDepth}
-                onBitDepthChange={onBitDepthChange}
               />
             )}
 
@@ -213,19 +248,37 @@ export function AdvancedAudioModal({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200/50 bg-gray-50/50">
-            <button
-              onClick={onClose}
-              className="px-6 py-2.5 rounded-xl font-semibold text-gray-700 hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onClose}
-              className="px-6 py-2.5 rounded-xl font-semibold bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg"
-            >
-              Save Changes
-            </button>
+          <div className="p-6 border-t border-gray-200/50 bg-gray-50/50 space-y-3">
+            {/* Validation Errors */}
+            {validationErrors.length > 0 && (
+              <div className="p-4 rounded-xl bg-red-50 border-2 border-red-200 space-y-2 animate-in slide-in-from-top-2 duration-300">
+                <div className="flex items-start gap-3">
+                  <div className="text-red-600 font-bold text-lg">⚠️</div>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm font-semibold text-red-900">Invalid Audio Settings</p>
+                    {validationErrors.map((error, idx) => (
+                      <p key={idx} className="text-xs text-red-800">• {error}</p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl font-semibold text-gray-700 hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-6 py-2.5 rounded-xl font-semibold bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </motion.div>
       </motion.div>
@@ -411,10 +464,6 @@ interface ProcessingTabProps {
   onCompressionToggle: (enabled: boolean) => void;
   compressionThreshold: number;
   onCompressionThresholdChange: (threshold: number) => void;
-  sampleRate: 44100 | 48000 | 96000;
-  onSampleRateChange: (rate: 44100 | 48000 | 96000) => void;
-  bitDepth: 16 | 24 | 32;
-  onBitDepthChange: (depth: 16 | 24 | 32) => void;
 }
 
 function ProcessingTab({
@@ -424,10 +473,6 @@ function ProcessingTab({
   onCompressionToggle,
   compressionThreshold,
   onCompressionThresholdChange,
-  sampleRate,
-  onSampleRateChange,
-  bitDepth,
-  onBitDepthChange,
 }: ProcessingTabProps) {
   return (
     <div className="space-y-6">
@@ -470,28 +515,20 @@ function ProcessingTab({
         )}
       </Section>
 
-      <Section title="Sample Rate">
-        <RadioGrid
-          options={[
-            { value: '44100', label: '44.1 kHz', description: 'CD quality' },
-            { value: '48000', label: '48 kHz', description: 'Pro standard' },
-            { value: '96000', label: '96 kHz', description: 'High resolution' },
-          ]}
-          value={String(sampleRate)}
-          onChange={(v) => onSampleRateChange(Number(v) as 44100 | 48000 | 96000)}
-        />
-      </Section>
-
-      <Section title="Bit Depth">
-        <RadioGrid
-          options={[
-            { value: '16', label: '16-bit', description: 'CD quality' },
-            { value: '24', label: '24-bit', description: 'Pro standard' },
-            { value: '32', label: '32-bit', description: 'Maximum quality' },
-          ]}
-          value={String(bitDepth)}
-          onChange={(v) => onBitDepthChange(Number(v) as 16 | 24 | 32)}
-        />
+      <Section title="Audio Quality">
+        <div className="p-4 rounded-xl bg-purple-50 border-2 border-purple-200">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-purple-500">
+              <Settings2 size={16} className="text-white" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900">Automatic Optimization</h4>
+              <p className="text-sm text-gray-600 mt-1">
+                We automatically configure sample rate (48 kHz) and bit depth (16-bit) for optimal voice recording quality. These settings provide excellent clarity while keeping file sizes manageable.
+              </p>
+            </div>
+          </div>
+        </div>
       </Section>
     </div>
   );
