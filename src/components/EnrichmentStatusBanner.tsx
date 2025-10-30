@@ -24,7 +24,7 @@
 
 import React, { useState } from 'react';
 import { Sparkles, CheckCircle2, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
-import type { Session } from '../types';
+import type { Session, EnrichmentProgress } from '../types';
 import { EnrichmentButton } from './EnrichmentButton';
 import { getBackgroundEnrichmentManager } from '../services/enrichment/BackgroundEnrichmentManager';
 import { useUI } from '../context/UIContext';
@@ -60,7 +60,7 @@ export function EnrichmentStatusBanner({
 
   // Check if session has audio or video data
   const hasAudio = session.audioSegments && session.audioSegments.length > 0;
-  const hasVideo = session.video?.fullVideoAttachmentId;
+  const hasVideo = Boolean(session.video?.fullVideoAttachmentId);
 
   // Don't show banner if no enrichable content
   if (!hasAudio && !hasVideo) {

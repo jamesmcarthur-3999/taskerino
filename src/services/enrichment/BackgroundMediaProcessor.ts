@@ -265,6 +265,9 @@ export class BackgroundMediaProcessor {
 
         // Strip data URL prefix if present (e.g., "data:audio/mp3;base64,")
         let base64Data = attachment.base64;
+        if (!base64Data) {
+          throw new Error('Attachment has no base64 data');
+        }
         if (base64Data.startsWith('data:') && base64Data.includes(',')) {
           base64Data = base64Data.split(',')[1];
         }

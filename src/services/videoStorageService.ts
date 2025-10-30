@@ -237,19 +237,8 @@ class VideoStorageService {
       }
     }
 
-    // Chunk sizes (if chunking is implemented)
-    if (session.video.chunks) {
-      for (const chunk of session.video.chunks) {
-        if (chunk.path) {
-          try {
-            const fileStats = await stat(chunk.path);
-            totalSize += fileStats.size;
-          } catch (error) {
-            console.error('❌ [VIDEO STORAGE] Failed to get chunk file size:', error);
-          }
-        }
-      }
-    }
+    // Note: Chunks are stored in CA storage (via attachmentId), not as separate files
+    // Chunk sizes would need to be retrieved from CA storage if needed
 
     return totalSize;
   }

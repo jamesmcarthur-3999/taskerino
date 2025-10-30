@@ -633,7 +633,7 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
           const hash = screenshot.hash || screenshot.attachmentId; // Fallback for legacy
           if (hash && screenshot.attachmentId) {
             try {
-              await caStorage.removeReference(hash, id, screenshot.attachmentId);
+              await caStorage.removeReference(hash, id);
               removedReferences++;
             } catch (error) {
               console.error(`[SessionListContext] Failed to remove screenshot reference: ${hash}`, error);
@@ -648,7 +648,7 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
           const hash = segment.hash || segment.attachmentId; // Fallback for legacy
           if (hash && segment.attachmentId) {
             try {
-              await caStorage.removeReference(hash, id, segment.attachmentId);
+              await caStorage.removeReference(hash, id);
               removedReferences++;
             } catch (error) {
               console.error(`[SessionListContext] Failed to remove audio segment reference: ${hash}`, error);
@@ -661,7 +661,7 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
       if (session.fullAudioAttachmentId) {
         console.log('[SessionListContext] Removing fullAudioAttachmentId reference:', session.fullAudioAttachmentId);
         try {
-          await caStorage.removeReference(session.fullAudioAttachmentId, id, session.fullAudioAttachmentId);
+          await caStorage.removeReference(session.fullAudioAttachmentId, id);
           removedReferences++;
         } catch (error) {
           console.error('[SessionListContext] Failed to remove full audio reference:', error);
@@ -672,7 +672,7 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
       if (session.video?.fullVideoAttachmentId) {
         const hash = session.video.hash || session.video.fullVideoAttachmentId;
         try {
-          await caStorage.removeReference(hash, id, session.video.fullVideoAttachmentId);
+          await caStorage.removeReference(hash, id);
           removedReferences++;
         } catch (error) {
           console.error('[SessionListContext] Failed to remove video reference:', error);
@@ -682,13 +682,12 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
       // Video chunks
       if (session.video?.chunks) {
         for (const chunk of session.video.chunks) {
-          const hash = chunk.hash || chunk.attachmentId;
-          if (hash && chunk.attachmentId) {
+          if (chunk.attachmentId) {
             try {
-              await caStorage.removeReference(hash, id, chunk.attachmentId);
+              await caStorage.removeReference(chunk.attachmentId, id);
               removedReferences++;
             } catch (error) {
-              console.error(`[SessionListContext] Failed to remove video chunk reference: ${hash}`, error);
+              console.error(`[SessionListContext] Failed to remove video chunk reference: ${chunk.attachmentId}`, error);
             }
           }
         }

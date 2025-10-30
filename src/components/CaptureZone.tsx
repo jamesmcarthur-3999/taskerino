@@ -1406,14 +1406,11 @@ export default function CaptureZone() {
     uiDispatch({
       type: 'ADD_NOTIFICATION',
       payload: {
-        id: generateId(),
         type: 'success',
         title: 'Saved Successfully',
         message: `${noteIds.length} ${noteIds.length === 1 ? 'note' : 'notes'} and ${editedTasks.length} ${editedTasks.length === 1 ? 'task' : 'tasks'} saved`,
         autoDismiss: true,
         dismissAfter: 3000,
-        createdAt: new Date().toISOString(),
-        read: false,
       },
     });
 

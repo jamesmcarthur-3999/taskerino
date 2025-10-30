@@ -183,8 +183,8 @@ export class VideoRecordingService {
     }
 
     // Use first available display (not hardcoded 0)
-    const displayId = parseInt(displays[0].id, 10);
-    console.log(`🖥️ [VIDEO SERVICE] Using display ID ${displayId}: "${displays[0].name}" (${displays[0].width}x${displays[0].height})`);
+    const displayId = parseInt(displays[0].displayId, 10);
+    console.log(`🖥️ [VIDEO SERVICE] Using display ID ${displayId}: "${displays[0].displayName}" (${displays[0].width}x${displays[0].height})`);
 
     const appDataDir = await path.appDataDir();
     const videoFileName = `session-${session.id}-${Date.now()}.mp4`;
@@ -662,7 +662,7 @@ export class VideoRecordingService {
       // Extract all source types from videoConfig
       const width = session.videoConfig?.resolution?.width || 1280;
       const height = session.videoConfig?.resolution?.height || 720;
-      const fps = session.videoConfig?.fps || session.videoConfig?.frameRate || 15;
+      const fps = session.videoConfig?.fps || 15;
       const displayIds = session.videoConfig?.displayIds;
       const windowIds = session.videoConfig?.windowIds;
       const webcamDeviceId = session.videoConfig?.webcamDeviceId;

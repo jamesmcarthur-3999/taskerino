@@ -629,6 +629,7 @@ Return ONLY valid JSON (no markdown):
       attachmentId: string;
       timestamp: string;
       userComment?: string;
+      hash?: string;
     }>,
     sessionContext: {
       sessionId: string;

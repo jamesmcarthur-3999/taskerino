@@ -21,6 +21,9 @@
 //
 import type { Relationship } from './types/relationships';
 
+// Re-export EnrichmentProgress from sessionEnrichmentService for convenience
+export type { EnrichmentProgress } from './services/sessionEnrichmentService';
+
 // ============================================================================
 // MIGRATION STATUS (as of October 2025)
 // ============================================================================

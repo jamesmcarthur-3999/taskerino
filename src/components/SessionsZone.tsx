@@ -999,7 +999,7 @@ export default function SessionsZone() {
             };
 
             // Save screenshot to attachmentStorage
-            const attachment = {
+            const attachment: any = {
               id: attachmentId,
               type: 'screenshot' as const,
               name: `Quick Capture ${new Date().toLocaleTimeString()}.png`,

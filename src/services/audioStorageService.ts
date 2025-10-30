@@ -357,7 +357,7 @@ class AudioStorageService {
    */
   async deleteAudio(hash: string, sessionId: string, attachmentId: string): Promise<void> {
     const caStorage = await getCAStorage();
-    await caStorage.removeReference(hash, sessionId, attachmentId);
+    await caStorage.removeReference(hash, sessionId);
     console.log(`🗑️  [AUDIO STORAGE] Removed reference for audio: ${attachmentId} (hash: ${hash.substring(0, 8)}...)`);
   }
 

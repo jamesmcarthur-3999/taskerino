@@ -114,7 +114,7 @@ export function useSessionEnding() {
         type: 'info',
         title: 'Ending Session',
         message: 'Stopping recordings...',
-        duration: Infinity, // Keep visible until we update it
+        autoDismiss: false, // Keep visible until we update it
       });
 
       // Step 3: Start the actual save operation
@@ -128,7 +128,7 @@ export function useSessionEnding() {
             type: 'info',
             title: 'Ending Session',
             message: 'Saving your work...',
-            duration: Infinity, // Keep visible until complete
+            autoDismiss: false, // Keep visible until complete
           });
           resolve(undefined);
         }, 800);
