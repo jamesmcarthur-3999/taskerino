@@ -18,6 +18,9 @@ export interface CaptureResult extends AIProcessResult {
   // Optional fields based on output needs (notes/tasks may not always be present)
   notes: AIProcessResult['notes'];
   tasks: AIProcessResult['tasks'];
+
+  // Created note IDs (for tracking draft notes in NotesContext)
+  createdNoteIds?: string[];
 }
 
 /**
@@ -84,4 +87,17 @@ export class ProcessingError extends Error {
     super(message);
     this.name = 'ProcessingError';
   }
+}
+
+/**
+ * Persisted review job for resuming capture reviews across sessions
+ * Saved to storage when processing completes, deleted when review is saved/cancelled
+ */
+export interface PersistedReviewJob {
+  id: string; // Unique job ID
+  createdAt: string; // ISO timestamp when capture was created
+  result: CaptureResult; // Full AI processing result with conversation context
+  draftNoteIds: string[]; // IDs of draft notes created for this capture
+  status: 'pending_review' | 'in_review' | 'completed' | 'cancelled';
+  lastModified: string; // ISO timestamp for cleanup/sorting
 }

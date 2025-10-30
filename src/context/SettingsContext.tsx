@@ -139,7 +139,7 @@ type SettingsAction =
 // Default state (copied from AppContext)
 const defaultState: SettingsState = {
   aiSettings: {
-    systemInstructions: `You are a helpful assistant that organizes notes and extracts actionable tasks. Be concise and focus on what matters.`,
+    systemInstructions: `You help users capture information by deciding how to best organize it using the tools available to you.`,
     autoMergeNotes: true,
     autoExtractTasks: true,
   },

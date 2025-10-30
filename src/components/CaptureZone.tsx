@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { AIProcessResult, Task, Attachment, ProcessingJob, Topic, Note } from '../types';
 import type { CaptureResult, RefinementRequest, RefinementResponse } from '../types/captureProcessing';
@@ -11,10 +11,13 @@ import { useSessionList } from '../context/SessionListContext';
 import { createTopic, createNote, extractHashtags, combineTags, getTimeBasedGreeting, generateId } from '../utils/helpers';
 import { CheckCircle2, FileText, Plus, Home, Brain, Upload, X, Image as ImageIcon, Paperclip, Loader2, ArrowRight, Clock, AlertCircle, CheckSquare, Eye, EyeOff, Check, ExternalLink, Lock } from 'lucide-react';
 import { RichTextEditor } from './RichTextEditor';
-import { ResultsReview } from './ResultsReview';
 import { CaptureReview } from './capture/CaptureReview';
 import { QuickTaskConfirmation } from './capture/QuickTaskConfirmation';
+import { PendingReviews } from './capture/PendingReviews';
 import { LearningService } from '../services/learningService';
+import { savePendingReview, deletePendingReview, cleanupOldReviews, loadPendingReviews } from '../services/captureReviewStorage';
+import type { PersistedReviewJob } from '../types/captureProcessing';
+import { getStorage } from '../services/storage';
 import { fileStorage } from '../services/fileStorageService';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { backgroundProcessor } from '../services/backgroundProcessor';
@@ -583,20 +586,25 @@ export default function CaptureZone() {
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [results, setResults] = useState<CaptureResult | null>(null);
   const [showQuickConfirm, setShowQuickConfirm] = useState(false);
   const [quickConfirmTask, setQuickConfirmTask] = useState<AIProcessResult['tasks'][0] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
-  const [autoSave, setAutoSave] = useState(true);
-  const [extractTasks, setExtractTasks] = useState(true);
   const [showBackgroundTooltip, setShowBackgroundTooltip] = useState(false);
   const [isCaptureInputFocused, setIsCaptureInputFocused] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
 
   // API key state
   const [hasApiKeys, setHasApiKeys] = useState(false);
   const [isCheckingKeys, setIsCheckingKeys] = useState(true);
+
+  // Pending reviews state
+  const [pendingReviewsCount, setPendingReviewsCount] = useState(0);
+  const [showPendingReviews, setShowPendingReviews] = useState(false);
 
   // Get tooltip trigger helper
   const { markFirstCaptureComplete } = useTooltipTriggers();
@@ -618,6 +626,175 @@ export default function CaptureZone() {
     checkApiKeys();
   }, []);
 
+  // Load pending reviews on mount and cleanup old ones
+  useEffect(() => {
+    const loadPendingReviewsData = async () => {
+      try {
+        // Cleanup old reviews (>7 days)
+        await cleanupOldReviews();
+
+        // Load pending reviews
+        const reviews = await loadPendingReviews();
+        const activeCount = reviews.filter(
+          (r) => r.status === 'pending_review' || r.status === 'in_review'
+        ).length;
+        setPendingReviewsCount(activeCount);
+
+        // Auto-expand if there are pending reviews
+        if (activeCount > 0) {
+          setShowPendingReviews(true);
+        }
+      } catch (error) {
+        console.error('Failed to load pending reviews:', error);
+      }
+    };
+
+    loadPendingReviewsData();
+  }, []);
+
+  // Load draft capture text from storage on mount
+  useEffect(() => {
+    const loadDraftText = async () => {
+      try {
+        const storage = await getStorage();
+        const draftText = await storage.load<string>('capture-draft-text');
+        if (draftText) {
+          setInputText(draftText);
+          console.log('[CaptureZone] Loaded draft text from storage');
+        }
+      } catch (error) {
+        console.error('[CaptureZone] Failed to load draft text:', error);
+      } finally {
+        setIsDraftLoaded(true);
+      }
+    };
+
+    loadDraftText();
+  }, []);
+
+  // Save draft capture text to storage as user types (debounced)
+  useEffect(() => {
+    // Skip initial load
+    if (!isDraftLoaded) return;
+
+    const saveDraftText = async () => {
+      try {
+        const storage = await getStorage();
+        if (inputText.trim()) {
+          await storage.save('capture-draft-text', inputText);
+        } else {
+          // Clear storage if text is empty
+          await storage.save('capture-draft-text', '');
+        }
+      } catch (error) {
+        console.error('[CaptureZone] Failed to save draft text:', error);
+      }
+    };
+
+    // Debounce saves by 1 second
+    const timeoutId = setTimeout(saveDraftText, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [inputText, isDraftLoaded]);
+
+  // Auto-scroll to align capture box below navigation when expanding
+  useEffect(() => {
+    if (!isExpanded || !editorContainerRef.current) return;
+
+    // Small delay to let the expansion animation start
+    const scrollTimer = setTimeout(() => {
+      const captureBox = editorContainerRef.current;
+      if (!captureBox) return;
+
+      const captureBoxTop = captureBox.getBoundingClientRect().top;
+      const captureBoxBottom = captureBox.getBoundingClientRect().bottom;
+      const viewportHeight = window.innerHeight;
+      const navigationHeight = 100; // Navigation island height + some padding
+
+      // Only auto-scroll if:
+      // 1. Capture box top is above navigation (user scrolled past it)
+      // 2. Capture box is mostly in view (user is focused on it, not content below)
+      const isAboveNavigation = captureBoxTop < navigationHeight;
+      const isMostlyInView = captureBoxTop < viewportHeight * 0.8;
+
+      if (isAboveNavigation || (isMostlyInView && captureBoxBottom > navigationHeight)) {
+        const scrollOffset = window.scrollY;
+        const targetScrollPosition = scrollOffset + captureBoxTop - navigationHeight;
+
+        window.scrollTo({
+          top: targetScrollPosition,
+          behavior: 'smooth'
+        });
+
+        console.log('[Auto-scroll] Aligning capture box below navigation');
+      } else {
+        console.log('[Auto-scroll] Skipped - user is viewing content below');
+      }
+    }, 100);
+
+    return () => clearTimeout(scrollTimer);
+  }, [isExpanded]);
+
+  // Scroll detection for expansion
+  useEffect(() => {
+    if (!editorContainerRef.current) return;
+
+    const checkScroll = () => {
+      const container = editorContainerRef.current;
+      if (!container) return;
+
+      // Get the ProseMirror editor element (the actual content)
+      const proseMirrorElement = container.querySelector('.ProseMirror') as HTMLElement;
+      if (!proseMirrorElement) return;
+
+      // Always measure against the COLLAPSED height (400px) to avoid feedback loops
+      const contentHeight = proseMirrorElement.scrollHeight;
+      const collapsedMaxHeight = 400; // Match the collapsed maxHeight
+      const threshold = 20; // Buffer for padding/margins
+
+      console.log('[Scroll Detection]', {
+        contentHeight,
+        collapsedMaxHeight,
+        needsExpansion: contentHeight > collapsedMaxHeight + threshold,
+        canCollapse: contentHeight <= collapsedMaxHeight - threshold,
+        isExpanded
+      });
+
+      // Expand: Content exceeds collapsed height
+      if (contentHeight > collapsedMaxHeight + threshold && !isExpanded) {
+        console.log('[Expanding] Content exceeds collapsed height');
+        setIsExpanded(true);
+      }
+      // Collapse: Content comfortably fits in collapsed height (with hysteresis)
+      else if (contentHeight <= collapsedMaxHeight - threshold && isExpanded) {
+        console.log('[Collapsing] Content fits within collapsed height');
+        setIsExpanded(false);
+      }
+    };
+
+    // Use ResizeObserver to detect content size changes
+    const resizeObserver = new ResizeObserver(() => {
+      checkScroll();
+    });
+
+    const container = editorContainerRef.current;
+    const proseMirrorElement = container.querySelector('.ProseMirror');
+
+    if (proseMirrorElement) {
+      resizeObserver.observe(proseMirrorElement);
+    }
+
+    // Also observe the container for size changes
+    resizeObserver.observe(container);
+
+    // Initial check with slight delay to ensure DOM is ready
+    setTimeout(checkScroll, 100);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [inputText, isExpanded]);
+
   // Watch for pending review job ID from notifications
   useEffect(() => {
     const pendingJobId = uiState.pendingReviewJobId;
@@ -626,7 +803,12 @@ export default function CaptureZone() {
       const job = uiState.backgroundProcessing.completed.find(j => j.id === pendingJobId);
       if (job && job.result) {
         // Open review for this job
-        setResults(job.result);
+        const wrappedResult = wrapInCaptureResult(job.result, job.input, []);
+        // Ensure createdNoteIds from job result are included in wrapped result
+        if (job.result.createdNoteIds) {
+          wrappedResult.createdNoteIds = job.result.createdNoteIds;
+        }
+        setResults(wrappedResult);
         setCurrentJobId(job.id);
         setCaptureState('review');
         // Clear the pending review job ID
@@ -733,10 +915,8 @@ export default function CaptureZone() {
     };
   };
 
-  const shouldShowQuickConfirmation = (result: CaptureResult, originalText: string) => {
-    return result.tasks?.length === 1
-      && (result.notes?.length ?? 0) === 0
-      && originalText.length < 100;
+  const shouldShowQuickConfirmation = (result: CaptureResult) => {
+    return result.tasks?.length === 1 && (result.notes?.length ?? 0) === 0;
   };
 
   // Background processor callbacks
@@ -759,152 +939,109 @@ export default function CaptureZone() {
 
     // Complete callback
     backgroundProcessor.onComplete((job) => {
+      // Create draft notes BEFORE completing the job so createdNoteIds can be included in the result
+      const createdNoteIds: string[] = [];
+      if (job.result?.notes && job.result.notes.length > 0) {
+        job.result.notes.forEach(noteResult => {
+          const newNote: Note = {
+            id: generateId(),
+            topicIds: [noteResult.topicId],
+            content: noteResult.content,
+            summary: noteResult.summary,
+            sourceText: noteResult.sourceText,
+            timestamp: new Date().toISOString(),
+            lastUpdated: new Date().toISOString(),
+            source: noteResult.source || 'thought',
+            status: 'draft', // Set as draft for review workflow
+            tags: noteResult.tags || [],
+            metadata: {
+              sentiment: noteResult.sentiment,
+              keyPoints: noteResult.keyPoints,
+              relatedTopics: noteResult.relatedTopics,
+            },
+          };
+          addNote(newNote);
+          createdNoteIds.push(newNote.id);
+        });
+      }
+
+      // Store createdNoteIds in the job result so all review code paths can access it
+      const enrichedResult: AIProcessResult = {
+        ...job.result!,
+        createdNoteIds,
+      };
+
+      // Complete the job with the enriched result
       uiDispatch({
         type: 'COMPLETE_PROCESSING_JOB',
         payload: {
           id: job.id,
-          result: job.result!,
+          result: enrichedResult,
         }
       });
 
-      // Check if this job should auto-save
-      const shouldAutoSave = (job as ExtendedJob)._autoSave;
+      // Always show review - simplified binary decision:
+      // - Single task only → Quick confirmation inline
+      // - Everything else → Full review modal
 
-      if (shouldAutoSave && job.result) {
-        // Auto-save directly without review
-        const result = job.result;
+      // Wrap result in CaptureResult for review UI
+      const wrappedResult = wrapInCaptureResult(enrichedResult, job.input, []);
 
-        // Save topics
-        const topicIdMap = new Map<string, string>();
-        result.detectedTopics.forEach(detected => {
-          if (detected.existingTopicId) {
-            topicIdMap.set(detected.name, detected.existingTopicId);
-          } else {
-            const newTopic = createTopic(detected.name);
-            addTopic(newTopic );
-            topicIdMap.set(detected.name, newTopic.id);
-          }
-        });
+      // Attach created note IDs to the wrapped result (for backward compatibility with existing handlers)
+      wrappedResult.createdNoteIds = createdNoteIds;
 
-        // Save notes
-        const createdNotes: typeof notesState.notes = [];
-        result.notes.forEach(noteResult => {
-          const topicId = topicIdMap.get(noteResult.topicName) || noteResult.topicId;
-          const hashtagsFromSource = extractHashtags(noteResult.sourceText || '');
-          const hashtagsFromContent = extractHashtags(noteResult.content);
-          const allTags = combineTags(noteResult.tags || [], result.keyTopics, hashtagsFromSource, hashtagsFromContent);
+      // Save pending review for persistence across app restarts
+      const persistedReview: PersistedReviewJob = {
+        id: job.id,
+        createdAt: new Date().toISOString(),
+        result: wrappedResult,
+        draftNoteIds: createdNoteIds,
+        status: 'pending_review',
+        lastModified: new Date().toISOString(),
+      };
+      savePendingReview(persistedReview).catch((error) => {
+        console.error('Failed to save pending review:', error);
+      });
 
-          const newNote = createNote(
-            topicId,
-            noteResult.content,
-            noteResult.summary,
-            {
-              tags: allTags,
-              sourceText: noteResult.sourceText,
-              metadata: {
-                sentiment: noteResult.sentiment || result.sentiment,
-                keyPoints: noteResult.keyPoints || [noteResult.summary],
-                relatedTopics: noteResult.relatedTopics,
-              },
-            }
-          );
-          if (noteResult.source) {
-            newNote.source = noteResult.source;
-          }
-          addNote(newNote );
-          uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'noteCount' });
-          createdNotes.push(newNote);
-        });
+      // Check if we should show quick confirmation for single task
+      if (shouldShowQuickConfirmation(wrappedResult)) {
+        // Show quick task confirmation inline
+        setQuickConfirmTask(wrappedResult.tasks![0]);
+        setShowQuickConfirm(true);
+        setCurrentJobId(job.id);
 
-        // Save tasks (if any)
-        const primaryNoteId = createdNotes.length > 0 ? createdNotes[0].id : undefined;
-        result.tasks.forEach(task => {
-          const taskWithNoteLink: Task = {
-            id: generateId(),
-            title: task.title,
-            description: task.description,
-            priority: task.priority,
-            dueDate: task.dueDate,
-            dueTime: task.dueTime,
-            topicId: task.topicId,
-            noteId: primaryNoteId,
-            tags: task.tags || [],
-            done: false,
-            status: 'todo',
-            createdBy: 'ai',
-            createdAt: new Date().toISOString(),
-            sourceNoteId: primaryNoteId,
-            sourceExcerpt: task.sourceExcerpt,
-            contextForAgent: task.contextForAgent,
-            subtasks: task.suggestedSubtasks?.map((title, idx) => ({
-              id: `${generateId()}-${idx}`,
-              title,
-              done: false,
-              createdAt: new Date().toISOString(),
-            })),
-          };
-          addTask(taskWithNoteLink );
-          uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'taskCount' });
-        });
-
-        // Remove job from queue
-        uiDispatch({ type: 'REMOVE_PROCESSING_JOB', payload: job.id });
-
-        // Show auto-save success notification
-        const taskCount = result.tasks.length || 0;
-        const noteCount = result.notes.length || 0;
         uiDispatch({
           type: 'ADD_NOTIFICATION',
           payload: {
             type: 'success',
-            title: 'Auto-Saved!',
-            message: `Saved ${noteCount} ${noteCount === 1 ? 'note' : 'notes'}${taskCount > 0 ? ` and ${taskCount} ${taskCount === 1 ? 'task' : 'tasks'}` : ''}.`,
+            title: 'Task Created!',
+            message: 'Review and confirm your task below.',
           }
         });
       } else {
-        // Wrap result in CaptureResult for new review UI
-        const wrappedResult = wrapInCaptureResult(job.result!, job.input, []);
+        // Show completion notification for manual review
+        const taskCount = job.result?.tasks.length || 0;
+        const topicCount = job.result?.detectedTopics.length || 0;
 
-        // Check if we should show quick confirmation for single task
-        if (shouldShowQuickConfirmation(wrappedResult, job.input)) {
-          // Show quick task confirmation inline
-          setQuickConfirmTask(wrappedResult.tasks![0]);
-          setShowQuickConfirm(true);
-          setCurrentJobId(job.id);
-
-          uiDispatch({
-            type: 'ADD_NOTIFICATION',
-            payload: {
-              type: 'success',
-              title: 'Task Created!',
-              message: 'Review and confirm your task below.',
-            }
-          });
-        } else {
-          // Show completion notification for manual review
-          const taskCount = job.result?.tasks.length || 0;
-          const topicCount = job.result?.detectedTopics.length || 0;
-
-          uiDispatch({
-            type: 'ADD_NOTIFICATION',
-            payload: {
-              type: 'success',
-              title: 'Processing Complete!',
-              message: `Found ${taskCount} tasks and ${topicCount} topics.`,
-              action: {
-                label: 'Review Now',
-                onClick: () => {
-                  // Use job data directly from closure to avoid race condition
-                  // with async state updates (fixes stuck loading issue)
-                  setResults(wrappedResult);
-                  setCurrentJobId(job.id);
-                  setCaptureState('review');
-                  uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'capture' });
-                },
+        uiDispatch({
+          type: 'ADD_NOTIFICATION',
+          payload: {
+            type: 'success',
+            title: 'Processing Complete!',
+            message: `Found ${taskCount} tasks and ${topicCount} topics.`,
+            action: {
+              label: 'Review Now',
+              onClick: () => {
+                // Use job data directly from closure to avoid race condition
+                // with async state updates (fixes stuck loading issue)
+                setResults(wrappedResult);
+                setCurrentJobId(job.id);
+                setCaptureState('review');
+                uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'capture' });
               },
-            }
-          });
-        }
+            },
+          }
+        });
       }
     });
 
@@ -944,6 +1081,9 @@ export default function CaptureZone() {
     const plainText = inputText.replace(/<[^>]*>/g, '').trim();
     if (!plainText) return;
 
+    // Collapse the capture box
+    setIsExpanded(false);
+
     // Add job to background processor - it returns the job with ID
     const job = backgroundProcessor.addJob(
       plainText,
@@ -954,11 +1094,8 @@ export default function CaptureZone() {
       settingsState.learningSettings,
       tasksState.tasks,
       attachments,
-      extractTasks // Pass the extractTasks preference
+      true // Always extract tasks
     );
-
-    // Store auto-save preference in the job
-    (job as ExtendedJob)._autoSave = autoSave;
 
     // Add to state using the SAME job from processor (must include ID for progress tracking)
     addProcessingJob({
@@ -976,18 +1113,24 @@ export default function CaptureZone() {
     // Mark first capture complete for tooltip
     markFirstCaptureComplete();
 
-    // Clear input immediately
+    // Clear input and draft from storage
     setInputText('');
     setAttachments([]);
     setError(null);
 
+    // Clear draft from storage
+    try {
+      const storage = await getStorage();
+      await storage.save('capture-draft-text', '');
+    } catch (error) {
+      console.error('[CaptureZone] Failed to clear draft text:', error);
+    }
+
     // Show success notification
     addNotification({
         type: 'info',
-        title: autoSave ? 'Processing & Auto-Saving' : 'Processing in Background',
-        message: autoSave
-          ? 'Your note will be automatically saved after AI processing.'
-          : 'Your note is being processed by AI. You can continue capturing more notes.',
+        title: 'Processing in Background',
+        message: 'Your note is being processed by AI. You can continue capturing more notes.',
       });
   };
 
@@ -1201,84 +1344,78 @@ export default function CaptureZone() {
     setQuickConfirmTask(null);
   };
 
-  const handleSaveFromNewReview = async (editedResult: CaptureResult) => {
-    if (!editedResult) return;
+  const handleSaveFromNewReview = async (noteIds: string[], editedTasks: Task[], removedTaskIndexes: number[]) => {
+    // Delete the persisted review job since it's being saved
+    if (currentJobId) {
+      deletePendingReview(currentJobId).catch((error) => {
+        console.error('Failed to delete pending review:', error);
+      });
+      handleReviewsChanged(); // Update count
+    }
 
-    // Save topics
-    const topicIdMap = new Map<string, string>();
-    editedResult.detectedTopics.forEach(detected => {
-      if (detected.existingTopicId) {
-        topicIdMap.set(detected.name, detected.existingTopicId);
-      } else {
-        const newTopic = createTopic(detected.name);
-        addTopic(newTopic);
-        topicIdMap.set(detected.name, newTopic.id);
+    // Before saving, ensure General Notes topic exists if any note has topicId='new'
+    // This happens when Claude doesn't detect a topic
+    let generalNotesTopicId: string | undefined;
+    for (const noteId of noteIds) {
+      const note = notesState.notes.find(n => n.id === noteId);
+      if (note && note.topicIds && note.topicIds.includes('new')) {
+        // Create General Notes topic if not already created
+        if (!generalNotesTopicId) {
+          // Check if General Notes already exists
+          const existingGeneralTopic = entitiesState.topics.find(t => t.name === 'General Notes');
+          if (existingGeneralTopic) {
+            generalNotesTopicId = existingGeneralTopic.id;
+          } else {
+            const generalTopic = createTopic('General Notes');
+            addTopic(generalTopic);
+            generalNotesTopicId = generalTopic.id;
+          }
+        }
+        // Update note with real topic ID (replace 'new' with actual ID)
+        await updateNote({
+          ...note,
+          topicIds: [generalNotesTopicId],
+        });
       }
+    }
+
+    // Notes were created as drafts and CaptureReview already updated them to status='approved'
+    // Just need to update onboarding stats
+    noteIds.forEach(() => {
+      uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'noteCount' });
     });
 
-    // Save notes (if any)
-    const createdNotes: typeof notesState.notes = [];
-    if (editedResult.notes) {
-      editedResult.notes.forEach(noteResult => {
-        const topicId = topicIdMap.get(noteResult.topicName) || noteResult.topicId;
-        const hashtagsFromSource = extractHashtags(noteResult.sourceText || '');
-        const hashtagsFromContent = extractHashtags(noteResult.content);
-        const allTags = combineTags(noteResult.tags || [], editedResult.keyTopics, hashtagsFromSource, hashtagsFromContent);
-
-        const newNote = createNote(
-          topicId,
-          noteResult.content,
-          noteResult.summary,
-          {
-            tags: allTags,
-            sourceText: noteResult.sourceText,
-            metadata: {
-              sentiment: noteResult.sentiment || editedResult.sentiment,
-              keyPoints: noteResult.keyPoints || [noteResult.summary],
-              relatedTopics: noteResult.relatedTopics,
-            },
-          }
-        );
-        if (noteResult.source) {
-          newNote.source = noteResult.source;
-        }
-        addNote(newNote);
-        uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'noteCount' });
-        createdNotes.push(newNote);
-      });
-    }
-
     // Save tasks (if any)
-    if (editedResult.tasks) {
-      const primaryNoteId = createdNotes.length > 0 ? createdNotes[0].id : undefined;
-      editedResult.tasks.forEach(task => {
-        const taskWithMeta: Task = {
-          id: generateId(),
-          title: task.title,
-          description: task.description,
-          priority: task.priority,
-          dueDate: task.dueDate,
-          dueTime: task.dueTime,
-          topicId: task.topicId,
-          noteId: primaryNoteId,
-          tags: task.tags || [],
-          done: false,
-          status: 'todo',
-          createdBy: 'ai',
-          createdAt: new Date().toISOString(),
-          sourceNoteId: primaryNoteId,
-          sourceExcerpt: task.sourceExcerpt,
-          subtasks: task.suggestedSubtasks?.map((title, idx) => ({
-            id: `${generateId()}-${idx}`,
-            title,
-            done: false,
-            createdAt: new Date().toISOString(),
-          })),
-        };
-        addTask(taskWithMeta);
-        uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'taskCount' });
-      });
-    }
+    const primaryNoteId = noteIds.length > 0 ? noteIds[0] : undefined;
+    editedTasks.forEach(task => {
+      const taskWithMeta: Task = {
+        ...task,
+        id: task.id || generateId(),
+        noteId: primaryNoteId,
+        done: false,
+        status: 'todo',
+        createdBy: 'ai',
+        createdAt: task.createdAt || new Date().toISOString(),
+        sourceNoteId: primaryNoteId,
+      };
+      addTask(taskWithMeta);
+      uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'taskCount' });
+    });
+
+    // Show success notification
+    uiDispatch({
+      type: 'ADD_NOTIFICATION',
+      payload: {
+        id: generateId(),
+        type: 'success',
+        title: 'Saved Successfully',
+        message: `${noteIds.length} ${noteIds.length === 1 ? 'note' : 'notes'} and ${editedTasks.length} ${editedTasks.length === 1 ? 'task' : 'tasks'} saved`,
+        autoDismiss: true,
+        dismissAfter: 3000,
+        createdAt: new Date().toISOString(),
+        read: false,
+      },
+    });
 
     // Remove job from queue
     if (currentJobId) {
@@ -1288,7 +1425,8 @@ export default function CaptureZone() {
 
     // Clear state
     setResults(null);
-    setCaptureState('complete');
+    setCaptureState('idle');
+    setInput('');
   };
 
   const handleRefineCapture = async (request: RefinementRequest): Promise<RefinementResponse> => {
@@ -1303,15 +1441,44 @@ export default function CaptureZone() {
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     setCaptureState('idle');
     setInputText('');
     setAttachments([]);
     setResults(null);
+
+    // Clear draft from storage
+    try {
+      const storage = await getStorage();
+      await storage.save('capture-draft-text', '');
+    } catch (error) {
+      console.error('[CaptureZone] Failed to clear draft text:', error);
+    }
   };
 
   const handleViewNotes = () => {
     uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'notes'  });
+  };
+
+  // Pending reviews handlers
+  const handleResumeReview = (review: PersistedReviewJob) => {
+    setResults(review.result);
+    setCurrentJobId(review.id);
+    setCaptureState('review');
+    setShowPendingReviews(false);
+  };
+
+  const handleReviewsChanged = async () => {
+    // Reload count after reviews change
+    try {
+      const reviews = await loadPendingReviews();
+      const activeCount = reviews.filter(
+        (r) => r.status === 'pending_review' || r.status === 'in_review'
+      ).length;
+      setPendingReviewsCount(activeCount);
+    } catch (error) {
+      console.error('Failed to reload pending reviews count:', error);
+    }
   };
 
   // File handling functions
@@ -1409,20 +1576,6 @@ export default function CaptureZone() {
     return () => document.removeEventListener('paste', handlePaste);
   }, []);
 
-  // Auto-disable auto-save for long notes
-  useEffect(() => {
-    const plainText = inputText.replace(/<[^>]*>/g, '').trim();
-    if (plainText.length > 1000 && autoSave) {
-      setAutoSave(false);
-      // Show notification to explain why auto-save was disabled
-      addNotification({
-          type: 'info',
-          title: 'Auto-save Disabled',
-          message: 'Auto-save has been turned off for this longer note so you can review it before saving.',
-        });
-    }
-  }, [inputText, autoSave,  uiDispatch]);
-
   // Show background processing tooltip on first processing job
   useEffect(() => {
     const processingJobs = uiState.backgroundProcessing.queue.filter(
@@ -1456,6 +1609,13 @@ export default function CaptureZone() {
             result={results}
             onSave={handleSaveFromNewReview}
             onCancel={() => {
+              // Delete the persisted review when cancelled
+              if (currentJobId) {
+                deletePendingReview(currentJobId).catch((error) => {
+                  console.error('Failed to delete pending review:', error);
+                });
+                handleReviewsChanged(); // Update count
+              }
               setCaptureState('idle');
               setResults(null);
             }}
@@ -1464,14 +1624,14 @@ export default function CaptureZone() {
         </div>
       )}
 
-      {/* Normal Capture Content - with max-w-3xl constraint */}
+      {/* Normal Capture Content - max-w responsive to expansion */}
       {captureState !== 'review' && (
-        <div className="relative z-10 w-full max-w-3xl mx-auto px-8 py-12 min-h-full flex flex-col">
+        <div className={`relative z-10 w-full ${isExpanded ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-8 py-12 min-h-full flex flex-col transition-all duration-300`}>
           {/* Flexible top spacer - grows when there's space */}
           <div className="flex-grow min-h-[10vh]" />
 
         {captureState === 'idle' && (
-          <div className="transform transition-all duration-300 ease-out flex-shrink-0">
+          <div className="transition-all duration-300 ease-out flex-shrink-0">
             {/* Live Time Display */}
             <LiveTime />
 
@@ -1482,6 +1642,16 @@ export default function CaptureZone() {
 
             {/* AI-Generated Sarcastic Quote */}
             {settingsState.userProfile.name && <SarcasticQuote />}
+
+            {/* Pending Reviews */}
+            {!isCheckingKeys && hasApiKeys && pendingReviewsCount > 0 && (
+              <div className="mb-6">
+                <PendingReviews
+                  onResumeReview={handleResumeReview}
+                  onReviewsChanged={handleReviewsChanged}
+                />
+              </div>
+            )}
 
             {/* Loading State */}
             {isCheckingKeys && (
@@ -1519,8 +1689,18 @@ export default function CaptureZone() {
                   transition={{ duration: 0.3 }}
                 >
                   {/* Frosted Glass Capture Box with Drag-Drop */}
-                  <div
-              className={`relative ${getGlassClasses('strong')} ${getRadiusClass('card')} overflow-hidden`}
+                  <motion.div
+              ref={editorContainerRef}
+              layout
+              animate={{
+                scale: isExpanded ? 1.02 : 1.0,
+              }}
+              transition={{
+                type: 'spring',
+                stiffness: 300,
+                damping: 30,
+              }}
+              className={`relative ${getGlassClasses('strong')} ${getRadiusClass('card')} overflow-visible w-full`}
               onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
               onDragLeave={() => setDragActive(false)}
               onDrop={handleFileDrop}
@@ -1546,7 +1726,7 @@ export default function CaptureZone() {
                   onSubmit={handleSubmit}
                   autoFocus
                   minimal={false}
-                  maxHeight="400px"
+                  maxHeight={isExpanded ? undefined : '400px'}
                   onFocus={() => setIsCaptureInputFocused(true)}
                   onBlur={() => setIsCaptureInputFocused(false)}
                 />
@@ -1592,86 +1772,102 @@ export default function CaptureZone() {
                 </div>
               )}
 
-              <div className="px-8 py-5 border-t-2 border-white/30 space-y-3">
-                {/* Top row: Keyboard hint and file picker */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-700/70 font-medium">
-                      <kbd className="px-3 py-1.5 bg-white/50 backdrop-blur-sm rounded-lg text-xs font-semibold shadow-sm">⌘</kbd>
-                      {' + '}
-                      <kbd className="px-3 py-1.5 bg-white/50 backdrop-blur-sm rounded-lg text-xs font-semibold shadow-sm">Enter</kbd>
-                      {' '}to process
-                    </span>
+              {/* Static Controls - Collapsed State */}
+              {!isExpanded && (
+                <div className="px-8 py-5 border-t-2 border-white/30 space-y-3">
+                  {/* Top row: Keyboard hint and file picker */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm text-gray-700/70 font-medium">
+                        <kbd className="px-3 py-1.5 bg-white/50 backdrop-blur-sm rounded-lg text-xs font-semibold shadow-sm">⌘</kbd>
+                        {' + '}
+                        <kbd className="px-3 py-1.5 bg-white/50 backdrop-blur-sm rounded-lg text-xs font-semibold shadow-sm">Enter</kbd>
+                        {' '}to process
+                      </span>
 
-                    {/* File Picker Button */}
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*,video/*,.pdf"
-                        onChange={handleFileSelect}
-                        className="hidden"
-                      />
-                      <div className={`flex items-center gap-2 px-4 py-2 ${getGlassClasses('medium')} ${getRadiusClass('field')} hover:bg-white/80 transition-all duration-300 text-sm font-semibold text-gray-700 hover:text-cyan-600`}>
-                        <Upload size={ICON_SIZES.sm} />
-                        Add Files
-                      </div>
-                    </label>
+                      {/* File Picker Button */}
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*,video/*,.pdf"
+                          onChange={handleFileSelect}
+                          className="hidden"
+                        />
+                        <div className={`flex items-center gap-2 px-4 py-2 ${getGlassClasses('medium')} ${getRadiusClass('field')} hover:bg-white/80 transition-all duration-300 text-sm font-semibold text-gray-700 hover:text-cyan-600`}>
+                          <Upload size={ICON_SIZES.sm} />
+                          Add Files
+                        </div>
+                      </label>
+                    </div>
+
+                    {(inputText.trim() || attachments.length > 0) && (
+                      <Button
+                        onClick={handleSubmit}
+                        variant="primary"
+                        size="md"
+                      >
+                        Process & File
+                      </Button>
+                    )}
                   </div>
 
-                  {(inputText.trim() || attachments.length > 0) && (
-                    <Button
-                      onClick={handleSubmit}
-                      variant="primary"
-                      size="md"
-                    >
-                      Process & File
-                    </Button>
-                  )}
                 </div>
+              )}
 
-                {/* Bottom row: Control toggles */}
-                <div className="flex items-center gap-6 pt-2 border-t border-white/20">
-                  {/* Auto-save toggle */}
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <div className="relative">
-                      <input
-                        type="checkbox"
-                        checked={autoSave}
-                        onChange={(e) => setAutoSave(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className={`w-11 h-6 bg-white/40 backdrop-blur-sm peer-focus:outline-none ${getRadiusClass('pill')} peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:border-white/60 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-blue-500`}></div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 size={ICON_SIZES.sm} className="text-gray-600 group-hover:text-cyan-600 transition-colors" />
-                      <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
-                        Auto-save (skip review)
-                      </span>
-                    </div>
-                  </label>
+              {/* Floating Controls - Expanded State (Fixed to viewport) */}
+              {isExpanded && (
+                <AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                      scale: 1
+                    }}
+                    exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                    className="fixed bottom-6 z-[9999]"
+                    style={{
+                      right: 'calc((100vw - 72rem) / 2 + 1.5rem)' // Align with max-w-6xl right edge + padding
+                    }}
+                  >
+                    <div className={`${getGlassClasses('strong')} ${getRadiusClass('pill')} px-6 py-4 shadow-2xl border-2 border-white/60`}>
+                      <div className="flex items-center gap-3">
 
-                  {/* Extract tasks toggle */}
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <div className="relative">
-                      <input
-                        type="checkbox"
-                        checked={extractTasks}
-                        onChange={(e) => setExtractTasks(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className={`w-11 h-6 bg-white/40 backdrop-blur-sm peer-focus:outline-none ${getRadiusClass('pill')} peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border after:border-white/60 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-cyan-500 peer-checked:to-blue-500`}></div>
+                        {/* File upload - icon only */}
+                        <label className="cursor-pointer" title="Add files">
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*,video/*,.pdf"
+                            onChange={handleFileSelect}
+                            className="hidden"
+                          />
+                          <div className={`w-10 h-10 ${getGlassClasses('medium')} ${getRadiusClass('pill')} flex items-center justify-center transition-all duration-300 hover:scale-110 hover:bg-white/80 text-gray-700 hover:text-cyan-600`}>
+                            <Upload size={ICON_SIZES.sm} />
+                          </div>
+                        </label>
+
+                        {/* Process button - pill style */}
+                        {(inputText.trim() || attachments.length > 0) && (
+                          <>
+                            <div className="w-px h-8 bg-white/40" />
+                            <button
+                              onClick={handleSubmit}
+                              className={`${getRadiusClass('pill')} px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-semibold text-sm hover:from-cyan-600 hover:to-blue-600 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 flex items-center gap-2`}
+                            >
+                              <ArrowRight size={ICON_SIZES.sm} />
+                              Process & File
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <CheckSquare size={ICON_SIZES.sm} className="text-gray-600 group-hover:text-cyan-600 transition-colors" />
-                      <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
-                        Extract tasks
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-            </div>
+                  </motion.div>
+                </AnimatePresence>
+              )}
+            </motion.div>
 
             {error && (
               <div className={`mt-6 p-5 bg-gradient-to-r from-red-500/10 via-rose-500/5 to-red-400/10 backdrop-blur-2xl border-2 border-red-300/50 ${getRadiusClass('card')} text-red-700 font-medium shadow-lg`}>
@@ -1728,62 +1924,77 @@ export default function CaptureZone() {
                 ))}
 
                 {/* Completed Jobs */}
-                {uiState.backgroundProcessing.completed.slice(0, 5).map(job => {
-                  const taskCount = job.result?.tasks.length || 0;
-                  const noteCount = job.result?.notes.length || 0;
+                {uiState.backgroundProcessing.completed
+                  .slice() // Create a copy to avoid mutating the original array
+                  .reverse() // Newest first
+                  .slice(0, 5) // Take first 5
+                  .filter(job => {
+                    // Hide the card if we're showing QuickTaskConfirmation for this job
+                    if (showQuickConfirm && currentJobId === job.id) {
+                      return false;
+                    }
+                    return true;
+                  })
+                  .map(job => {
+                    const taskCount = job.result?.tasks.length || 0;
+                    const noteCount = job.result?.notes.length || 0;
 
-                  return (
-                    <div key={job.id} className={`${getGlassClasses('strong')} ${getRadiusClass('card')} p-6 hover:border-cyan-300 transition-all duration-300`}>
-                      <div className="flex items-start gap-4">
-                        <CheckCircle2 size={ICON_SIZES.md} className="text-green-600 flex-shrink-0 mt-1" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="font-semibold text-gray-900">Processing Complete!</p>
-                            <span className="text-xs text-gray-500">
-                              {new Date(job.completedAt!).toLocaleTimeString()}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-700 mb-3 line-clamp-2">
-                            {job.input}
-                          </p>
-                          <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
-                            <span className="flex items-center gap-1">
-                              <FileText size={ICON_SIZES.sm} />
-                              {noteCount} {noteCount === 1 ? 'note' : 'notes'}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <CheckCircle2 size={ICON_SIZES.sm} />
-                              {taskCount} {taskCount === 1 ? 'task' : 'tasks'}
-                            </span>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => {
-                                const wrappedResult = wrapInCaptureResult(job.result!, job.input, []);
-                                setResults(wrappedResult);
-                                setCurrentJobId(job.id);
-                                setCaptureState('review');
-                              }}
-                              variant="primary"
-                              size="sm"
-                              icon={<ArrowRight size={ICON_SIZES.sm} />}
-                              iconPosition="right"
-                            >
-                              Review & Save
-                            </Button>
-                            <Button
-                              onClick={() => uiDispatch({ type: 'REMOVE_PROCESSING_JOB', payload: job.id })}
-                              variant="secondary"
-                              size="sm"
-                            >
-                              Dismiss
-                            </Button>
+                    return (
+                      <div key={job.id} className={`${getGlassClasses('strong')} ${getRadiusClass('card')} p-6 hover:border-cyan-300 transition-all duration-300`}>
+                        <div className="flex items-start gap-4">
+                          <CheckCircle2 size={ICON_SIZES.md} className="text-green-600 flex-shrink-0 mt-1" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="font-semibold text-gray-900">Processing Complete!</p>
+                              <span className="text-xs text-gray-500">
+                                {new Date(job.completedAt!).toLocaleTimeString()}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-700 mb-3 line-clamp-2">
+                              {job.input}
+                            </p>
+                            <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
+                              <span className="flex items-center gap-1">
+                                <FileText size={ICON_SIZES.sm} />
+                                {noteCount} {noteCount === 1 ? 'note' : 'notes'}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <CheckCircle2 size={ICON_SIZES.sm} />
+                                {taskCount} {taskCount === 1 ? 'task' : 'tasks'}
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => {
+                                  const wrappedResult = wrapInCaptureResult(job.result!, job.input, []);
+                                  // Ensure createdNoteIds from job result are included in wrapped result
+                                  if (job.result?.createdNoteIds) {
+                                    wrappedResult.createdNoteIds = job.result.createdNoteIds;
+                                  }
+                                  setResults(wrappedResult);
+                                  setCurrentJobId(job.id);
+                                  setCaptureState('review');
+                                }}
+                                variant="primary"
+                                size="sm"
+                                icon={<ArrowRight size={ICON_SIZES.sm} />}
+                                iconPosition="right"
+                              >
+                                Review
+                              </Button>
+                              <Button
+                                onClick={() => uiDispatch({ type: 'REMOVE_PROCESSING_JOB', payload: job.id })}
+                                variant="secondary"
+                                size="sm"
+                              >
+                                Dismiss
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
 
                 {/* Error Jobs */}
                 {uiState.backgroundProcessing.queue.filter(j => j.status === 'error').map(job => (

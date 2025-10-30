@@ -591,6 +591,14 @@ export interface Note {
   timestamp: string; // Original creation time
   lastUpdated: string; // Most recent update time
   source: 'call' | 'email' | 'thought' | 'other';
+  /**
+   * Review status for notes created from AI processing
+   * - draft: Being edited in ResultsReview, not yet saved
+   * - pending_review: Saved but awaiting final review
+   * - approved: Reviewed and approved by user
+   * @default 'approved' (for direct captures and existing notes)
+   */
+  status?: 'draft' | 'pending_review' | 'approved';
   tags: string[]; // Auto-extracted by AI
   parentNoteId?: string; // For threading/nesting
   /**
@@ -680,6 +688,9 @@ export interface Task {
 // AI Processing Types
 
 export interface AIProcessResult {
+  // AI guidance
+  aiSummary?: string; // Conversational AI summary of what was created and why
+
   // What the AI detected
   detectedTopics: {
     name: string;
@@ -731,6 +742,11 @@ export interface AIProcessResult {
   sentiment?: 'positive' | 'neutral' | 'negative';
   keyTopics: string[];
   processingSteps: string[]; // For showing progress
+
+  // Draft notes created during processing (populated after AI completes)
+  // This array is populated in CaptureZone when draft notes are created in NotesContext
+  // and persisted in the job result so all review code paths can access it
+  createdNoteIds?: string[];
 }
 
 export interface AIQueryResponse {

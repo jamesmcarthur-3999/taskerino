@@ -630,11 +630,8 @@ export function formatNoteContent(content: string): string {
   const decoded = decodeHtmlEntities(content);
 
   // Now check if the decoded content is already HTML (has actual HTML tags)
-  const hasHtmlTags = decoded.includes('<p>') || decoded.includes('<div>') ||
-                      decoded.includes('<br') || decoded.includes('<h1') ||
-                      decoded.includes('<h2') || decoded.includes('<h3') ||
-                      decoded.includes('<ul') || decoded.includes('<ol') ||
-                      decoded.includes('<strong') || decoded.includes('<em');
+  // Use robust regex to detect ANY HTML tag, not just specific ones
+  const hasHtmlTags = /<[a-z][\w-]*(\s[^>]*)?>/i.test(decoded);
 
   // If it already has HTML tags after decoding, return it sanitized
   if (hasHtmlTags) {

@@ -31,6 +31,7 @@ export default function LibraryZone() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<('call' | 'email' | 'thought' | 'other')[]>([]);
   const [selectedSentiments, setSelectedSentiments] = useState<('positive' | 'neutral' | 'negative')[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<'all' | 'approved' | 'draft'>('approved'); // Show approved notes by default
   const [sortBy] = useState<'recent' | 'name' | 'noteCount'>('recent');
   const [noteSortBy, setNoteSortBy] = useState<'recent' | 'oldest' | 'alphabetical'>('recent');
   const [searchQuery, setSearchQuery] = useState('');
@@ -221,6 +222,14 @@ export default function LibraryZone() {
   const displayedNotes = useMemo(() => {
     let notes = notesState.notes;
 
+    // Filter by status (draft vs approved)
+    if (selectedStatus === 'approved') {
+      notes = notes.filter(note => !note.status || note.status === 'approved');
+    } else if (selectedStatus === 'draft') {
+      notes = notes.filter(note => note.status === 'draft');
+    }
+    // 'all' shows both draft and approved
+
     // Filter by companies (multi-select)
     if (selectedCompanyIds.length > 0) {
       notes = notes.filter(note =>
@@ -292,7 +301,7 @@ export default function LibraryZone() {
     });
 
     return sorted;
-  }, [notesState.notes, selectedCompanyIds, selectedContactIds, selectedTopicIds, selectedTags, selectedSources, selectedSentiments, searchQuery, noteSortBy]);
+  }, [notesState.notes, selectedCompanyIds, selectedContactIds, selectedTopicIds, selectedTags, selectedSources, selectedSentiments, selectedStatus, searchQuery, noteSortBy]);
 
   // Auto-select first note when displayedNotes changes
   useEffect(() => {
@@ -384,18 +393,32 @@ export default function LibraryZone() {
                   gradient: 'purple',
                 }}
                 glassDropdowns={
-                  <GlassSelect
-                    value={noteSortBy}
-                    onChange={(value) => setNoteSortBy(value as typeof noteSortBy)}
-                    options={[
-                      { value: 'recent', label: 'Recent First', icon: TrendingDown },
-                      { value: 'oldest', label: 'Oldest First', icon: TrendingUp },
-                      { value: 'alphabetical', label: 'A-Z', icon: SortAsc },
-                    ]}
-                    variant="primary"
-                    triggerIcon={SortAsc}
-                    placeholder="Sort by..."
-                  />
+                  <>
+                    <GlassSelect
+                      value={selectedStatus}
+                      onChange={(value) => setSelectedStatus(value as typeof selectedStatus)}
+                      options={[
+                        { value: 'approved', label: 'Approved', icon: CheckCheck },
+                        { value: 'draft', label: 'Drafts', icon: FileText },
+                        { value: 'all', label: 'All Notes', icon: FileText },
+                      ]}
+                      variant="primary"
+                      triggerIcon={CheckCheck}
+                      placeholder="Status..."
+                    />
+                    <GlassSelect
+                      value={noteSortBy}
+                      onChange={(value) => setNoteSortBy(value as typeof noteSortBy)}
+                      options={[
+                        { value: 'recent', label: 'Recent First', icon: TrendingDown },
+                        { value: 'oldest', label: 'Oldest First', icon: TrendingUp },
+                        { value: 'alphabetical', label: 'A-Z', icon: SortAsc },
+                      ]}
+                      variant="primary"
+                      triggerIcon={SortAsc}
+                      placeholder="Sort by..."
+                    />
+                  </>
                 }
                 filters={{
                   active: showFilters,
@@ -520,18 +543,32 @@ export default function LibraryZone() {
                   gradient: 'purple',
                 }}
                 glassDropdowns={
-                  <GlassSelect
-                    value={noteSortBy}
-                    onChange={(value) => setNoteSortBy(value as typeof noteSortBy)}
-                    options={[
-                      { value: 'recent', label: 'Recent First', icon: TrendingDown },
-                      { value: 'oldest', label: 'Oldest First', icon: TrendingUp },
-                      { value: 'alphabetical', label: 'A-Z', icon: SortAsc },
-                    ]}
-                    variant="primary"
-                    triggerIcon={SortAsc}
-                    placeholder="Sort by..."
-                  />
+                  <>
+                    <GlassSelect
+                      value={selectedStatus}
+                      onChange={(value) => setSelectedStatus(value as typeof selectedStatus)}
+                      options={[
+                        { value: 'approved', label: 'Approved', icon: CheckCheck },
+                        { value: 'draft', label: 'Drafts', icon: FileText },
+                        { value: 'all', label: 'All Notes', icon: FileText },
+                      ]}
+                      variant="primary"
+                      triggerIcon={CheckCheck}
+                      placeholder="Status..."
+                    />
+                    <GlassSelect
+                      value={noteSortBy}
+                      onChange={(value) => setNoteSortBy(value as typeof noteSortBy)}
+                      options={[
+                        { value: 'recent', label: 'Recent First', icon: TrendingDown },
+                        { value: 'oldest', label: 'Oldest First', icon: TrendingUp },
+                        { value: 'alphabetical', label: 'A-Z', icon: SortAsc },
+                      ]}
+                      variant="primary"
+                      triggerIcon={SortAsc}
+                      placeholder="Sort by..."
+                    />
+                  </>
                 }
                 filters={{
                   active: showFilters,

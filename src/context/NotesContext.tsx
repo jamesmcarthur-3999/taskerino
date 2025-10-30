@@ -210,7 +210,8 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     });
 
     // Create relationships if RelationshipContext is available
-    if (relationshipsContext) {
+    // Skip relationship creation for draft notes (they'll be created when approved)
+    if (relationshipsContext && note.status !== 'draft') {
       try {
         // Create relationships for topics
         for (const topicId of linkedTopicIds) {
@@ -275,8 +276,86 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   };
 
   // UPDATE_NOTE - simple dispatch without entity updates
-  const updateNote = (note: Note) => {
+  // Special case: Create relationships when draft note becomes approved
+  const updateNote = async (note: Note) => {
+    const oldNote = state.notes.find(n => n.id === note.id);
+    const wasDraft = oldNote?.status === 'draft';
+    const isNowApproved = note.status === 'approved';
+
     dispatch({ type: 'UPDATE_NOTE', payload: note });
+
+    // Create relationships when draft note is approved
+    if (wasDraft && isNowApproved && relationshipsContext) {
+      const linkedCompanyIds = note.companyIds || [];
+      const linkedContactIds = note.contactIds || [];
+      const linkedTopicIds = note.topicIds || [];
+
+      // Also handle legacy topicId
+      if (note.topicId && !linkedTopicIds.includes(note.topicId)) {
+        linkedTopicIds.push(note.topicId);
+      }
+
+      try {
+        // Create relationships for topics
+        for (const topicId of linkedTopicIds) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.TOPIC,
+            targetId: topicId,
+            type: RelationshipType.NOTE_TOPIC,
+            metadata: { source: 'manual', createdAt: new Date().toISOString() },
+          });
+        }
+
+        // Create relationships for companies
+        for (const companyId of linkedCompanyIds) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.COMPANY,
+            targetId: companyId,
+            type: RelationshipType.NOTE_COMPANY,
+            metadata: { source: 'manual', createdAt: new Date().toISOString() },
+          });
+        }
+
+        // Create relationships for contacts
+        for (const contactId of linkedContactIds) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.CONTACT,
+            targetId: contactId,
+            type: RelationshipType.NOTE_CONTACT,
+            metadata: { source: 'manual', createdAt: new Date().toISOString() },
+          });
+        }
+
+        // Create relationship to source session if specified
+        if (note.sourceSessionId) {
+          await relationshipsContext.addRelationship({
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.SESSION,
+            targetId: note.sourceSessionId,
+            type: RelationshipType.NOTE_SESSION,
+            metadata: {
+              source: 'manual',
+              createdAt: new Date().toISOString()
+            },
+          });
+        }
+
+        // Mark note as using relationship system
+        if (!note.relationshipVersion) {
+          const updatedNote = { ...note, relationshipVersion: 1 };
+          dispatch({ type: 'UPDATE_NOTE', payload: updatedNote });
+        }
+      } catch (error) {
+        console.error('[NotesContext] Failed to create relationships for approved note:', error);
+      }
+    }
   };
 
   // DELETE_NOTE with entity noteCount updates and relationship cascade deletion

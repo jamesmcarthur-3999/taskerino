@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Edit2, Trash2, X, Check, AlertCircle, Sparkles, FileText, CheckSquare } from 'lucide-react';
+import { ChevronDown, ChevronRight, Edit2, Trash2, X, Check, AlertCircle, Sparkles, FileText, CheckSquare, Hash, Clock } from 'lucide-react';
 import type { AIProcessResult } from '../../types';
 import {
   getGlassClasses,
@@ -9,6 +9,7 @@ import {
   SHADOWS,
   TRANSITIONS,
   SCALE,
+  ICON_SIZES,
 } from '../../design-system/theme';
 
 // Props for note card
@@ -336,15 +337,48 @@ export function TaskCard({ task, onEdit, onDelete, isDeleted = false }: TaskCard
                 {task.title}
               </h3>
               {!isExpanded && (
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <span className={`px-2.5 py-1 ${getRadiusClass('pill')} ${TYPOGRAPHY.caption} ${colors.bg} ${colors.text} capitalize font-semibold`}>
-                    {task.priority}
-                  </span>
-                  {dueDateFormatted && (
-                    <span className={`${TYPOGRAPHY.caption} ${TEXT_COLORS.tertiary} flex items-center gap-1`}>
-                      <CheckSquare className="w-3 h-3" />
-                      {dueDateFormatted}
+                <div className="space-y-2 mt-2">
+                  {/* Priority & Due Date Row */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`px-2.5 py-1 ${getRadiusClass('pill')} ${TYPOGRAPHY.caption} ${colors.bg} ${colors.text} capitalize font-semibold`}>
+                      {task.priority}
                     </span>
+                    {dueDateFormatted && (
+                      <span className={`${TYPOGRAPHY.caption} ${TEXT_COLORS.tertiary} flex items-center gap-1`}>
+                        <Clock size={12} />
+                        {dueDateFormatted}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Tags Row */}
+                  {task.tags && task.tags.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {task.tags.slice(0, 2).map((tag, idx) => (
+                        <span
+                          key={idx}
+                          className={`px-2 py-0.5 ${getRadiusClass('pill')} ${TYPOGRAPHY.caption} ${getGlassClasses('subtle')} ${TEXT_COLORS.tertiary} border border-white/40 flex items-center gap-1`}
+                        >
+                          <Hash size={10} />
+                          {tag}
+                        </span>
+                      ))}
+                      {task.tags.length > 2 && (
+                        <span className={`${TYPOGRAPHY.caption} ${TEXT_COLORS.tertiary} font-medium`}>
+                          +{task.tags.length - 2} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Subtask Count */}
+                  {task.suggestedSubtasks && task.suggestedSubtasks.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className={`${TYPOGRAPHY.caption} ${TEXT_COLORS.tertiary} flex items-center gap-1 font-medium`}>
+                        <CheckSquare size={12} className="text-cyan-500" />
+                        {task.suggestedSubtasks.length} subtask{task.suggestedSubtasks.length > 1 ? 's' : ''} suggested
+                      </span>
+                    </div>
                   )}
                 </div>
               )}
