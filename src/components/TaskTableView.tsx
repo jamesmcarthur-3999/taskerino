@@ -32,6 +32,9 @@ interface TaskTableViewProps {
   selectedTaskId?: string;
   groupBy: GroupByOption;
   scrollRef?: React.RefObject<HTMLDivElement> | ((node: HTMLDivElement | null) => void);
+  bulkSelectMode?: boolean;
+  selectedTaskIds?: Set<string>;
+  onToggleTaskSelection?: (taskId: string) => void;
 }
 
 type GroupByOption = 'due-date' | 'status' | 'priority' | 'topic' | 'tag' | 'none';
@@ -53,7 +56,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'topic', label: 'Topic', width: '140px', sortable: false },
 ];
 
-export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scrollRef }: TaskTableViewProps) {
+export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scrollRef, bulkSelectMode = false, selectedTaskIds = new Set(), onToggleTaskSelection }: TaskTableViewProps) {
   const { dispatch: tasksDispatch } = useTasks();
   const { dispatch: uiDispatch } = useUI();
   const { state: entitiesState } = useEntities();
@@ -569,6 +572,26 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
       <div className="flex-1 min-h-0 flex flex-col bg-white/30 backdrop-blur-2xl rounded-[24px] border border-white/60 shadow-xl overflow-hidden">
         {/* Column Headers */}
         <div className="flex items-center gap-2 px-4 py-3 border-b-2 border-white/50 bg-white/30 backdrop-blur-sm">
+          {bulkSelectMode && (
+            <div style={{ width: '40px' }} className="flex items-center justify-center">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                checked={selectedTaskIds.size === tasks.length && tasks.length > 0}
+                onChange={(e) => {
+                  if (onToggleTaskSelection) {
+                    tasks.forEach(task => {
+                      if (e.target.checked && !selectedTaskIds.has(task.id)) {
+                        onToggleTaskSelection(task.id);
+                      } else if (!e.target.checked && selectedTaskIds.has(task.id)) {
+                        onToggleTaskSelection(task.id);
+                      }
+                    });
+                  }
+                }}
+              />
+            </div>
+          )}
           {columns.map((column) => (
             <div
               key={column.id}
@@ -625,18 +648,42 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
               {/* Group Tasks */}
               {!collapsedGroups.has(key) && (
                 <div>
-                  {groupTasks.map((task) => (
+                  {groupTasks.map((task) => {
+                    const isSelected = selectedTaskIds.has(task.id);
+                    return (
                     <div
                       key={task.id}
                       draggable
                       onDragStart={() => handleTaskDragStart(task)}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => handleTaskDrop(task, key)}
-                      onClick={() => onTaskClick(task.id)}
+                      onClick={() => {
+                        if (bulkSelectMode && onToggleTaskSelection) {
+                          onToggleTaskSelection(task.id);
+                        } else {
+                          onTaskClick(task.id);
+                        }
+                      }}
                       className={`group flex items-center gap-2 px-4 py-2 cursor-pointer border-b border-white/20 last:border-b-0 transition-all hover:bg-white/30 ${
                         selectedTaskId === task.id ? 'bg-cyan-100/20 border-l-4 border-l-cyan-500' : ''
-                      }`}
+                      } ${isSelected ? 'bg-cyan-50/30' : ''}`}
                     >
+                      {bulkSelectMode && (
+                        <div style={{ width: '40px' }} className="flex items-center justify-center">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (onToggleTaskSelection) {
+                                onToggleTaskSelection(task.id);
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      )}
                       {columns.map((column) => (
                         <div
                           key={column.id}
@@ -675,7 +722,8 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
                         </button>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
 
                   {/* Add Task Row */}
                   {newTaskGroupKey === key ? (

@@ -26,7 +26,44 @@ class VideoFrameExtractor {
     videoPath: string,
     timestamp: number
   ): Promise<VideoFrame> {
+    // Validation
+    if (!videoPath || typeof videoPath !== 'string') {
+      throw new Error(`Invalid video path: ${videoPath} (type: ${typeof videoPath})`);
+    }
+
+    if (typeof timestamp !== 'number' || timestamp < 0 || isNaN(timestamp)) {
+      throw new Error(`Invalid timestamp: ${timestamp} (must be a positive number)`);
+    }
+
     console.log(`🎬 [FRAME EXTRACTOR] Extracting frame at ${timestamp}s from ${videoPath}`);
+
+    // CRITICAL: Wait for video file to be ready before extracting frames
+    // This prevents "Cannot Open" errors when the file is still locked by the encoder
+    console.log('🔍 [FRAME EXTRACTOR] Checking if video is ready for frame extraction...');
+    let isReady = false;
+    const maxAttempts = 20; // 20 attempts * 500ms = 10 seconds max wait
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        isReady = await invoke<boolean>('is_video_ready', { videoPath });
+        if (isReady) {
+          console.log(`✅ [FRAME EXTRACTOR] Video is ready (attempt ${attempt}/${maxAttempts})`);
+          break;
+        }
+
+        if (attempt < maxAttempts) {
+          console.log(`⏳ [FRAME EXTRACTOR] Video not ready yet, waiting 500ms (attempt ${attempt}/${maxAttempts})...`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      } catch (error) {
+        console.error(`❌ [FRAME EXTRACTOR] Failed to check video readiness (attempt ${attempt}):`, error);
+        break;
+      }
+    }
+
+    if (!isReady) {
+      throw new Error(`Video file not ready after ${maxAttempts * 500}ms - file may still be locked by encoder`);
+    }
 
     try {
       // Use existing Swift thumbnail generation
@@ -35,6 +72,10 @@ class VideoFrameExtractor {
         time: timestamp
       });
 
+      if (!dataUri || !dataUri.startsWith('data:image/png')) {
+        throw new Error('Invalid data URI returned from thumbnail generation');
+      }
+
       return {
         timestamp,
         dataUri,
@@ -42,8 +83,13 @@ class VideoFrameExtractor {
         height: 180
       };
     } catch (error) {
-      console.error('❌ [FRAME EXTRACTOR] Failed to extract frame:', error);
-      throw new Error(`Failed to extract frame at ${timestamp}s: ${error}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('❌ [FRAME EXTRACTOR] Failed to extract frame:', {
+        videoPath,
+        timestamp,
+        error: errorMsg
+      });
+      throw new Error(`Failed to extract frame at ${timestamp}s from ${videoPath}: ${errorMsg}`);
     }
   }
 

@@ -7,7 +7,7 @@
 export { TaskModule } from './TaskModule';
 export { TimelineModule } from './TimelineModule';
 export { ScreenshotGalleryModule } from './ScreenshotGalleryModule';
-export { default as TimelineModuleExample } from './TimelineModule.example';
+// export { default as TimelineModuleExample } from './TimelineModule.example'; // File doesn't exist
 
 // Re-export types for convenience
 export type {

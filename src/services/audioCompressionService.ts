@@ -22,7 +22,7 @@ const QUALITY_PRESETS: Record<AudioQualityPreset, CompressionSettings> = {
   optimized: {
     transcriptionSampleRate: 16000, // Whisper's native training rate
     descriptionSampleRate: 24000,   // Better for environmental sounds
-    transcriptionBitrate: 64,        // Good speech quality
+    transcriptionBitrate: 96,        // Better speech quality (increased from 64)
     descriptionBitrate: 128,         // Better for complex audio
   },
   balanced: {
@@ -90,16 +90,26 @@ class AudioCompressionService {
   }
 
   /**
-   * Compress audio for long-term storage (higher quality than API compression)
-   * Uses 64kbps MP3 encoding, mono, 16kHz sample rate
+   * Compress audio for long-term storage (NO downsampling to preserve playback speed)
+   * Uses 96kbps MP3 encoding, mono, original sample rate (44.1kHz or 48kHz)
+   *
+   * CRITICAL: Must NOT downsample for storage or playback will be at wrong speed!
+   * The browser's AudioContext runs at 48kHz, so 16kHz audio plays at 1/3 speed.
    */
   async compressForStorage(base64Wav: string): Promise<string> {
-    const settings = this.getSettings();
-    // Use transcription settings (16kHz, 64kbps) for storage
+    // Detect original sample rate from WAV
+    const audioContext = new AudioContext();
+    const arrayBuffer = this.base64ToArrayBuffer(base64Wav);
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const originalSampleRate = audioBuffer.sampleRate;
+
+    console.log(`💾 [AUDIO COMPRESSION] Storage: Using original sample rate ${originalSampleRate}Hz (NO downsampling)`);
+
+    // Use original sample rate with higher bitrate for storage
     return this.compressAudio(
       base64Wav,
-      settings.transcriptionSampleRate,  // 16000 Hz
-      settings.transcriptionBitrate      // 64 kbps
+      originalSampleRate,  // Keep original (44100 or 48000 Hz)
+      96                    // 96 kbps for better quality
     );
   }
 

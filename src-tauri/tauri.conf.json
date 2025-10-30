@@ -9,6 +9,7 @@
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
+  "plugins": {},
   "app": {
     "withGlobalTauri": false,
     "windows": [
@@ -24,7 +25,7 @@
         "decorations": true,
         "alwaysOnTop": false,
         "skipTaskbar": false,
-        "visible": false,
+        "visible": true,
         "visibleOnAllWorkspaces": false,
         "hiddenTitle": false,
         "transparent": false,
@@ -56,7 +57,7 @@
       "frameworks": [],
       "minimumSystemVersion": "12.3",
       "exceptionDomain": "",
-      "signingIdentity": null,
+      "signingIdentity": "Developer ID Application: YOUR_NAME (TEAM_ID)",
       "entitlements": "entitlements.plist"
     }
   }

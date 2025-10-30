@@ -1,16 +1,18 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import type { Note, Task } from '../types';
+import type { Note } from '../types';
 import { useNotes } from '../context/NotesContext';
 import { useEntities } from '../context/EntitiesContext';
-import { useTasks } from '../context/TasksContext';
-import { useUI } from '../context/UIContext';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
-import { Calendar, Tag as TagIcon, FileText, Trash2, Clock, CheckSquare, Link2, X, Sparkles, Plus, Columns, Focus } from 'lucide-react';
-import { formatRelativeTime } from '../utils/helpers';
-import { getTasksByNoteId } from '../utils/navigation';
+import { FileText, Trash2, Clock, Sparkles, Columns, Focus, Settings } from 'lucide-react';
+import { formatRelativeTime, generateId } from '../utils/helpers';
 import { RichTextEditor } from './RichTextEditor';
 import { InlineTagManager } from './InlineTagManager';
-import { ICON_SIZES, getGlassClasses, getRadiusClass, getStatusBadgeClasses } from '../design-system/theme';
+import { CompanyPillManager } from './CompanyPillManager';
+import { ContactPillManager } from './ContactPillManager';
+import { ICON_SIZES, getGlassClasses, getRadiusClass } from '../design-system/theme';
+import { RelationshipModal } from './relationships/RelationshipModal';
+import { RelationshipCardSection } from './relationships/RelationshipCardSection';
+import { EntityType, RelationshipType } from '../types/relationships';
 
 interface NoteDetailInlineProps {
   noteId: string;
@@ -22,9 +24,7 @@ type SaveStatus = 'idle' | 'saving' | 'saved';
 
 export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }: NoteDetailInlineProps) {
   const { state: notesState, updateNote, deleteNote } = useNotes();
-  const { state: entitiesState } = useEntities();
-  const { state: tasksState } = useTasks();
-  const { dispatch: uiDispatch } = useUI();
+  const { state: entitiesState, addCompany, addContact } = useEntities();
   const { registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
   const [editedContent, setEditedContent] = useState('');
   const [editedSummary, setEditedSummary] = useState('');
@@ -32,6 +32,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [isScrolled, setIsScrolled] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
   const summaryInputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
@@ -39,24 +40,6 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
 
   // Find the note from state
   const note = notesState.notes.find(n => n.id === noteId);
-
-  // Get all related entities (companies, contacts, topics)
-  const relatedCompanies = note ? entitiesState.companies.filter(c => note.companyIds?.includes(c.id)) : [];
-  const relatedContacts = note ? entitiesState.contacts.filter(c => note.contactIds?.includes(c.id)) : [];
-  const relatedTopics = note ? entitiesState.topics.filter(t => note.topicIds?.includes(t.id)) : [];
-
-  // Legacy support
-  if (note?.topicId) {
-    const legacyCompany = entitiesState.companies.find(c => c.id === note.topicId);
-    const legacyContact = entitiesState.contacts.find(c => c.id === note.topicId);
-    const legacyTopic = entitiesState.topics.find(t => t.id === note.topicId);
-    if (legacyCompany && !relatedCompanies.some(c => c.id === legacyCompany.id)) relatedCompanies.push(legacyCompany);
-    if (legacyContact && !relatedContacts.some(c => c.id === legacyContact.id)) relatedContacts.push(legacyContact);
-    if (legacyTopic && !relatedTopics.some(t => t.id === legacyTopic.id)) relatedTopics.push(legacyTopic);
-  }
-
-  // Get linked tasks
-  const linkedTasks = noteId ? getTasksByNoteId(noteId, tasksState.tasks) : [];
 
   // Get all unique tags from all notes for autocomplete
   const allTags = useMemo(() => {
@@ -178,77 +161,49 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
     updateNote(updatedNote);
   };
 
-  const handleAddCompany = (companyId: string) => {
+  const handleCompaniesChange = (companyIds: string[]) => {
     if (!note) return;
-    const currentIds = note.companyIds || [];
-    if (currentIds.includes(companyId)) return;
     const updatedNote: Note = {
       ...note,
-      companyIds: [...currentIds, companyId],
+      companyIds,
     };
     updateNote(updatedNote);
   };
 
-  const handleRemoveCompany = (companyId: string) => {
+  const handleContactsChange = (contactIds: string[]) => {
     if (!note) return;
     const updatedNote: Note = {
       ...note,
-      companyIds: (note.companyIds || []).filter(id => id !== companyId),
+      contactIds,
     };
     updateNote(updatedNote);
   };
 
-  const handleAddContact = (contactId: string) => {
-    if (!note) return;
-    const currentIds = note.contactIds || [];
-    if (currentIds.includes(contactId)) return;
-    const updatedNote: Note = {
-      ...note,
-      contactIds: [...currentIds, contactId],
+  // Entity creation callbacks
+  const handleCreateCompany = async (name: string) => {
+    const newCompany = {
+      id: generateId(),
+      name,
+      createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      noteCount: 0,
+      profile: {},
     };
-    updateNote(updatedNote);
+    addCompany(newCompany);
+    return newCompany;
   };
 
-  const handleRemoveContact = (contactId: string) => {
-    if (!note) return;
-    const updatedNote: Note = {
-      ...note,
-      contactIds: (note.contactIds || []).filter(id => id !== contactId),
+  const handleCreateContact = async (name: string) => {
+    const newContact = {
+      id: generateId(),
+      name,
+      createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      noteCount: 0,
+      profile: {},
     };
-    updateNote(updatedNote);
-  };
-
-  const handleAddTopic = (topicId: string) => {
-    if (!note) return;
-    const currentIds = note.topicIds || [];
-    if (currentIds.includes(topicId)) return;
-    const updatedNote: Note = {
-      ...note,
-      topicIds: [...currentIds, topicId],
-    };
-    updateNote(updatedNote);
-  };
-
-  const handleRemoveTopic = (topicId: string) => {
-    if (!note) return;
-    const updatedNote: Note = {
-      ...note,
-      topicIds: (note.topicIds || []).filter(id => id !== topicId),
-    };
-    updateNote(updatedNote);
-  };
-
-  const getPriorityFlag = (priority: Task['priority']) => {
-    switch (priority) {
-      case 'high':
-        return '🔴';
-      case 'medium':
-        return '🟡';
-      case 'low':
-        return '🟢';
-      default:
-        return '';
-    }
+    addContact(newContact);
+    return newContact;
   };
 
 
@@ -315,25 +270,12 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
 
           {/* Metadata Section - Collapsible on scroll */}
           <div
-            className="overflow-hidden transition-all duration-150"
+            className="overflow-visible transition-all duration-150"
             style={{
               maxHeight: `${Math.max(0, (1 - scrollProgress) * 200)}px`,
               opacity: Math.max(0, 1 - scrollProgress * 1.2),
             }}
           >
-            {/* Entity Relationships - Inline & Editable */}
-            <InlineRelationshipManager
-              relatedCompanies={relatedCompanies}
-              relatedContacts={relatedContacts}
-              relatedTopics={relatedTopics}
-              onAddCompany={handleAddCompany}
-              onRemoveCompany={handleRemoveCompany}
-              onAddContact={handleAddContact}
-              onRemoveContact={handleRemoveContact}
-              onAddTopic={handleAddTopic}
-              onRemoveTopic={handleRemoveTopic}
-            />
-
             {/* Tags - Inline & Editable */}
             <div className="mt-3">
               <InlineTagManager
@@ -343,6 +285,37 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
                 editable={true}
                 className="min-h-[32px]"
               />
+            </div>
+
+            {/* Companies & Contacts - Combined Row */}
+            <div className="flex gap-4 mt-3 overflow-visible">
+              {/* Companies Section */}
+              <div className="flex-1 min-w-0 overflow-visible">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Companies
+                </label>
+                <CompanyPillManager
+                  companyIds={note.companyIds || []}
+                  onCompaniesChange={handleCompaniesChange}
+                  allCompanies={entitiesState.companies}
+                  editable={true}
+                  onCreateCompany={handleCreateCompany}
+                />
+              </div>
+
+              {/* Contacts Section */}
+              <div className="flex-1 min-w-0 overflow-visible">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Contacts
+                </label>
+                <ContactPillManager
+                  contactIds={note.contactIds || []}
+                  onContactsChange={handleContactsChange}
+                  allContacts={entitiesState.contacts}
+                  editable={true}
+                  onCreateContact={handleCreateContact}
+                />
+              </div>
             </div>
 
             {/* Quick Stats Row */}
@@ -364,12 +337,6 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
                 <Clock size={14} />
                 <span>{formatRelativeTime(note.timestamp)}</span>
               </div>
-              {linkedTasks.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <CheckSquare size={14} />
-                  <span>{linkedTasks.length} {linkedTasks.length === 1 ? 'task' : 'tasks'}</span>
-                </div>
-              )}
               <div className="ml-auto">
                 {renderSaveStatus()}
               </div>
@@ -443,47 +410,33 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
           />
         </div>
 
-        {/* Linked Tasks */}
-        {linkedTasks.length > 0 && (
-          <div className={`${getGlassClasses('medium')} ${getRadiusClass('field')} overflow-hidden`}>
-            <div className="px-4 py-3 bg-gray-50">
-              <div className="flex items-center gap-2">
-                <CheckSquare className="w-4 h-4 text-gray-600" />
-                <h3 className="text-sm font-bold text-gray-900">
-                  Linked Tasks ({linkedTasks.length})
-                </h3>
-              </div>
-            </div>
 
-            <div className="p-4 bg-white space-y-2">
-              {linkedTasks.map((task) => (
-                <div
-                  key={task.id}
-                  onClick={() => uiDispatch({ type: 'OPEN_SIDEBAR', payload: { type: 'task', itemId: task.id, label: task.title } })}
-                  className={`p-3 bg-gray-50 ${getRadiusClass('element')} border border-gray-200 hover:border-cyan-300 cursor-pointer transition-all`}
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="text-base mt-0.5">{getPriorityFlag(task.priority)}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-2 py-0.5 ${getRadiusClass('element')} text-xs font-bold ${getStatusBadgeClasses(task.status)}`}>
-                          {task.status === 'todo' ? 'To Do' : task.status === 'in-progress' ? 'In Progress' : task.status === 'done' ? 'Done' : 'Blocked'}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
-                      {task.dueDate && (
-                        <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                          <Calendar className="w-3 h-3" />
-                          <span>{new Date(task.dueDate).toLocaleDateString()}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Related Content Sections */}
+        <div className="space-y-4">
+          <RelationshipCardSection
+            entityId={note.id}
+            entityType={EntityType.NOTE}
+            title="Related Tasks"
+            filterTypes={[RelationshipType.TASK_NOTE]}
+            maxVisible={8}
+            variant="default"
+            showActions={true}
+            showExcerpts={false}
+            onAddClick={() => setRelationshipModalOpen(true)}
+          />
+
+          <RelationshipCardSection
+            entityId={note.id}
+            entityType={EntityType.NOTE}
+            title="Related Sessions"
+            filterTypes={[RelationshipType.NOTE_SESSION]}
+            maxVisible={8}
+            variant="default"
+            showActions={true}
+            showExcerpts={false}
+            onAddClick={() => setRelationshipModalOpen(true)}
+          />
+        </div>
 
         {/* Related Topics */}
         {note.metadata?.relatedTopics && note.metadata.relatedTopics.length > 0 && (
@@ -519,187 +472,14 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
         <div className="h-24" />
         </div>
       </div>
-    </div>
-  );
-}
 
-// Inline Relationship Manager Component - Click to edit relationships inline
-interface InlineRelationshipManagerProps {
-  relatedCompanies: Array<{ id: string; name: string }>;
-  relatedContacts: Array<{ id: string; name: string }>;
-  relatedTopics: Array<{ id: string; name: string }>;
-  onAddCompany: (companyId: string) => void;
-  onRemoveCompany: (companyId: string) => void;
-  onAddContact: (contactId: string) => void;
-  onRemoveContact: (contactId: string) => void;
-  onAddTopic: (topicId: string) => void;
-  onRemoveTopic: (topicId: string) => void;
-}
-
-function InlineRelationshipManager({
-  relatedCompanies,
-  relatedContacts,
-  relatedTopics,
-  onAddCompany,
-  onRemoveCompany,
-  onAddContact,
-  onRemoveContact,
-  onAddTopic,
-  onRemoveTopic,
-}: InlineRelationshipManagerProps) {
-  const { state: entitiesState } = useEntities();
-  const [isEditing, setIsEditing] = useState(false);
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const [selectedContactId, setSelectedContactId] = useState('');
-  const [selectedTopicId, setSelectedTopicId] = useState('');
-
-  const handleAddCompany = (companyId: string) => {
-    if (!companyId) return;
-    onAddCompany(companyId);
-    setSelectedCompanyId('');
-  };
-
-  const handleAddContact = (contactId: string) => {
-    if (!contactId) return;
-    onAddContact(contactId);
-    setSelectedContactId('');
-  };
-
-  const handleAddTopic = (topicId: string) => {
-    if (!topicId) return;
-    onAddTopic(topicId);
-    setSelectedTopicId('');
-  };
-
-  const hasRelationships = relatedCompanies.length > 0 || relatedContacts.length > 0 || relatedTopics.length > 0;
-
-  if (isEditing) {
-    return (
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Companies Dropdown */}
-        <select
-          value={selectedCompanyId}
-          onChange={(e) => {
-            setSelectedCompanyId(e.target.value);
-            handleAddCompany(e.target.value);
-          }}
-          className={`px-3 py-1.5 bg-white/80 ${getGlassClasses('subtle')} border-2 border-blue-400 ${getRadiusClass('pill')} text-xs font-semibold text-gray-800 outline-none`}
-        >
-          <option value="">+ Company...</option>
-          {entitiesState.companies.filter(c => !relatedCompanies.some(rc => rc.id === c.id)).map(company => (
-            <option key={company.id} value={company.id}>🏢 {company.name}</option>
-          ))}
-        </select>
-
-        {/* Contacts Dropdown */}
-        <select
-          value={selectedContactId}
-          onChange={(e) => {
-            setSelectedContactId(e.target.value);
-            handleAddContact(e.target.value);
-          }}
-          className={`px-3 py-1.5 bg-white/80 ${getGlassClasses('subtle')} border-2 border-emerald-400 ${getRadiusClass('pill')} text-xs font-semibold text-gray-800 outline-none`}
-        >
-          <option value="">+ Contact...</option>
-          {entitiesState.contacts.filter(c => !relatedContacts.some(rc => rc.id === c.id)).map(contact => (
-            <option key={contact.id} value={contact.id}>👤 {contact.name}</option>
-          ))}
-        </select>
-
-        {/* Topics Dropdown */}
-        <select
-          value={selectedTopicId}
-          onChange={(e) => {
-            setSelectedTopicId(e.target.value);
-            handleAddTopic(e.target.value);
-          }}
-          className={`px-3 py-1.5 bg-white/80 ${getGlassClasses('subtle')} border-2 border-amber-400 ${getRadiusClass('pill')} text-xs font-semibold text-gray-800 outline-none`}
-        >
-          <option value="">+ Topic...</option>
-          {entitiesState.topics.filter(t => !relatedTopics.some(rt => rt.id === t.id)).map(topic => (
-            <option key={topic.id} value={topic.id}>📌 {topic.name}</option>
-          ))}
-        </select>
-
-        <button
-          onClick={() => setIsEditing(false)}
-          className={`px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white ${getRadiusClass('pill')} text-xs font-semibold transition-all`}
-        >
-          Done
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
-      {/* Company Pills */}
-      {relatedCompanies.map(company => (
-        <button
-          key={company.id}
-          onClick={() => setIsEditing(true)}
-          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-100/80 to-cyan-100/80 hover:from-blue-200/90 hover:to-cyan-200/90 border border-blue-300/60 ${getRadiusClass('pill')} text-xs font-semibold text-blue-800 transition-all`}
-        >
-          <span>🏢</span>
-          <span>{company.name}</span>
-          <X
-            className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemoveCompany(company.id);
-            }}
-          />
-        </button>
-      ))}
-
-      {/* Contact Pills */}
-      {relatedContacts.map(contact => (
-        <button
-          key={contact.id}
-          onClick={() => setIsEditing(true)}
-          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-100/80 to-green-100/80 hover:from-emerald-200/90 hover:to-green-200/90 border border-emerald-300/60 ${getRadiusClass('pill')} text-xs font-semibold text-emerald-800 transition-all`}
-        >
-          <span>👤</span>
-          <span>{contact.name}</span>
-          <X
-            className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemoveContact(contact.id);
-            }}
-          />
-        </button>
-      ))}
-
-      {/* Topic Pills */}
-      {relatedTopics.map(topic => (
-        <button
-          key={topic.id}
-          onClick={() => setIsEditing(true)}
-          className={`group inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-100/80 to-yellow-100/80 hover:from-amber-200/90 hover:to-yellow-200/90 border border-amber-300/60 ${getRadiusClass('pill')} text-xs font-semibold text-amber-800 transition-all`}
-        >
-          <span>📌</span>
-          <span>{topic.name}</span>
-          <X
-            className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemoveTopic(topic.id);
-            }}
-          />
-        </button>
-      ))}
-
-      {/* Add Button - Only show if no relationships */}
-      {!hasRelationships && (
-        <button
-          onClick={() => setIsEditing(true)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/40 hover:bg-white/60 border border-dashed border-gray-400 hover:border-cyan-400 ${getRadiusClass('pill')} text-xs text-gray-500 hover:text-cyan-700 font-medium transition-all`}
-        >
-          <Plus size={12} />
-          <span>Add Relationships</span>
-        </button>
-      )}
+      {/* Relationship Management Modal */}
+      <RelationshipModal
+        open={relationshipModalOpen}
+        onClose={() => setRelationshipModalOpen(false)}
+        entityId={note.id}
+        entityType={EntityType.NOTE}
+      />
     </div>
   );
 }

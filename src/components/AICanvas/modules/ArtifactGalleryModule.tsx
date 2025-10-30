@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { Card } from '../../Card';
 import { getGlassClasses, getRadiusClass } from '../../../design-system/theme';
-import { attachmentStorage } from '../../../services/attachmentStorage';
+import { getCAStorage } from '../../../services/storage/ContentAddressableStorage';
 import type { SessionScreenshot } from '../../../types';
 
 // ============================================================================
@@ -127,9 +127,10 @@ function calculateTimeInSession(timestamp: string, sessionStart: string): string
   return `${minutes}m ${seconds}s`;
 }
 
-async function loadImageFromAttachment(attachmentId: string): Promise<string | null> {
+async function loadImageFromAttachment(identifier: string): Promise<string | null> {
   try {
-    const attachment = await attachmentStorage.getAttachment(attachmentId);
+    const caStorage = await getCAStorage();
+    const attachment = await caStorage.loadAttachment(identifier);
     if (!attachment || !attachment.base64) {
       return null;
     }

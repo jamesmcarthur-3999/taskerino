@@ -9,6 +9,13 @@ import type {
   Attachment,
 } from '../types';
 import type {
+  CaptureResult,
+  ConversationContext,
+  RefinementRequest,
+  RefinementResponse,
+  RefinementError,
+} from '../types/captureProcessing';
+import type {
   ClaudeChatResponse,
   ClaudeMessage,
   ClaudeContentBlock,
@@ -141,9 +148,35 @@ Images may contain:
       : '';
 
     const prompt = `<system_instructions>
-${settings.systemInstructions}
+You help users capture information by deciding how to best organize it using the tools available to you.
 </system_instructions>
 ${learningsSection}
+
+<your_tools>
+You have these tools to capture and organize information:
+
+1. **Create Notes** - For information worth preserving (ideas, context, reference material, documentation)
+   - Rich HTML content with semantic structure
+   - Can associate with topics for organization
+   - Add tags for discoverability
+
+2. **Create Tasks** - For work that needs to be done (action items, to-dos, follow-ups)
+   - Title and description
+   - Optional: priority, due date, subtasks
+   - Can link to topics and add tags
+
+3. **Attach Metadata** - To enrich notes and tasks with context
+   - Topics (companies, people, projects, subjects)
+   - Tags (flexible categorization)
+   - Contacts and companies (entities)
+   - Source type and sentiment
+
+You decide which tools to use based on the user's input. Use what makes sense:
+- Just a note (reference, documentation, ideas)
+- Just tasks (action items, to-dos)
+- Both (meeting notes with follow-ups)
+- Neither (if input is unclear or requests something else)
+</your_tools>
 
 <existing_data>
 Topics: ${topicList}
@@ -160,69 +193,14 @@ ${text}
 </user_input>
 ${attachmentInfo}
 
-<core_rules>
-1. Topic Hierarchy: PRIMARY (Customer/Company) > SECONDARY (People) > TERTIARY (Features/Tech)
-2. Note Consolidation: ONE comprehensive note per customer/topic from each input
-3. Update vs Create: Check if recent note exists for same topic before creating new
-4. Duplicate Detection: Check existing tasks; if duplicate, add to skippedTasks array with reason
-5. Task Extraction: Create SEPARATE task for EACH distinct action item mentioned
-</core_rules>
-
-<task_requirements>
-For EVERY task, provide ALL fields:
-- title: Clear, actionable
-- description: REQUIRED, 1-2 sentences (never empty/null)
-- sourceExcerpt: REQUIRED, exact quote from input (never empty/null)
-- dueDate + dueTime: If temporal context exists, BOTH required (18:00 for EOD, 09:00 for morning)
-- dueDateReasoning: Why this date/time chosen
-- tags: 2-4 relevant tags
-- priority: high/medium/low
-- suggestedSubtasks: If multi-step task
-</task_requirements>
-
-<note_structure>
-Use markdown with:
-- ## for headers (Context, Discussion, Decisions, Next Steps)
-- **bold** for key terms/names
-- Bullet lists (-) and numbered lists (1. 2. 3.)
-- Clear sections for scanability
-</note_structure>
-
-<output_schema>
-{
-  "inputType": "call_transcript" | "meeting_note" | "quick_note",
-  "primaryTopic": {"name": "", "type": "company", "confidence": 0.95, "matchedExisting": ""},
-  "secondaryTopics": [{"name": "", "type": "person", "relationTo": ""}],
-  "noteStrategy": {"action": "create"|"update", "shouldConsolidate": true, "updateNoteId": ""},
-  "note": {
-    "content": "## Context\n\n...\n\n## Discussion Points\n\n...\n\n## Next Steps\n\n...",
-    "summary": "One-line summary (max 100 chars)",
-    "topicAssociation": "",
-    "tags": ["tag1", "tag2"],
-    "source": "call"|"email"|"thought"|"other",
-    "sentiment": "positive"|"neutral"|"negative",
-    "keyPoints": ["Point 1", "Point 2"],
-    "relatedTopics": ["Topic 1"]
-  },
-  "tasks": [
-    {
-      "title": "",
-      "priority": "high",
-      "dueDate": "2025-10-05",
-      "dueTime": "18:00",
-      "dueDateReasoning": "",
-      "description": "",
-      "tags": [],
-      "suggestedSubtasks": [],
-      "sourceExcerpt": "",
-      "relatedTo": ""
-    }
-  ],
-  "skippedTasks": [{"title": "", "reason": "duplicate", "existingTaskTitle": "", "sourceExcerpt": ""}],
-  "tags": [],
-  "sentiment": "positive"
-}
-</output_schema>
+<guidelines>
+- Check existing data to avoid duplicates
+- Match existing topics when relevant (fuzzy matching is OK)
+- Use HTML for note content (no markdown): <h2>, <p>, <ul><li>, <ol><li>, <strong>
+- For tasks with deadlines, infer dates from temporal context below
+- Be honest: if something shouldn't be a task, don't force it
+- If input is vague or conversational, capture what's clear and skip what isn't
+</guidelines>
 
 <temporal_context>
 ${(() => {
@@ -232,45 +210,171 @@ ${(() => {
   const currentTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 
   return `${dayOfWeek}, ${monthDay} at ${currentTime}
-ISO Date: ${now.toISOString().split('T')[0]}
-Business Hours: 09:00-18:00 | EOD: 18:00`;
+ISO Date: ${now.toISOString().split('T')[0]}`;
 })()}
 
-Date Inference:
+Date Inference Examples:
 - "EOD today" → ${new Date().toISOString().split('T')[0]} at 18:00
-- "tomorrow" → ${new Date(Date.now() + 86400000).toISOString().split('T')[0]} at 09:00
-- "by Friday"/"end of week" → Next Friday at 18:00
+- "tomorrow morning" → ${new Date(Date.now() + 86400000).toISOString().split('T')[0]} at 09:00
+- "by Friday" → Next Friday at 18:00
 - "next week" → Next Monday at 09:00
-- "ASAP"/"urgent" → today
-- No context → null
+- No deadline mentioned → Leave dueDate/dueTime null
 </temporal_context>
 
-<example>
-Input: "Follow up with Sarah about pricing, send proposal EOD Friday"
-Output tasks:
-[
-  {
-    "title": "Follow up with Sarah about pricing",
-    "description": "Follow up with Sarah regarding pricing discussion.",
-    "sourceExcerpt": "Follow up with Sarah about pricing",
-    "dueDate": null,
-    "dueTime": null,
-    "dueDateReasoning": "No specific deadline",
+<ai_summary_instructions>
+Write a conversational 2-3 sentence summary explaining your decisions:
+1. What you created (tasks, notes, or both) and why
+2. Key decisions you made (priority, organization, what you skipped)
+3. How you interpreted the user's input
+
+**If anything was unclear or ambiguous**, ask the user a friendly question to help you refine it. They can answer using the "Request Changes" button.
+
+Examples WITHOUT questions (everything was clear):
+- "I created 2 tasks from your message since you mentioned specific follow-ups with Sarah. I left the deadlines open since you didn't specify timing."
+- "I captured this as a single note under the Product Ideas topic because it's more brainstorming than actionable work. I added tags for the features mentioned so you can find it later."
+- "I saved this as a research note without creating tasks since you're collecting information rather than planning work. I linked it to the AI topic you've been exploring."
+
+Examples WITH questions (something was unclear):
+- "I created a note about the product feedback from the call. Should I also create a follow-up task to address the concerns, or is this just for reference?"
+- "I captured the meeting discussion as a note and created 2 tasks for the action items. I wasn't sure about the priority for the API review - is that urgent or can it wait until next sprint?"
+- "I saved this as a task to 'Schedule team meeting.' Did you want me to break this into subtasks for the agenda items you mentioned, or keep it simple?"
+- "I created a note with your story idea. I wasn't sure if 'detective' should be a topic - do you want to organize creative writing by genre like this?"
+
+Ask questions when genuinely unsure, not for every detail. Be specific and offer context for why you're asking.
+</ai_summary_instructions>
+
+<examples>
+Example 1 - Meeting with tasks:
+Input: "Met with Sarah about pricing. Need to send proposal by Friday, follow up next week on pricing model. She mentioned concerns about enterprise tier."
+Output: {
+  "aiSummary": "I created a note capturing the pricing discussion and Sarah's concerns, plus 2 tasks for your follow-ups. The proposal is high priority with a Friday deadline since you specified that timing.",
+  "detectedTopics": [{"name": "Sarah", "type": "person", "confidence": 0.9}],
+  "notes": [{
+    "content": "<h2>Meeting with Sarah - Pricing Discussion</h2><p>Sarah raised concerns about the enterprise tier pricing model.</p>",
+    "summary": "Pricing discussion with Sarah",
+    "tags": ["pricing", "enterprise"],
+    "source": "other"
+  }],
+  "tasks": [
+    {
+      "title": "Send pricing proposal to Sarah",
+      "description": "Send proposal by end of Friday.",
+      "priority": "high",
+      "dueDate": "[next-friday]",
+      "dueTime": "18:00",
+      "tags": ["proposal", "pricing"]
+    },
+    {
+      "title": "Follow up with Sarah on pricing model",
+      "description": "Follow up next week to discuss pricing model concerns.",
+      "priority": "medium",
+      "dueDate": null,
+      "tags": ["follow-up", "pricing"]
+    }
+  ]
+}
+
+Example 2 - Research note only:
+Input: "Interesting article on transformer architecture improvements. Multi-head attention can be optimized using sparse patterns. Could reduce compute by 40%. Link: example.com/article"
+Output: {
+  "aiSummary": "I saved this as a research note under Machine Learning since it's technical information worth referencing later. I didn't create tasks since you're collecting insights, not planning work.",
+  "detectedTopics": [{"name": "Machine Learning", "type": "subject", "confidence": 0.85}],
+  "notes": [{
+    "content": "<h2>Transformer Architecture Optimization</h2><p>Multi-head attention can be optimized using sparse patterns, potentially reducing compute by 40%.</p><p>Source: <a href='example.com/article'>example.com/article</a></p>",
+    "summary": "Transformer optimization techniques",
+    "tags": ["transformers", "optimization", "research"],
+    "source": "other"
+  }],
+  "tasks": []
+}
+
+Example 3 - Personal task only:
+Input: "Need to book dentist appointment, been putting it off"
+Output: {
+  "aiSummary": "I created a simple task for booking your dentist appointment. No deadline specified so I left it flexible.",
+  "detectedTopics": [],
+  "notes": [],
+  "tasks": [{
+    "title": "Book dentist appointment",
+    "description": "Schedule dentist appointment.",
     "priority": "medium",
-    "tags": ["follow-up", "pricing"]
-  },
-  {
-    "title": "Send proposal",
-    "description": "Send proposal by end of day Friday.",
-    "sourceExcerpt": "send proposal EOD Friday",
-    "dueDate": "[Friday]",
-    "dueTime": "18:00",
-    "dueDateReasoning": "EOD Friday specified",
-    "priority": "high",
-    "tags": ["proposal"]
-  }
-]
-</example>
+    "dueDate": null,
+    "tags": ["health", "personal"]
+  }]
+}
+
+Example 4 - Creative note only:
+Input: "Story idea: detective who can see last 60 seconds of anyone's life by touching objects they owned. Set in 1920s Paris. Protagonist is haunted by what she sees."
+Output: {
+  "aiSummary": "I captured your story idea as a creative note. I added tags for the genre and setting so you can find it when working on similar ideas.",
+  "detectedTopics": [],
+  "notes": [{
+    "content": "<h2>Story Idea: Last 60 Seconds Detective</h2><p>A detective with the ability to see the last 60 seconds of anyone's life by touching objects they owned.</p><h2>Setting</h2><p>1920s Paris</p><h2>Character</h2><p>Protagonist is haunted by what she sees through her ability.</p>",
+    "summary": "Detective story idea - psychic touch ability",
+    "tags": ["story-idea", "detective", "1920s", "paranormal"],
+    "source": "thought"
+  }],
+  "tasks": []
+}
+</examples>
+
+<output_schema>
+Return JSON with these fields:
+{
+  "aiSummary": "Your conversational explanation (required)",
+  "detectedTopics": [
+    {
+      "name": "Topic name",
+      "type": "company" | "person" | "subject" | "project",
+      "confidence": 0.0-1.0,
+      "matchedExisting": "ID if matched existing topic"
+    }
+  ],
+  "notes": [
+    {
+      "content": "Semantic HTML content (h2, p, ul/ol, strong)",
+      "summary": "One-line summary",
+      "topicAssociation": "Topic name if relevant",
+      "tags": ["tag1", "tag2"],
+      "source": "call" | "email" | "thought" | "other",
+      "sentiment": "positive" | "neutral" | "negative",
+      "keyPoints": ["Point 1", "Point 2"],
+      "relatedTopics": ["Topic1"]
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Clear, actionable title",
+      "description": "1-2 sentence description",
+      "sourceExcerpt": "Exact quote from input",
+      "priority": "high" | "medium" | "low",
+      "dueDate": "YYYY-MM-DD or null",
+      "dueTime": "HH:MM or null",
+      "dueDateReasoning": "Why this date/time",
+      "tags": ["tag1", "tag2"],
+      "suggestedSubtasks": ["Subtask 1"] or [],
+      "relatedTo": "Topic name"
+    }
+  ],
+  "skippedTasks": [
+    {
+      "title": "Task title",
+      "reason": "duplicate" | "unclear" | "not-actionable",
+      "existingTaskTitle": "If duplicate",
+      "sourceExcerpt": "Quote from input"
+    }
+  ],
+  "tags": ["tag1", "tag2"],
+  "sentiment": "positive" | "neutral" | "negative"
+}
+
+Notes:
+- notes array can be empty if no note needed
+- tasks array can be empty if no tasks needed
+- Both can be populated if appropriate
+- detectedTopics can be empty
+- All fields in tasks are optional except title, description, priority
+</output_schema>
 
 Return valid JSON only (no markdown).`;
 
@@ -278,73 +382,44 @@ Return valid JSON only (no markdown).`;
       // Build content array with prompt caching enabled
       // Split prompt into cacheable static instructions and dynamic user input
       const staticInstructions = `<system_instructions>
-${settings.systemInstructions}
+You help users capture information by deciding how to best organize it using the tools available to you.
 </system_instructions>
 ${learningsSection}
 
-<core_rules>
-1. Topic Hierarchy: PRIMARY (Customer/Company) > SECONDARY (People) > TERTIARY (Features/Tech)
-2. Note Consolidation: ONE comprehensive note per customer/topic from each input
-3. Update vs Create: Check if recent note exists for same topic before creating new
-4. Duplicate Detection: Check existing tasks; if duplicate, add to skippedTasks array with reason
-5. Task Extraction: Create SEPARATE task for EACH distinct action item mentioned
-</core_rules>
+<your_tools>
+You have these tools to capture and organize information:
 
-<task_requirements>
-For EVERY task, provide ALL fields:
-- title: Clear, actionable
-- description: REQUIRED, 1-2 sentences (never empty/null)
-- sourceExcerpt: REQUIRED, exact quote from input (never empty/null)
-- dueDate + dueTime: If temporal context exists, BOTH required (18:00 for EOD, 09:00 for morning)
-- dueDateReasoning: Why this date/time chosen
-- tags: 2-4 relevant tags
-- priority: high/medium/low
-- suggestedSubtasks: If multi-step task
-</task_requirements>
+1. **Create Notes** - For information worth preserving (ideas, context, reference material, documentation)
+   - Rich HTML content with semantic structure
+   - Can associate with topics for organization
+   - Add tags for discoverability
 
-<note_structure>
-Use markdown with:
-- ## for headers (Context, Discussion, Decisions, Next Steps)
-- **bold** for key terms/names
-- Bullet lists (-) and numbered lists (1. 2. 3.)
-- Clear sections for scanability
-</note_structure>
+2. **Create Tasks** - For work that needs to be done (action items, to-dos, follow-ups)
+   - Title and description
+   - Optional: priority, due date, subtasks
+   - Can link to topics and add tags
 
-<output_schema>
-{
-  "inputType": "call_transcript" | "meeting_note" | "quick_note",
-  "primaryTopic": {"name": "", "type": "company", "confidence": 0.95, "matchedExisting": ""},
-  "secondaryTopics": [{"name": "", "type": "person", "relationTo": ""}],
-  "noteStrategy": {"action": "create"|"update", "shouldConsolidate": true, "updateNoteId": ""},
-  "note": {
-    "content": "## Context\n\n...\n\n## Discussion Points\n\n...\n\n## Next Steps\n\n...",
-    "summary": "One-line summary (max 100 chars)",
-    "topicAssociation": "",
-    "tags": ["tag1", "tag2"],
-    "source": "call"|"email"|"thought"|"other",
-    "sentiment": "positive"|"neutral"|"negative",
-    "keyPoints": ["Point 1", "Point 2"],
-    "relatedTopics": ["Topic 1"]
-  },
-  "tasks": [
-    {
-      "title": "",
-      "priority": "high",
-      "dueDate": "2025-10-05",
-      "dueTime": "18:00",
-      "dueDateReasoning": "",
-      "description": "",
-      "tags": [],
-      "suggestedSubtasks": [],
-      "sourceExcerpt": "",
-      "relatedTo": ""
-    }
-  ],
-  "skippedTasks": [{"title": "", "reason": "duplicate", "existingTaskTitle": "", "sourceExcerpt": ""}],
-  "tags": [],
-  "sentiment": "positive"
-}
-</output_schema>
+3. **Attach Metadata** - To enrich notes and tasks with context
+   - Topics (companies, people, projects, subjects)
+   - Tags (flexible categorization)
+   - Contacts and companies (entities)
+   - Source type and sentiment
+
+You decide which tools to use based on the user's input. Use what makes sense:
+- Just a note (reference, documentation, ideas)
+- Just tasks (action items, to-dos)
+- Both (meeting notes with follow-ups)
+- Neither (if input is unclear or requests something else)
+</your_tools>
+
+<guidelines>
+- Check existing data to avoid duplicates
+- Match existing topics when relevant (fuzzy matching is OK)
+- Use HTML for note content (no markdown): <h2>, <p>, <ul><li>, <ol><li>, <strong>
+- For tasks with deadlines, infer dates from temporal context below
+- Be honest: if something shouldn't be a task, don't force it
+- If input is vague or conversational, capture what's clear and skip what isn't
+</guidelines>
 
 <temporal_context>
 ${(() => {
@@ -354,45 +429,171 @@ ${(() => {
   const currentTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 
   return `${dayOfWeek}, ${monthDay} at ${currentTime}
-ISO Date: ${now.toISOString().split('T')[0]}
-Business Hours: 09:00-18:00 | EOD: 18:00`;
+ISO Date: ${now.toISOString().split('T')[0]}`;
 })()}
 
-Date Inference:
+Date Inference Examples:
 - "EOD today" → ${new Date().toISOString().split('T')[0]} at 18:00
-- "tomorrow" → ${new Date(Date.now() + 86400000).toISOString().split('T')[0]} at 09:00
-- "by Friday"/"end of week" → Next Friday at 18:00
+- "tomorrow morning" → ${new Date(Date.now() + 86400000).toISOString().split('T')[0]} at 09:00
+- "by Friday" → Next Friday at 18:00
 - "next week" → Next Monday at 09:00
-- "ASAP"/"urgent" → today
-- No context → null
+- No deadline mentioned → Leave dueDate/dueTime null
 </temporal_context>
 
-<example>
-Input: "Follow up with Sarah about pricing, send proposal EOD Friday"
-Output tasks:
-[
-  {
-    "title": "Follow up with Sarah about pricing",
-    "description": "Follow up with Sarah regarding pricing discussion.",
-    "sourceExcerpt": "Follow up with Sarah about pricing",
-    "dueDate": null,
-    "dueTime": null,
-    "dueDateReasoning": "No specific deadline",
+<ai_summary_instructions>
+Write a conversational 2-3 sentence summary explaining your decisions:
+1. What you created (tasks, notes, or both) and why
+2. Key decisions you made (priority, organization, what you skipped)
+3. How you interpreted the user's input
+
+**If anything was unclear or ambiguous**, ask the user a friendly question to help you refine it. They can answer using the "Request Changes" button.
+
+Examples WITHOUT questions (everything was clear):
+- "I created 2 tasks from your message since you mentioned specific follow-ups with Sarah. I left the deadlines open since you didn't specify timing."
+- "I captured this as a single note under the Product Ideas topic because it's more brainstorming than actionable work. I added tags for the features mentioned so you can find it later."
+- "I saved this as a research note without creating tasks since you're collecting information rather than planning work. I linked it to the AI topic you've been exploring."
+
+Examples WITH questions (something was unclear):
+- "I created a note about the product feedback from the call. Should I also create a follow-up task to address the concerns, or is this just for reference?"
+- "I captured the meeting discussion as a note and created 2 tasks for the action items. I wasn't sure about the priority for the API review - is that urgent or can it wait until next sprint?"
+- "I saved this as a task to 'Schedule team meeting.' Did you want me to break this into subtasks for the agenda items you mentioned, or keep it simple?"
+- "I created a note with your story idea. I wasn't sure if 'detective' should be a topic - do you want to organize creative writing by genre like this?"
+
+Ask questions when genuinely unsure, not for every detail. Be specific and offer context for why you're asking.
+</ai_summary_instructions>
+
+<examples>
+Example 1 - Meeting with tasks:
+Input: "Met with Sarah about pricing. Need to send proposal by Friday, follow up next week on pricing model. She mentioned concerns about enterprise tier."
+Output: {
+  "aiSummary": "I created a note capturing the pricing discussion and Sarah's concerns, plus 2 tasks for your follow-ups. The proposal is high priority with a Friday deadline since you specified that timing.",
+  "detectedTopics": [{"name": "Sarah", "type": "person", "confidence": 0.9}],
+  "notes": [{
+    "content": "<h2>Meeting with Sarah - Pricing Discussion</h2><p>Sarah raised concerns about the enterprise tier pricing model.</p>",
+    "summary": "Pricing discussion with Sarah",
+    "tags": ["pricing", "enterprise"],
+    "source": "other"
+  }],
+  "tasks": [
+    {
+      "title": "Send pricing proposal to Sarah",
+      "description": "Send proposal by end of Friday.",
+      "priority": "high",
+      "dueDate": "[next-friday]",
+      "dueTime": "18:00",
+      "tags": ["proposal", "pricing"]
+    },
+    {
+      "title": "Follow up with Sarah on pricing model",
+      "description": "Follow up next week to discuss pricing model concerns.",
+      "priority": "medium",
+      "dueDate": null,
+      "tags": ["follow-up", "pricing"]
+    }
+  ]
+}
+
+Example 2 - Research note only:
+Input: "Interesting article on transformer architecture improvements. Multi-head attention can be optimized using sparse patterns. Could reduce compute by 40%. Link: example.com/article"
+Output: {
+  "aiSummary": "I saved this as a research note under Machine Learning since it's technical information worth referencing later. I didn't create tasks since you're collecting insights, not planning work.",
+  "detectedTopics": [{"name": "Machine Learning", "type": "subject", "confidence": 0.85}],
+  "notes": [{
+    "content": "<h2>Transformer Architecture Optimization</h2><p>Multi-head attention can be optimized using sparse patterns, potentially reducing compute by 40%.</p><p>Source: <a href='example.com/article'>example.com/article</a></p>",
+    "summary": "Transformer optimization techniques",
+    "tags": ["transformers", "optimization", "research"],
+    "source": "other"
+  }],
+  "tasks": []
+}
+
+Example 3 - Personal task only:
+Input: "Need to book dentist appointment, been putting it off"
+Output: {
+  "aiSummary": "I created a simple task for booking your dentist appointment. No deadline specified so I left it flexible.",
+  "detectedTopics": [],
+  "notes": [],
+  "tasks": [{
+    "title": "Book dentist appointment",
+    "description": "Schedule dentist appointment.",
     "priority": "medium",
-    "tags": ["follow-up", "pricing"]
-  },
-  {
-    "title": "Send proposal",
-    "description": "Send proposal by end of day Friday.",
-    "sourceExcerpt": "send proposal EOD Friday",
-    "dueDate": "[Friday]",
-    "dueTime": "18:00",
-    "dueDateReasoning": "EOD Friday specified",
-    "priority": "high",
-    "tags": ["proposal"]
-  }
-]
-</example>
+    "dueDate": null,
+    "tags": ["health", "personal"]
+  }]
+}
+
+Example 4 - Creative note only:
+Input: "Story idea: detective who can see last 60 seconds of anyone's life by touching objects they owned. Set in 1920s Paris. Protagonist is haunted by what she sees."
+Output: {
+  "aiSummary": "I captured your story idea as a creative note. I added tags for the genre and setting so you can find it when working on similar ideas.",
+  "detectedTopics": [],
+  "notes": [{
+    "content": "<h2>Story Idea: Last 60 Seconds Detective</h2><p>A detective with the ability to see the last 60 seconds of anyone's life by touching objects they owned.</p><h2>Setting</h2><p>1920s Paris</p><h2>Character</h2><p>Protagonist is haunted by what she sees through her ability.</p>",
+    "summary": "Detective story idea - psychic touch ability",
+    "tags": ["story-idea", "detective", "1920s", "paranormal"],
+    "source": "thought"
+  }],
+  "tasks": []
+}
+</examples>
+
+<output_schema>
+Return JSON with these fields:
+{
+  "aiSummary": "Your conversational explanation (required)",
+  "detectedTopics": [
+    {
+      "name": "Topic name",
+      "type": "company" | "person" | "subject" | "project",
+      "confidence": 0.0-1.0,
+      "matchedExisting": "ID if matched existing topic"
+    }
+  ],
+  "notes": [
+    {
+      "content": "Semantic HTML content (h2, p, ul/ol, strong)",
+      "summary": "One-line summary",
+      "topicAssociation": "Topic name if relevant",
+      "tags": ["tag1", "tag2"],
+      "source": "call" | "email" | "thought" | "other",
+      "sentiment": "positive" | "neutral" | "negative",
+      "keyPoints": ["Point 1", "Point 2"],
+      "relatedTopics": ["Topic1"]
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Clear, actionable title",
+      "description": "1-2 sentence description",
+      "sourceExcerpt": "Exact quote from input",
+      "priority": "high" | "medium" | "low",
+      "dueDate": "YYYY-MM-DD or null",
+      "dueTime": "HH:MM or null",
+      "dueDateReasoning": "Why this date/time",
+      "tags": ["tag1", "tag2"],
+      "suggestedSubtasks": ["Subtask 1"] or [],
+      "relatedTo": "Topic name"
+    }
+  ],
+  "skippedTasks": [
+    {
+      "title": "Task title",
+      "reason": "duplicate" | "unclear" | "not-actionable",
+      "existingTaskTitle": "If duplicate",
+      "sourceExcerpt": "Quote from input"
+    }
+  ],
+  "tags": ["tag1", "tag2"],
+  "sentiment": "positive" | "neutral" | "negative"
+}
+
+Notes:
+- notes array can be empty if no note needed
+- tasks array can be empty if no tasks needed
+- Both can be populated if appropriate
+- detectedTopics can be empty
+- All fields in tasks are optional except title, description, priority
+</output_schema>
 
 Return valid JSON only (no markdown).`;
 
@@ -495,8 +696,8 @@ ${attachmentInfo}`;
       ];
 
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion_vision', {
-        model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5
-        maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
+        model: 'claude-haiku-4-5-20251001', // Claude Haiku 4.5 - Fast, cost-effective
+        maxTokens: 64000, // Claude Haiku 4.5 max output limit
         messages,
         system: undefined,
         temperature: undefined,
@@ -553,22 +754,24 @@ ${attachmentInfo}`;
       console.log('Overall sentiment:', aiResponse.sentiment || 'unknown');
       console.log('Overall tags:', aiResponse.tags?.join(', ') || 'none');
 
-      if (aiResponse.note) {
+      // Log first note from notes array (Claude returns "notes" plural)
+      if (aiResponse.notes && aiResponse.notes.length > 0) {
+        const firstNote = aiResponse.notes[0];
         console.group('📝 Note Details:');
         console.log({
-          hasSummary: !!aiResponse.note.summary,
-          summaryLength: aiResponse.note.summary?.length || 0,
-          hasContent: !!aiResponse.note.content,
-          contentLength: aiResponse.note.content?.length || 0,
-          hasTags: !!aiResponse.note.tags,
-          tagsCount: aiResponse.note.tags?.length || 0,
-          tags: aiResponse.note.tags?.join(', ') || 'none',
-          source: aiResponse.note.source || 'not set',
-          sentiment: aiResponse.note.sentiment || 'not set',
-          hasKeyPoints: !!aiResponse.note.keyPoints,
-          keyPointsCount: aiResponse.note.keyPoints?.length || 0,
-          hasRelatedTopics: !!aiResponse.note.relatedTopics,
-          relatedTopicsCount: aiResponse.note.relatedTopics?.length || 0,
+          hasSummary: !!firstNote.summary,
+          summaryLength: firstNote.summary?.length || 0,
+          hasContent: !!firstNote.content,
+          contentLength: firstNote.content?.length || 0,
+          hasTags: !!firstNote.tags,
+          tagsCount: firstNote.tags?.length || 0,
+          tags: firstNote.tags?.join(', ') || 'none',
+          source: firstNote.source || 'not set',
+          sentiment: firstNote.sentiment || 'not set',
+          hasKeyPoints: !!firstNote.keyPoints,
+          keyPointsCount: firstNote.keyPoints?.length || 0,
+          hasRelatedTopics: !!firstNote.relatedTopics,
+          relatedTopicsCount: firstNote.relatedTopics?.length || 0,
         });
         console.groupEnd();
       }
@@ -670,8 +873,12 @@ ${attachmentInfo}`;
 
       const noteResults = [];
 
-      if (primaryTopicResult && aiResponse.note) {
-        const topicId = primaryTopicResult.existingTopicId || 'new';
+      // Parse notes array (Claude returns "notes" plural, not "note" singular)
+      // Notes are independent of topics - we parse them even if no topic detected
+      if (aiResponse.notes && aiResponse.notes.length > 0) {
+        const firstNote = aiResponse.notes[0]; // Get first note from array
+        const topicId = primaryTopicResult?.existingTopicId || 'new';
+        const topicName = primaryTopicResult?.name || 'General Notes';
         let mergedWith: string | undefined;
         let isNew = true;
 
@@ -679,10 +886,10 @@ ${attachmentInfo}`;
         if (aiResponse.noteStrategy?.action === 'update' && aiResponse.noteStrategy.updateNoteId) {
           mergedWith = aiResponse.noteStrategy.updateNoteId;
           isNew = false;
-        } else if (settings.autoMergeNotes && primaryTopicResult.existingTopicId) {
+        } else if (settings.autoMergeNotes && primaryTopicResult?.existingTopicId) {
           // Or check similarity with recent notes
           const similarNotes = findSimilarNotes(
-            aiResponse.note.content,
+            firstNote.content,
             primaryTopicResult.existingTopicId,
             existingNotes,
             1 // last 1 day for call transcripts
@@ -696,22 +903,33 @@ ${attachmentInfo}`;
 
         noteResults.push({
           topicId,
-          topicName: primaryTopicResult.name,
-          content: aiResponse.note.content,
-          summary: aiResponse.note.summary,
+          topicName,
+          content: firstNote.content,
+          summary: firstNote.summary,
           sourceText: text, // Store original input for validation
           isNew,
           mergedWith,
-          tags: aiResponse.note.tags || aiResponse.tags || [],
-          source: (aiResponse.note.source || (aiResponse.inputType === 'call_transcript' ? 'call' : aiResponse.inputType === 'meeting_note' ? 'call' : 'thought')) as 'call' | 'email' | 'thought' | 'other' | undefined,
-          sentiment: (aiResponse.note.sentiment || aiResponse.sentiment) as 'positive' | 'neutral' | 'negative' | undefined,
-          keyPoints: aiResponse.note.keyPoints || [],
-          relatedTopics: aiResponse.note.relatedTopics || aiResponse.secondaryTopics?.map((t: any) => t.name) || [],
+          tags: firstNote.tags || aiResponse.tags || [],
+          source: (firstNote.source || (aiResponse.inputType === 'call_transcript' ? 'call' : aiResponse.inputType === 'meeting_note' ? 'call' : 'thought')) as 'call' | 'email' | 'thought' | 'other' | undefined,
+          sentiment: (firstNote.sentiment || aiResponse.sentiment) as 'positive' | 'neutral' | 'negative' | undefined,
+          keyPoints: firstNote.keyPoints || [],
+          relatedTopics: firstNote.relatedTopics || aiResponse.secondaryTopics?.map((t: any) => t.name) || [],
+        });
+      } else {
+        // Log warning if Claude didn't return notes array
+        console.warn('[claudeService] No notes array in AI response. Claude may not be following prompt format.');
+        console.warn('[claudeService] Response structure:', {
+          hasNote: !!aiResponse.note,
+          hasNotes: !!aiResponse.notes,
+          notesLength: aiResponse.notes?.length,
         });
       }
 
-      // Fallback: If no primary topic detected, create a "General" topic
-      if (topicResults.length === 0) {
+      // Fallback: Only if Claude returns NEITHER topics NOR notes
+      // (If Claude returns notes but no topic, we already parsed the notes above with topicName='General Notes')
+      if (topicResults.length === 0 && noteResults.length === 0) {
+        console.warn('[claudeService] Claude returned no topics and no notes. Using fallback with raw text.');
+
         topicResults.push({
           name: 'General Notes',
           type: 'other' as const,
@@ -763,6 +981,7 @@ ${attachmentInfo}`;
       processingSteps.push('Done!');
 
       return {
+        aiSummary: aiResponse.aiSummary, // AI-generated conversational summary
         detectedTopics: topicResults,
         notes: noteResults,
         tasks: taskResults,
@@ -855,8 +1074,8 @@ ${context}
 
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
-          model: 'claude-sonnet-4-5-20250929', // Latest model - Claude Sonnet 4.5
-          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
+          model: 'claude-haiku-4-5-20251001', // Claude Haiku 4.5 - Fast, cost-effective
+          maxTokens: 64000, // Claude Haiku 4.5 max output limit
           messages,
           system: undefined,
           temperature: undefined,
@@ -978,8 +1197,8 @@ Only include "suggestedSettings" if shouldOptimize is true. Make conservative ad
 
       const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
         request: {
-          model: 'claude-sonnet-4-5-20250929',
-          maxTokens: 64000, // Claude Sonnet 4.5 max output limit (2025)
+          model: 'claude-haiku-4-5-20251001', // Claude Haiku 4.5 - Fast, cost-effective
+          maxTokens: 64000, // Claude Haiku 4.5 max output limit
           messages,
           system: undefined,
           temperature: undefined,
@@ -1024,6 +1243,211 @@ Only include "suggestedSettings" if shouldOptimize is true. Make conservative ad
       return {
         shouldOptimize: false,
         reasoning: 'Failed to analyze: ' + (error instanceof Error ? error.message : 'Unknown error'),
+      };
+    }
+  }
+
+  /**
+   * Refine existing capture results based on user feedback
+   * Uses conversation history to maintain context across refinements
+   */
+  async refineCapture(
+    request: RefinementRequest
+  ): Promise<RefinementResponse> {
+    if (!this.hasApiKey) {
+      return {
+        success: false,
+        error: 'API key not set. Please configure your Claude API key in Settings.',
+      };
+    }
+
+    const { userMessage, currentResult } = request;
+    const context = currentResult.conversationContext;
+
+    // Check iteration limit
+    if (context.iterationCount >= 10) {
+      return {
+        success: false,
+        error: 'Maximum refinement iterations reached (10). Please save or cancel.',
+      };
+    }
+
+    try {
+      // Build refinement prompt
+      const refinementPrompt = `You are refining a previous capture based on user feedback.
+
+<context>
+Original Input: ${context.originalCapture}
+
+Your Previous Output:
+${JSON.stringify({
+  aiSummary: currentResult.aiSummary,
+  notes: currentResult.notes,
+  tasks: currentResult.tasks,
+  detectedTopics: currentResult.detectedTopics,
+}, null, 2)}
+
+Conversation History:
+${context.messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content.substring(0, 500)}`).join('\n')}
+</context>
+
+<user_feedback>
+${userMessage}
+</user_feedback>
+
+<instructions>
+The user is asking you to adjust your previous capture. Listen to their feedback and update accordingly:
+
+1. Understand what they want changed (add, remove, modify, reorganize)
+2. Make those changes to the notes and/or tasks
+3. Keep everything else consistent unless they ask you to change it
+4. Explain what you changed and why
+
+Remember: You're using tools (notes, tasks, metadata). Adjust based on what makes sense given their feedback.
+</instructions>
+
+<ai_summary_instructions>
+Write a 2-3 sentence summary explaining what you CHANGED:
+1. What you modified (added tasks, removed notes, changed priorities, etc.)
+2. WHY you made those changes based on their feedback
+3. Key improvements or adjustments
+
+Examples:
+- "I updated the task priorities based on your feedback. The proposal is now high priority since you mentioned the tight deadline, and I dropped the research task to low priority."
+- "I consolidated the 3 meeting tasks into one comprehensive task with subtasks, like you asked. This keeps your list cleaner while still tracking everything."
+- "I expanded the note with the technical details you provided and added the #architecture tag. I also created that API review task you said was missing."
+
+Be specific - explain what changed and why.
+</ai_summary_instructions>
+
+<output_schema>
+Return the FULL updated result in this format:
+{
+  "aiSummary": "Explanation of changes",
+  "detectedTopics": ${JSON.stringify(currentResult.detectedTopics || [])},
+  "notes": [
+    {
+      "content": "...",
+      "summary": "...",
+      "topicAssociation": "...",
+      "tags": [],
+      "source": "...",
+      "sentiment": "...",
+      "keyPoints": [],
+      "relatedTopics": []
+    }
+  ],
+  "tasks": [
+    {
+      "title": "",
+      "description": "",
+      "sourceExcerpt": "",
+      "priority": "high" | "medium" | "low",
+      "dueDate": "YYYY-MM-DD or null",
+      "dueTime": "HH:MM or null",
+      "dueDateReasoning": "",
+      "tags": [],
+      "suggestedSubtasks": [],
+      "relatedTo": ""
+    }
+  ],
+  "tags": [],
+  "sentiment": "..."
+}
+</output_schema>
+
+Return valid JSON only (no markdown).`;
+
+      // Build message with conversation history
+      const messages: ClaudeMessage[] = [
+        { role: 'user', content: refinementPrompt }
+      ];
+
+      const response = await invoke<ClaudeChatResponse>('claude_chat_completion', {
+        request: {
+          model: 'claude-haiku-4-5-20251001', // Claude Haiku 4.5 - Fast refinements
+          maxTokens: 64000,
+          messages,
+          system: undefined,
+          temperature: undefined,
+        }
+      });
+
+      const content = response.content[0];
+      if (content.type !== 'text') {
+        return {
+          success: false,
+          error: 'Unexpected response format from Claude',
+        };
+      }
+
+      const responseText = content.text.trim();
+      let jsonText = responseText;
+
+      // Extract JSON from response
+      const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[1].trim();
+      } else if (!responseText.startsWith('{') && !responseText.startsWith('[')) {
+        const objectMatch = responseText.match(/(\{[\s\S]*\})/);
+        if (objectMatch) {
+          jsonText = objectMatch[1];
+        }
+      }
+
+      let aiResponse;
+      try {
+        aiResponse = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error('Failed to parse refinement response');
+        return {
+          success: false,
+          error: 'Failed to parse AI response. Please try again.',
+        };
+      }
+
+      // Build updated result with new conversation context
+      const updatedResult: CaptureResult = {
+        ...currentResult,
+        aiSummary: aiResponse.aiSummary || 'I\'ve updated the capture based on your request.',
+        // Parse notes array (Claude returns "notes" plural, not "note" singular)
+        notes: aiResponse.notes && aiResponse.notes.length > 0 ? [{
+          topicId: aiResponse.primaryTopic?.name || 'General',
+          topicName: aiResponse.primaryTopic?.name || 'General',
+          content: aiResponse.notes[0].content,
+          summary: aiResponse.notes[0].summary,
+          sourceText: context.originalCapture,
+          isNew: true,
+          tags: aiResponse.notes[0].tags || [],
+          source: aiResponse.notes[0].source || 'thought',
+          sentiment: aiResponse.notes[0].sentiment || 'neutral',
+          keyPoints: aiResponse.notes[0].keyPoints || [],
+          relatedTopics: aiResponse.notes[0].relatedTopics || [],
+        }] : currentResult.notes,
+        tasks: aiResponse.tasks || currentResult.tasks,
+        detectedTopics: currentResult.detectedTopics, // Keep existing topics
+        conversationContext: {
+          ...context,
+          messages: [
+            ...context.messages,
+            { role: 'user', content: userMessage },
+            { role: 'assistant', content: JSON.stringify(aiResponse) },
+          ],
+          iterationCount: context.iterationCount + 1,
+        },
+        processingSteps: ['Refined based on user feedback'],
+        processingTimeMs: 0, // Not tracked for refinements
+      };
+
+      return {
+        success: true,
+        updatedResult,
+      };
+    } catch (error) {
+      console.error('Error refining capture:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during refinement',
       };
     }
   }

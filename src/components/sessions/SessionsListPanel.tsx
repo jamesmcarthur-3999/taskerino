@@ -5,7 +5,7 @@ import { CollapsibleSidebar } from '../CollapsibleSidebar';
 import { ActiveFiltersDisplay } from './ActiveFiltersDisplay';
 import { BulkOperationsBar } from './BulkOperationsBar';
 import { SessionsSearchBar } from './SessionsSearchBar';
-import { SessionListGroup } from './SessionListGroup';
+import { UnifiedVirtualSessionList } from './UnifiedVirtualSessionList';
 import { getGlassClasses, getRadiusClass, getDangerGradient, getInfoGradient } from '../../design-system/theme';
 
 interface SessionsListPanelProps {
@@ -269,8 +269,8 @@ export function SessionsListPanel({
                     </div>
                   )}
 
-                  {/* Grouped Sessions */}
-                  <SessionListGroup
+                  {/* Unified Virtual Sessions List - all sessions in single virtualized list with date headers */}
+                  <UnifiedVirtualSessionList
                     groupedSessions={groupedSessions}
                     bulkSelectMode={bulkSelectMode}
                     selectedSessionIds={selectedSessionIds}

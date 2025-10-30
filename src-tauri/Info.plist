@@ -6,5 +6,7 @@
 	<string>Taskerino needs screen recording permission to automatically capture screenshots during work sessions for AI-powered productivity tracking.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Taskerino needs microphone access to record audio notes and transcribe meeting conversations for AI-powered task extraction.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Taskerino needs camera access to record video during work sessions (optional).</string>
 </dict>
 </plist>

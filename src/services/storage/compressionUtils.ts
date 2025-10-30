@@ -24,9 +24,18 @@ const COMPRESSION_PREFIX = 'GZIP_V1:';
  *
  * @param data - The JSON string to compress
  * @returns Base64-encoded compressed data with version prefix
- * @throws Error if compression fails
+ * @throws Error if compression fails or data is invalid
  */
 export async function compressData(data: string): Promise<string> {
+  // Validate input
+  if (data === undefined || data === null) {
+    throw new Error(`Cannot compress invalid data: ${data}`);
+  }
+
+  if (typeof data !== 'string') {
+    throw new Error(`Data must be a string, got ${typeof data}`);
+  }
+
   try {
     // Convert string to Uint8Array
     const uint8Data = strToU8(data);
@@ -35,7 +44,12 @@ export async function compressData(data: string): Promise<string> {
     const compressed = gzipSync(uint8Data, { level: 9 });
 
     // Convert to base64 for safe storage
-    const base64 = btoa(String.fromCharCode.apply(null, Array.from(compressed)));
+    // Use loop instead of .apply() to avoid stack overflow on large arrays (>65K elements)
+    let binaryString = '';
+    for (let i = 0; i < compressed.length; i++) {
+      binaryString += String.fromCharCode(compressed[i]);
+    }
+    const base64 = btoa(binaryString);
 
     // Add version prefix
     const result = COMPRESSION_PREFIX + base64;
@@ -45,7 +59,6 @@ export async function compressData(data: string): Promise<string> {
     const compressedSize = result.length;
     const ratio = ((1 - compressedSize / originalSize) * 100).toFixed(1);
 
-    console.log(`🗜️  Compressed: ${formatBytes(originalSize)} → ${formatBytes(compressedSize)} (${ratio}% reduction)`);
 
     return result;
   } catch (error) {
@@ -82,7 +95,6 @@ export async function decompressData(data: string): Promise<string> {
     // Convert back to string
     const result = strFromU8(decompressed);
 
-    console.log(`📦 Decompressed: ${formatBytes(data.length)} → ${formatBytes(result.length)}`);
 
     return result;
   } catch (error) {

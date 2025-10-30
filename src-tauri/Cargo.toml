@@ -53,9 +53,20 @@ reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }  # HT
 tokio = { version = "1", features = ["full"] }  # Async runtime
 futures-util = "0.3"  # Stream utilities for SSE parsing
 rayon = "1.7"  # Parallel processing for data operations
+thiserror = "1.0"
+uuid = { version = "1.6", features = ["v4"] }  # UUID generation for temp files
+# Removed: crossbeam (AudioGraph lock-free buffers - no longer needed)
+# Removed: rubato (AudioGraph FFT resampler - now using simple linear interpolation)
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.23"
 core-foundation = "0.9"
 cocoa = "0.25"
 objc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.8"
+criterion = "0.5"
+uuid = { version = "1.6", features = ["v4"] }
+
+# Removed: audio_graph_bench - AudioGraph system archived

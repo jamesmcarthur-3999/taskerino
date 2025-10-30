@@ -216,24 +216,25 @@ export const TRANSITIONS = {
 
 /**
  * Easing curves for natural motion
+ * Note: Using array format for Framer Motion compatibility
  */
 export const EASING = {
   // Standard easing functions
-  easeInOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
-  easeOut: 'cubic-bezier(0.0, 0, 0.2, 1)',
-  easeIn: 'cubic-bezier(0.4, 0, 1, 1)',
+  easeInOut: [0.4, 0, 0.2, 1] as const,
+  easeOut: [0.0, 0, 0.2, 1] as const,
+  easeIn: [0.4, 0, 1, 1] as const,
 
   // Smooth, natural motion (recommended for most UI)
-  smooth: 'cubic-bezier(0.4, 0.0, 0.2, 1)',
+  smooth: [0.4, 0.0, 0.2, 1] as const,
 
   // Snappy, responsive feel
-  snappy: 'cubic-bezier(0.4, 0.0, 0.6, 1)',
+  snappy: [0.4, 0.0, 0.6, 1] as const,
 
   // Elastic, bouncy effect
-  elastic: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+  elastic: [0.34, 1.56, 0.64, 1] as const,
 
   // Anticipation (slightly overshoots)
-  anticipate: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+  anticipate: [0.68, -0.55, 0.265, 1.55] as const,
 } as const;
 
 /**
@@ -1627,3 +1628,209 @@ export type CanvasThemeVariant = keyof typeof CANVAS_COMPONENTS.themes;
 export function getCanvasThemeClasses(theme: CanvasThemeVariant = 'default') {
   return CANVAS_COMPONENTS.themes[theme];
 }
+
+// ============================================================================
+// GLASSMORPHIC DROPDOWN DESIGN PATTERN
+// ============================================================================
+
+/**
+ * **Glassmorphic Dropdown Design Pattern**
+ *
+ * A unified design system for all dropdown menus in Taskerino.
+ * Based on the Filter Sessions dropdown aesthetic.
+ *
+ * ## Core Principles
+ * 1. **Clean frosted glass effect** - Translucent with strong blur
+ * 2. **Subtle hover states** - Light, semi-transparent backgrounds
+ * 3. **Minimal visual noise** - No unnecessary borders or decoration
+ * 4. **Consistent spacing** - Predictable, breathable layouts
+ *
+ * ## Container Structure
+ * ```tsx
+ * <div className={`
+ *   absolute top-full left-0 mt-2
+ *   w-80                                    // Or custom width
+ *   bg-white/80 backdrop-blur-2xl          // Frosted glass base
+ *   ${getRadiusClass('modal')}             // Consistent border radius
+ *   border-2 border-cyan-400/80            // Prominent cyan border
+ *   ${SHADOWS.modal}                       // Strong shadow for elevation
+ *   z-[9999]                               // Above everything
+ * `}>
+ * ```
+ *
+ * ## Header Pattern
+ * ```tsx
+ * <div className="flex items-center justify-between p-5 border-b-2 border-gray-200/50">
+ *   <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+ *     <Icon size={20} className="text-cyan-600" />
+ *     Title
+ *   </h3>
+ *   <button
+ *     onClick={onClose}
+ *     className={`p-1.5 ${getRadiusClass('element')} hover:bg-white/60 transition-colors`}
+ *   >
+ *     <X size={18} className="text-gray-600" />
+ *   </button>
+ * </div>
+ * ```
+ *
+ * ## Search Input Pattern
+ * ```tsx
+ * <input
+ *   className={`
+ *     w-full pl-10 pr-3 py-2
+ *     text-sm
+ *     bg-white/50 backdrop-blur-md        // Semi-transparent glass
+ *     border border-white/50              // Subtle border
+ *     ${getRadiusClass('field')}
+ *     focus:outline-none
+ *     focus:ring-2 focus:ring-cyan-400
+ *     transition-all
+ *   `}
+ * />
+ * ```
+ *
+ * ## Interactive Item Pattern (Buttons/Labels)
+ * ```tsx
+ * <button className={`
+ *   w-full text-left px-3 py-2
+ *   ${getRadiusClass('element')}
+ *   text-sm font-medium
+ *   transition-all
+ *   ${selected
+ *     ? 'bg-cyan-100 text-cyan-900'      // Selected: SOLID cyan
+ *     : 'text-gray-800 hover:bg-cyan-50' // Hover: SOLID light cyan
+ *   }
+ * `}>
+ * ```
+ *
+ * ## Section Headers
+ * ```tsx
+ * <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3">
+ *   Section Title
+ * </h4>
+ * ```
+ *
+ * ## Footer Pattern
+ * ```tsx
+ * <div className="px-5 pb-5 pt-4 border-t-2 border-white/30">
+ *   <button className={`
+ *     w-full flex items-center justify-center gap-2
+ *     px-4 py-2.5
+ *     ${getRadiusClass('field')}
+ *     bg-white/60 backdrop-blur-lg         // Glass button
+ *     hover:bg-white/70                    // Slightly more opaque on hover
+ *     border-2 border-white/50
+ *     hover:border-cyan-400/60             // Cyan border on hover
+ *     text-cyan-700 font-semibold text-sm
+ *     transition-all
+ *   `}>
+ *     <Icon size={16} />
+ *     Action Text
+ *   </button>
+ * </div>
+ * ```
+ *
+ * ## Warning/Alert Boxes
+ * ```tsx
+ * <div className="p-3 bg-yellow-50/60 backdrop-blur-lg rounded-xl border-2 border-yellow-300/60">
+ *   <p className="text-xs text-yellow-900 font-semibold">⚠️ Warning Title</p>
+ *   <p className="text-xs text-yellow-800">Warning message...</p>
+ *   <button className={`
+ *     w-full px-3 py-1.5
+ *     bg-yellow-500/90 hover:bg-yellow-600
+ *     text-white text-xs font-semibold
+ *     ${getRadiusClass('element')}
+ *     transition-colors
+ *   `}>
+ *     Action
+ *   </button>
+ * </div>
+ * ```
+ *
+ * ## Spacing Guidelines
+ * - **Container padding**: `p-5` (20px) for main content areas
+ * - **Section spacing**: `space-y-5` (20px) between major sections
+ * - **Item spacing**: `space-y-2` (8px) within sections
+ * - **Footer padding**: `px-5 pb-5 pt-4` (asymmetric for visual balance)
+ *
+ * ## Color Guidelines
+ * - **Primary accent**: Cyan (`cyan-400`, `cyan-600`, etc.)
+ * - **Borders**: `border-gray-200/50` for internal dividers
+ * - **Borders (external)**: `border-cyan-400/80` for dropdown edge
+ * - **Text primary**: `text-gray-900`
+ * - **Text secondary**: `text-gray-800` (slightly lighter)
+ * - **Text tertiary**: `text-gray-600` or `text-gray-700`
+ *
+ * ## Opacity Stack Rules
+ * **IMPORTANT**: Avoid stacking multiple opaque layers
+ * - Main container: `bg-white/80` (80% opaque frosted glass)
+ * - Internal inputs: `bg-white/50` (50% opaque) - DO NOT go higher
+ * - Hover states: `bg-cyan-50` (SOLID - provides clear feedback)
+ * - Selected states: `bg-cyan-100` (SOLID - clear selection)
+ * - Warning boxes: `bg-yellow-50/60` (60% opaque yellow with blur)
+ *
+ * Never use:
+ * - Solid white backgrounds on SECTIONS (no `bg-white` wrappers around groups)
+ * - Multiple nested glass layers (causes opacity stacking)
+ * - Gradient backgrounds on section containers (visual clutter)
+ * - Semi-transparent hover states (too subtle - users need clear feedback)
+ *
+ * ## Animation Pattern
+ * ```tsx
+ * <motion.div
+ *   initial={{ opacity: 0, y: -10, scale: 0.95 }}
+ *   animate={{ opacity: 1, y: 0, scale: 1 }}
+ *   exit={{ opacity: 0, y: -5, scale: 0.98 }}
+ *   transition={{
+ *     type: 'spring',
+ *     damping: 25,
+ *     stiffness: 300,
+ *   }}
+ * >
+ * ```
+ *
+ * ## Examples in Codebase
+ * - ✅ **Reference**: `SessionsFilterMenu.tsx` (gold standard)
+ * - ✅ **Reference**: `SessionsSortMenu.tsx`
+ * - ✅ **Reference**: `AudioQuickSettings.tsx`
+ * - ✅ **Reference**: `CaptureQuickSettings.tsx`
+ */
+export const DROPDOWN_PATTERN = {
+  container: {
+    background: 'bg-white/80 backdrop-blur-2xl',
+    border: 'border-2 border-cyan-400/80',
+    shadow: SHADOWS.modal,
+    radius: getRadiusClass('modal'),
+    padding: 'p-5',
+  },
+  header: {
+    padding: 'p-5 pb-4',
+    border: 'border-b-2 border-gray-200/50',
+    title: 'text-lg font-bold text-gray-900',
+    closeButton: `p-1.5 ${getRadiusClass('element')} hover:bg-white/60 transition-colors`,
+  },
+  search: {
+    background: 'bg-white/50 backdrop-blur-md',
+    border: 'border border-white/50',
+    focus: 'focus:ring-2 focus:ring-cyan-400',
+  },
+  item: {
+    base: `px-3 py-2 ${getRadiusClass('element')} text-sm font-medium transition-all`,
+    selected: 'bg-cyan-100 text-cyan-900',
+    hover: 'text-gray-800 hover:bg-cyan-50',
+  },
+  section: {
+    header: 'text-xs font-bold text-gray-700 uppercase tracking-wider mb-3',
+    spacing: 'space-y-5',
+  },
+  footer: {
+    padding: 'px-5 pb-5 pt-4',
+    border: 'border-t-2 border-white/30',
+    button: {
+      background: 'bg-white/60 backdrop-blur-lg hover:bg-white/70',
+      border: 'border-2 border-white/50 hover:border-cyan-400/60',
+      text: 'text-cyan-700 font-semibold text-sm',
+    },
+  },
+} as const;

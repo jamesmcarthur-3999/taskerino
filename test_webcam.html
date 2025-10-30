@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Webcam Recording</title>
+    <script type="module">
+        import { invoke } from '@tauri-apps/api/core';
+
+        async function testWebcamEnumeration() {
+            try {
+                console.log('Testing webcam enumeration...');
+                const webcams = await invoke('enumerate_webcams');
+                console.log('Webcams found:', webcams);
+                document.getElementById('output').innerHTML = `
+                    <h2>Webcams Found:</h2>
+                    <pre>${JSON.stringify(webcams, null, 2)}</pre>
+                `;
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('output').innerHTML = `
+                    <h2>Error:</h2>
+                    <pre>${error}</pre>
+                `;
+            }
+        }
+
+        async function testWebcamRecording() {
+            try {
+                console.log('Testing webcam recording...');
+
+                // First get webcams
+                const webcams = await invoke('enumerate_webcams');
+                if (webcams.length === 0) {
+                    throw new Error('No webcams found');
+                }
+
+                const webcamId = webcams[0].id;
+                const outputPath = '/tmp/test_webcam_recording.mp4';
+
+                console.log('Starting webcam recording with ID:', webcamId);
+
+                // Start recording via advanced API
+                const config = {
+                    sourceType: 'webcam',
+                    webcamDeviceId: webcamId,
+                    quality: 'medium',
+                    fps: 15,
+                    resolution: null,
+                    displayIds: null,
+                    windowId: null,
+                    pipConfig: null
+                };
+
+                await invoke('start_video_recording_advanced', {
+                    sessionId: 'test-webcam-session',
+                    outputPath: outputPath,
+                    config: config
+                });
+
+                document.getElementById('output').innerHTML = `
+                    <h2>Recording Started!</h2>
+                    <p>Recording to: ${outputPath}</p>
+                    <p>Recording for 5 seconds...</p>
+                    <button onclick="stopRecording()">Stop Recording</button>
+                `;
+
+                // Auto-stop after 5 seconds
+                setTimeout(async () => {
+                    await stopRecording();
+                }, 5000);
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('output').innerHTML = `
+                    <h2>Error:</h2>
+                    <pre>${error}</pre>
+                `;
+            }
+        }
+
+        async function stopRecording() {
+            try {
+                console.log('Stopping recording...');
+                await invoke('stop_all_recording');
+                document.getElementById('output').innerHTML += `
+                    <h2>Recording Stopped!</h2>
+                    <p>Check /tmp/test_webcam_recording.mp4</p>
+                `;
+            } catch (error) {
+                console.error('Error stopping:', error);
+                document.getElementById('output').innerHTML += `
+                    <h2>Stop Error:</h2>
+                    <pre>${error}</pre>
+                `;
+            }
+        }
+
+        window.testWebcamEnumeration = testWebcamEnumeration;
+        window.testWebcamRecording = testWebcamRecording;
+        window.stopRecording = stopRecording;
+    </script>
+</head>
+<body>
+    <h1>Webcam Recording Test</h1>
+    <button onclick="testWebcamEnumeration()">Test Webcam Enumeration</button>
+    <button onclick="testWebcamRecording()">Test Webcam Recording</button>
+    <div id="output"></div>
+</body>
+</html>

@@ -91,10 +91,10 @@ export function validateName(name: string): ValidationResult {
     };
   }
 
-  if (trimmedName.length > 50) {
+  if (trimmedName.length > 30) {
     return {
       isValid: false,
-      error: 'Name must be less than 50 characters',
+      error: 'Name must be between 2 and 30 characters',
     };
   }
 

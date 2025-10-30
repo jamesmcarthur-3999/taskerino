@@ -67,8 +67,7 @@ export const NedSettings: React.FC = () => {
   const hasSessionPermissions = nedSettings.sessionPermissions.length > 0;
 
   // Calculate cost estimate (approximate)
-  const costPerMToken = 3.00; // Sonnet
-  const estimatedCost = (nedSettings.tokenUsage.total / 1_000_000) * costPerMToken;
+  // Cost calculation removed - violates NO COST UI philosophy
 
   return (
     <div className="space-y-6">
@@ -260,27 +259,7 @@ export const NedSettings: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowTokens(!showTokens)}
-          className={`mt-3 text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 ${TRANSITIONS.colors}`}
-        >
-          {showTokens ? 'Hide' : 'Show'} cost estimate
-        </button>
-
-        {showTokens && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className={`mt-3 p-3 ${getRadiusClass('field')} bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800`}
-          >
-            <p className="text-sm text-purple-700 dark:text-purple-300">
-              Estimated cost: <span className="font-semibold">${estimatedCost.toFixed(1)}</span>
-            </p>
-            <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-              Based on Claude Sonnet pricing (~${costPerMToken}/M tokens)
-            </p>
-          </motion.div>
-        )}
+        {/* Cost estimate removed - violates NO COST UI philosophy */}
       </div>
     </div>
   );

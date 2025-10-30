@@ -9,7 +9,8 @@ import { useMemo } from 'react';
 import { useUI } from '../../context/UIContext';
 import { useTasks } from '../../context/TasksContext';
 import { useNotes } from '../../context/NotesContext';
-import { useSessions } from '../../context/SessionsContext';
+import { useSessionList } from '../../context/SessionListContext';
+import { useActiveSession } from '../../context/ActiveSessionContext';
 import { useEntities } from '../../context/EntitiesContext';
 
 /**
@@ -59,7 +60,8 @@ export function useNavData(): NavData {
   const { state: uiState } = useUI();
   const { state: tasksState } = useTasks();
   const { state: notesState } = useNotes();
-  const { sessions, activeSessionId } = useSessions();
+  const { sessions } = useSessionList();
+  const { activeSessionId } = useActiveSession();
   const { state: entitiesState } = useEntities();
 
   // Count of undone tasks (line 142-145)

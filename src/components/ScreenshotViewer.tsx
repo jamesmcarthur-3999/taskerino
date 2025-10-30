@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2, Clock, MessageSquare, Flag } from 'lucide-react';
 import type { Session, SessionScreenshot } from '../types';
-import { attachmentStorage } from '../services/attachmentStorage';
+import { getCAStorage } from '../services/storage/ContentAddressableStorage';
 import { getGlassClasses, RADIUS, SCALE, TRANSITIONS, MODAL_OVERLAY } from '../design-system/theme';
+import { useScreenshotPreloading } from '../hooks/useScreenshotPreloading';
 
 interface ScreenshotViewerProps {
   screenshot: SessionScreenshot;
@@ -15,6 +16,9 @@ interface ScreenshotViewerProps {
   hasNext?: boolean;
   hasPrev?: boolean;
   originPosition?: { x: number; y: number } | null;
+  // New props for preloading
+  allScreenshots?: SessionScreenshot[]; // All screenshots in session
+  currentIndex?: number; // Current screenshot index in array
 }
 
 export function ScreenshotViewer({
@@ -28,6 +32,8 @@ export function ScreenshotViewer({
   hasNext = false,
   hasPrev = false,
   originPosition = null,
+  allScreenshots = [],
+  currentIndex = 0,
 }: ScreenshotViewerProps) {
   const [imageData, setImageData] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,14 +45,23 @@ export function ScreenshotViewer({
   const [commentInput, setCommentInput] = useState('');
   const [showCommentInput, setShowCommentInput] = useState(false);
 
-  // Load screenshot image
+  // Screenshot preloading for instant navigation
+  useScreenshotPreloading({
+    screenshots: allScreenshots.length > 0 ? allScreenshots : [screenshot],
+    currentIndex,
+    preloadConfig: { ahead: 2, behind: 1 },
+    enabled: allScreenshots.length > 1, // Only preload if we have multiple screenshots
+  });
+
+  // Load screenshot image (Phase 4: Content-Addressable Storage)
   useEffect(() => {
     async function loadImage() {
       setLoading(true);
       setError(null);
 
       try {
-        const attachment = await attachmentStorage.getAttachment(screenshot.attachmentId);
+        const caStorage = await getCAStorage();
+        const attachment = await caStorage.loadAttachment(screenshot.hash!);
 
         if (!attachment) {
           throw new Error('Screenshot not found');

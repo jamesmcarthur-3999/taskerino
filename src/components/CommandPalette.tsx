@@ -3,6 +3,7 @@ import { useUI } from '../context/UIContext';
 import { useTasks } from '../context/TasksContext';
 import { useNotes } from '../context/NotesContext';
 import { useEntities } from '../context/EntitiesContext';
+import { useSessionList } from '../context/SessionListContext';
 import { Command } from 'cmdk';
 import {
   Search,
@@ -50,6 +51,7 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
   const { state: notesState } = useNotes();
   const { state: entitiesState } = useEntities();
+  const { sessions } = useSessionList();
   const { colorScheme } = useTheme();
   const [search, setSearch] = useState('');
 
@@ -150,7 +152,7 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
 
   // Filter sessions based on search (same deep search as SessionsZone)
   const filteredSessions: Session[] = search
-    ? ([] as Session[]) // TODO: Add sessions data from useSessions() hook
+    ? sessions
         .filter((session: Session) => session.status === 'completed') // Only show completed sessions
         .filter((s: Session) => {
           const query = search.toLowerCase();

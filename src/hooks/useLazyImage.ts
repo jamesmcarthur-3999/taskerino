@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { attachmentStorage } from '../services/attachmentStorage';
+import { getCAStorage } from '../services/storage/ContentAddressableStorage';
 
 interface UseLazyImageOptions {
   rootMargin?: string;  // Load images N pixels before visible
@@ -50,7 +50,9 @@ export function useLazyImage(
       setError(null);
 
       try {
-        const attachment = await attachmentStorage.getAttachment(attachmentId);
+        // Phase 4: Use CA storage (attachmentId can be hash or legacy ID)
+        const caStorage = await getCAStorage();
+        const attachment = await caStorage.loadAttachment(attachmentId);
 
         if (!attachment) {
           throw new Error(`Attachment ${attachmentId} not found`);

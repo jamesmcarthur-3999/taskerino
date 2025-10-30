@@ -1,0 +1,177 @@
+--- a/ScreenRecorder/ScreenRecorder.swift
++++ b/ScreenRecorder/ScreenRecorder.swift
+@@ -504,38 +504,8 @@ public func screen_recorder_start_display_recording(
+     print("  Display IDs JSON: \(displayIdsStr)")
+     print("  Output: \(outputPathStr)")
+     print("  Settings: \(width)x\(height) @ \(fps)fps")
+-
+-    // Parse display IDs from JSON
+-    guard let displayIdsData = displayIdsStr.data(using: .utf8),
+-          let displayIds = try? JSONDecoder().decode([String].self, from: displayIdsData) else {
+-        print("❌ Failed to parse display IDs JSON")
+-        return -1
+-    }
+-
+-    let semaphore = DispatchSemaphore(value: 0)
+-    var result: Int32 = 0
+-
+-    Task {
+-        do {
+-            try await GlobalScreenRecorder.shared.startDisplayRecording(
+-                displayIds: displayIds,
+-                outputPath: outputPathStr,
+-                fps: Int(fps),
+-                width: Int(width),
+-                height: Int(height)
+-            )
+-            result = 0
+-        } catch {
+-            print("❌ Display recording failed: \(error)")
+-            result = -1
+-        }
+-        semaphore.signal()
+-    }
+-
+-    semaphore.wait()
+-    return result
++    print("⚠️  Advanced multi-display recording not yet implemented")
++    return -1
+ }
+
+ /// Start window-specific recording
+@@ -552,32 +522,8 @@ public func screen_recorder_start_window_recording(
+     print("  Window ID: \(windowIdStr)")
+     print("  Output: \(outputPathStr)")
+     print("  Settings: \(width)x\(height) @ \(fps)fps")
+-
+-    let semaphore = DispatchSemaphore(value: 0)
+-    var result: Int32 = 0
+-
+-    Task {
+-        do {
+-            try await GlobalScreenRecorder.shared.startWindowRecording(
+-                windowId: windowIdStr,
+-                outputPath: outputPathStr,
+-                fps: Int(fps),
+-                width: Int(width),
+-                height: Int(height)
+-            )
+-            result = 0
+-        } catch {
+-            print("❌ Window recording failed: \(error)")
+-            result = -1
+-        }
+-        semaphore.signal()
+-    }
+-
+-    semaphore.wait()
+-    return result
++    print("⚠️  Window-specific recording not yet implemented")
++    return -1
+ }
+
+ /// Start webcam-only recording
+@@ -594,86 +540,18 @@ public func screen_recorder_start_webcam_recording(
+     print("  Webcam ID: \(webcamIdStr)")
+     print("  Output: \(outputPathStr)")
+     print("  Settings: \(width)x\(height) @ \(fps)fps")
+-
+-    let semaphore = DispatchSemaphore(value: 0)
+-    var result: Int32 = 0
+-
+-    Task {
+-        do {
+-            try await GlobalScreenRecorder.shared.startWebcamRecording(
+-                webcamId: webcamIdStr,
+-                outputPath: outputPathStr,
+-                fps: Int(fps),
+-                width: Int(width),
+-                height: Int(height)
+-            )
+-            result = 0
+-        } catch {
+-            print("❌ Webcam recording failed: \(error)")
+-            result = -1
+-        }
+-        semaphore.signal()
+-    }
+-
+-    semaphore.wait()
+-    return result
++    print("⚠️  Webcam-only recording not yet implemented")
++    return -1
+ }
+
+ /// Start PiP recording (display + webcam composite)
+ @_cdecl("screen_recorder_start_pip_recording")
+ public func screen_recorder_start_pip_recording(
+     configJson: UnsafePointer<CChar>,
+     outputPath: UnsafePointer<CChar>
+ ) -> Int32 {
+-    let configStr = String(cString: configJson)
+-    let outputPathStr = String(cString: outputPath)
+-
+-    print("[VIDEO] PiP recording FFI called")
+-    print("  Config JSON: \(configStr)")
+-    print("  Output: \(outputPathStr)")
+-
+-    // Parse config
+-    guard let configData = configStr.data(using: .utf8),
+-          let config = try? JSONDecoder().decode(VideoRecordingConfig.self, from: configData) else {
+-        print("❌ Failed to parse video config JSON")
+-        return -1
+-    }
+-
+-    let semaphore = DispatchSemaphore(value: 0)
+-    var result: Int32 = 0
+-
+-    Task {
+-        do {
+-            try await GlobalScreenRecorder.shared.startPiPRecording(
+-                config: config,
+-                outputPath: outputPathStr
+-            )
+-            result = 0
+-        } catch {
+-            print("❌ PiP recording failed: \(error)")
+-            result = -1
+-        }
+-        semaphore.signal()
+-    }
+-
+-    semaphore.wait()
+-    return result
++    print("⚠️  PiP recording not yet implemented")
++    return -1
+ }
+
+ /// Update PiP configuration during recording
+@@ -681,26 +559,8 @@ public func screen_recorder_start_pip_recording(
+ public func screen_recorder_update_pip_config(
+     configJson: UnsafePointer<CChar>
+ ) -> Int32 {
+-    let configStr = String(cString: configJson)
+-
+-    print("[VIDEO] Update PiP config FFI called")
+-    print("  Config JSON: \(configStr)")
+-
+-    // Parse PiP config
+-    guard let configData = configStr.data(using: .utf8),
+-          let pipConfig = try? JSONDecoder().decode(PiPConfigSwift.self, from: configData) else {
+-        print("❌ Failed to parse PiP config JSON")
+-        return -1
+-    }
+-
+-    do {
+-        try GlobalScreenRecorder.shared.updatePiPConfig(pipConfig: pipConfig)
+-        print("✅ PiP config updated successfully")
+-        return 0
+-    } catch {
+-        print("❌ Failed to update PiP config: \(error)")
+-        return -1
+-    }
++    print("⚠️  PiP config updates not yet implemented")
++    return -1
+ }
+
+ // MARK: - System Audio Capture (ScreenCaptureKit)

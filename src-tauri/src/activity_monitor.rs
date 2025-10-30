@@ -10,7 +10,6 @@
  * Phase 1: Stub implementation with manual event tracking
  * Phase 2 TODO: Integrate macOS NSWorkspace and CGEvent taps for automatic monitoring
  */
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -159,7 +158,10 @@ impl ActivityMonitor {
 
     /// Create a new activity monitor with custom time window
     pub fn with_window(window_seconds: u64) -> Self {
-        println!("📊 [ACTIVITY MONITOR] Creating monitor with {}s window", window_seconds);
+        println!(
+            "📊 [ACTIVITY MONITOR] Creating monitor with {}s window",
+            window_seconds
+        );
         Self {
             state: Arc::new(Mutex::new(MonitorState::new(window_seconds))),
         }
@@ -167,7 +169,9 @@ impl ActivityMonitor {
 
     /// Start monitoring user activity
     pub fn start_monitoring(&self) -> Result<(), String> {
-        let mut state = self.state.lock()
+        let mut state = self
+            .state
+            .lock()
             .map_err(|e| format!("Failed to lock state: {}", e))?;
 
         if state.state == MonitoringState::Running {
@@ -194,7 +198,9 @@ impl ActivityMonitor {
 
     /// Stop monitoring user activity
     pub fn stop_monitoring(&self) -> Result<(), String> {
-        let mut state = self.state.lock()
+        let mut state = self
+            .state
+            .lock()
             .map_err(|e| format!("Failed to lock state: {}", e))?;
 
         if state.state == MonitoringState::Stopped {
@@ -223,20 +229,13 @@ impl ActivityMonitor {
         };
         let recent_events = state.get_recent_events(window_seconds);
 
-        println!("📊 [ACTIVITY MONITOR] Getting metrics for last {}s: {} events",
-            window_seconds, recent_events.len());
+        println!(
+            "📊 [ACTIVITY MONITOR] Getting metrics for last {}s: {} events",
+            window_seconds,
+            recent_events.len()
+        );
 
         ActivityMetrics::from_events(&recent_events)
-    }
-
-    /// Get metrics using the monitor's default window
-    pub fn get_current_metrics(&self) -> ActivityMetrics {
-        let window_seconds = match self.state.lock() {
-            Ok(state) => state.window_seconds,
-            Err(_) => return ActivityMetrics::new(), // Return empty metrics on lock failure
-        };
-
-        self.get_metrics(window_seconds)
     }
 
     /// Record an app switch event
@@ -299,39 +298,11 @@ impl ActivityMonitor {
         println!("📊 [ACTIVITY MONITOR] Window focus change recorded");
     }
 
-    /// Get current monitoring state
-    pub fn get_state(&self) -> MonitoringState {
-        self.state.lock()
-            .map(|s| s.state)
-            .unwrap_or(MonitoringState::Stopped)
-    }
-
-    /// Check if currently monitoring
-    pub fn is_monitoring(&self) -> bool {
-        self.get_state() == MonitoringState::Running
-    }
-
-    /// Update the time window for metrics
-    pub fn set_window(&self, window_seconds: u64) {
-        if let Ok(mut state) = self.state.lock() {
-            state.window_seconds = window_seconds;
-            println!("📊 [ACTIVITY MONITOR] Window updated to {}s", window_seconds);
-        }
-    }
-
-    /// Get the current time window setting
-    pub fn get_window(&self) -> u64 {
-        self.state.lock()
-            .map(|s| s.window_seconds)
-            .unwrap_or(60) // Default to 60 seconds on error
-    }
 
     /// Get total event count (for debugging/testing)
     #[allow(dead_code)]
     pub fn get_event_count(&self) -> usize {
-        self.state.lock()
-            .map(|s| s.events.len())
-            .unwrap_or(0)
+        self.state.lock().map(|s| s.events.len()).unwrap_or(0)
     }
 }
 
@@ -340,51 +311,3 @@ impl Default for ActivityMonitor {
         Self::new()
     }
 }
-
-// ============================================================================
-// PHASE 2 IMPLEMENTATION NOTES
-// ============================================================================
-//
-// macOS Event Monitoring Integration Plan:
-//
-// 1. App Switching (NSWorkspace):
-//    - Use NSWorkspace.sharedWorkspace.notificationCenter
-//    - Register for NSWorkspaceDidActivateApplicationNotification
-//    - Extract app name from notification.userInfo
-//    - Call increment_app_switch() from notification handler
-//
-// 2. Mouse Clicks (CGEvent Tap):
-//    - Create CGEventTap with kCGEventLeftMouseDown | kCGEventRightMouseDown
-//    - Request accessibility permissions if needed
-//    - Call increment_mouse_click() from event callback
-//    - Consider rate limiting to avoid performance impact
-//
-// 3. Keyboard Events (CGEvent Tap):
-//    - Create CGEventTap with kCGEventKeyDown
-//    - Request accessibility permissions if needed
-//    - Call increment_keyboard_event() from event callback
-//    - Consider rate limiting for performance
-//
-// 4. Window Focus (Accessibility API):
-//    - Use AXObserver to monitor focused window changes
-//    - Register for kAXFocusedWindowChangedNotification
-//    - Call increment_window_focus() from notification handler
-//
-// 5. Permissions:
-//    - Add LSApplicationQueriesSchemes to Info.plist
-//    - Request accessibility permissions via AXIsProcessTrusted()
-//    - Provide clear error messages if permissions denied
-//
-// 6. Performance Considerations:
-//    - Implement rate limiting for high-frequency events (mouse, keyboard)
-//    - Consider batching events before adding to Vec
-//    - Use atomic counters for simple counts instead of full event storage
-//    - Profile memory usage with long-running sessions
-//
-// 7. Testing Strategy:
-//    - Unit tests for metric calculation and time windowing
-//    - Integration tests for event recording
-//    - Manual testing with real macOS events
-//    - Performance testing with high event rates
-//
-// ============================================================================

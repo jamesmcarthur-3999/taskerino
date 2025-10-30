@@ -226,13 +226,23 @@ export function useEntities() {
     throw new Error('useEntities must be used within EntitiesProvider');
   }
 
-  // Helper method
+  // Helper methods for adding entities
+  const addCompany = (company: Company) => {
+    context.dispatch({ type: 'ADD_COMPANY', payload: company });
+  };
+
+  const addContact = (contact: Contact) => {
+    context.dispatch({ type: 'ADD_CONTACT', payload: contact });
+  };
+
   const addTopic = (topic: Topic) => {
     context.dispatch({ type: 'ADD_TOPIC', payload: topic });
   };
 
   return {
     ...context,
+    addCompany,
+    addContact,
     addTopic,
   };
 }

@@ -1,26 +1,115 @@
-import { useSessions } from '../context/SessionsContext';
+/**
+ * @file useSession.ts - Convenience hook for session operations
+ *
+ * @overview
+ * Provides a simplified, ergonomic API for common session operations. This is a
+ * convenience wrapper around SessionsContext that provides sensible defaults and
+ * derived state.
+ *
+ * @difference_from_other_hooks
+ * - **useSession()** - Convenience wrapper with defaults (THIS FILE)
+ * - **useActiveSession()** - Phase 1 active session lifecycle (preferred for new code)
+ * - **useSessionList()** - Phase 1 session CRUD and filtering (preferred for new code)
+ * - **useSessions()** - DEPRECATED - Direct context access (legacy)
+ *
+ * @features
+ * - Simplified session start/end/pause/resume methods
+ * - Sensible defaults for session configuration
+ * - Derived state (activeSession, hasActiveSession, isSessionActive)
+ * - Helper methods (getSession, getSessionDuration)
+ * - Filtered views (pastSessions, activeSessions)
+ *
+ * @usage
+ * ```typescript
+ * function MyComponent() {
+ *   const {
+ *     activeSession,
+ *     hasActiveSession,
+ *     startSession,
+ *     endSession,
+ *     pauseSession
+ *   } = useSession();
+ *
+ *   return (
+ *     <div>
+ *       {hasActiveSession ? (
+ *         <button onClick={() => endSession()}>
+ *           End {activeSession.name}
+ *         </button>
+ *       ) : (
+ *         <button onClick={() => startSession({
+ *           name: "Work Session",
+ *           description: "Daily work"
+ *         })}>
+ *           Start Session
+ *         </button>
+ *       )}
+ *     </div>
+ *   );
+ * }
+ * ```
+ *
+ * @defaults
+ * When calling startSession(), these defaults are applied:
+ * - screenshotInterval: 2 minutes
+ * - autoAnalysis: true
+ * - status: 'active'
+ * - audioRecording: false
+ * - enableScreenshots: true
+ * - audioMode: 'off'
+ * - tags: [] (empty array)
+ *
+ * @deprecated_note
+ * This hook uses deprecated SessionsContext. For new code, use Phase 1 contexts:
+ * - useActiveSession() - For active session lifecycle
+ * - useSessionList() - For session CRUD and filtering
+ * - useRecording() - For recording service management
+ *
+ * @migration_example
+ * ```typescript
+ * // OLD (deprecated):
+ * const { activeSession, startSession } = useSession();
+ *
+ * // NEW (Phase 1):
+ * const { activeSession, startSession } = useActiveSession();
+ * const { sessions, filteredSessions } = useSessionList();
+ * ```
+ *
+ * @see {@link ../context/SessionsContext.tsx} - DEPRECATED - Use Phase 1 contexts
+ * @see {@link ../context/ActiveSessionContext.tsx} - NEW - Phase 1 active session management
+ * @see {@link ../context/SessionListContext.tsx} - NEW - Phase 1 session list management
+ * @see {@link ../docs/sessions-rewrite/CONTEXT_MIGRATION_GUIDE.md} - Migration guide
+ */
+
+import { useSessionList } from '../context/SessionListContext';
+import { useActiveSession } from '../context/ActiveSessionContext';
 import type { Session } from '../types';
 
 /**
- * useSession Hook
+ * Convenience hook for session operations with sensible defaults
  *
- * Provides easy access to session functionality across the app.
- * Use this hook to start, pause, resume, or end sessions from any component.
+ * @deprecated Use Phase 1 contexts instead:
+ * - useActiveSession() for active session lifecycle
+ * - useSessionList() for session CRUD and filtering
+ * - useRecording() for recording service management
  */
 export function useSession() {
   const {
     sessions,
+    updateSession: updateSessionFromContext,
+    deleteSession: deleteSessionFromContext,
+  } = useSessionList();
+
+  const {
+    activeSession,
     activeSessionId,
     startSession: startSessionFromContext,
     endSession: endSessionFromContext,
     pauseSession: pauseSessionFromContext,
     resumeSession: resumeSessionFromContext,
-    updateSession: updateSessionFromContext,
-    deleteSession: deleteSessionFromContext,
-  } = useSessions();
+  } = useActiveSession();
 
-  // Get active session
-  const activeSession = sessions.find(s => s.id === activeSessionId);
+  // Get active session (already provided by useActiveSession)
   const hasActiveSession = !!activeSession;
   const isSessionActive = activeSession?.status === 'active';
   const isSessionPaused = activeSession?.status === 'paused';
@@ -62,7 +151,7 @@ export function useSession() {
   const endSession = (sessionId?: string) => {
     const id = sessionId || activeSession?.id;
     if (id) {
-      endSessionFromContext(id);
+      endSessionFromContext();
     }
   };
 
@@ -72,7 +161,7 @@ export function useSession() {
   const pauseSession = (sessionId?: string) => {
     const id = sessionId || activeSession?.id;
     if (id) {
-      pauseSessionFromContext(id);
+      pauseSessionFromContext();
     }
   };
 
@@ -82,7 +171,7 @@ export function useSession() {
   const resumeSession = (sessionId?: string) => {
     const id = sessionId || activeSession?.id;
     if (id) {
-      resumeSessionFromContext(id);
+      resumeSessionFromContext();
     }
   };
 
@@ -90,7 +179,8 @@ export function useSession() {
    * Update session data
    */
   const updateSession = (session: Session) => {
-    updateSessionFromContext(session);
+    const { id, ...updates } = session;
+    updateSessionFromContext(id, updates);
   };
 
   /**

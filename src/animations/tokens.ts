@@ -75,15 +75,15 @@ export const easings = {
   elastic: EASING.elastic,
   anticipate: EASING.anticipate,
 
-  // Additional for Framer Motion
-  bouncy: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-  gentle: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+  // Additional for Framer Motion (arrays, not CSS strings)
+  bouncy: [0.34, 1.56, 0.64, 1],
+  gentle: [0.25, 0.1, 0.25, 1],
 
-  // Material Design easings
-  standard: 'cubic-bezier(0.4, 0.0, 0.2, 1)',
-  decelerate: 'cubic-bezier(0.0, 0.0, 0.2, 1)',
-  accelerate: 'cubic-bezier(0.4, 0.0, 1, 1)',
-  sharp: 'cubic-bezier(0.4, 0.0, 0.6, 1)',
+  // Material Design easings (arrays for Framer Motion compatibility)
+  standard: [0.4, 0.0, 0.2, 1],
+  decelerate: [0.0, 0.0, 0.2, 1],
+  accelerate: [0.4, 0.0, 1, 1],
+  sharp: [0.4, 0.0, 0.6, 1],
 } as const;
 
 /**

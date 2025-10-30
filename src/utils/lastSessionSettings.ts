@@ -5,23 +5,27 @@
  * Stored in localStorage for cross-session persistence.
  */
 
+import type { AudioSourceType } from '../types';
+
 export interface LastSessionSettings {
   screenshotInterval: number;
   enableScreenshots: boolean;
   audioRecording: boolean;
   videoRecording?: boolean;
   autoAnalysis: boolean;
+  audioSourceType?: AudioSourceType; // Audio source preference (default: 'microphone')
   lastUsed: string; // ISO timestamp
 }
 
 const STORAGE_KEY = 'taskerino_last_session_settings';
 
 const DEFAULT_SETTINGS: LastSessionSettings = {
-  screenshotInterval: 2,
+  screenshotInterval: -1, // AI Adaptive mode (changed from 2 min fixed)
   enableScreenshots: true,
   audioRecording: false,
   videoRecording: false,
   autoAnalysis: true,
+  audioSourceType: 'microphone', // Default to OS system microphone (not external devices)
   lastUsed: new Date().toISOString(),
 };
 
@@ -123,7 +127,7 @@ function isValidSettings(settings: any): settings is LastSessionSettings {
   return (
     settings &&
     typeof settings.screenshotInterval === 'number' &&
-    settings.screenshotInterval > 0 &&
+    (settings.screenshotInterval > 0 || settings.screenshotInterval === -1) && // Allow -1 for AI Adaptive
     typeof settings.enableScreenshots === 'boolean' &&
     typeof settings.audioRecording === 'boolean' &&
     typeof settings.autoAnalysis === 'boolean' &&

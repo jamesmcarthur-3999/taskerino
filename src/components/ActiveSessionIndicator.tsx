@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Activity, Play, Pause, Square, Clock } from 'lucide-react';
+import { Activity, Play, Pause, Square, Clock, Volume2, VolumeX } from 'lucide-react';
+import { listen } from '@tauri-apps/api/event';
 import { useSession } from '../hooks/useSession';
 import { useUI } from '../context/UIContext';
 import { audioStorageService } from '../services/audioStorageService';
@@ -16,6 +17,7 @@ export function ActiveSessionIndicator() {
   const { dispatch: uiDispatch, addNotification } = useUI();
   const [duration, setDuration] = useState(0);
   const [isStitching, setIsStitching] = useState(false);
+  const [lastChunkWasSilent, setLastChunkWasSilent] = useState<boolean | null>(null);
 
   // Update duration every second
   useEffect(() => {
@@ -30,6 +32,29 @@ export function ActiveSessionIndicator() {
 
     return () => clearInterval(interval);
   }, [activeSession, getSessionDuration]);
+
+  // Listen for audio chunks to track VAD status
+  useEffect(() => {
+    if (!activeSession || !activeSession.audioRecording) return;
+
+    let unlisten: (() => void) | null = null;
+
+    const setupListener = async () => {
+      unlisten = await listen<{ isSilent?: boolean }>('audio-chunk', (event) => {
+        if (event.payload.isSilent !== undefined) {
+          setLastChunkWasSilent(event.payload.isSilent);
+          // Auto-clear after 3 seconds to avoid stale indicator
+          setTimeout(() => setLastChunkWasSilent(null), 3000);
+        }
+      });
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [activeSession]);
 
   if (!activeSession) return null;
 
@@ -138,6 +163,19 @@ export function ActiveSessionIndicator() {
         <span className="text-xs text-gray-500 leading-none mt-0.5 flex items-center gap-1">
           <Clock className="w-3 h-3" />
           {formatDuration(duration)}
+          {/* VAD indicator - shows when AI analysis is skipped */}
+          {lastChunkWasSilent === true && activeSession.audioRecording && (
+            <span className="flex items-center gap-0.5 text-orange-600 ml-1" title="Skipping transcription (silence detected)">
+              <VolumeX className="w-3 h-3" />
+              <span className="text-[10px] font-medium">Skip AI</span>
+            </span>
+          )}
+          {lastChunkWasSilent === false && activeSession.audioRecording && (
+            <span className="flex items-center gap-0.5 text-green-600 ml-1" title="Transcribing audio">
+              <Volume2 className="w-3 h-3" />
+              <span className="text-[10px] font-medium">AI Active</span>
+            </span>
+          )}
         </span>
       </div>
 

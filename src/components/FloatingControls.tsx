@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Settings, EyeOff } from 'lucide-react';
 import { useUI } from '../context/UIContext';
-import { useSessions } from '../context/SessionsContext';
+import { useSessionList } from '../context/SessionListContext';
+import { useActiveSession } from '../context/ActiveSessionContext';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getGlassClasses, SHADOWS, Z_INDEX } from '../design-system/theme';
 
 export function FloatingControls() {
   const { dispatch: uiDispatch } = useUI();
-  const { sessions, activeSessionId } = useSessions();
+  const { sessions } = useSessionList();
+  const { activeSessionId } = useActiveSession();
   const [isExpanded, setIsExpanded] = useState(false);
   const activeSession = sessions.find(s => s.id === activeSessionId);
 

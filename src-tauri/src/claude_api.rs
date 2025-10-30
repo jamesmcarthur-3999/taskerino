@@ -1,10 +1,10 @@
 use crate::ai_types::*;
+use futures_util::StreamExt;
 use reqwest::Client;
 use serde_json::json;
-use futures_util::StreamExt;
+use std::time::Duration;
 use tauri::Emitter;
 use tauri_plugin_store::StoreExt;
-use std::time::Duration;
 
 const CLAUDE_API_BASE: &str = "https://api.anthropic.com/v1";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -15,20 +15,24 @@ pub async fn claude_chat_completion(
     app: tauri::AppHandle,
     request: ClaudeChatRequest,
 ) -> Result<ClaudeChatResponse, String> {
-    let store = app.store("api_keys.json")
+    let store = app
+        .store("api_keys.json")
         .map_err(|e| format!("Failed to access store: {}", e))?;
 
     let api_key = match store.get("claude_api_key") {
-        Some(value) => value.as_str()
+        Some(value) => value
+            .as_str()
             .ok_or("Claude API key not set. Please add your API key in Settings.")?
             .to_string(),
-        None => return Err("Claude API key not set. Please add your API key in Settings.".to_string())
+        None => {
+            return Err("Claude API key not set. Please add your API key in Settings.".to_string())
+        }
     };
 
     let client = Client::builder()
-        .timeout(Duration::from_secs(1200))         // 20 min total timeout (for large canvas generation)
-        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
-        .read_timeout(Duration::from_secs(900))     // 15 min to read response (large sessions can take 5-10 min)
+        .timeout(Duration::from_secs(1200)) // 20 min total timeout (for large canvas generation)
+        .connect_timeout(Duration::from_secs(30)) // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900)) // 15 min to read response (large sessions can take 5-10 min)
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
@@ -54,7 +58,12 @@ pub async fn claude_chat_completion(
         if attempt > 0 {
             // Exponential backoff: 1s, 2s, 4s
             let delay_ms = 1000 * (2_u64.pow(attempt as u32));
-            println!("Retrying Claude API request (attempt {}/{}) after {}ms delay...", attempt + 1, max_retries, delay_ms);
+            println!(
+                "Retrying Claude API request (attempt {}/{}) after {}ms delay...",
+                attempt + 1,
+                max_retries,
+                delay_ms
+            );
             tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
         }
 
@@ -96,10 +105,13 @@ pub async fn claude_chat_completion(
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
             last_error = match status_code {
-                502 => "Anthropic API gateway error (502). The API is temporarily unavailable.".to_string(),
-                503 => "Anthropic API service unavailable (503). The service is temporarily down.".to_string(),
+                502 => "Anthropic API gateway error (502). The API is temporarily unavailable."
+                    .to_string(),
+                503 => "Anthropic API service unavailable (503). The service is temporarily down."
+                    .to_string(),
                 504 => "Anthropic API timeout (504). The request took too long.".to_string(),
-                520 => "Cloudflare error (520). Anthropic's servers are temporarily unreachable.".to_string(),
+                520 => "Cloudflare error (520). Anthropic's servers are temporarily unreachable."
+                    .to_string(),
                 521 => "Cloudflare error (521). Anthropic's servers are down.".to_string(),
                 _ => format!("Server error ({}): {}", status_code, error_text),
             };
@@ -128,7 +140,10 @@ pub async fn claude_chat_completion(
             if stop_reason == "max_tokens" {
                 eprintln!("⚠️  WARNING: Claude response truncated due to max_tokens limit!");
                 eprintln!("   Requested: {} tokens", request.max_tokens);
-                eprintln!("   Output tokens used: {}", claude_response.usage.output_tokens);
+                eprintln!(
+                    "   Output tokens used: {}",
+                    claude_response.usage.output_tokens
+                );
                 return Err(format!(
                     "Response truncated: hit max_tokens limit of {}. Output used {} tokens. Increase token limit or implement chunking.",
                     request.max_tokens,
@@ -177,14 +192,18 @@ pub async fn claude_chat_completion_stream(
     stream_id: String,
     request: ClaudeStreamingRequest,
 ) -> Result<(), String> {
-    let store = app.store("api_keys.json")
+    let store = app
+        .store("api_keys.json")
         .map_err(|e| format!("Failed to access store: {}", e))?;
 
     let api_key = match store.get("claude_api_key") {
-        Some(value) => value.as_str()
+        Some(value) => value
+            .as_str()
             .ok_or("Claude API key not set. Please add your API key in Settings.")?
             .to_string(),
-        None => return Err("Claude API key not set. Please add your API key in Settings.".to_string())
+        None => {
+            return Err("Claude API key not set. Please add your API key in Settings.".to_string())
+        }
     };
 
     // Spawn async task to handle streaming
@@ -205,9 +224,9 @@ async fn stream_claude_response(
     request: ClaudeStreamingRequest,
 ) -> Result<(), String> {
     let client = Client::builder()
-        .timeout(Duration::from_secs(1200))         // 20 min total timeout (for large canvas generation)
-        .connect_timeout(Duration::from_secs(30))   // 30 sec to establish connection
-        .read_timeout(Duration::from_secs(900))     // 15 min to read response (large sessions can take 5-10 min)
+        .timeout(Duration::from_secs(1200)) // 20 min total timeout (for large canvas generation)
+        .connect_timeout(Duration::from_secs(30)) // 30 sec to establish connection
+        .read_timeout(Duration::from_secs(900)) // 15 min to read response (large sessions can take 5-10 min)
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
@@ -236,7 +255,11 @@ async fn stream_claude_response(
 
     // DEBUG: Log the actual request being sent
     println!("[Claude API] Request body:");
-    println!("{}", serde_json::to_string_pretty(&request_body).unwrap_or_else(|_| "Failed to serialize".to_string()));
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&request_body)
+            .unwrap_or_else(|_| "Failed to serialize".to_string())
+    );
 
     let response = client
         .post(&format!("{}/messages", CLAUDE_API_BASE))
@@ -297,26 +320,27 @@ async fn stream_claude_response(
 
                             // Parse JSON data
                             match serde_json::from_str::<serde_json::Value>(data) {
-                            Ok(json_data) => {
-                                // Log event type for debugging
-                                if let Some(event_type) = json_data.get("type") {
-                                    println!("[Claude Stream] Event type: {}", event_type);
-                                    if event_type == "content_block_delta" {
-                                        println!("[Claude Stream] Delta: {:?}", json_data.get("delta"));
+                                Ok(json_data) => {
+                                    // Log event type for debugging
+                                    if let Some(event_type) = json_data.get("type") {
+                                        println!("[Claude Stream] Event type: {}", event_type);
+                                        if event_type == "content_block_delta" {
+                                            println!(
+                                                "[Claude Stream] Delta: {:?}",
+                                                json_data.get("delta")
+                                            );
+                                        }
                                     }
-                                }
 
-                                // Emit event to frontend
-                                let _ = app.emit(
-                                    &format!("claude-stream-{}", stream_id),
-                                    json_data,
-                                );
+                                    // Emit event to frontend
+                                    let _ = app
+                                        .emit(&format!("claude-stream-{}", stream_id), json_data);
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to parse SSE data: {}", e);
+                                    eprintln!("Raw data: {}", data);
+                                }
                             }
-                            Err(e) => {
-                                eprintln!("Failed to parse SSE data: {}", e);
-                                eprintln!("Raw data: {}", data);
-                            }
-                        }
                         }
                     }
                 }

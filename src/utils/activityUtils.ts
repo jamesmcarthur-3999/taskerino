@@ -113,15 +113,6 @@ export function normalizeActivity(rawActivity: string): { name: string; color: s
 }
 
 /**
- * Get color for activity type (legacy support)
- * @deprecated Use normalizeActivity() instead for better categorization
- */
-export function getActivityColor(activity: string): string {
-  // Use new normalization system
-  return normalizeActivity(activity).color;
-}
-
-/**
  * Group consecutive screenshots with the same activity into blocks
  * Now uses intelligent normalization to reduce fragmentation
  */

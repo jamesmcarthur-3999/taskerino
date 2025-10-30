@@ -1,13 +1,12 @@
+use rayon::prelude::*;
+use std::time::Instant;
 /**
  * Session Storage Module (Task 3A)
  *
  * Parallel session loading using Rust + Rayon for multi-core processing
  * Offloads heavy JSON parsing and data transformation from JavaScript
  */
-
 use tauri::{AppHandle, Manager};
-use rayon::prelude::*;
-use std::time::Instant;
 
 use crate::session_models::{Session, SessionSummary};
 
@@ -17,9 +16,7 @@ use crate::session_models::{Session, SessionSummary};
  * Uses rayon for parallel transformation across CPU cores
  */
 #[tauri::command]
-pub async fn load_session_summaries(
-    app_handle: AppHandle
-) -> Result<Vec<SessionSummary>, String> {
+pub async fn load_session_summaries(app_handle: AppHandle) -> Result<Vec<SessionSummary>, String> {
     println!("🦀 [RUST] Loading session summaries with parallel processing...");
     let start = Instant::now();
 
@@ -51,13 +48,20 @@ pub async fn load_session_summaries(
     // Transform to summaries in PARALLEL using rayon
     // This distributes work across all CPU cores
     let summaries: Vec<SessionSummary> = sessions
-        .into_par_iter()  // Parallel iterator - uses thread pool
-        .map(|session| session.into())  // Convert each session to summary
+        .into_par_iter() // Parallel iterator - uses thread pool
+        .map(|session| session.into()) // Convert each session to summary
         .collect();
 
     let elapsed = start.elapsed();
-    println!("✅ [RUST] Loaded {} summaries in {:?} (parallel)", summaries.len(), elapsed);
-    println!("⚡ [PERFORMANCE] CPU cores utilized: {}", rayon::current_num_threads());
+    println!(
+        "✅ [RUST] Loaded {} summaries in {:?} (parallel)",
+        summaries.len(),
+        elapsed
+    );
+    println!(
+        "⚡ [PERFORMANCE] CPU cores utilized: {}",
+        rayon::current_num_threads()
+    );
 
     Ok(summaries)
 }
@@ -69,7 +73,7 @@ pub async fn load_session_summaries(
 #[tauri::command]
 pub async fn load_session_detail(
     session_id: String,
-    app_handle: AppHandle
+    app_handle: AppHandle,
 ) -> Result<Session, String> {
     println!("🦀 [RUST] Loading session detail for {}...", session_id);
     let start = Instant::now();
@@ -110,7 +114,7 @@ pub async fn load_session_detail(
 #[tauri::command]
 pub async fn search_sessions(
     query: String,
-    app_handle: AppHandle
+    app_handle: AppHandle,
 ) -> Result<Vec<SessionSummary>, String> {
     println!("🦀 [RUST] Searching sessions for '{}'...", query);
     let start = Instant::now();
@@ -166,7 +170,11 @@ pub async fn search_sessions(
         .collect();
 
     let elapsed = start.elapsed();
-    println!("✅ [RUST] Found {} matches in {:?} (parallel search)", matching_summaries.len(), elapsed);
+    println!(
+        "✅ [RUST] Found {} matches in {:?} (parallel search)",
+        matching_summaries.len(),
+        elapsed
+    );
 
     Ok(matching_summaries)
 }
@@ -175,9 +183,7 @@ pub async fn search_sessions(
  * Get session count (fast, no parsing)
  */
 #[tauri::command]
-pub async fn get_session_count(
-    app_handle: AppHandle
-) -> Result<usize, String> {
+pub async fn get_session_count(app_handle: AppHandle) -> Result<usize, String> {
     let data_dir = app_handle
         .path()
         .app_data_dir()
@@ -193,8 +199,8 @@ pub async fn get_session_count(
         .await
         .map_err(|e| format!("Failed to read sessions file: {}", e))?;
 
-    let sessions: Vec<serde_json::Value> = serde_json::from_str(&file_content)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+    let sessions: Vec<serde_json::Value> =
+        serde_json::from_str(&file_content).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
     Ok(sessions.len())
 }

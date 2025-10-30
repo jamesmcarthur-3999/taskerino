@@ -15,7 +15,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { Sparkles, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import type { Session } from '../types';
 import { sessionEnrichmentService, type CostEstimate, type EnrichmentCapability } from '../services/sessionEnrichmentService';
 
@@ -142,10 +142,7 @@ export function EnrichmentButton({
     return parts.join(' + ');
   }
 
-  // Format cost for display
-  function formatCost(cost: number): string {
-    return `$${cost.toFixed(1)}`;
-  }
+  // formatCost function removed - no longer needed after cost UI removal
 
   return (
     <div className="relative inline-block">
@@ -197,7 +194,7 @@ export function EnrichmentButton({
           {/* Subtext */}
           {!loading && !enriching && !error && costEstimate && (
             <span className="text-xs font-normal opacity-90">
-              {getEnrichmentDetails()} • {formatCost(costEstimate.total)}
+              {getEnrichmentDetails()} {/* Cost estimate removed - users should feel free to enrich */}
             </span>
           )}
         </div>
@@ -213,7 +210,7 @@ export function EnrichmentButton({
         </div>
       )}
 
-      {/* Tooltip - Cost Breakdown */}
+      {/* Tooltip - Enrichment Details (NO COST) */}
       {showTooltip && !loading && !error && costEstimate && canEnrich() && (
         <div
           className="
@@ -240,67 +237,42 @@ export function EnrichmentButton({
 
           <div className="font-bold text-gray-900 mb-3 flex items-center gap-2">
             <Sparkles size={14} className="text-cyan-500" />
-            Cost Breakdown
+            Enrichment Details
           </div>
 
           <div className="space-y-2 text-xs">
             {/* Audio Line */}
             {capability?.audio && costEstimate.breakdown.audio && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">
+              <div className="flex items-center gap-2">
+                <CheckCircle size={14} className="text-cyan-500 flex-shrink-0" />
+                <span className="text-gray-700">
                   Audio Analysis: {Math.round(costEstimate.breakdown.audio.duration)} min
-                </span>
-                <span className="font-mono font-semibold text-gray-900">
-                  {formatCost(costEstimate.audio)}
                 </span>
               </div>
             )}
 
             {/* Video Line */}
             {capability?.video && costEstimate.breakdown.video && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">
+              <div className="flex items-center gap-2">
+                <CheckCircle size={14} className="text-cyan-500 flex-shrink-0" />
+                <span className="text-gray-700">
                   Video Chapters: {costEstimate.breakdown.video.frameCount} frames
-                </span>
-                <span className="font-mono font-semibold text-gray-900">
-                  {formatCost(costEstimate.video)}
                 </span>
               </div>
             )}
 
             {/* Summary Line */}
             {costEstimate.breakdown.summary && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">
-                  Summary Update: {costEstimate.breakdown.summary.tokens.toLocaleString()} tokens
-                </span>
-                <span className="font-mono font-semibold text-gray-900">
-                  {formatCost(costEstimate.summary)}
+              <div className="flex items-center gap-2">
+                <CheckCircle size={14} className="text-cyan-500 flex-shrink-0" />
+                <span className="text-gray-700">
+                  Summary Update
                 </span>
               </div>
             )}
-
-            {/* Separator */}
-            <div className="border-t border-gray-200 my-2" />
-
-            {/* Total */}
-            <div className="flex justify-between items-center font-bold">
-              <span className="text-gray-900">Total</span>
-              <span className="font-mono text-base text-cyan-600">
-                {formatCost(costEstimate.total)}
-              </span>
-            </div>
           </div>
 
-          {/* Warning if exceeds threshold */}
-          {costEstimate.exceedsThreshold && (
-            <div className="mt-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
-              <div className="flex items-start gap-2 text-xs text-amber-800">
-                <AlertCircle size={12} className="mt-0.5 flex-shrink-0" />
-                <span>Cost exceeds threshold</span>
-              </div>
-            </div>
-          )}
+          {/* Cost breakdown removed - violates NO COST UI philosophy */}
 
           {/* Info Text */}
           <div className="mt-3 text-xs text-gray-500 leading-relaxed">
