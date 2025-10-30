@@ -233,7 +233,7 @@ export function NoteReviewCard({ noteId, onDelete, isDeleted }: NoteReviewCardPr
               </label>
               <InlineTagManager
                 tags={editedTags}
-                onChange={setEditedTags}
+                onTagsChange={setEditedTags}
                 allTags={[]} // No autocomplete suggestions in review
               />
             </div>

@@ -73,7 +73,7 @@ export function CanvasChart({
             cx="50%"
             cy="50%"
             labelLine={false}
-            label={({ name, percent }: { name: string; percent: number }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+            label={(props: any) => `${props.name}: ${(props.percent * 100).toFixed(0)}%`}
             outerRadius={type === 'donut' ? 80 : 100}
             innerRadius={type === 'donut' ? 50 : 0}
             fill="#8884d8"

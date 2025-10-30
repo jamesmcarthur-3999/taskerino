@@ -108,9 +108,10 @@ export function CaptureReview({
     });
 
     // Get active tasks (apply edits and filter deleted)
-    const activeTasks = currentResult.tasks
+    // Note: These are partial task objects from AI processing that will be completed by the parent
+    const activeTasks = (currentResult.tasks
       ?.filter((_, idx) => !deletedTaskIndices.has(idx))
-      .map((task, idx) => editedTasks.get(idx) || task) || [];
+      .map((task, idx) => editedTasks.get(idx) || task) || []) as Task[];
 
     // Get removed task indices
     const removedTaskIndexes = Array.from(deletedTaskIndices);

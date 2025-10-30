@@ -99,7 +99,7 @@ export function EnrichmentStatusIndicator({
           processing: queueStatus.processing,
           completed: queueStatus.completed,
           failed: queueStatus.failed,
-          totalJobs: queueStatus.totalJobs,
+          totalJobs: queueStatus.pending + queueStatus.processing + queueStatus.completed + queueStatus.failed,
         });
       } catch (err) {
         console.error('[EnrichmentStatusIndicator] Failed to fetch status:', err);
@@ -205,7 +205,6 @@ export function EnrichmentStatusIndicator({
         {expanded && (
           <EnrichmentPanel
             onClose={handleClose}
-            status={status}
           />
         )}
       </AnimatePresence>

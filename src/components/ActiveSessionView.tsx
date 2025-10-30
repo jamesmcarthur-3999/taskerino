@@ -135,8 +135,12 @@ export function ActiveSessionView({ session }: ActiveSessionViewProps) {
   };
 
   // Handle context item addition
-  const handleAddContext = (contextItem: SessionContextItem) => {
-    addContextItem(contextItem);
+  const handleAddContext = (contextItem: Omit<SessionContextItem, 'id' | 'sessionId'>) => {
+    addContextItem({
+      ...contextItem,
+      id: `context-${Date.now()}`,
+      sessionId: session.id,
+    });
   };
 
   // Handle pause/resume
