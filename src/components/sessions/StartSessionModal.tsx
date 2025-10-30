@@ -260,7 +260,7 @@ export function StartSessionModal({
     // Add audio config if audio recording is enabled
     if (audioRecording) {
       // Determine source type based on what's enabled
-      let sourceType: 'microphone' | 'system-audio' | 'both' = lastSettings?.audioSourceType || 'microphone';
+      let sourceType: 'microphone' | 'system-audio' | 'both' = 'microphone';
       if (selectedAudioDevice && enableSystemAudio && selectedSystemAudioDevice) {
         sourceType = 'both';
       } else if (enableSystemAudio && selectedSystemAudioDevice) {

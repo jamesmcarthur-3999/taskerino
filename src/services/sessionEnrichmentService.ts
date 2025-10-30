@@ -99,6 +99,9 @@ export interface EnrichmentOptions {
   /** Resume from existing checkpoint if available */
   resumeFromCheckpoint?: boolean;
 
+  /** Optimized video path from background media processing */
+  optimizedVideoPath?: string;
+
   /** Progress callback for real-time updates */
   onProgress?: (progress: EnrichmentProgress) => void;
 }
@@ -359,8 +362,8 @@ export class SessionEnrichmentService {
       });
     }
 
-    // Default options
-    const opts: Required<EnrichmentOptions> = {
+    // Default options (excluding optional fields like optimizedVideoPath)
+    const opts: Required<Omit<EnrichmentOptions, 'optimizedVideoPath'>> & Pick<EnrichmentOptions, 'optimizedVideoPath'> = {
       includeAudio: options.includeAudio ?? true,
       includeVideo: options.includeVideo ?? true,
       includeSummary: options.includeSummary ?? true,
@@ -368,6 +371,7 @@ export class SessionEnrichmentService {
       forceRegenerate: options.forceRegenerate ?? false,
       maxCost: options.maxCost ?? this.DEFAULT_MAX_COST,
       resumeFromCheckpoint: options.resumeFromCheckpoint ?? true,
+      optimizedVideoPath: options.optimizedVideoPath,
       onProgress: options.onProgress ?? (() => {}),
     };
 
@@ -1693,11 +1697,10 @@ export class SessionEnrichmentService {
 
         // Return partial results instead of throwing
         return {
-          success: false,
-          sessionId: session.id,
+          completed: false,
           summary: null,
+          duration: 0,
           error: 'Session not found - may have been deleted during enrichment',
-          partialResults: freshEnrichment,
         };
       }
 

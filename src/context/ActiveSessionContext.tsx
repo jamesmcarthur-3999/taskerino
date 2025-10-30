@@ -616,11 +616,7 @@ export function ActiveSessionProvider({ children }: ActiveSessionProviderProps) 
           await processor.process({
             sessionId: completedSession.id,
             sessionName: completedSession.name,
-            videoPath: sessionVideo?.fullVideoAttachmentId ?
-              await (async () => {
-                const { videoStorageService } = await import('../services/videoStorageService');
-                return await videoStorageService.getVideoPath(sessionVideo.fullVideoAttachmentId!);
-              })() : null,
+            videoPath: sessionVideo?.path || null,
             audioSegments: completedSession.audioSegments || [],
             onProgress: (stage, progress) => {
               console.log(`[TASK 11] Media processing progress: ${stage} ${progress}%`);
