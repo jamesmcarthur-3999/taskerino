@@ -288,6 +288,9 @@ export function SessionsTopBar({
           // Update session config
           updateActiveSession({
             videoConfig: {
+              sourceType: activeSession.videoConfig?.sourceType || 'display',
+              quality: activeSession.videoConfig?.quality || 'medium',
+              fps: activeSession.videoConfig?.fps || 15,
               ...activeSession.videoConfig,
               displayIds: newDisplays,
             }
@@ -316,6 +319,9 @@ export function SessionsTopBar({
           // Update session config
           updateActiveSession({
             videoConfig: {
+              sourceType: activeSession.videoConfig?.sourceType || 'webcam',
+              quality: activeSession.videoConfig?.quality || 'medium',
+              fps: activeSession.videoConfig?.fps || 15,
               ...activeSession.videoConfig,
               webcamDeviceId: newWebcam,
             }

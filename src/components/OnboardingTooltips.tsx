@@ -20,6 +20,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { FeatureTooltip } from './FeatureTooltip';
 import { useUI } from '../context/UIContext';
+import type { OnboardingState } from '../types';
 
 // Tooltip IDs for tracking dismissals
 const TOOLTIP_IDS = {
@@ -31,7 +32,7 @@ const TOOLTIP_IDS = {
 // Tooltip configurations
 interface TooltipConfig {
   id: string;
-  featureFlag: keyof typeof import('../types').OnboardingState['featureIntroductions'];
+  featureFlag: keyof OnboardingState['featureIntroductions'];
   position: 'top' | 'bottom' | 'left' | 'right' | 'bottom-right' | 'center';
   title: string;
   message: string | React.ReactNode;
@@ -95,8 +96,9 @@ function TooltipTrigger({ tooltipKey, triggerCondition, onTriggerChange }: Toolt
   const [localTrigger, setLocalTrigger] = useState(false);
 
   // Check if tooltip should show
+  const featureFlag = config.featureFlag as keyof OnboardingState['featureIntroductions'];
   const shouldShow =
-    !state.onboarding.featureIntroductions[config.featureFlag] &&
+    !state.onboarding.featureIntroductions[featureFlag] &&
     !state.onboarding.dismissedTooltips.includes(config.id) &&
     (triggerCondition || localTrigger);
 
@@ -248,8 +250,9 @@ export function useTooltipTriggers() {
 
   const shouldShowTooltip = useCallback((tooltipKey: keyof typeof TOOLTIP_CONFIGS): boolean => {
     const config = TOOLTIP_CONFIGS[tooltipKey];
+    const featureFlag = config.featureFlag as keyof OnboardingState['featureIntroductions'];
     return (
-      !state.onboarding.featureIntroductions[config.featureFlag] &&
+      !state.onboarding.featureIntroductions[featureFlag] &&
       !state.onboarding.dismissedTooltips.includes(config.id)
     );
   }, [state.onboarding.featureIntroductions, state.onboarding.dismissedTooltips]);
