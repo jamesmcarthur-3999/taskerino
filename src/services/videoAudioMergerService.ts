@@ -88,13 +88,18 @@ export interface MergeResult {
  * Merge error with user-friendly message
  */
 export class MergeError extends Error {
+  public readonly userMessage: string;
+  public readonly code: string;
+
   constructor(
     message: string,
-    public readonly userMessage: string,
-    public readonly code: string
+    userMessage: string,
+    code: string
   ) {
     super(message);
     this.name = 'MergeError';
+    this.userMessage = userMessage;
+    this.code = code;
   }
 }
 

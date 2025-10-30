@@ -56,9 +56,9 @@ import type {
   PersistentEnrichmentQueue,
   EnrichmentJob,
   QueueStatus,
-  EnrichmentOptions,
   JobPriority,
 } from './PersistentEnrichmentQueue';
+import type { EnrichmentOptions } from '../sessionEnrichmentService';
 import { getChunkedStorage } from '../storage/ChunkedSessionStorage';
 
 // ============================================================================

@@ -1010,6 +1010,7 @@ export default function SessionsZone() {
             };
 
             // Phase 4: Save to CA storage
+            const caStorage = await getCAStorage();
             const hash = await caStorage.saveAttachment(attachment);
             attachment.hash = hash;
             await caStorage.addReference(hash, activeSession.id, attachment.id);

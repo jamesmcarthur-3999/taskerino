@@ -139,7 +139,7 @@ export function SessionNotes({ session, onAddContext, onUpdateContext, onDeleteC
           <button
             onClick={handleAddNote}
             disabled={!noteInput.trim() || isAtLimit}
-            className={`absolute right-2 bottom-2 p-2 bg-cyan-500 text-white ${getRadiusClass('sm')} ${TRANSITIONS.standard} ${
+            className={`absolute right-2 bottom-2 p-2 bg-cyan-500 text-white ${getRadiusClass('element')} ${TRANSITIONS.standard} ${
               !noteInput.trim() || isAtLimit
                 ? 'opacity-30 cursor-not-allowed'
                 : 'hover:bg-cyan-600 hover:shadow-lg'
@@ -176,13 +176,13 @@ export function SessionNotes({ session, onAddContext, onUpdateContext, onDeleteC
                       value={editContent}
                       onChange={(e) => setEditContent(e.target.value)}
                       onKeyDown={handleEditKeyPress}
-                      className={`w-full px-3 py-2 ${getGlassClasses('subtle')} ${getRadiusClass('sm')} text-sm resize-none ${TRANSITIONS.standard}`}
+                      className={`w-full px-3 py-2 ${getGlassClasses('subtle')} ${getRadiusClass('element')} text-sm resize-none ${TRANSITIONS.standard}`}
                       rows={3}
                     />
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={cancelEditing}
-                        className={`px-3 py-1 flex items-center gap-1 text-xs font-medium text-gray-700 hover:bg-white/50 ${getRadiusClass('sm')} ${TRANSITIONS.standard}`}
+                        className={`px-3 py-1 flex items-center gap-1 text-xs font-medium text-gray-700 hover:bg-white/50 ${getRadiusClass('element')} ${TRANSITIONS.standard}`}
                       >
                         <X size={12} />
                         Cancel
@@ -190,7 +190,7 @@ export function SessionNotes({ session, onAddContext, onUpdateContext, onDeleteC
                       <button
                         onClick={saveEdit}
                         disabled={!editContent.trim()}
-                        className={`px-3 py-1 flex items-center gap-1 text-xs font-medium bg-cyan-500 text-white ${getRadiusClass('sm')} ${TRANSITIONS.standard} ${
+                        className={`px-3 py-1 flex items-center gap-1 text-xs font-medium bg-cyan-500 text-white ${getRadiusClass('element')} ${TRANSITIONS.standard} ${
                           !editContent.trim()
                             ? 'opacity-50 cursor-not-allowed'
                             : 'hover:bg-cyan-600'
@@ -216,7 +216,7 @@ export function SessionNotes({ session, onAddContext, onUpdateContext, onDeleteC
                         {onUpdateContext && (
                           <button
                             onClick={() => startEditing(item)}
-                            className={`p-1 hover:bg-white/50 ${getRadiusClass('sm')} ${TRANSITIONS.standard}`}
+                            className={`p-1 hover:bg-white/50 ${getRadiusClass('element')} ${TRANSITIONS.standard}`}
                             title="Edit note"
                           >
                             <Edit2 size={12} className="text-gray-600" />
@@ -225,7 +225,7 @@ export function SessionNotes({ session, onAddContext, onUpdateContext, onDeleteC
                         {onDeleteContext && (
                           <button
                             onClick={() => handleDelete(item.id)}
-                            className={`p-1 hover:bg-red-500/10 ${getRadiusClass('sm')} ${TRANSITIONS.standard}`}
+                            className={`p-1 hover:bg-red-500/10 ${getRadiusClass('element')} ${TRANSITIONS.standard}`}
                             title="Delete note"
                           >
                             <Trash2 size={12} className="text-red-600" />

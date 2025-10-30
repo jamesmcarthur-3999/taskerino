@@ -66,12 +66,15 @@ export interface RefinementResponse {
  * Error thrown when refinement max iterations exceeded
  */
 export class RefinementError extends Error {
+  public readonly reason: 'max_iterations' | 'model_error' | 'invalid_request';
+
   constructor(
     message: string,
-    public readonly reason: 'max_iterations' | 'model_error' | 'invalid_request'
+    reason: 'max_iterations' | 'model_error' | 'invalid_request'
   ) {
     super(message);
     this.name = 'RefinementError';
+    this.reason = reason;
   }
 }
 
@@ -79,13 +82,18 @@ export class RefinementError extends Error {
  * Error thrown when all processing models fail
  */
 export class ProcessingError extends Error {
+  public readonly attemptedModels: string[];
+  public readonly lastError: Error;
+
   constructor(
     message: string,
-    public readonly attemptedModels: string[],
-    public readonly lastError: Error
+    attemptedModels: string[],
+    lastError: Error
   ) {
     super(message);
     this.name = 'ProcessingError';
+    this.attemptedModels = attemptedModels;
+    this.lastError = lastError;
   }
 }
 

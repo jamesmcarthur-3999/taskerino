@@ -190,7 +190,7 @@ export function LiveTranscriptPanel({ session }: LiveTranscriptPanelProps) {
                 {/* Copy button */}
                 <button
                   onClick={() => copySegment(segment.id, text)}
-                  className={`opacity-0 group-hover:opacity-100 p-1 hover:bg-white/50 ${getRadiusClass('sm')} ${TRANSITIONS.standard}`}
+                  className={`opacity-0 group-hover:opacity-100 p-1 hover:bg-white/50 ${getRadiusClass('element')} ${TRANSITIONS.standard}`}
                 >
                   {copiedId === segment.id ? (
                     <Check size={14} className="text-green-600" />

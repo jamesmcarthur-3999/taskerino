@@ -75,7 +75,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
         ref={ref}
         className={combinedStyles}
         style={{
-          transitionTimingFunction: EASING.elastic,
+          transitionTimingFunction: `cubic-bezier(${EASING.elastic.join(', ')})`,
         }}
         {...props}
       >

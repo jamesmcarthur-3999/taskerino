@@ -40,7 +40,7 @@ export function SessionCard({
   // Check if session is being enriched
   const enrichmentStatus = session.enrichmentStatus?.status || 'idle';
   const activeEnrichment = getActiveEnrichment(session.id);
-  const isEnriching = enrichmentStatus === 'in-progress' || enrichmentStatus === 'waiting' || !!activeEnrichment;
+  const isEnriching = enrichmentStatus === 'in-progress' || enrichmentStatus === 'pending' || !!activeEnrichment;
   const enrichmentFailed = enrichmentStatus === 'failed';
 
   // Handler to extract all recommended tasks from summary

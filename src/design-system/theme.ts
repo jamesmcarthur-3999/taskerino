@@ -220,21 +220,21 @@ export const TRANSITIONS = {
  */
 export const EASING = {
   // Standard easing functions
-  easeInOut: [0.4, 0, 0.2, 1],
-  easeOut: [0.0, 0, 0.2, 1],
-  easeIn: [0.4, 0, 1, 1],
+  easeInOut: [0.4, 0, 0.2, 1] as const,
+  easeOut: [0.0, 0, 0.2, 1] as const,
+  easeIn: [0.4, 0, 1, 1] as const,
 
   // Smooth, natural motion (recommended for most UI)
-  smooth: [0.4, 0.0, 0.2, 1],
+  smooth: [0.4, 0.0, 0.2, 1] as const,
 
   // Snappy, responsive feel
-  snappy: [0.4, 0.0, 0.6, 1],
+  snappy: [0.4, 0.0, 0.6, 1] as const,
 
   // Elastic, bouncy effect
-  elastic: [0.34, 1.56, 0.64, 1],
+  elastic: [0.34, 1.56, 0.64, 1] as const,
 
   // Anticipation (slightly overshoots)
-  anticipate: [0.68, -0.55, 0.265, 1.55],
+  anticipate: [0.68, -0.55, 0.265, 1.55] as const,
 } as const;
 
 /**

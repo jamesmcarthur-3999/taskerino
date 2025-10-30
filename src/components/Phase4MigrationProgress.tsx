@@ -26,8 +26,29 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { getBackgroundMigrationService } from '../services/BackgroundMigrationService';
-import type { MigrationProgress as Progress, MigrationState } from '../services/BackgroundMigrationService';
+// TODO: Implement BackgroundMigrationService
+// import { getBackgroundMigrationService } from '../services/BackgroundMigrationService';
+// import type { MigrationProgress as Progress, MigrationState } from '../services/BackgroundMigrationService';
+
+// Stub types until BackgroundMigrationService is implemented
+type Progress = {
+  percentage: number;
+  currentOperation?: string;
+  step?: number;
+  totalSteps?: number;
+  stepName?: string;
+  status?: string;
+  current?: number;
+  total?: number;
+  stepData?: any;
+  estimatedTimeRemaining?: number;
+};
+type MigrationState = 'idle' | 'running' | 'paused' | 'completed' | 'failed' | null | {
+  status?: string;
+  startedAt?: number;
+  error?: any;
+  result?: any;
+};
 
 // ============================================================================
 // Types
@@ -60,7 +81,9 @@ export function Phase4MigrationProgress({
   const [state, setState] = useState<MigrationState | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
 
-  const migrationService = getBackgroundMigrationService();
+  // TODO: Implement BackgroundMigrationService
+  // const migrationService = getBackgroundMigrationService();
+  const migrationService: any = null; // Stub until service is implemented
 
   // Subscribe to migration events
   useEffect(() => {

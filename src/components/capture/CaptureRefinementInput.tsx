@@ -1,4 +1,4 @@
-import { useState, useRef, KeyboardEvent } from 'react';
+import { useState, useRef, type KeyboardEvent } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 
 export interface CaptureRefinementInputProps {

@@ -102,7 +102,7 @@ export function SessionDetailView({
 
   // Check enrichment status for UI state
   const enrichmentStatus = currentSession.enrichmentStatus?.status || 'idle';
-  const isEnriching = enrichmentStatus === 'in-progress' || enrichmentStatus === 'waiting';
+  const isEnriching = enrichmentStatus === 'in-progress' || enrichmentStatus === 'pending';
   const enrichmentComplete = enrichmentStatus === 'completed';
   const enrichmentFailed = enrichmentStatus === 'failed';
   const [pendingSeekTimestamp, setPendingSeekTimestamp] = useState<string | null>(null);

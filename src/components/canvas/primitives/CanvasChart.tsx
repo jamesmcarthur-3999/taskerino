@@ -84,7 +84,6 @@ export function CanvasChart({
             ))}
           </Pie>
           {tooltip && <Tooltip />}
-          {/* @ts-expect-error - React 19 + recharts type compatibility issue */}
           {showLegend && <Legend />}
         </PieChart>
       </ResponsiveContainer>
@@ -99,7 +98,6 @@ export function CanvasChart({
           <XAxis dataKey="name" stroke="#6b7280" />
           <YAxis stroke="#6b7280" />
           {tooltip && <Tooltip />}
-          {/* @ts-expect-error - React 19 + recharts type compatibility issue */}
           {showLegend && <Legend />}
           {data.datasets.map((dataset, index) => (
             <Line
@@ -125,7 +123,6 @@ export function CanvasChart({
           <XAxis dataKey="name" stroke="#6b7280" />
           <YAxis stroke="#6b7280" />
           {tooltip && <Tooltip />}
-          {/* @ts-expect-error - React 19 + recharts type compatibility issue */}
           {showLegend && <Legend />}
           {data.datasets.map((dataset, index) => (
             <Bar
@@ -148,7 +145,6 @@ export function CanvasChart({
           <XAxis dataKey="name" stroke="#6b7280" />
           <YAxis stroke="#6b7280" />
           {tooltip && <Tooltip />}
-          {/* @ts-expect-error - React 19 + recharts type compatibility issue */}
           {showLegend && <Legend />}
           {data.datasets.map((dataset, index) => (
             <Area

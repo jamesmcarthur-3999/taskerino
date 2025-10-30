@@ -153,7 +153,7 @@ function ApiKeyInput({ onComplete }: { onComplete: () => void }) {
       opacity: 1,
       transition: {
         duration: 0.3,
-        ease: [0.4, 0, 0.2, 1],
+        ease: [0.4, 0, 0.2, 1] as const,
       },
     },
     exit: (direction: number) => ({
@@ -161,7 +161,7 @@ function ApiKeyInput({ onComplete }: { onComplete: () => void }) {
       opacity: 0,
       transition: {
         duration: 0.2,
-        ease: [0.4, 0, 1, 1],
+        ease: [0.4, 0, 1, 1] as const,
       },
     }),
   };
@@ -1426,7 +1426,7 @@ export default function CaptureZone() {
     // Clear state
     setResults(null);
     setCaptureState('idle');
-    setInput('');
+    setInputText('');
   };
 
   const handleRefineCapture = async (request: RefinementRequest): Promise<RefinementResponse> => {

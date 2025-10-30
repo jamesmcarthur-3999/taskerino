@@ -131,7 +131,7 @@ export function ScreenshotsList({ session, onAddComment, onToggleFlag }: Screens
         <div className={`flex items-center gap-1 p-1 ${getGlassClasses('subtle')} ${getRadiusClass('field')}`}>
           <button
             onClick={() => setViewMode('list')}
-            className={`p-1.5 ${getRadiusClass('sm')} ${TRANSITIONS.standard} ${
+            className={`p-1.5 ${getRadiusClass('element')} ${TRANSITIONS.standard} ${
               viewMode === 'list'
                 ? 'bg-cyan-500/20 text-cyan-700'
                 : 'text-gray-600 hover:bg-white/50'
@@ -142,7 +142,7 @@ export function ScreenshotsList({ session, onAddComment, onToggleFlag }: Screens
           </button>
           <button
             onClick={() => setViewMode('grid')}
-            className={`p-1.5 ${getRadiusClass('sm')} ${TRANSITIONS.standard} ${
+            className={`p-1.5 ${getRadiusClass('element')} ${TRANSITIONS.standard} ${
               viewMode === 'grid'
                 ? 'bg-cyan-500/20 text-cyan-700'
                 : 'text-gray-600 hover:bg-white/50'

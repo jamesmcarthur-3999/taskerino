@@ -421,7 +421,7 @@ export const EnrichmentPanel: React.FC<EnrichmentPanelProps> = ({ onClose }) => 
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.2 }}
-      className={`absolute top-full right-0 mt-2 w-96 max-h-[600px] overflow-hidden ${getGlassClasses('strong')} ${getRadiusClass('panel')} ${SHADOWS.elevated} border border-white/20 dark:border-gray-700 z-[100]`}
+      className={`absolute top-full right-0 mt-2 w-96 max-h-[600px] overflow-hidden ${getGlassClasses('strong')} ${getRadiusClass('modal')} ${SHADOWS.elevated} border border-white/20 dark:border-gray-700 z-[100]`}
     >
       {/* Header */}
       <div className="sticky top-0 z-10 px-6 py-4 bg-gradient-to-r from-purple-500/10 to-blue-600/10 dark:from-purple-500/20 dark:to-blue-600/20 border-b border-white/10 dark:border-gray-700/50 backdrop-blur-xl">

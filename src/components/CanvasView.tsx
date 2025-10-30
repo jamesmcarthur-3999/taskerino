@@ -143,7 +143,7 @@ export function CanvasView({ session, onNavigateToSource }: CanvasViewProps) {
 
   // Check if enrichment is complete (required for canvas generation)
   const enrichmentStatus = session.enrichmentStatus?.status || 'idle';
-  const isEnriching = enrichmentStatus === 'in-progress' || enrichmentStatus === 'waiting';
+  const isEnriching = enrichmentStatus === 'in-progress' || enrichmentStatus === 'pending';
   const enrichmentComplete = enrichmentStatus === 'completed';
 
   // Handler for manual canvas regeneration

@@ -120,7 +120,7 @@ export function APIKeySetupModal({ isOpen, onComplete }: APIKeySetupModalProps) 
       opacity: 1,
       transition: {
         duration: 0.3,
-        ease: [0.4, 0, 0.2, 1],
+        ease: [0.4, 0, 0.2, 1] as const,
       },
     },
     exit: (direction: number) => ({
@@ -128,7 +128,7 @@ export function APIKeySetupModal({ isOpen, onComplete }: APIKeySetupModalProps) 
       opacity: 0,
       transition: {
         duration: 0.2,
-        ease: [0.4, 0, 1, 1],
+        ease: [0.4, 0, 1, 1] as const,
       },
     }),
   };
