@@ -121,7 +121,7 @@ export interface SessionMetadata {
   video?: {
     id: string;
     sessionId: string;
-    fullVideoAttachmentId: string;
+    fullVideoAttachmentId?: string; // Optional: audio-only sessions won't have this
     duration: number;
     chunkingStatus: 'pending' | 'processing' | 'complete' | 'error';
     processedAt?: string;

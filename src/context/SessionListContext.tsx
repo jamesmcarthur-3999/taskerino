@@ -282,7 +282,7 @@ function createMetadataFromSession(session: Session): SessionMetadata {
 
     // Storage metadata
     storageVersion: 4, // Phase 4 storage
-    createdAt: session.createdAt || session.startTime,
+    createdAt: session.startTime, // Use startTime as creation time
     updatedAt: new Date().toISOString(),
   };
 }
