@@ -13,6 +13,8 @@ import { nedMemory } from './nedMemory';
 import { sessionsAgentService } from './sessionsAgentService';
 import { getCAStorage } from './storage/ContentAddressableStorage';
 import { generateId, stripHtmlTags } from '../utils/helpers';
+import { relationshipManager } from './relationshipManager';
+import { EntityType, RelationshipType } from '../types/relationships';
 
 type DispatchFunction = (action: any) => void;
 
@@ -47,6 +49,9 @@ export class NedToolExecutor {
 
         case 'get_item_details':
           return this.getItemDetails(tool);
+
+        case 'get_entity_relationships':
+          return await this.getEntityRelationships(tool);
 
         // ==================== SESSION TOOLS ====================
 
@@ -90,6 +95,12 @@ export class NedToolExecutor {
 
         case 'record_memory':
           return this.recordMemory(tool);
+
+        case 'link_entities':
+          return await this.linkEntities(tool);
+
+        case 'unlink_entities':
+          return await this.unlinkEntities(tool);
 
         default:
           return {
@@ -1035,5 +1046,340 @@ export class NedToolExecutor {
     // Calculate active duration: (end - start - total paused time) in minutes
     const activeMs = endMs - startMs - totalPausedMs;
     return Math.floor(activeMs / (1000 * 60));
+  }
+
+  // ==================== RELATIONSHIP TOOLS ====================
+
+  /**
+   * Link entities to a note or task (creates relationships)
+   */
+  private async linkEntities(tool: ToolCall): Promise<ToolResult> {
+    const { item_type, item_id, company_ids, contact_ids, topic_ids } = tool.input;
+
+    // Verify item exists
+    const items = item_type === 'task' ? this.appState.tasks : this.appState.notes;
+    const item = items.find((i: any) => i.id === item_id);
+
+    if (!item) {
+      return {
+        tool_use_id: tool.id,
+        content: `${item_type} not found: ${item_id}`,
+        is_error: true,
+      };
+    }
+
+    try {
+      await relationshipManager.init();
+
+      const createdRelationships = [];
+      const sourceType = item_type === 'task' ? EntityType.TASK : EntityType.NOTE;
+
+      // Link companies
+      if (company_ids && company_ids.length > 0) {
+        for (const companyId of company_ids) {
+          const relationship = await relationshipManager.addRelationship({
+            sourceType,
+            sourceId: item_id,
+            targetType: EntityType.COMPANY,
+            targetId: companyId,
+            type: item_type === 'task' ? RelationshipType.TASK_COMPANY : RelationshipType.NOTE_COMPANY,
+            metadata: {
+              source: 'ai',
+              createdBy: 'ned',
+              createdAt: new Date().toISOString(),
+            },
+          });
+          createdRelationships.push(relationship);
+        }
+      }
+
+      // Link contacts
+      if (contact_ids && contact_ids.length > 0) {
+        for (const contactId of contact_ids) {
+          const relationship = await relationshipManager.addRelationship({
+            sourceType,
+            sourceId: item_id,
+            targetType: EntityType.CONTACT,
+            targetId: contactId,
+            type: item_type === 'task' ? RelationshipType.TASK_CONTACT : RelationshipType.NOTE_CONTACT,
+            metadata: {
+              source: 'ai',
+              createdBy: 'ned',
+              createdAt: new Date().toISOString(),
+            },
+          });
+          createdRelationships.push(relationship);
+        }
+      }
+
+      // Link topics
+      if (topic_ids && topic_ids.length > 0) {
+        for (const topicId of topic_ids) {
+          const relationship = await relationshipManager.addRelationship({
+            sourceType,
+            sourceId: item_id,
+            targetType: EntityType.TOPIC,
+            targetId: topicId,
+            type: item_type === 'task' ? RelationshipType.TASK_TOPIC : RelationshipType.NOTE_TOPIC,
+            metadata: {
+              source: 'ai',
+              createdBy: 'ned',
+              createdAt: new Date().toISOString(),
+            },
+          });
+          createdRelationships.push(relationship);
+        }
+      }
+
+      return {
+        tool_use_id: tool.id,
+        content: {
+          success: true,
+          message: `Linked ${createdRelationships.length} entities to ${item_type} "${(item as any).title || (item as any).summary}"`,
+          relationships: createdRelationships,
+          item_id,
+          item_type,
+        },
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Failed to link entities: ${error instanceof Error ? error.message : String(error)}`,
+        is_error: true,
+      };
+    }
+  }
+
+  /**
+   * Unlink entities from a note or task (removes relationships)
+   */
+  private async unlinkEntities(tool: ToolCall): Promise<ToolResult> {
+    const { item_type, item_id, company_ids, contact_ids, topic_ids } = tool.input;
+
+    // Verify item exists
+    const items = item_type === 'task' ? this.appState.tasks : this.appState.notes;
+    const item = items.find((i: any) => i.id === item_id);
+
+    if (!item) {
+      return {
+        tool_use_id: tool.id,
+        content: `${item_type} not found: ${item_id}`,
+        is_error: true,
+      };
+    }
+
+    try {
+      await relationshipManager.init();
+
+      const removedCount = [];
+      const sourceType = item_type === 'task' ? EntityType.TASK : EntityType.NOTE;
+
+      // Get all current relationships
+      const allRelationships = relationshipManager.getRelationships({ entityId: item_id });
+
+      // Remove companies
+      if (company_ids && company_ids.length > 0) {
+        for (const companyId of company_ids) {
+          const rel = allRelationships.find(
+            r => r.targetType === EntityType.COMPANY && r.targetId === companyId
+          );
+          if (rel) {
+            await relationshipManager.removeRelationship({ relationshipId: rel.id });
+            removedCount.push(rel);
+          }
+        }
+      }
+
+      // Remove contacts
+      if (contact_ids && contact_ids.length > 0) {
+        for (const contactId of contact_ids) {
+          const rel = allRelationships.find(
+            r => r.targetType === EntityType.CONTACT && r.targetId === contactId
+          );
+          if (rel) {
+            await relationshipManager.removeRelationship({ relationshipId: rel.id });
+            removedCount.push(rel);
+          }
+        }
+      }
+
+      // Remove topics
+      if (topic_ids && topic_ids.length > 0) {
+        for (const topicId of topic_ids) {
+          const rel = allRelationships.find(
+            r => r.targetType === EntityType.TOPIC && r.targetId === topicId
+          );
+          if (rel) {
+            await relationshipManager.removeRelationship({ relationshipId: rel.id });
+            removedCount.push(rel);
+          }
+        }
+      }
+
+      return {
+        tool_use_id: tool.id,
+        content: {
+          success: true,
+          message: `Removed ${removedCount.length} entity links from ${item_type} "${(item as any).title || (item as any).summary}"`,
+          removed_count: removedCount.length,
+          item_id,
+          item_type,
+        },
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Failed to unlink entities: ${error instanceof Error ? error.message : String(error)}`,
+        is_error: true,
+      };
+    }
+  }
+
+  /**
+   * Get entity relationships
+   */
+  private async getEntityRelationships(tool: ToolCall): Promise<ToolResult> {
+    const { entity_type, entity_id } = tool.input;
+
+    // Verify entity exists
+    let entityExists = false;
+    let entityName = '';
+
+    switch (entity_type) {
+      case 'task':
+        const task = this.appState.tasks.find(t => t.id === entity_id);
+        if (task) {
+          entityExists = true;
+          entityName = task.title;
+        }
+        break;
+      case 'note':
+        const note = this.appState.notes.find(n => n.id === entity_id);
+        if (note) {
+          entityExists = true;
+          entityName = note.summary;
+        }
+        break;
+      case 'company':
+        const company = this.appState.companies.find(c => c.id === entity_id);
+        if (company) {
+          entityExists = true;
+          entityName = company.name;
+        }
+        break;
+      case 'contact':
+        const contact = this.appState.contacts.find(c => c.id === entity_id);
+        if (contact) {
+          entityExists = true;
+          entityName = contact.name;
+        }
+        break;
+      case 'topic':
+        const topic = this.appState.topics.find(t => t.id === entity_id);
+        if (topic) {
+          entityExists = true;
+          entityName = topic.name;
+        }
+        break;
+      case 'session':
+        const session = this.appState.sessions.find(s => s.id === entity_id);
+        if (session) {
+          entityExists = true;
+          entityName = session.name;
+        }
+        break;
+    }
+
+    if (!entityExists) {
+      return {
+        tool_use_id: tool.id,
+        content: `${entity_type} not found: ${entity_id}`,
+        is_error: true,
+      };
+    }
+
+    try {
+      await relationshipManager.init();
+
+      const relationships = relationshipManager.getRelationships({ entityId: entity_id });
+
+      // Enrich relationships with entity names
+      const enrichedRelationships = relationships.map(rel => {
+        let targetName = '';
+        let sourceName = '';
+
+        // Get target name
+        if (rel.targetId !== entity_id) {
+          switch (rel.targetType) {
+            case EntityType.TASK:
+              targetName = this.appState.tasks.find(t => t.id === rel.targetId)?.title || '';
+              break;
+            case EntityType.NOTE:
+              targetName = this.appState.notes.find(n => n.id === rel.targetId)?.summary || '';
+              break;
+            case EntityType.COMPANY:
+              targetName = this.appState.companies.find(c => c.id === rel.targetId)?.name || '';
+              break;
+            case EntityType.CONTACT:
+              targetName = this.appState.contacts.find(c => c.id === rel.targetId)?.name || '';
+              break;
+            case EntityType.TOPIC:
+              targetName = this.appState.topics.find(t => t.id === rel.targetId)?.name || '';
+              break;
+            case EntityType.SESSION:
+              targetName = this.appState.sessions.find(s => s.id === rel.targetId)?.name || '';
+              break;
+          }
+        }
+
+        // Get source name
+        if (rel.sourceId !== entity_id) {
+          switch (rel.sourceType) {
+            case EntityType.TASK:
+              sourceName = this.appState.tasks.find(t => t.id === rel.sourceId)?.title || '';
+              break;
+            case EntityType.NOTE:
+              sourceName = this.appState.notes.find(n => n.id === rel.sourceId)?.summary || '';
+              break;
+            case EntityType.COMPANY:
+              sourceName = this.appState.companies.find(c => c.id === rel.sourceId)?.name || '';
+              break;
+            case EntityType.CONTACT:
+              sourceName = this.appState.contacts.find(c => c.id === rel.sourceId)?.name || '';
+              break;
+            case EntityType.TOPIC:
+              sourceName = this.appState.topics.find(t => t.id === rel.sourceId)?.name || '';
+              break;
+            case EntityType.SESSION:
+              sourceName = this.appState.sessions.find(s => s.id === rel.sourceId)?.name || '';
+              break;
+          }
+        }
+
+        return {
+          ...rel,
+          targetName: targetName || rel.targetId,
+          sourceName: sourceName || rel.sourceId,
+        };
+      });
+
+      return {
+        tool_use_id: tool.id,
+        content: {
+          entity_type,
+          entity_id,
+          entity_name: entityName,
+          relationships: enrichedRelationships,
+          total_relationships: enrichedRelationships.length,
+          summary: `Found ${enrichedRelationships.length} relationships for ${entity_type} "${entityName}"`,
+        },
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Failed to get relationships: ${error instanceof Error ? error.message : String(error)}`,
+        is_error: true,
+      };
+    }
   }
 }

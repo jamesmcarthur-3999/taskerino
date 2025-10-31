@@ -31,7 +31,6 @@ import { validateOpenAIKey, validateAnthropicKey } from '../utils/validation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { claudeService } from '../services/claudeService';
 import { sessionsAgentService } from '../services/sessionsAgentService';
-import { nedService } from '../services/nedService';
 import { contextAgent } from '../services/contextAgent';
 import { sessionsQueryAgent } from '../services/sessionsQueryAgent';
 
@@ -116,7 +115,6 @@ function ApiKeyInput({ onComplete }: { onComplete: () => void }) {
       if (savedClaudeKey) {
         await claudeService.setApiKey(savedClaudeKey);
         await sessionsAgentService.setApiKey(savedClaudeKey);
-        await nedService.setApiKey(savedClaudeKey);
         await contextAgent.setApiKey(savedClaudeKey);
         await sessionsQueryAgent.setApiKey(savedClaudeKey);
       }

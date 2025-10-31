@@ -16,7 +16,7 @@ import { useUI } from '../../context/UIContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useNotes } from '../../context/NotesContext';
 import { useTasks } from '../../context/TasksContext';
-import { useSessions } from '../../context/SessionsContext';
+import { useSessionList } from '../../context/SessionListContext';
 import { useEntities } from '../../context/EntitiesContext';
 import { FeatureTooltip } from '../FeatureTooltip';
 import { CHAT_STYLES } from '../../design-system/theme';
@@ -45,6 +45,99 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
   update_note: 'Modify existing notes',
   delete_note: 'Remove notes',
   record_memory: 'Save information about your preferences and habits',
+  link_entities: 'Link notes/tasks to companies, contacts, or topics',
+  unlink_entities: 'Remove entity links from notes/tasks',
+};
+
+// Tool display names (in-progress and completed states)
+const TOOL_DISPLAY_NAMES: Record<string, { pending: string; completed: string }> = {
+  // Read tools
+  query_context_agent: { 
+    pending: '🔍 Searching notes and tasks', 
+    completed: '🔍 Searched notes and tasks' 
+  },
+  get_current_datetime: { 
+    pending: 'Getting current time', 
+    completed: 'Got current time' 
+  },
+  get_user_context: { 
+    pending: 'Loading context', 
+    completed: 'Loaded context' 
+  },
+  recall_memory: { 
+    pending: 'Recalling memories', 
+    completed: 'Recalled memories' 
+  },
+  get_item_details: { 
+    pending: 'Fetching details', 
+    completed: 'Fetched details' 
+  },
+  query_sessions: { 
+    pending: 'Searching sessions', 
+    completed: 'Searched sessions' 
+  },
+  get_session_details: { 
+    pending: 'Loading session', 
+    completed: 'Loaded session' 
+  },
+  get_session_summary: { 
+    pending: 'Generating summary', 
+    completed: 'Generated summary' 
+  },
+  get_active_session: { 
+    pending: 'Checking active session', 
+    completed: 'Checked active session' 
+  },
+  get_screenshot_image: { 
+    pending: 'Loading screenshot', 
+    completed: 'Loaded screenshot' 
+  },
+  get_entity_relationships: { 
+    pending: 'Loading relationships', 
+    completed: 'Loaded relationships' 
+  },
+  
+  // Write tools
+  create_task: { 
+    pending: 'Creating task', 
+    completed: 'Created task' 
+  },
+  update_task: { 
+    pending: 'Updating task', 
+    completed: 'Updated task' 
+  },
+  complete_task: { 
+    pending: 'Completing task', 
+    completed: 'Completed task' 
+  },
+  delete_task: { 
+    pending: 'Deleting task', 
+    completed: 'Deleted task' 
+  },
+  create_note: { 
+    pending: 'Creating note', 
+    completed: 'Created note' 
+  },
+  update_note: { 
+    pending: 'Updating note', 
+    completed: 'Updated note' 
+  },
+  delete_note: { 
+    pending: 'Deleting note', 
+    completed: 'Deleted note' 
+  },
+  record_memory: { 
+    pending: 'Recording memory', 
+    completed: 'Recorded memory' 
+  },
+  link_entities: { 
+    pending: 'Linking entities', 
+    completed: 'Linked entities' 
+  },
+  unlink_entities: { 
+    pending: 'Unlinking entities', 
+    completed: 'Unlinked entities' 
+  },
 };
 
 export const NedChatSimplified: React.FC = () => {
@@ -52,7 +145,7 @@ export const NedChatSimplified: React.FC = () => {
   const { state: settingsState, dispatch: settingsDispatch } = useSettings();
   const { state: notesState } = useNotes();
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
-  const { sessions, setActiveSession } = useSessions();
+  const { sessions } = useSessionList();
   const { state: entitiesState } = useEntities();
 
   const [input, setInput] = useState('');
@@ -363,8 +456,8 @@ export const NedChatSimplified: React.FC = () => {
         return null;
       }
       
-      // For user and assistant messages, render as text
-      if (msg.role === 'user' || (msg.role === 'assistant' && msg.content && !msg.tool_calls)) {
+      // For user messages, render as text
+      if (msg.role === 'user') {
         return {
           id: msg.id,
           role: msg.role,
@@ -376,10 +469,79 @@ export const NedChatSimplified: React.FC = () => {
         };
       }
       
-      // Skip assistant messages with tool calls - we only show the results
-      // This prevents the "turbo UI" from taking over the chat
+      // For assistant messages WITH tool calls, render both text and tool calls
       if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-        return null;
+        const contents = [];
+        
+        // Add text content if present
+        if (msg.content) {
+          contents.push({
+            type: 'text' as const,
+            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+          });
+        }
+        
+        // Add tool call contents
+        msg.tool_calls.forEach((toolCall: any) => {
+          const toolResult = toolResultsMap.get(toolCall.id);
+          
+          // Safely parse tool arguments
+          let parsedInput;
+          try {
+            if (toolCall.function?.arguments) {
+              parsedInput = typeof toolCall.function.arguments === 'string' 
+                ? JSON.parse(toolCall.function.arguments) 
+                : toolCall.function.arguments;
+            } else {
+              parsedInput = toolCall.input;
+            }
+          } catch (e) {
+            // If JSON parsing fails (e.g., during streaming), use raw string
+            console.warn('[NedChat] Failed to parse tool arguments:', e);
+            parsedInput = toolCall.function?.arguments || toolCall.input || {};
+          }
+          
+          const toolName = toolCall.function?.name || toolCall.name || 'unknown';
+          const toolStatus = toolResult ? (toolResult.parsedData?.is_error ? 'error' : 'success') : 'pending';
+          const displayNames = TOOL_DISPLAY_NAMES[toolName];
+          
+          // Get appropriate display name based on status
+          let displayName: string;
+          if (displayNames) {
+            displayName = toolStatus === 'pending' ? displayNames.pending : displayNames.completed;
+          } else {
+            // Fallback: convert underscores to spaces
+            displayName = toolName.replace(/_/g, ' ');
+          }
+          
+          contents.push({
+            type: 'tool-use' as const,
+            toolName: displayName,
+            toolInput: parsedInput,
+            toolOutput: toolResult?.content,
+            toolStatus,
+          });
+        });
+        
+        return {
+          id: msg.id,
+          role: msg.role,
+          contents,
+          timestamp: msg.timestamp?.toISOString() || new Date().toISOString(),
+        };
+      }
+      
+      // For assistant messages WITHOUT tool calls, render as text
+      if (msg.role === 'assistant' && msg.content) {
+        return {
+          id: msg.id,
+          role: msg.role,
+          contents: [{
+            type: 'text' as const,
+            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+          }],
+          timestamp: msg.timestamp?.toISOString() || new Date().toISOString(),
+        };
       }
       
       return null;

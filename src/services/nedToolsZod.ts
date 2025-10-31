@@ -154,15 +154,13 @@ export const getScreenshotImageTool = {
 
 export const createTaskTool = {
   name: 'create_task',
-  description: 'Create a new task.',
+  description: 'Create a new task. Use link_entities tool separately to link it to companies, contacts, or topics.',
   schema: z.object({
     title: z.string().describe('Task title'),
     description: z.string().optional().describe('Task description'),
     priority: z.enum(['low', 'medium', 'high']).optional().describe('Task priority'),
     dueDate: z.string().optional().describe('Due date (ISO format)'),
     tags: z.array(z.string()).optional().describe('Task tags'),
-    companyIds: z.array(z.string()).optional().describe('Related company IDs'),
-    contactIds: z.array(z.string()).optional().describe('Related contact IDs'),
   }),
 };
 
@@ -197,14 +195,12 @@ export const deleteTaskTool = {
 
 export const createNoteTool = {
   name: 'create_note',
-  description: 'Create a new note.',
+  description: 'Create a new note. Use link_entities tool separately to link it to companies, contacts, or topics.',
   schema: z.object({
     summary: z.string().describe('Brief summary of the note'),
     content: z.string().describe('Full note content'),
     source: z.string().optional().describe('Source type (e.g., "meeting", "research")'),
     tags: z.array(z.string()).optional().describe('Note tags'),
-    companyIds: z.array(z.string()).optional().describe('Related company IDs'),
-    contactIds: z.array(z.string()).optional().describe('Related contact IDs'),
   }),
 };
 
@@ -237,6 +233,39 @@ export const recordMemoryTool = {
   }),
 };
 
+export const linkEntitiesTool = {
+  name: 'link_entities',
+  description: 'Link a note or task to companies, contacts, or topics. Creates relationships in the unified relationship system.',
+  schema: z.object({
+    item_type: z.enum(['task', 'note']).describe('Type of item to link'),
+    item_id: z.string().describe('ID of the task or note'),
+    company_ids: z.array(z.string()).optional().describe('Company IDs to link'),
+    contact_ids: z.array(z.string()).optional().describe('Contact IDs to link'),
+    topic_ids: z.array(z.string()).optional().describe('Topic IDs to link'),
+  }),
+};
+
+export const unlinkEntitiesTool = {
+  name: 'unlink_entities',
+  description: 'Remove entity links from a note or task.',
+  schema: z.object({
+    item_type: z.enum(['task', 'note']).describe('Type of item to unlink from'),
+    item_id: z.string().describe('ID of the task or note'),
+    company_ids: z.array(z.string()).optional().describe('Company IDs to unlink'),
+    contact_ids: z.array(z.string()).optional().describe('Contact IDs to unlink'),
+    topic_ids: z.array(z.string()).optional().describe('Topic IDs to unlink'),
+  }),
+};
+
+export const getEntityRelationshipsTool = {
+  name: 'get_entity_relationships',
+  description: 'Get all relationships for a specific entity (task, note, company, contact, or topic).',
+  schema: z.object({
+    entity_type: z.enum(['task', 'note', 'company', 'contact', 'topic', 'session']).describe('Type of entity'),
+    entity_id: z.string().describe('ID of the entity'),
+  }),
+};
+
 // ============================================================================
 // TOOL COLLECTIONS
 // ============================================================================
@@ -252,6 +281,7 @@ export const READ_TOOL_NAMES = [
   'get_session_summary',
   'get_active_session',
   'get_screenshot_image',
+  'get_entity_relationships',
 ];
 
 export const WRITE_TOOL_NAMES = [
@@ -263,6 +293,8 @@ export const WRITE_TOOL_NAMES = [
   'update_note',
   'delete_note',
   'record_memory',
+  'link_entities',
+  'unlink_entities',
 ];
 
 // Backward compatibility - same as WRITE_TOOL_NAMES
@@ -283,6 +315,7 @@ export function getAllNedTools() {
     get_session_summary: getSessionSummaryTool,
     get_active_session: getActiveSessionTool,
     get_screenshot_image: getScreenshotImageTool,
+    get_entity_relationships: getEntityRelationshipsTool,
     create_task: createTaskTool,
     update_task: updateTaskTool,
     complete_task: completeTaskTool,
@@ -291,6 +324,8 @@ export function getAllNedTools() {
     update_note: updateNoteTool,
     delete_note: deleteNoteTool,
     record_memory: recordMemoryTool,
+    link_entities: linkEntitiesTool,
+    unlink_entities: unlinkEntitiesTool,
   };
 }
 
@@ -309,6 +344,7 @@ export function getReadOnlyTools() {
     get_session_summary: getSessionSummaryTool,
     get_active_session: getActiveSessionTool,
     get_screenshot_image: getScreenshotImageTool,
+    get_entity_relationships: getEntityRelationshipsTool,
   };
 }
 
@@ -332,5 +368,7 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   update_note: 'Modify existing notes',
   delete_note: 'Delete notes',
   record_memory: 'Save memories about preferences and context',
+  link_entities: 'Link notes/tasks to companies, contacts, or topics',
+  unlink_entities: 'Remove entity links from notes/tasks',
 };
 
