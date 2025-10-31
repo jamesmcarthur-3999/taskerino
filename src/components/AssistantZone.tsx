@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { NedChat } from './ned/NedChat';
+import { NedChatSimplified as NedChat } from './ned/NedChatSimplified';
 import { BACKGROUND_GRADIENT } from '../design-system/theme';
 
 export default function AssistantZone() {

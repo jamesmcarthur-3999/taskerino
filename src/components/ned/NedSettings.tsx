@@ -18,7 +18,7 @@ import {
   Info,
 } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
-import { WRITE_TOOLS } from '../../services/nedTools';
+import { WRITE_TOOLS } from '../../services/nedToolsZod';
 import { getRadiusClass, TRANSITIONS } from '../../design-system/theme';
 
 const TOOL_DESCRIPTIONS: Record<string, string> = {

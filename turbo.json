@@ -1,0 +1,85 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build:vite": {
+      "outputs": ["dist/**"],
+      "cache": true
+    },
+    "build:tauri": {
+      "dependsOn": ["build:vite"],
+      "outputs": ["src-tauri/target/release/**"],
+      "cache": true
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "dev:vite": {
+      "cache": false,
+      "persistent": true
+    },
+    "tauri:dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "dev:tauri": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": [],
+      "cache": true
+    },
+    "lint:eslint": {
+      "outputs": [],
+      "cache": true
+    },
+    "type-check": {
+      "outputs": [],
+      "cache": true
+    },
+    "type-check:tsc": {
+      "outputs": [],
+      "cache": true
+    },
+    "test": {
+      "outputs": ["coverage/**"],
+      "cache": true
+    },
+    "test:vitest": {
+      "outputs": ["coverage/**"],
+      "cache": true
+    },
+    "test:ui": {
+      "cache": false,
+      "persistent": true
+    },
+    "test:ui:vitest": {
+      "cache": false,
+      "persistent": true
+    },
+    "test:coverage": {
+      "outputs": ["coverage/**"],
+      "cache": true
+    },
+    "test:coverage:vitest": {
+      "outputs": ["coverage/**"],
+      "cache": true
+    }
+  },
+  "globalDependencies": [
+    "**/.env.*local",
+    ".env",
+    "tsconfig.json",
+    "tsconfig.app.json",
+    "tsconfig.node.json",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "tailwind.config.js",
+    "postcss.config.js"
+  ],
+  "remoteCache": {
+    "enabled": false
+  }
+}

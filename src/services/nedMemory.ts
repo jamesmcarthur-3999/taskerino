@@ -11,7 +11,7 @@
  * - localStorage persistence
  */
 
-import type { NedMemory } from './nedTools';
+import type { NedMemory } from './nedToolsZod';
 
 const MEMORY_STORAGE_KEY = 'ned-memories';
 const MAX_MEMORIES = 1000;
