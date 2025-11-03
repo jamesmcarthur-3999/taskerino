@@ -2,6 +2,7 @@ mod activity_monitor;
 mod ai_types;
 mod api_keys;
 mod audio_simple; // Simple audio recording implementation (replaces AudioGraph)
+mod baleybot_api;
 mod claude_api;
 mod macos_audio;
 mod macos_events;
@@ -1034,7 +1035,8 @@ pub fn run() {
             // Claude API
             claude_api::claude_chat_completion,
             claude_api::claude_chat_completion_vision,
-            claude_api::claude_chat_completion_stream,
+            // BaleyBots API
+            baleybot_api::baleybot_invoke,
             // Performance optimization - Session storage (Task 3A)
             session_storage::load_session_summaries,
             session_storage::load_session_detail,

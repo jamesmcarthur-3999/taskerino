@@ -159,24 +159,6 @@ pub struct ClaudeUsage {
     pub cache_read_input_tokens: Option<u32>,
 }
 
-// ============================================================================
-// Claude Streaming Types
-// ============================================================================
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ClaudeStreamingRequest {
-    pub model: String,
-    pub max_tokens: u32,
-    pub messages: Vec<ClaudeMessage>,
-    pub system: Option<serde_json::Value>, // Accepts both String and Array with cache_control
-    pub temperature: Option<f32>,
-    pub tools: Option<Vec<ClaudeTool>>,
-    pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extended_thinking: Option<bool>,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ClaudeTool {
     pub name: String,

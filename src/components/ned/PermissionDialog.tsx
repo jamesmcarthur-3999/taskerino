@@ -61,7 +61,13 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md pointer-events-none"
+            style={{
+              position: 'fixed',
+              left: '50%',
+              top: '50%',
+              x: '-50%',
+            }}
+            className="z-50 w-full max-w-md pointer-events-none"
           >
             <div className="pointer-events-auto">
             <div className={`bg-white dark:bg-gray-800 ${getRadiusClass('modal')} shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden`}>

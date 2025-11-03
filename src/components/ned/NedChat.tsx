@@ -15,7 +15,7 @@ import { useNotes } from '../../context/NotesContext';
 import { useTasks } from '../../context/TasksContext';
 import { useSessionList } from '../../context/SessionListContext';
 import { useEntities } from '../../context/EntitiesContext';
-import { nedService } from '../../services/nedService';
+import { nedServiceBaleybots as nedService } from '../../services/nedServiceBaleybots';
 import { contextAgent } from '../../services/contextAgent';
 import { sessionsQueryAgent } from '../../services/sessionsQueryAgent';
 import { NedToolExecutor } from '../../services/nedToolExecutor';
