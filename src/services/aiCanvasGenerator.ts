@@ -266,7 +266,11 @@ export class AICanvasGenerator {
    * BEST PRACTICE #2: Handle prefilled response (starts with '{')
    */
   private parseCanvasSpec(response: ClaudeChatResponse): CanvasSpec {
-    let jsonText = response.content[0].text.trim();
+    const firstContent = response.content[0];
+    if (firstContent.type !== 'text') {
+      throw new Error('Expected text response from Claude');
+    }
+    let jsonText = firstContent.text.trim();
 
     // Remove markdown code fences if present (though prefilling should prevent this)
     const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -280,7 +284,19 @@ export class AICanvasGenerator {
       jsonText = '{' + jsonText;
     }
 
-    const parsed = JSON.parse(jsonText);
+    // Clean up common JSON issues from AI responses
+    jsonText = jsonText
+      .replace(/,(\s*[}\]])/g, '$1')  // Remove trailing commas
+      .replace(/([{,]\s*)(\w+):/g, '$1"$2":')  // Quote unquoted property names
+      .trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (parseError) {
+      console.error('❌ [AICanvasGenerator] JSON parse failed, attempting to parse:', jsonText.substring(0, 500));
+      throw parseError;
+    }
 
     return {
       theme: parsed.theme,
@@ -301,8 +317,12 @@ export class AICanvasGenerator {
 
   /**
    * Fallback spec when AI generation fails
+   * Creates a simple but functional ComponentTree
    */
   private createFallbackSpec(c: EnrichedSessionCharacteristics, s: Session): CanvasSpec {
+    const duration = Math.floor(c.duration);
+    const screenshotCount = s.screenshots?.length || 0;
+
     return {
       theme: { primary: '#3b82f6', secondary: '#8b5cf6', mood: 'calm', explanation: 'Default' },
       layout: {
@@ -314,6 +334,110 @@ export class AICanvasGenerator {
         ],
       },
       metadata: { generatedAt: new Date().toISOString(), sessionType: c.type, confidence: 0.3 },
+      // NEW: Generate proper ComponentTree for fallback
+      componentTree: {
+        component: 'Stack',
+        props: { direction: 'vertical', spacing: 'relaxed' },
+        children: [
+          // Header
+          {
+            component: 'Card',
+            props: { variant: 'lifted', padding: 'relaxed', theme: 'info' },
+            children: [
+              {
+                component: 'Heading',
+                props: {
+                  level: 1,
+                  text: s.name,
+                  icon: '📊',
+                  emphasis: 'hero'
+                }
+              },
+              {
+                component: 'Text',
+                props: {
+                  content: 'Canvas generation failed. Using fallback layout.',
+                  size: 'sm',
+                  color: 'muted'
+                }
+              }
+            ]
+          },
+          // Stats
+          {
+            component: 'Grid',
+            props: { columns: 2, gap: 'normal', responsive: true },
+            children: [
+              {
+                component: 'StatCard',
+                props: {
+                  value: `${Math.floor(duration / 60)}h ${duration % 60}m`,
+                  label: 'Duration',
+                  icon: '⏱️',
+                  theme: 'default'
+                }
+              },
+              {
+                component: 'StatCard',
+                props: {
+                  value: screenshotCount,
+                  label: 'Screenshots',
+                  icon: '📸',
+                  theme: 'default'
+                }
+              }
+            ]
+          },
+          // Basic info
+          {
+            component: 'Card',
+            props: { variant: 'flat', padding: 'normal' },
+            children: [
+              {
+                component: 'Heading',
+                props: { level: 3, text: 'Session Overview' }
+              },
+              {
+                component: 'KeyValue',
+                props: {
+                  layout: 'stacked',
+                  spacing: 'normal',
+                  items: [
+                    { key: 'Started', value: new Date(s.startTime).toLocaleString(), icon: '🕐' },
+                    { key: 'Type', value: c.type, icon: '📁' },
+                    { key: 'Status', value: s.endTime ? 'Completed' : 'In Progress', icon: '✓' }
+                  ]
+                }
+              }
+            ]
+          },
+          // Timeline (if screenshots available)
+          ...(screenshotCount > 0 ? [{
+            component: 'Card' as const,
+            props: { variant: 'flat' as const, padding: 'normal' as const },
+            children: [
+              {
+                component: 'Heading' as const,
+                props: { level: 3, text: 'Timeline' }
+              },
+              {
+                component: 'Timeline' as const,
+                props: {
+                  orientation: 'vertical' as const,
+                  showTimestamps: true,
+                  items: (s.screenshots || []).slice(0, 5).map((screenshot, idx) => ({
+                    id: screenshot.id,
+                    timestamp: screenshot.timestamp,
+                    title: `Screenshot ${idx + 1}`,
+                    description: screenshot.aiAnalysis?.summary || screenshot.aiAnalysis?.detectedActivity || 'Activity recorded',
+                    icon: '📸'
+                  }))
+                }
+              }
+            ]
+          }] : [])
+        ]
+      }
     };
   }
 
@@ -947,7 +1071,7 @@ export class AICanvasGenerator {
       return screenshots;
     }
 
-    console.log('[Canvas] Large session, selecting top 50% from', screenshots.length, 'screenshots');
+    console.log('[Canvas] Large session, selecting top 80% from', screenshots.length, 'screenshots');
 
     // Score all screenshots
     const scored = screenshots.map(s => ({
@@ -961,8 +1085,8 @@ export class AICanvasGenerator {
     const last2 = screenshots.slice(-2);
     const forceIncluded = [...userCommented, ...first2, ...last2];
 
-    // Calculate target (50% of total)
-    const targetCount = Math.floor(screenshots.length * 0.5);
+    // Calculate target (80% of total - reduced data loss)
+    const targetCount = Math.floor(screenshots.length * 0.8);
 
     // Top-scoring (excluding force-included)
     const remaining = scored.filter(s => !forceIncluded.includes(s.screenshot));
@@ -987,12 +1111,7 @@ export class AICanvasGenerator {
   }
 
   /**
-   * Strip heavy fields from screenshot to reduce token usage
-   *
-   * Removes (token-heavy fields):
-   * - extractedText: 200-800 tokens per screenshot (OCR dump)
-   * - keyElements: Redundant with summary
-   * - confidence, curiosity, curiosityReason: Internal metadata not needed for narrative
+   * Strip heavy fields from screenshot to reduce token usage (REDUCED AGGRESSIVENESS)
    *
    * Keeps (essential for canvas):
    * - id, timestamp, attachmentId: For ImageGallery and citations
@@ -1000,8 +1119,14 @@ export class AICanvasGenerator {
    * - progressIndicators: Achievements, blockers, insights
    * - suggestedActions: For action buttons
    * - userComment: User's own notes
+   * - extractedText (LIMITED): First 500 chars for context
+   * - confidence: Useful for quality assessment
    *
-   * Token savings: ~60-70% per screenshot (329 → ~120 tokens)
+   * Removes (only truly redundant):
+   * - keyElements: Redundant with summary
+   * - curiosity, curiosityReason: Internal scheduling metadata
+   *
+   * Token savings: ~40-50% per screenshot (reduced from 60-70% for better context)
    */
   private minimizeScreenshotData(screenshot: SessionScreenshot): any {
     return {
@@ -1015,9 +1140,12 @@ export class AICanvasGenerator {
         contextDelta: screenshot.aiAnalysis.contextDelta,
         progressIndicators: screenshot.aiAnalysis.progressIndicators,
         suggestedActions: screenshot.aiAnalysis.suggestedActions,
-        // REMOVED: extractedText (huge - 200-800 tokens each)
+        // KEPT (limited): extractedText for context (first 500 chars)
+        extractedText: screenshot.aiAnalysis.extractedText?.substring(0, 500),
+        // KEPT: confidence for quality assessment
+        confidence: screenshot.aiAnalysis.confidence,
         // REMOVED: keyElements (redundant with summary)
-        // REMOVED: confidence, curiosity, curiosityReason (internal metadata)
+        // REMOVED: curiosity, curiosityReason (internal scheduling metadata)
       } : undefined
     };
   }

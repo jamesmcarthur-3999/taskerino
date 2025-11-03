@@ -56,6 +56,12 @@
         },
         {
           "path": "$APPDATA/**/*.dat"
+        },
+        {
+          "path": "$APPDATA/**/*.log"
+        },
+        {
+          "path": "$APPDATA/**/*.checkpoint"
         }
       ]
     },
@@ -85,7 +91,25 @@
           "path": "$APPDATA/sessions/**"
         },
         {
+          "path": "$APPDATA/videos/**"
+        },
+        {
           "path": "$APPDATA/*.tmp"
+        },
+        {
+          "path": "$APPDATA/db/tx-temp-*"
+        },
+        {
+          "path": "$APPDATA/db/**/*.backup.json"
+        },
+        {
+          "path": "$APPDATA/backups/**"
+        },
+        {
+          "path": "$APPDATA/db/wal.log"
+        },
+        {
+          "path": "$APPDATA/db/wal.checkpoint"
         }
       ]
     },

@@ -21,6 +21,7 @@ import {
   ArrowDown,
 } from 'lucide-react';
 import type { Task } from '../types';
+import { EntityType, RelationshipType } from '../types/relationships';
 import { formatRelativeTime, isTaskOverdue, isTaskDueToday, isTaskDueSoon, generateId } from '../utils/helpers';
 import { TaskDetailInline } from './TaskDetailInline';
 import { InlineTagManager } from './InlineTagManager';
@@ -32,6 +33,9 @@ interface TaskTableViewProps {
   selectedTaskId?: string;
   groupBy: GroupByOption;
   scrollRef?: React.RefObject<HTMLDivElement> | ((node: HTMLDivElement | null) => void);
+  bulkSelectMode?: boolean;
+  selectedTaskIds?: Set<string>;
+  onToggleTaskSelection?: (taskId: string) => void;
 }
 
 type GroupByOption = 'due-date' | 'status' | 'priority' | 'topic' | 'tag' | 'none';
@@ -53,7 +57,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'topic', label: 'Topic', width: '140px', sortable: false },
 ];
 
-export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scrollRef }: TaskTableViewProps) {
+export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scrollRef, bulkSelectMode = false, selectedTaskIds = new Set(), onToggleTaskSelection }: TaskTableViewProps) {
   const { dispatch: tasksDispatch } = useTasks();
   const { dispatch: uiDispatch } = useUI();
   const { state: entitiesState } = useEntities();
@@ -120,8 +124,10 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
           break;
 
         case 'topic':
-          const topic = entitiesState.topics.find(t => t.id === task.topicId);
-          groupKey = task.topicId || 'no-topic';
+          const topicRel = task.relationships.find(r => r.targetType === EntityType.TOPIC);
+          const taskTopicId = topicRel?.targetId;
+          const topic = taskTopicId ? entitiesState.topics.find(t => t.id === taskTopicId) : undefined;
+          groupKey = taskTopicId || 'no-topic';
           groupLabel = topic ? `📌 ${topic.name}` : 'No Topic';
           groupOrder = topic ? 0 : 999;
           break;
@@ -296,6 +302,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
 
     const newTask: Task = {
       id: generateId(),
+      relationships: [],
       title: newTaskTitle.trim(),
       done: false,
       priority: 'medium',
@@ -541,12 +548,38 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
         );
 
       case 'topic':
+        const topicRel = task.relationships.find(r => r.targetType === EntityType.TOPIC);
+        const currentTopicId = topicRel?.targetId || '';
         return (
           <select
-            value={task.topicId || ''}
+            value={currentTopicId}
             onChange={(e) => {
               e.stopPropagation();
-              updateTask({ topicId: e.target.value || undefined });
+              const newTopicId = e.target.value || undefined;
+
+              // Remove existing topic relationships
+              const nonTopicRelationships = task.relationships.filter(
+                r => r.targetType !== EntityType.TOPIC
+              );
+
+              // Add new topic relationship if topicId is provided
+              const newRelationships = newTopicId
+                ? [
+                    ...nonTopicRelationships,
+                    {
+                      id: generateId(),
+                      sourceType: EntityType.TASK,
+                      sourceId: task.id,
+                      targetType: EntityType.TOPIC,
+                      targetId: newTopicId,
+                      type: RelationshipType.TASK_TOPIC,
+                      canonical: true,
+                      metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+                    },
+                  ]
+                : nonTopicRelationships;
+
+              updateTask({ relationships: newRelationships });
             }}
             onClick={(e) => e.stopPropagation()}
             className="w-full text-xs text-gray-600 bg-transparent border-0 cursor-pointer rounded pl-1 pr-6 py-0.5 hover:bg-white/30"
@@ -569,6 +602,26 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
       <div className="flex-1 min-h-0 flex flex-col bg-white/30 backdrop-blur-2xl rounded-[24px] border border-white/60 shadow-xl overflow-hidden">
         {/* Column Headers */}
         <div className="flex items-center gap-2 px-4 py-3 border-b-2 border-white/50 bg-white/30 backdrop-blur-sm">
+          {bulkSelectMode && (
+            <div style={{ width: '40px' }} className="flex items-center justify-center">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                checked={selectedTaskIds.size === tasks.length && tasks.length > 0}
+                onChange={(e) => {
+                  if (onToggleTaskSelection) {
+                    tasks.forEach(task => {
+                      if (e.target.checked && !selectedTaskIds.has(task.id)) {
+                        onToggleTaskSelection(task.id);
+                      } else if (!e.target.checked && selectedTaskIds.has(task.id)) {
+                        onToggleTaskSelection(task.id);
+                      }
+                    });
+                  }
+                }}
+              />
+            </div>
+          )}
           {columns.map((column) => (
             <div
               key={column.id}
@@ -625,18 +678,42 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
               {/* Group Tasks */}
               {!collapsedGroups.has(key) && (
                 <div>
-                  {groupTasks.map((task) => (
+                  {groupTasks.map((task) => {
+                    const isSelected = selectedTaskIds.has(task.id);
+                    return (
                     <div
                       key={task.id}
                       draggable
                       onDragStart={() => handleTaskDragStart(task)}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => handleTaskDrop(task, key)}
-                      onClick={() => onTaskClick(task.id)}
+                      onClick={() => {
+                        if (bulkSelectMode && onToggleTaskSelection) {
+                          onToggleTaskSelection(task.id);
+                        } else {
+                          onTaskClick(task.id);
+                        }
+                      }}
                       className={`group flex items-center gap-2 px-4 py-2 cursor-pointer border-b border-white/20 last:border-b-0 transition-all hover:bg-white/30 ${
                         selectedTaskId === task.id ? 'bg-cyan-100/20 border-l-4 border-l-cyan-500' : ''
-                      }`}
+                      } ${isSelected ? 'bg-cyan-50/30' : ''}`}
                     >
+                      {bulkSelectMode && (
+                        <div style={{ width: '40px' }} className="flex items-center justify-center">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (onToggleTaskSelection) {
+                                onToggleTaskSelection(task.id);
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      )}
                       {columns.map((column) => (
                         <div
                           key={column.id}
@@ -675,7 +752,8 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
                         </button>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
 
                   {/* Add Task Row */}
                   {newTaskGroupKey === key ? (

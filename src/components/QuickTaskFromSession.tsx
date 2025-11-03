@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useTasks } from '../context/TasksContext';
-import { useSessions } from '../context/SessionsContext';
+import { useActiveSession } from '../context/ActiveSessionContext';
 import { useUI } from '../context/UIContext';
 import { X, Calendar, Flag, Zap } from 'lucide-react';
 import type { Task } from '../types';
+import { EntityType, RelationshipType } from '../types/relationships';
 import { generateId } from '../utils/helpers';
 import { getGlassClasses, getRadiusClass, MODAL_SECTIONS } from '../design-system/theme';
 
@@ -29,7 +30,7 @@ export function QuickTaskFromSession({
   suggestedContext,
 }: QuickTaskFromSessionProps) {
   const { addTask } = useTasks();
-  const { addExtractedTask } = useSessions();
+  const { addExtractedTask } = useActiveSession();
   const { addNotification } = useUI();
   const [title, setTitle] = useState(suggestedAction);
   const [priority, setPriority] = useState<Task['priority']>(suggestedPriority || 'medium');
@@ -51,25 +52,32 @@ export function QuickTaskFromSession({
   const handleCreate = () => {
     if (!title.trim()) return;
 
+    const taskId = generateId();
+    const now = new Date().toISOString();
     const newTask: Task = {
-      id: generateId(),
+      id: taskId,
+      relationships: [
+        {
+          id: generateId(),
+          sourceType: EntityType.TASK,
+          sourceId: taskId,
+          targetType: EntityType.SESSION,
+          targetId: sessionId,
+          type: RelationshipType.TASK_SESSION,
+          canonical: true,
+          metadata: { source: 'ai' as const, createdAt: now },
+        },
+      ],
       title: title.trim(),
       done: false,
       priority,
       dueDate: dueDate || undefined,
       status: 'todo',
       createdBy: 'ai', // AI-suggested from session analysis
-      createdAt: new Date().toISOString(),
-
-      // Session linkage
-      sourceSessionId: sessionId,
-      sourceExcerpt: suggestedAction,
+      createdAt: now,
 
       // Rich context for AI agents
       description: description.trim() || `Extracted from session: ${sessionName}`,
-      contextForAgent: description.trim()
-        ? `This task was identified during the session "${sessionName}". Context: ${description.trim()}`
-        : `This task was identified during the session "${sessionName}".`,
 
       // Tags from session
       tags: [],
@@ -78,7 +86,7 @@ export function QuickTaskFromSession({
     addTask(newTask);
 
     // Add task ID to session's extractedTaskIds
-    addExtractedTask(sessionId, newTask.id);
+    addExtractedTask(newTask.id);
 
     addNotification({
       type: 'success',

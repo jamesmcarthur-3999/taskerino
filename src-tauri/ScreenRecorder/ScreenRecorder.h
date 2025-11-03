@@ -64,6 +64,49 @@ bool screen_recorder_check_permission(void);
  */
 void screen_recorder_request_permission(void);
 
+/**
+ * Create audio capture instance
+ * @return Opaque pointer to AudioCapture instance (requires macOS 13.0+)
+ */
+void* audio_capture_create(void);
+
+/**
+ * Start audio capture for specified display
+ * @param capture Pointer to AudioCapture instance
+ * @param displayID Display ID to capture audio from
+ * @return true if capture started successfully, false otherwise
+ */
+bool audio_capture_start(void* capture, uint32_t displayID);
+
+/**
+ * Stop audio capture
+ * @param capture Pointer to AudioCapture instance
+ * @return true if capture stopped successfully, false otherwise
+ */
+bool audio_capture_stop(void* capture);
+
+/**
+ * Get audio samples from buffer
+ * @param capture Pointer to AudioCapture instance
+ * @param maxCount Maximum number of samples to retrieve
+ * @param outCount Output parameter for actual number of samples returned
+ * @return Pointer to Float array (must be freed by caller using free())
+ */
+float* audio_capture_get_samples(void* capture, int32_t maxCount, int32_t* outCount);
+
+/**
+ * Get number of available samples in buffer
+ * @param capture Pointer to AudioCapture instance
+ * @return Number of available samples
+ */
+int32_t audio_capture_available_samples(void* capture);
+
+/**
+ * Destroy audio capture instance and free memory
+ * @param capture Pointer to AudioCapture instance
+ */
+void audio_capture_destroy(void* capture);
+
 #ifdef __cplusplus
 }
 #endif

@@ -25,6 +25,7 @@ import type {
 import type { AppState, Note, Task, Session } from '../types';
 import { NED_TOOLS, READ_TOOLS, WRITE_TOOLS, type ToolCall, type ToolResult } from './nedTools';
 import { contextAgent } from './contextAgent';
+import { debug } from "../utils/debug";
 
 // ============================================================================
 // TYPES
@@ -130,7 +131,7 @@ export class NedService {
       const savedKey = await invoke<string | null>('get_claude_api_key');
       if (savedKey && savedKey.trim()) {
         this.apiKey = savedKey;
-        console.log('✅ NedService: Loaded API key from storage');
+        debug.log(debug.log(console.log('✅ NedService: Loaded API key from storage')));
       } else {
         console.warn('⚠️ NedService: No API key found in storage');
       }

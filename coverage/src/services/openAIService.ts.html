@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/156</span>
+                <span class='fraction'>0/161</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/156</span>
+                <span class='fraction'>0/161</span>
             </div>
         
             
@@ -333,7 +333,20 @@
 <a name='L268'></a><a href='#L268'>268</a>
 <a name='L269'></a><a href='#L269'>269</a>
 <a name='L270'></a><a href='#L270'>270</a>
-<a name='L271'></a><a href='#L271'>271</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L271'></a><a href='#L271'>271</a>
+<a name='L272'></a><a href='#L272'>272</a>
+<a name='L273'></a><a href='#L273'>273</a>
+<a name='L274'></a><a href='#L274'>274</a>
+<a name='L275'></a><a href='#L275'>275</a>
+<a name='L276'></a><a href='#L276'>276</a>
+<a name='L277'></a><a href='#L277'>277</a>
+<a name='L278'></a><a href='#L278'>278</a>
+<a name='L279'></a><a href='#L279'>279</a>
+<a name='L280'></a><a href='#L280'>280</a>
+<a name='L281'></a><a href='#L281'>281</a>
+<a name='L282'></a><a href='#L282'>282</a>
+<a name='L283'></a><a href='#L283'>283</a>
+<a name='L284'></a><a href='#L284'>284</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -344,8 +357,11 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -393,6 +409,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -410,6 +427,9 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -499,6 +519,9 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -533,8 +556,11 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -614,8 +640,11 @@
 &nbsp;
 <span class="cstat-no" title="statement not covered" >import { invoke } from '@tauri-apps/api/core';</span>
 import type { AudioMode } from '../types';
+<span class="cstat-no" title="statement not covered" >import { getWhisperPool } from './WhisperRequestPool';</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >export class OpenAIService {</span>
+<span class="cstat-no" title="statement not covered" >  private whisperPool = getWhisperPool();</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >  constructor() {</span>
 <span class="cstat-no" title="statement not covered" >    this.loadApiKeyFromStorage();</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
@@ -659,16 +688,17 @@ import type { AudioMode } from '../types';
 &nbsp;
   /**
    * Transcribe audio using Whisper-1 (simplified for real-time recording)
+   * Uses WhisperRequestPool for concurrency control and rate limiting
    *
    * @param audioBase64 - Base64-encoded WAV audio
    * @returns Transcription text
    */
 <span class="cstat-no" title="statement not covered" >  async transcribeAudio(audioBase64: string): Promise&lt;string&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
-      // Always use Whisper-1 for real-time transcription
-<span class="cstat-no" title="statement not covered" >      console.log('🎤 Transcribing audio with Whisper-1...');</span>
+      // Use WhisperRequestPool for rate limiting and concurrency control
+<span class="cstat-no" title="statement not covered" >      console.log('🎤 Transcribing audio with Whisper-1 (via pool)...');</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      const transcription = await invoke&lt;string&gt;('openai_transcribe_audio', { audioBase64 });</span>
+<span class="cstat-no" title="statement not covered" >      const transcription = await this.whisperPool.transcribe(audioBase64);</span>
 &nbsp;
       // Filter ONLY exact "Thanks for watching!" (case-insensitive)
       // Note: This is now done in Rust, but keeping for backward compatibility
@@ -682,13 +712,16 @@ import type { AudioMode } from '../types';
 <span class="cstat-no" title="statement not covered" >    } catch (error: any) {</span>
 <span class="cstat-no" title="statement not covered" >      console.error('❌ OpenAI transcription error:', error);</span>
 &nbsp;
+      // Extract error message for checking (handles both Error objects and strings)
+<span class="cstat-no" title="statement not covered" >      const errorMessage = error instanceof Error ? error.message : String(error);</span>
+&nbsp;
       // Handle specific error cases
-<span class="cstat-no" title="statement not covered" >      if (error.includes &amp;&amp; error.includes('401')) {</span>
+<span class="cstat-no" title="statement not covered" >      if (errorMessage.includes('401')) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error('Invalid OpenAI API key. Please check your key in Settings.');</span>
-<span class="cstat-no" title="statement not covered" >      } else if (error.includes &amp;&amp; error.includes('429')) {</span>
+<span class="cstat-no" title="statement not covered" >      } else if (errorMessage.includes('429')) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error('OpenAI rate limit exceeded. Please try again later.');</span>
 <span class="cstat-no" title="statement not covered" >      } else {</span>
-<span class="cstat-no" title="statement not covered" >        throw new Error(`Audio transcription failed: ${error.message || error || 'Unknown error'}`);</span>
+<span class="cstat-no" title="statement not covered" >        throw new Error(`Audio transcription failed: ${errorMessage || 'Unknown error'}`);</span>
 <span class="cstat-no" title="statement not covered" >      }</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
@@ -771,13 +804,16 @@ import type { AudioMode } from '../types';
 <span class="cstat-no" title="statement not covered" >    } catch (error: any) {</span>
 <span class="cstat-no" title="statement not covered" >      console.error('❌ OpenAI full audio analysis error:', error);</span>
 &nbsp;
+      // Extract error message for checking (handles both Error objects and strings)
+<span class="cstat-no" title="statement not covered" >      const errorMessage = error instanceof Error ? error.message : String(error);</span>
+&nbsp;
       // Handle specific error cases
-<span class="cstat-no" title="statement not covered" >      if (error.includes &amp;&amp; error.includes('401')) {</span>
+<span class="cstat-no" title="statement not covered" >      if (errorMessage.includes('401')) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error('Invalid OpenAI API key. Please check your key in Settings.');</span>
-<span class="cstat-no" title="statement not covered" >      } else if (error.includes &amp;&amp; error.includes('429')) {</span>
+<span class="cstat-no" title="statement not covered" >      } else if (errorMessage.includes('429')) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error('OpenAI rate limit exceeded. Please try again later.');</span>
 <span class="cstat-no" title="statement not covered" >      } else {</span>
-<span class="cstat-no" title="statement not covered" >        throw new Error(`Audio analysis failed: ${error.message || error || 'Unknown error'}`);</span>
+<span class="cstat-no" title="statement not covered" >        throw new Error(`Audio analysis failed: ${errorMessage || 'Unknown error'}`);</span>
 <span class="cstat-no" title="statement not covered" >      }</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
@@ -807,13 +843,16 @@ import type { AudioMode } from '../types';
 <span class="cstat-no" title="statement not covered" >    } catch (error: any) {</span>
 <span class="cstat-no" title="statement not covered" >      console.error('❌ OpenAI word-level transcription error:', error);</span>
 &nbsp;
+      // Extract error message for checking (handles both Error objects and strings)
+<span class="cstat-no" title="statement not covered" >      const errorMessage = error instanceof Error ? error.message : String(error);</span>
+&nbsp;
       // Handle specific error cases
-<span class="cstat-no" title="statement not covered" >      if (error.includes &amp;&amp; error.includes('401')) {</span>
+<span class="cstat-no" title="statement not covered" >      if (errorMessage.includes('401')) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error('Invalid OpenAI API key. Please check your key in Settings.');</span>
-<span class="cstat-no" title="statement not covered" >      } else if (error.includes &amp;&amp; error.includes('429')) {</span>
+<span class="cstat-no" title="statement not covered" >      } else if (errorMessage.includes('429')) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error('OpenAI rate limit exceeded. Please try again later.');</span>
 <span class="cstat-no" title="statement not covered" >      } else {</span>
-<span class="cstat-no" title="statement not covered" >        throw new Error(`Word-level transcription failed: ${error.message || error || 'Unknown error'}`);</span>
+<span class="cstat-no" title="statement not covered" >        throw new Error(`Word-level transcription failed: ${errorMessage || 'Unknown error'}`);</span>
 <span class="cstat-no" title="statement not covered" >      }</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
@@ -880,7 +919,7 @@ import type { AudioMode } from '../types';
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

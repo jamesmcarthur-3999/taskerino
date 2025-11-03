@@ -15,6 +15,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { ClaudeChatResponse, ClaudeMessage } from '../types/tauri-ai-commands';
 import type { Session } from '../types';
+import { debug } from "../utils/debug";
 
 interface AgentThread {
   id: string;
@@ -47,7 +48,7 @@ export class SessionsQueryAgent {
       const savedKey = await invoke<string | null>('get_claude_api_key');
       if (savedKey && savedKey.trim()) {
         this.hasApiKey = true;
-        console.log('✅ SessionsQueryAgent: Loaded API key from storage');
+        debug.log(debug.log(console.log('✅ SessionsQueryAgent: Loaded API key from storage')));
       }
     } catch (error) {
       console.error('❌ SessionsQueryAgent: Failed to load API key from storage:', error);

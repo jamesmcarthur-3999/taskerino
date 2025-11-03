@@ -6,6 +6,8 @@
  * - Web Browser: IndexedDB storage with 100s of MB
  */
 
+import type { StorageTransaction } from './types';
+
 export interface StorageInfo {
   used: number;           // Bytes used
   available: number;      // Bytes available (Infinity for file system)
@@ -15,19 +17,31 @@ export interface StorageInfo {
   };
 }
 
-export interface BackupInfo {
-  id: string;
-  timestamp: number;
-  size: number;
-  collections: string[];
-}
-
 export interface MigrationStatus {
   completed: boolean;
   timestamp?: number;
   from?: string;
   to?: string;
   error?: string;
+}
+
+/**
+ * Transaction for atomic multi-collection operations
+ * Ensures all operations succeed or all fail (ACID properties)
+ */
+export interface Transaction {
+  id: string;
+  operations: TransactionOperation[];
+}
+
+/**
+ * Single operation within a transaction
+ */
+export interface TransactionOperation {
+  type: 'write' | 'delete';
+  collection: string;
+  data?: any;
+  entityId?: string;
 }
 
 /**
@@ -73,29 +87,6 @@ export abstract class StorageAdapter {
   abstract getStorageInfo(): Promise<StorageInfo>;
 
   /**
-   * Create a backup of all data
-   * @returns Backup ID
-   */
-  abstract createBackup(): Promise<string>;
-
-  /**
-   * List all available backups
-   */
-  abstract listBackups(): Promise<BackupInfo[]>;
-
-  /**
-   * Restore data from a backup
-   * @param backupId - Backup ID to restore
-   */
-  abstract restoreBackup(backupId: string): Promise<void>;
-
-  /**
-   * Delete a backup
-   * @param backupId - Backup ID to delete
-   */
-  abstract deleteBackup(backupId: string): Promise<void>;
-
-  /**
    * Clear all data (dangerous!)
    */
   abstract clear(): Promise<void>;
@@ -137,6 +128,85 @@ export abstract class StorageAdapter {
    * Flushes all pending writes before app closes
    */
   abstract shutdown(): Promise<void>;
+
+  /**
+   * Begin a new storage transaction for atomic multi-key operations
+   * @returns A new transaction instance
+   */
+  abstract beginTransaction(): Promise<StorageTransaction>;
+
+  /**
+   * Begin a new Phase 2.4 transaction (ACID transaction system)
+   * Returns transaction ID for use with addOperation/commitTransaction/rollbackTransaction
+   */
+  abstract beginPhase24Transaction(): string;
+
+  /**
+   * Add an operation to an active Phase 2.4 transaction
+   * @param txId - Transaction ID from beginPhase24Transaction
+   * @param operation - Operation to add to transaction
+   */
+  abstract addOperation(txId: string, operation: TransactionOperation): void;
+
+  /**
+   * Commit a Phase 2.4 transaction atomically
+   * All operations succeed or all fail
+   * @param txId - Transaction ID to commit
+   */
+  abstract commitPhase24Transaction(txId: string): Promise<void>;
+
+  /**
+   * Rollback a Phase 2.4 transaction
+   * Cancels all queued operations
+   * @param txId - Transaction ID to rollback
+   */
+  abstract rollbackPhase24Transaction(txId: string): Promise<void>;
+
+  /**
+   * Save an index to storage
+   * @param collection - Collection name (e.g., 'sessions', 'notes', 'tasks')
+   * @param indexType - Type of index ('date', 'tag', 'status', 'fulltext', 'metadata')
+   * @param index - Index data structure
+   * @param metadata - Index metadata (lastBuilt, entityCount, etc.)
+   */
+  abstract saveIndex(
+    collection: string,
+    indexType: 'date' | 'tag' | 'status' | 'fulltext' | 'metadata',
+    index: any,
+    metadata: import('./IndexingEngine').IndexMetadata
+  ): Promise<void>;
+
+  /**
+   * Load an index from storage
+   * @param collection - Collection name
+   * @param indexType - Type of index
+   * @returns Index data and metadata, or null if not found
+   */
+  abstract loadIndex<T>(
+    collection: string,
+    indexType: 'date' | 'tag' | 'status' | 'fulltext' | 'metadata'
+  ): Promise<{ index: T; metadata: import('./IndexingEngine').IndexMetadata } | null>;
+
+  /**
+   * Save entity with compression (Phase 3.4)
+   * @param collection - Collection name (e.g., 'sessions', 'notes', 'tasks')
+   * @param entity - Entity object with an 'id' field
+   */
+  abstract saveEntityCompressed<T extends { id: string }>(
+    collection: string,
+    entity: T
+  ): Promise<void>;
+
+  /**
+   * Load entity with decompression (Phase 3.4)
+   * @param collection - Collection name
+   * @param id - Entity ID
+   * @returns The entity or null if not found
+   */
+  abstract loadEntityCompressed<T extends { id: string }>(
+    collection: string,
+    id: string
+  ): Promise<T | null>;
 }
 
 /**

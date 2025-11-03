@@ -9,8 +9,12 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type { AudioMode } from '../types';
+import { getWhisperPool } from './WhisperRequestPool';
+import { debug } from "../utils/debug";
 
 export class OpenAIService {
+  private whisperPool = getWhisperPool();
+
   constructor() {
     this.loadApiKeyFromStorage();
   }
@@ -21,7 +25,7 @@ export class OpenAIService {
   private async loadApiKeyFromStorage() {
     try {
       await invoke('get_openai_api_key');
-      console.log('✅ OpenAIService: Loaded API key from storage');
+      debug.log(debug.log(console.log('✅ OpenAIService: Loaded API key from storage')));
     } catch (error) {
       console.error('❌ OpenAIService: Failed to load API key from storage:', error);
     }
@@ -33,7 +37,7 @@ export class OpenAIService {
   async setApiKey(apiKey: string) {
     try {
       await invoke('set_openai_api_key', { apiKey });
-      console.log('✅ OpenAIService: API key set and saved');
+      debug.log(console.log('✅ OpenAIService: API key set and saved'));
     } catch (error) {
       console.error('❌ OpenAIService: Failed to set API key:', error);
       throw error;
@@ -54,16 +58,17 @@ export class OpenAIService {
 
   /**
    * Transcribe audio using Whisper-1 (simplified for real-time recording)
+   * Uses WhisperRequestPool for concurrency control and rate limiting
    *
    * @param audioBase64 - Base64-encoded WAV audio
    * @returns Transcription text
    */
   async transcribeAudio(audioBase64: string): Promise<string> {
     try {
-      // Always use Whisper-1 for real-time transcription
-      console.log('🎤 Transcribing audio with Whisper-1...');
+      // Use WhisperRequestPool for rate limiting and concurrency control
+      console.log('🎤 Transcribing audio with Whisper-1 (via pool)...');
 
-      const transcription = await invoke<string>('openai_transcribe_audio', { audioBase64 });
+      const transcription = await this.whisperPool.transcribe(audioBase64);
 
       // Filter ONLY exact "Thanks for watching!" (case-insensitive)
       // Note: This is now done in Rust, but keeping for backward compatibility
@@ -77,13 +82,16 @@ export class OpenAIService {
     } catch (error: any) {
       console.error('❌ OpenAI transcription error:', error);
 
+      // Extract error message for checking (handles both Error objects and strings)
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
       // Handle specific error cases
-      if (error.includes && error.includes('401')) {
+      if (errorMessage.includes('401')) {
         throw new Error('Invalid OpenAI API key. Please check your key in Settings.');
-      } else if (error.includes && error.includes('429')) {
+      } else if (errorMessage.includes('429')) {
         throw new Error('OpenAI rate limit exceeded. Please try again later.');
       } else {
-        throw new Error(`Audio transcription failed: ${error.message || error || 'Unknown error'}`);
+        throw new Error(`Audio transcription failed: ${errorMessage || 'Unknown error'}`);
       }
     }
   }
@@ -166,13 +174,16 @@ export class OpenAIService {
     } catch (error: any) {
       console.error('❌ OpenAI full audio analysis error:', error);
 
+      // Extract error message for checking (handles both Error objects and strings)
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
       // Handle specific error cases
-      if (error.includes && error.includes('401')) {
+      if (errorMessage.includes('401')) {
         throw new Error('Invalid OpenAI API key. Please check your key in Settings.');
-      } else if (error.includes && error.includes('429')) {
+      } else if (errorMessage.includes('429')) {
         throw new Error('OpenAI rate limit exceeded. Please try again later.');
       } else {
-        throw new Error(`Audio analysis failed: ${error.message || error || 'Unknown error'}`);
+        throw new Error(`Audio analysis failed: ${errorMessage || 'Unknown error'}`);
       }
     }
   }
@@ -202,13 +213,16 @@ export class OpenAIService {
     } catch (error: any) {
       console.error('❌ OpenAI word-level transcription error:', error);
 
+      // Extract error message for checking (handles both Error objects and strings)
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
       // Handle specific error cases
-      if (error.includes && error.includes('401')) {
+      if (errorMessage.includes('401')) {
         throw new Error('Invalid OpenAI API key. Please check your key in Settings.');
-      } else if (error.includes && error.includes('429')) {
+      } else if (errorMessage.includes('429')) {
         throw new Error('OpenAI rate limit exceeded. Please try again later.');
       } else {
-        throw new Error(`Word-level transcription failed: ${error.message || error || 'Unknown error'}`);
+        throw new Error(`Word-level transcription failed: ${errorMessage || 'Unknown error'}`);
       }
     }
   }

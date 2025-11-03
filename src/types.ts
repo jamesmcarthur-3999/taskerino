@@ -1,6 +1,208 @@
 // Core Data Types
 
 // ============================================================================
+// UNIFIED RELATIONSHIP SYSTEM (Phase 2.0)
+// ============================================================================
+//
+// All entities use a flexible relationships[] array for entity-to-entity connections.
+//
+// EXAMPLES:
+// - Task → Note: { fromId: taskId, fromType: 'task', toId: noteId, toType: 'note', type: 'TASK_NOTE' }
+// - Session → Task: { fromId: sessionId, fromType: 'session', toId: taskId, toType: 'task', type: 'SESSION_TASK' }
+// - Note → Company: { fromId: noteId, fromType: 'note', toId: companyId, toType: 'company', type: 'NOTE_COMPANY' }
+//
+// SEE: /src/types/relationships.ts for Relationship interface and helpers
+//
+import type { Relationship } from './types/relationships';
+
+// Re-export EnrichmentProgress from sessionEnrichmentService for convenience
+export type { EnrichmentProgress } from './services/sessionEnrichmentService';
+
+// ============================================================================
+// ACTIVE MIGRATIONS (as of November 2025)
+// ============================================================================
+//
+// 1. Content-Addressable Storage (Phase 4)
+//    Status: Complete for new data, migrating old screenshots
+//    Old: SessionScreenshot.path
+//    New: SessionScreenshot.attachmentId
+//    Search: grep "@deprecated.*path" src/types.ts
+//    Migration: Screenshot path migration script (runs on startup)
+//
+// 2. Flexible Summaries (Phase 2)
+//    Status: Both formats supported
+//    Old: SessionSummary (fixed template)
+//    New: FlexibleSessionSummary (AI-chosen sections)
+//    Check: session.summary?.schemaVersion === '2.0'
+//
+// DEPRECATED FIELDS COUNT: 10+
+// Run: grep -c "@deprecated" src/types.ts
+
+// ============================================================================
+// DEPRECATED FIELDS REFERENCE
+// ============================================================================
+//
+// All deprecated fields are marked with @deprecated JSDoc tags.
+// This section provides a centralized guide for migration.
+//
+// SEARCH PATTERN: grep "@deprecated" src/types.ts
+//
+// DEPRECATED RELATIONSHIP FIELDS:
+//
+// 1. Session.extractedTaskIds: string[]
+//    Deprecated: October 2025
+//    Replacement: relationships[] with type='SESSION_TASK'
+//    Migration: Run relationship migration script
+//    Remove: v2.0 (when relationshipVersion migration complete)
+//
+// 2. Session.extractedNoteIds: string[]
+//    Deprecated: October 2025
+//    Replacement: relationships[] with type='SESSION_NOTE'
+//    Migration: Run relationship migration script
+//    Remove: v2.0 (when relationshipVersion migration complete)
+//
+// 3. Note.topicId?: string
+//    Deprecated: October 2025
+//    Replacement: relationships[] with toType='topic'
+//    Usage: Widely used (175 occurrences across 31 files)
+//    Migration: Gradual migration via relationshipVersion field
+//    Remove: After full migration (2-3 months)
+//
+// 4. Note.sourceSessionId?: string
+//    Deprecated: October 2025
+//    Replacement: relationships[] with type='NOTE_SESSION'
+//    Migration: Automatic during relationship migration
+//    Remove: v2.0
+//
+// 5. Task.noteId?: string
+//    Deprecated: October 2025
+//    Replacement: relationships[] with toType='note'
+//    Usage: Check TasksContext for active usage
+//    Migration: Automatic during relationship migration
+//    Remove: v2.0
+//
+// 6. Task.sourceNoteId?: string
+//    Deprecated: October 2025
+//    Replacement: relationships[] with type='TASK_NOTE'
+//    Migration: Automatic during relationship migration
+//    Remove: v2.0
+//
+// 7. Task.sourceSessionId?: string
+//    Deprecated: October 2025
+//    Replacement: relationships[] with toType='session'
+//    Migration: Automatic during relationship migration
+//    Remove: v2.0
+//
+// DEPRECATED STORAGE FIELDS:
+//
+// 8. SessionScreenshot.path?: string
+//    Deprecated: October 2025 (Phase 4 ContentAddressableStorage)
+//    Replacement: attachmentId with CAS lookup
+//    Usage: 4 occurrences as backward compatibility fallback
+//    Migration: Screenshot path migration script (runs on startup)
+//    Remove: v1.0 after migration completes
+//
+// DEPRECATED DATA FIELDS:
+//
+// 9. Session.audioKeyMoments?: AudioKeyMoment[]
+//    Deprecated: October 2025
+//    Replacement: audioInsights.keyMoments
+//    Reason: Consolidated into AudioInsights structure
+//    Migration: One-time data copy during enrichment
+//    Remove: v1.0
+//
+// DEPRECATED TYPES:
+//
+// 10. AudioMode: 'off' | 'transcription' | 'description'
+//     Deprecated: October 2025
+//     Replacement: audioConfig.enabled boolean
+//     Status: No longer used in codebase
+//     Remove: Immediately (already unused)
+//
+// DEPRECATED CONTEXT ITEMS FIELDS:
+//
+// 11. SessionContextItem.noteId?: string
+//     Deprecated: October 2025
+//     Replacement: linkedItemId with type detection
+//     Migration: Automatic when creating new context items
+//     Remove: v2.0
+//
+// 12. SessionContextItem.taskId?: string
+//     Deprecated: October 2025
+//     Replacement: linkedItemId with type detection
+//     Migration: Automatic when creating new context items
+//     Remove: v2.0
+//
+// TOTAL DEPRECATED FIELDS: 12
+// Migration Priority: High (unified relationships), Medium (storage), Low (data)
+// Estimated Migration Timeline: 2-3 months for full completion
+//
+// ============================================================================
+//
+// ============================================================================
+
+// ============================================================================
+// STATUS ENUMS (Typed String Literals)
+// ============================================================================
+
+/**
+ * Session Lifecycle Status
+ * - active: Currently recording (screenshots/audio/video)
+ * - paused: Recording paused, can resume
+ * - completed: Ended normally by user
+ * - interrupted: Ended due to crash/error
+ */
+export type SessionStatus = 'active' | 'paused' | 'completed' | 'interrupted';
+
+/**
+ * Screenshot AI Analysis Status
+ * - pending: Queued for analysis
+ * - analyzing: Currently being analyzed by Claude Vision
+ * - complete: Analysis finished successfully
+ * - error: Analysis failed (rate limit, API error, etc.)
+ */
+export type ScreenshotAnalysisStatus = 'pending' | 'analyzing' | 'complete' | 'error';
+
+/**
+ * Task Lifecycle Status
+ * - todo: Not started
+ * - in-progress: Currently being worked on
+ * - done: Completed
+ * - blocked: Blocked by dependencies or issues
+ */
+export type TaskStatus = 'todo' | 'in-progress' | 'done' | 'blocked';
+
+/**
+ * Enrichment Pipeline Status
+ * - idle: No enrichment started (default for new sessions)
+ * - pending: Queued for enrichment
+ * - in-progress: Currently enriching (audio/video/summary stages)
+ * - completed: All enabled stages completed successfully
+ * - failed: Enrichment failed with unrecoverable error
+ * - partial: Some stages completed, others failed/skipped
+ */
+export type EnrichmentStatus = 'idle' | 'pending' | 'in-progress' | 'completed' | 'failed' | 'partial';
+
+/**
+ * Individual Enrichment Stage Status
+ * - pending: Not started
+ * - processing: Currently running
+ * - completed: Stage completed successfully
+ * - failed: Stage failed with error
+ * - skipped: Stage skipped (user preference or no data available)
+ */
+export type EnrichmentStageStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
+/**
+ * Task Priority Level
+ * - low: Nice to have, do when time permits
+ * - medium: Should do soon
+ * - high: Important, do ASAP
+ * - urgent: Critical, blocking work
+ */
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+// ============================================================================
 // AI Canvas Types
 // ============================================================================
 
@@ -241,6 +443,20 @@ export type StoryType =
 // ============================================================================
 export type AttachmentType = 'image' | 'video' | 'file' | 'link' | 'screenshot' | 'audio';
 
+/**
+ * Tracks references to physical attachment files
+ * Used for deduplication and reference counting
+ */
+export interface AttachmentRef {
+  hash: string; // SHA-256 hash of file content
+  physicalPath: string; // Actual file location on disk
+  refCount: number; // Number of Attachment records pointing to this file
+  size: number; // File size in bytes
+  attachmentIds: string[]; // IDs of Attachment records using this file
+  createdAt: number;
+  lastAccessedAt: number;
+}
+
 export interface Attachment {
   id: string;
   type: AttachmentType;
@@ -253,6 +469,9 @@ export interface Attachment {
   path?: string;                   // Local file path (Tauri)
   base64?: string;                 // Inline data for smaller files
   url?: string;                    // For link attachments
+
+  // Deduplication
+  hash?: string;                   // SHA-256 hash for deduplication
 
   // Metadata
   thumbnail?: string;              // Base64 thumbnail for videos/large images
@@ -332,13 +551,10 @@ export interface NoteUpdate {
 export interface Note {
   id: string;
 
-  // Multiple relationship support
-  companyIds?: string[]; // Links to Company entities
-  contactIds?: string[]; // Links to Contact (person) entities
-  topicIds?: string[]; // Links to Topic entities (for "other" category)
-
-  // Legacy field for migration (will be removed after migration)
-  topicId?: string;
+  /**
+   * Unified relationship system
+   */
+  relationships: Relationship[];
 
   content: string; // The actual note content (markdown) - most recent or combined
   summary: string; // AI-generated summary
@@ -346,9 +562,16 @@ export interface Note {
   timestamp: string; // Original creation time
   lastUpdated: string; // Most recent update time
   source: 'call' | 'email' | 'thought' | 'other';
+  /**
+   * Review status for notes created from AI processing
+   * - draft: Being edited in ResultsReview, not yet saved
+   * - pending_review: Saved but awaiting final review
+   * - approved: Reviewed and approved by user
+   * @default 'approved' (for direct captures and existing notes)
+   */
+  status?: 'draft' | 'pending_review' | 'approved';
   tags: string[]; // Auto-extracted by AI
   parentNoteId?: string; // For threading/nesting
-  sourceSessionId?: string; // Link back to originating session
   updates?: NoteUpdate[]; // History of additions/updates (newest first)
   attachments?: Attachment[]; // Multi-modal attachments
   metadata?: {
@@ -356,6 +579,31 @@ export interface Note {
     sentiment?: 'positive' | 'neutral' | 'negative';
     keyPoints?: string[];
     relatedTopics?: string[];
+
+    // AI enrichment metadata
+    aiEnrichment?: {
+      enrichedAt: string;           // ISO timestamp of enrichment
+      model: string;                // Model used (e.g., 'claude-sonnet-4-5')
+      autoEnriched: boolean;        // Was it auto-triggered on navigation away?
+
+      // Suggested metadata (user can review/edit before applying)
+      suggestedTitle?: string;      // Better title than "Untitled Note"
+      suggestedTags?: string[];     // Auto-extracted tags
+      suggestedSummary?: string;    // 2-3 sentence summary
+      keyTopics?: string[];         // Main topics discussed
+      sentiment?: 'positive' | 'neutral' | 'negative';
+
+      // Suggested relationships to existing entities
+      relatedNoteIds?: string[];           // Similar notes found
+      suggestedCompanyIds?: string[];      // Companies mentioned (existing)
+      suggestedContactIds?: string[];      // Contacts mentioned (existing)
+      suggestedTopicIds?: string[];        // Topics to link (existing)
+
+      // Suggested NEW entities to create
+      newCompanies?: Array<{ name: string; description?: string }>;
+      newContacts?: Array<{ name: string; email?: string; role?: string }>;
+      newTopics?: Array<{ name: string; description?: string }>;
+    };
   };
 }
 
@@ -371,25 +619,26 @@ export interface Task {
   id: string;
   title: string;
   done: boolean;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
+  priority: TaskPriority;
   dueDate?: string;
   dueTime?: string; // NEW: Specific time in 24h format (e.g., "18:00")
-  topicId?: string; // Optional link to topic
-  noteId?: string; // Which note created this task
   createdAt: string;
   completedAt?: string;
 
   // Phase 1 - Enhanced fields
   description?: string; // Rich text description
-  status: 'todo' | 'in-progress' | 'done' | 'blocked';
+  status: TaskStatus;
   subtasks?: SubTask[]; // Checklist items
   tags?: string[]; // Task-specific tags
   createdBy: 'ai' | 'manual'; // Creation source
   attachments?: Attachment[]; // Multi-modal attachments
 
+  /**
+   * Unified relationship system
+   */
+  relationships: Relationship[];
+
   // Source tracking (for agent capabilities)
-  sourceNoteId?: string; // NEW: Link back to originating note
-  sourceSessionId?: string; // Link back to originating session
   sourceExcerpt?: string; // NEW: Exact text that triggered this task
   contextForAgent?: string; // NEW: AI-generated context for future agents
 
@@ -404,32 +653,55 @@ export interface Task {
 
 // AI Processing Types
 
+/**
+ * AI Process Result - Structured output from Claude AI processing
+ *
+ * IMPORTANT: As of Phase 3, notes and tasks include 'action' fields that
+ * determine whether the AI wants to:
+ * - create: New entity (default behavior)
+ * - update: Modify existing entity (targetId required)
+ * - merge: Combine multiple entities (targetId + mergeWith required)
+ * - skip: Don't create (duplicate detected)
+ *
+ * The 'reasoning' field explains the AI's decision to the user.
+ *
+ * All action fields are optional for backward compatibility.
+ * Existing code that doesn't specify 'action' will default to 'create'.
+ */
 export interface AIProcessResult {
-  // What the AI detected
-  detectedTopics: {
-    name: string;
-    type: 'company' | 'person' | 'other';
-    confidence: number; // 0-1
-    existingTopicId?: string; // If matched to existing
-  }[];
+  // AI guidance
+  aiSummary?: string; // Conversational AI summary of what was created and why
 
-  // What was created/updated
+  // Notes with temp IDs and action directives (Phase 3)
   notes: {
-    topicId: string;
-    topicName: string;
+    id: string; // Temp ID assigned by AI (note-1, note-2, etc.)
+
+    // Phase 3: Action-based system
+    action?: 'create' | 'update' | 'merge' | 'skip'; // What AI wants to do
+    targetId?: string; // Existing note ID (required if action is 'update' or 'merge')
+    mergeWith?: string[]; // Additional note IDs to merge (if action is 'merge')
+    mergeStrategy?: 'append' | 'replace'; // How to merge content
+    reasoning?: string; // Explanation of AI's decision
+
+    // Existing fields
     content: string;
     summary: string;
-    sourceText: string; // Original input text
-    isNew: boolean; // true if new note, false if merged
-    mergedWith?: string; // Note ID if merged
     tags?: string[]; // Auto-extracted tags
     source?: 'call' | 'email' | 'thought' | 'other'; // Input type
     sentiment?: 'positive' | 'neutral' | 'negative';
     keyPoints?: string[]; // Bullet points of key info
-    relatedTopics?: string[]; // Related topic names
   }[];
 
+  // Tasks with temp IDs and action directives (Phase 3)
   tasks: {
+    id: string; // Temp ID assigned by AI (task-1, task-2, etc.)
+
+    // Phase 3: Action-based system
+    action?: 'create' | 'update' | 'complete' | 'skip'; // What AI wants to do
+    targetId?: string; // Existing task ID (required if action is 'update' or 'complete')
+    reasoning?: string; // Explanation of AI's decision
+
+    // Existing fields
     title: string;
     priority: Task['priority'];
     dueDate?: string; // AI-inferred due date
@@ -438,24 +710,63 @@ export interface AIProcessResult {
     description?: string; // Task context from note
     tags?: string[]; // Relevant tags
     suggestedSubtasks?: string[]; // Multi-step breakdown
-    topicId?: string;
-    noteId?: string; // Link to the note that generated this task
     sourceExcerpt?: string; // Exact text from input that triggered this task
-    contextForAgent?: string; // Context for future agent execution
   }[];
+
+  // Explicit relationships (AI decides what links to what)
+  relationships: {
+    from: {
+      type: 'note' | 'task';
+      id: string; // Temp ID from notes/tasks array
+    };
+    to: {
+      type: 'topic' | 'company' | 'contact' | 'note' | 'task';
+      id?: string; // Existing entity ID
+      name?: string; // New entity name (if creating)
+    };
+    relationType: string; // 'note-topic', 'task-note', etc.
+    metadata?: {
+      confidence?: number; // 0-1
+      reasoning?: string; // Why this relationship exists
+    };
+  }[];
+
+  // New entities to create
+  newEntities: {
+    topics: {
+      name: string;
+      type: 'company' | 'person' | 'subject' | 'project';
+      confidence: number; // 0-1
+    }[];
+    companies: {
+      name: string;
+      confidence: number;
+    }[];
+    contacts: {
+      name: string;
+      confidence: number;
+    }[];
+  };
 
   // Duplicate/skipped tasks
   skippedTasks?: {
     title: string;
-    reason: 'duplicate' | 'already_exists';
+    reason: 'duplicate' | 'unclear' | 'not-actionable';
     existingTaskTitle?: string; // Title of the existing task
     sourceExcerpt?: string; // What triggered this detection
   }[];
 
   // Overall analysis
   sentiment?: 'positive' | 'neutral' | 'negative';
-  keyTopics: string[];
-  processingSteps: string[]; // For showing progress
+  tags?: string[];
+
+  // Processing metadata (Phase 3)
+  processingSteps?: string[]; // Log of AI's decision-making process
+
+  // Clarification system (for when AI asks questions or refuses content)
+  requiresClarification?: boolean; // If true, AI is asking for user input
+  clarificationMessage?: string; // The AI's question or refusal message
+
 }
 
 export interface AIQueryResponse {
@@ -780,9 +1091,6 @@ export interface CaptureDraft {
 
 export interface ManualNoteData {
   content: string;
-  topicId?: string;
-  newTopicName?: string;
-  newTopicType?: 'company' | 'person' | 'other';
   tags?: string[];
   source?: Note['source'];
   processWithAI?: boolean;
@@ -800,7 +1108,6 @@ export interface ManualTaskData {
   priority?: Task['priority'];
   status?: Task['status'];
   dueDate?: string;
-  topicId?: string;
   tags?: string[];
 }
 
@@ -938,6 +1245,94 @@ export interface SessionSummary {
     primaryTheme?: string;
     warnings?: string[]; // Any caveats about summary quality
   };
+
+  // ========================================================================
+  // LIVE SESSION INTELLIGENCE FIELDS (Live Session UI System)
+  // ========================================================================
+
+  /**
+   * Real-time task suggestions from AI
+   * Displayed in LiveIntelligencePanel with one-click creation
+   * OPTIONAL - Only present when AI generates suggestions
+   */
+  suggestedTasks?: Array<{
+    title: string;
+    description?: string;
+    priority?: 'urgent' | 'high' | 'medium' | 'low';
+    context: string; // Why AI suggests this task
+    confidence?: number; // 0-1 confidence score
+    relevance?: number; // 0-1 relevance score
+    tags?: string[];
+    topicId?: string;
+    dueDate?: string;
+    dueTime?: string;
+  }>;
+
+  /**
+   * Real-time note suggestions from AI
+   * Displayed in LiveIntelligencePanel with one-click creation
+   * OPTIONAL - Only present when AI generates suggestions
+   */
+  suggestedNotes?: Array<{
+    content: string;
+    context: string; // Why AI suggests this note
+    confidence?: number; // 0-1 confidence score
+    relevance?: number; // 0-1 relevance score
+    tags?: string[];
+    topicIds?: string[];
+    companyIds?: string[];
+    contactIds?: string[];
+  }>;
+
+  /**
+   * Interactive AI question for user clarification
+   * Displayed in AIQuestionBar with countdown timer
+   * OPTIONAL - Only present when AI needs user input
+   */
+  interactivePrompt?: {
+    questionId: string;
+    question: string;
+    context?: string; // Why AI is asking
+    suggestedAnswers?: string[]; // Quick-reply options (2-4)
+    timeoutSeconds: number; // Countdown timer (15-20s typical)
+    timestamp: string; // When question was asked
+  };
+
+  /**
+   * AI's focus recommendation
+   * Suggests focus mode when user is context-switching frequently
+   * OPTIONAL - Only present when AI detects need for focus
+   */
+  focusRecommendation?: {
+    message: string; // "Consider focusing on authentication work"
+    severity: 'info' | 'warning'; // How urgent the recommendation is
+    suggestedFocusMode?: string; // Suggested focus mode to apply
+  };
+
+  /**
+   * Active focus mode (user-selected or AI-suggested)
+   * Filters AI's attention to specific work types
+   * OPTIONAL - Only present when focus mode is active
+   */
+  focusMode?: {
+    type: 'preset' | 'custom';
+    preset?: 'all' | 'coding' | 'debugging' | 'meetings' | 'documentation'; // Preset modes
+    activities?: string[]; // Custom: Specific activities to focus on
+    keywords?: string[]; // Custom: Keywords to filter by
+    minCuriosity?: number; // Custom: Minimum curiosity threshold (0-1)
+  };
+
+  /**
+   * Dismissed suggestions tracking
+   * Prevents re-showing suggestions user explicitly dismissed
+   * OPTIONAL - Tracks user dismissals for better UX
+   */
+  dismissedSuggestions?: Array<{
+    id: string; // Suggestion identifier
+    type: 'task' | 'note'; // What was dismissed
+    timestamp: string; // When dismissed
+    reason?: string; // Optional dismissal reason
+  }>;
 }
 
 // ============================================================================
@@ -996,17 +1391,71 @@ export interface SessionSummaryContext {
 }
 
 /**
- * Flexible session summary where AI chooses relevant sections
+ * Flexible Session Summary (Phase 2 - Section-Based Architecture)
  *
+ * A dynamic, AI-driven summary system where the AI chooses which sections to include
+ * based on what's actually meaningful for each specific session.
+ *
+ * WHY FLEXIBLE SUMMARIES?
  * Instead of forcing every session into the same template (achievements, blockers, etc.),
- * this allows the AI to compose summaries from a variety of section types based on
- * what's actually meaningful for THIS specific session.
+ * this allows the AI to compose summaries from a variety of section types. A debugging
+ * session might emphasize problem-solving-journey + technical-discoveries, while a
+ * learning session highlights breakthrough-moments + learning-highlights.
  *
- * A debugging session might have: problem-solving-journey + technical-discoveries
- * A learning session might have: breakthrough-moments + learning-highlights
- * A meeting might have: collaboration-wins + emotional-journey
+ * ARCHITECTURE:
+ * - schemaVersion: '2.0' (distinguishes from legacy SessionSummary)
+ * - narrative: Core story of the session (always present)
+ * - sections: Dynamic array of section types chosen by AI
+ * - generationMetadata: AI's reasoning for section selection
  *
- * The AI explains its choices via generationMetadata.
+ * SECTION TYPES (15+ available):
+ * - AchievementsSection: What was completed
+ * - BlockersSection: What blocked progress
+ * - BreakthroughMomentsSection: Key insights and discoveries
+ * - ProblemSolvingSection: Step-by-step problem resolution
+ * - TechnicalDiscoveriesSection: New learnings about technology
+ * - LearningHighlightsSection: Educational takeaways
+ * - FlowStateSection: Deep work periods
+ * - FocusAreasSection: Where time was spent
+ * - EmotionalJourneySection: Emotional progression
+ * - CollaborationSection: Team interactions
+ * - CreativeSolutionsSection: Novel approaches
+ * - TimelineSection: Chronological event flow
+ * - RecommendedTasksSection: AI-suggested next steps
+ * - KeyInsightsSection: Important observations
+ * - RelatedContextSection: Links to existing tasks/notes
+ * - TaskBreakdownSection: Subtask breakdown
+ * - CustomSection: AI-defined custom sections
+ *
+ * USAGE:
+ * ```typescript
+ * import { isFlexibleSummary, getSectionByType } from '@/types';
+ *
+ * if (isFlexibleSummary(session.summary)) {
+ *   // Access sections
+ *   const achievements = getSectionByType(session.summary, 'achievements');
+ *   const timeline = getSectionByType(session.summary, 'timeline');
+ *
+ *   // Check what AI detected
+ *   console.log(session.summary.generationMetadata.detectedSessionType);
+ *   // → 'deep-work', 'exploratory', 'troubleshooting', etc.
+ * }
+ * ```
+ *
+ * BACKWARD COMPATIBILITY:
+ * - Legacy SessionSummary (fixed template) still supported
+ * - Use isFlexibleSummary() type guard to distinguish
+ * - quickAccess field provides common fields for backward compat
+ *
+ * COST OPTIMIZATION:
+ * - AI chooses only relevant sections (reduces token usage)
+ * - Sections can be cached independently
+ * - Progressive enrichment (add sections over time)
+ *
+ * @see SessionSummary for legacy fixed-template format
+ * @see SummarySection for all available section types
+ * @see isFlexibleSummary() type guard
+ * @see getSectionByType() helper for section retrieval
  */
 export interface FlexibleSessionSummary {
   /** Schema version for migration */
@@ -1107,6 +1556,40 @@ interface BaseSummarySection {
   colorTheme?: 'success' | 'warning' | 'info' | 'error' | 'neutral' | 'creative';
 }
 
+/**
+ * Achievements Section - Notable accomplishments during session
+ *
+ * Used when AI detects completed work, milestones reached, or goals achieved.
+ * Common in deep-work, coding, and building sessions.
+ *
+ * FIELDS:
+ * - achievements: List of accomplishments with timestamps and impact level
+ * - summary: Optional overview of all achievements
+ *
+ * RENDERING:
+ * - emphasis: Controls visual prominence (low/medium/high)
+ * - position: Order in summary (lower = earlier)
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'achievements',
+ *   title: 'Major Wins',
+ *   emphasis: 'high',
+ *   position: 1,
+ *   data: {
+ *     achievements: [{
+ *       title: 'Completed OAuth integration',
+ *       timestamp: '2025-10-26T14:30:00Z',
+ *       impact: 'major'
+ *     }]
+ *   }
+ * }
+ * ```
+ */
 export interface AchievementsSection extends BaseSummarySection {
   type: 'achievements';
   data: {
@@ -1120,6 +1603,43 @@ export interface AchievementsSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Breakthrough Moments Section - Sudden insights or problem-solving victories
+ *
+ * Used when AI detects "aha!" moments, debugging breakthroughs, or key realizations.
+ * Common in troubleshooting, learning, and exploratory sessions.
+ *
+ * FIELDS:
+ * - moments: Array of breakthrough events with full context
+ * - title: Name of the breakthrough
+ * - description: What happened
+ * - context: Why this was significant
+ *
+ * RENDERING:
+ * - emphasis: Usually 'high' for impactful moments
+ * - position: Often early in summary (highlights)
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'breakthrough-moments',
+ *   title: 'Key Breakthroughs',
+ *   emphasis: 'high',
+ *   position: 2,
+ *   data: {
+ *     moments: [{
+ *       title: 'Found the memory leak',
+ *       description: 'Discovered unclosed event listeners',
+ *       timestamp: '2025-10-26T15:45:00Z',
+ *       context: 'After 2 hours of debugging'
+ *     }]
+ *   }
+ * }
+ * ```
+ */
 export interface BreakthroughMomentsSection extends BaseSummarySection {
   type: 'breakthrough-moments';
   data: {
@@ -1133,6 +1653,42 @@ export interface BreakthroughMomentsSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Blockers Section - Obstacles and challenges encountered
+ *
+ * Used when AI detects errors, roadblocks, or unresolved issues.
+ * Common in debugging, troubleshooting, and complex implementation sessions.
+ *
+ * FIELDS:
+ * - blockers: Array of obstacles with resolution status
+ * - status: Whether blocker was resolved, worked around, or remains open
+ * - resolution: How the blocker was addressed (if resolved/workaround)
+ *
+ * RENDERING:
+ * - emphasis: Usually 'medium' or 'high' for critical blockers
+ * - position: Often near achievements to show full picture
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'blockers',
+ *   title: 'Challenges',
+ *   emphasis: 'medium',
+ *   position: 3,
+ *   data: {
+ *     blockers: [{
+ *       title: 'API rate limiting errors',
+ *       description: 'Hitting 429 responses after 100 requests',
+ *       status: 'workaround',
+ *       resolution: 'Added exponential backoff'
+ *     }]
+ *   }
+ * }
+ * ```
+ */
 export interface BlockersSection extends BaseSummarySection {
   type: 'blockers';
   data: {
@@ -1147,6 +1703,41 @@ export interface BlockersSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Learning Highlights Section - New knowledge gained during session
+ *
+ * Used when AI detects educational content, skill development, or discoveries.
+ * Common in learning, research, and exploratory sessions.
+ *
+ * FIELDS:
+ * - learnings: Array of insights with categorization
+ * - topic: What area the learning relates to
+ * - insight: The actual knowledge gained
+ * - category: Type of learning (technical, process, tool, domain, other)
+ *
+ * RENDERING:
+ * - emphasis: Usually 'medium' to highlight growth
+ * - position: Often mid-summary after achievements
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'learning-highlights',
+ *   title: 'What I Learned',
+ *   emphasis: 'medium',
+ *   data: {
+ *     learnings: [{
+ *       topic: 'React Context',
+ *       insight: 'Context re-renders all consumers. Use split contexts.',
+ *       category: 'technical'
+ *     }]
+ *   }
+ * }
+ * ```
+ */
 export interface LearningHighlightsSection extends BaseSummarySection {
   type: 'learning-highlights';
   data: {
@@ -1160,6 +1751,41 @@ export interface LearningHighlightsSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Creative Solutions Section - Innovative problem-solving approaches
+ *
+ * Used when AI detects novel solutions, clever workarounds, or unconventional approaches.
+ * Common in creative, optimization, and problem-solving sessions.
+ *
+ * FIELDS:
+ * - solutions: Array of problem-solution pairs
+ * - problem: The challenge that needed solving
+ * - solution: The creative approach taken
+ * - approach: Methodology or reasoning behind solution
+ *
+ * RENDERING:
+ * - emphasis: Usually 'high' to showcase ingenuity
+ * - position: Often highlighted early in summary
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'creative-solutions',
+ *   title: 'Clever Solutions',
+ *   emphasis: 'high',
+ *   data: {
+ *     solutions: [{
+ *       problem: 'Need to cache without LRU library overhead',
+ *       solution: 'Built custom Map-based LRU with O(1) operations',
+ *       approach: 'Used doubly-linked list pattern'
+ *     }]
+ *   }
+ * }
+ * ```
+ */
 export interface CreativeSolutionsSection extends BaseSummarySection {
   type: 'creative-solutions';
   data: {
@@ -1173,6 +1799,41 @@ export interface CreativeSolutionsSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Collaboration Wins Section - Team interactions and shared achievements
+ *
+ * Used when AI detects pair programming, meetings, code reviews, or team discussions.
+ * Common in collaborative, meeting, and code review sessions.
+ *
+ * FIELDS:
+ * - collaborations: Array of team interactions
+ * - participants: Who was involved
+ * - outcome: Result of the collaboration
+ *
+ * RENDERING:
+ * - emphasis: Usually 'medium' for team context
+ * - position: Often mid-summary after individual work
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'collaboration-wins',
+ *   title: 'Team Wins',
+ *   emphasis: 'medium',
+ *   data: {
+ *     collaborations: [{
+ *       title: 'Architecture review with Sarah',
+ *       description: 'Discussed database schema migration strategy',
+ *       participants: ['Sarah Chen', 'You'],
+ *       outcome: 'Agreed on phased migration with feature flags'
+ *     }]
+ *   }
+ * }
+ * ```
+ */
 export interface CollaborationSection extends BaseSummarySection {
   type: 'collaboration-wins';
   data: {
@@ -1186,6 +1847,40 @@ export interface CollaborationSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Technical Discoveries Section - Technology-specific findings and insights
+ *
+ * Used when AI detects exploration of new APIs, frameworks, or technical patterns.
+ * Common in research, prototyping, and learning sessions.
+ *
+ * FIELDS:
+ * - discoveries: Array of technical findings
+ * - technology: Specific tool/framework/API explored
+ * - finding: What was discovered about it
+ *
+ * RENDERING:
+ * - emphasis: Usually 'medium' for technical context
+ * - position: Often grouped with learning highlights
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'technical-discoveries',
+ *   title: 'Technical Findings',
+ *   emphasis: 'medium',
+ *   data: {
+ *     discoveries: [{
+ *       title: 'IndexedDB transaction performance',
+ *       technology: 'IndexedDB API',
+ *       finding: 'Single transaction for 100 writes is 20x faster than 100 individual transactions'
+ *     }]
+ *   }
+ * }
+ * ```
+ */
 export interface TechnicalDiscoveriesSection extends BaseSummarySection {
   type: 'technical-discoveries';
   data: {
@@ -1199,6 +1894,47 @@ export interface TechnicalDiscoveriesSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Timeline Section - Chronological flow of session events
+ *
+ * Used when AI wants to emphasize temporal progression and session arc.
+ * Common in long sessions with distinct phases or when chronology matters.
+ *
+ * FIELDS:
+ * - events: Chronological list of key moments
+ * - type: Event classification (start, milestone, blocker, breakthrough, end)
+ * - narrative: Optional story-like description of session flow
+ *
+ * RENDERING:
+ * - emphasis: Usually 'low' or 'medium' (provides context, not highlights)
+ * - position: Often early for orientation, or late for retrospective
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'timeline',
+ *   title: 'Session Flow',
+ *   emphasis: 'low',
+ *   data: {
+ *     events: [
+ *       {
+ *         time: '2025-10-26T09:00:00Z',
+ *         title: 'Started debugging',
+ *         type: 'start'
+ *       },
+ *       {
+ *         time: '2025-10-26T11:30:00Z',
+ *         title: 'Found root cause',
+ *         type: 'breakthrough'
+ *       }
+ *     ]
+ *   }
+ * }
+ * ```
+ */
 export interface TimelineSection extends BaseSummarySection {
   type: 'timeline';
   data: {
@@ -1213,6 +1949,45 @@ export interface TimelineSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Flow State Section - Deep work and concentration analysis
+ *
+ * Used when AI detects sustained focus periods and work rhythm patterns.
+ * Common in deep-work, coding, and creative sessions with minimal interruptions.
+ *
+ * FIELDS:
+ * - flowPeriods: Distinct periods of focused work
+ * - quality: Depth of focus (deep/moderate/shallow)
+ * - totalFlowTime: Sum of all flow periods
+ * - flowPercentage: Proportion of session spent in flow
+ *
+ * RENDERING:
+ * - emphasis: Usually 'medium' for productivity context
+ * - position: Often late in summary as meta-analysis
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'flow-states',
+ *   title: 'Focus Analysis',
+ *   emphasis: 'medium',
+ *   data: {
+ *     flowPeriods: [{
+ *       startTime: '2025-10-26T09:00:00Z',
+ *       endTime: '2025-10-26T11:30:00Z',
+ *       duration: 150,
+ *       activity: 'Implementing authentication logic',
+ *       quality: 'deep'
+ *     }],
+ *     totalFlowTime: 150,
+ *     flowPercentage: 75
+ *   }
+ * }
+ * ```
+ */
 export interface FlowStateSection extends BaseSummarySection {
   type: 'flow-states';
   data: {
@@ -1228,6 +2003,49 @@ export interface FlowStateSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Emotional Journey Section - Emotional arc throughout session
+ *
+ * Used when AI detects emotional patterns in audio/transcription or activity shifts.
+ * Common in sessions with audio recording enabled and significant mood changes.
+ *
+ * FIELDS:
+ * - journey: Emotional checkpoints throughout session
+ * - emotion: Detected feeling (frustrated, excited, focused, confused, etc.)
+ * - overallSentiment: Summary of entire session's emotional tone
+ * - narrative: Story-like description of emotional progression
+ *
+ * RENDERING:
+ * - emphasis: Usually 'low' or 'medium' (adds human context)
+ * - position: Often late in summary as reflection
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'emotional-journey',
+ *   title: 'How It Felt',
+ *   emphasis: 'low',
+ *   data: {
+ *     journey: [
+ *       {
+ *         timestamp: '2025-10-26T09:00:00Z',
+ *         emotion: 'focused',
+ *         description: 'Deep concentration on problem'
+ *       },
+ *       {
+ *         timestamp: '2025-10-26T10:30:00Z',
+ *         emotion: 'frustrated',
+ *         description: 'Hitting unexpected errors'
+ *       }
+ *     ],
+ *     overallSentiment: 'positive'
+ *   }
+ * }
+ * ```
+ */
 export interface EmotionalJourneySection extends BaseSummarySection {
   type: 'emotional-journey';
   data: {
@@ -1242,6 +2060,51 @@ export interface EmotionalJourneySection extends BaseSummarySection {
   };
 }
 
+/**
+ * Problem Solving Journey Section - Step-by-step debugging or problem resolution
+ *
+ * Used when AI detects methodical troubleshooting, systematic debugging, or multi-step solutions.
+ * Common in troubleshooting, debugging, and complex problem-solving sessions.
+ *
+ * FIELDS:
+ * - problem: The challenge being addressed
+ * - approach: Ordered steps taken to solve it
+ * - resolution: Final outcome or solution
+ * - lessonsLearned: Key takeaways from the process
+ *
+ * RENDERING:
+ * - emphasis: Usually 'high' for narrative-driven sessions
+ * - position: Often early as main story arc
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'problem-solving-journey',
+ *   title: 'Debugging Journey',
+ *   emphasis: 'high',
+ *   data: {
+ *     problem: 'Memory leak causing browser crashes after 30 minutes',
+ *     approach: [
+ *       {
+ *         step: 1,
+ *         action: 'Used Chrome DevTools heap snapshots',
+ *         outcome: 'Found growing array of event listeners'
+ *       },
+ *       {
+ *         step: 2,
+ *         action: 'Traced listener registration',
+ *         outcome: 'Discovered missing cleanup in useEffect'
+ *       }
+ *     ],
+ *     resolution: 'Fixed by adding proper effect cleanup',
+ *     lessonsLearned: ['Always clean up observers in useEffect']
+ *   }
+ * }
+ * ```
+ */
 export interface ProblemSolvingSection extends BaseSummarySection {
   type: 'problem-solving-journey';
   data: {
@@ -1257,6 +2120,49 @@ export interface ProblemSolvingSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Focus Areas Section - Time allocation across different activities
+ *
+ * Used when AI wants to show how time was distributed across work areas.
+ * Common in mixed sessions with multiple distinct activities.
+ *
+ * FIELDS:
+ * - areas: Different work domains/activities
+ * - duration: Minutes spent on each area
+ * - percentage: Proportion of total session time
+ * - activities: Specific tasks within each area
+ *
+ * RENDERING:
+ * - emphasis: Usually 'low' or 'medium' (provides context)
+ * - position: Often late in summary as time analysis
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'focus-areas',
+ *   title: 'Time Breakdown',
+ *   emphasis: 'low',
+ *   data: {
+ *     areas: [
+ *       {
+ *         area: 'Backend Development',
+ *         duration: 90,
+ *         percentage: 60,
+ *         activities: ['API endpoints', 'Database queries', 'Testing']
+ *       },
+ *       {
+ *         area: 'Code Review',
+ *         duration: 30,
+ *         percentage: 20
+ *       }
+ *     ]
+ *   }
+ * }
+ * ```
+ */
 export interface FocusAreasSection extends BaseSummarySection {
   type: 'focus-areas';
   data: {
@@ -1269,6 +2175,46 @@ export interface FocusAreasSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Recommended Tasks Section - AI-extracted action items
+ *
+ * Used when AI detects TODO comments, unfinished work, or natural next steps.
+ * Common in all session types - AI suggests follow-up actions.
+ *
+ * FIELDS:
+ * - tasks: Suggested tasks with priority and context
+ * - priority: Urgency level based on session context
+ * - context: Why this task matters or where it came from
+ * - estimatedDuration: AI's guess at time needed
+ * - category: Type of task (bug, feature, refactor, etc.)
+ *
+ * RENDERING:
+ * - emphasis: Usually 'medium' or 'high' (actionable next steps)
+ * - position: Often late in summary (after reviewing what was done)
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'recommended-tasks',
+ *   title: 'Next Steps',
+ *   emphasis: 'medium',
+ *   data: {
+ *     tasks: [
+ *       {
+ *         title: 'Add error handling to auth flow',
+ *         priority: 'high',
+ *         context: 'Left TODO comment during implementation',
+ *         estimatedDuration: 30,
+ *         category: 'bug'
+ *       }
+ *     ]
+ *   }
+ * }
+ * ```
+ */
 export interface RecommendedTasksSection extends BaseSummarySection {
   type: 'recommended-tasks';
   data: {
@@ -1283,6 +2229,43 @@ export interface RecommendedTasksSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Key Insights Section - Important observations and realizations
+ *
+ * Used when AI detects significant learnings, patterns, or meta-observations.
+ * Common in reflective, analytical, and discovery sessions.
+ *
+ * FIELDS:
+ * - insights: Array of notable observations
+ * - importance: Significance level of the insight
+ * - category: Type of insight (performance, architecture, UX, etc.)
+ *
+ * RENDERING:
+ * - emphasis: Usually 'medium' or 'high' based on importance
+ * - position: Often mid-summary after concrete work
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'key-insights',
+ *   title: 'Key Insights',
+ *   emphasis: 'medium',
+ *   data: {
+ *     insights: [
+ *       {
+ *         insight: 'Our current architecture makes real-time features difficult',
+ *         timestamp: '2025-10-26T14:00:00Z',
+ *         importance: 'major',
+ *         category: 'architecture'
+ *       }
+ *     ]
+ *   }
+ * }
+ * ```
+ */
 export interface KeyInsightsSection extends BaseSummarySection {
   type: 'key-insights';
   data: {
@@ -1355,6 +2338,56 @@ export interface RelatedContextSection extends BaseSummarySection {
   };
 }
 
+/**
+ * Task Breakdown Section - Hierarchical task decomposition
+ *
+ * Used when AI detects a main task being broken down into subtasks.
+ * Common in planning, project kickoff, and complex implementation sessions.
+ *
+ * FIELDS:
+ * - mainTask: The overarching goal
+ * - subtasks: Component tasks with status tracking
+ * - progress: Overall completion percentage
+ * - totalEstimatedTime: Sum of subtask estimates
+ * - dependencies: Subtask ordering constraints
+ *
+ * RENDERING:
+ * - emphasis: Usually 'medium' for project planning context
+ * - position: Often early for planning sessions, late for retrospectives
+ *
+ * @see FlexibleSessionSummary for section system overview
+ * @see getSectionByType helper for retrieving sections
+ *
+ * @example
+ * ```typescript
+ * {
+ *   type: 'task-breakdown',
+ *   title: 'Implementation Plan',
+ *   emphasis: 'medium',
+ *   data: {
+ *     mainTask: 'Implement user authentication',
+ *     description: 'OAuth 2.0 with JWT tokens',
+ *     subtasks: [
+ *       {
+ *         id: 'auth-1',
+ *         title: 'Set up OAuth provider',
+ *         status: 'done',
+ *         estimatedDuration: 30
+ *       },
+ *       {
+ *         id: 'auth-2',
+ *         title: 'Implement token validation',
+ *         status: 'in-progress',
+ *         estimatedDuration: 60,
+ *         dependencies: ['auth-1']
+ *       }
+ *     ],
+ *     progress: 33,
+ *     totalEstimatedTime: 135
+ *   }
+ * }
+ * ```
+ */
 export interface TaskBreakdownSection extends BaseSummarySection {
   type: 'task-breakdown';
   data: {
@@ -1380,12 +2413,17 @@ export interface CustomSection extends BaseSummarySection {
 }
 
 export interface Session {
+  // ========================================
+  // CORE IDENTITY
+  // ========================================
   id: string;
   name: string; // User-provided or AI-generated
   description: string; // What user is working on
 
-  // Lifecycle
-  status: 'active' | 'paused' | 'completed' | 'interrupted';
+  // ========================================
+  // LIFECYCLE & STATUS
+  // ========================================
+  status: SessionStatus;
   startTime: string;
   endTime?: string;
   lastScreenshotTime?: string;
@@ -1394,48 +2432,67 @@ export interface Session {
   pausedAt?: string; // Timestamp when session was last paused
   totalPausedTime?: number; // Total paused time in milliseconds
 
-  // Configuration
+  // ========================================
+  // RECORDING CONFIGURATION
+  // ========================================
   screenshotInterval: number; // Minutes (default: 2), or -1 for adaptive mode
   autoAnalysis: boolean; // Auto-analyze screenshots
   enableScreenshots: boolean; // Enable/disable screenshot capture (default: true)
   audioMode: AudioMode; // Audio recording mode (default: 'off')
   audioRecording: boolean; // Currently recording audio
 
-  // References
+  // ========================================
+  // CAPTURED DATA
+  // ========================================
   trackingNoteId?: string; // Session tracking note
   screenshots: SessionScreenshot[];
   audioSegments?: SessionAudioSegment[]; // Real-time audio recordings (Whisper-1 transcripts)
-  extractedTaskIds: string[]; // Task IDs created from this session
-  extractedNoteIds: string[]; // Note IDs created from this session
   contextItems?: SessionContextItem[]; // User-added context during session
 
-  // ONE-TIME Audio Review (cached, never re-processed)
+  // ========================================
+  // RELATIONSHIPS (Phase 2.0 Unified System)
+  // ========================================
+  /**
+   * Unified relationship system
+   */
+  relationships: Relationship[];
+
+  // ========================================
+  // AUDIO ANALYSIS (ONE-TIME, CACHED)
+  // ========================================
   audioReviewCompleted: boolean; // Has comprehensive audio review been done?
   fullAudioAttachmentId?: string; // Complete concatenated audio file (downsampled)
   fullTranscription?: string; // Full transcript from GPT-4o-audio-preview
   audioInsights?: AudioInsights; // Comprehensive audio analysis (emotions, patterns, context)
   transcriptUpgradeCompleted?: boolean; // Has word-level transcript upgrade been done?
 
-  // AI-Generated Summary (synthesized every 5 min + on session end)
-  summary?: SessionSummary;
-
-  // AI-Generated Canvas Specification (cached for fast rendering, avoids regeneration costs)
-  canvasSpec?: CanvasSpec;
-
   // DEPRECATED: Legacy audio fields
   audioKeyMoments?: AudioKeyMoment[]; // Replaced by audioInsights.keyMoments
 
-  // Metadata
+  // ========================================
+  // AI-GENERATED ARTIFACTS (CACHED)
+  // ========================================
+  summary?: SessionSummary; // Synthesized every 5 min + on session end
+  canvasSpec?: CanvasSpec; // Cached for fast rendering, avoids regeneration costs
+
+  // ========================================
+  // METADATA & CLASSIFICATION
+  // ========================================
   tags: string[];
   category?: string; // AI-assigned primary category: "Deep Work", "Meetings", "Research", etc.
   subCategory?: string; // AI-assigned sub-category: "API Development", "Client Presentation", etc.
   activityType?: string; // "email-writing", "presentation", "coding", etc.
   totalDuration?: number; // Total minutes (calculated)
 
-  // Video Recording (Phase 1)
+  // ========================================
+  // VIDEO RECORDING (Phase 1)
+  // ========================================
   video?: SessionVideo;
   videoRecording?: boolean; // Enable/disable video recording (user setting)
 
+  // ========================================
+  // ENRICHMENT PIPELINE (POST-SESSION)
+  // ========================================
   /**
    * Enrichment Status - Comprehensive tracking of post-session enrichment pipeline
    *
@@ -1453,7 +2510,7 @@ export interface Session {
    */
   enrichmentStatus?: {
     /** Overall enrichment pipeline status */
-    status: 'idle' | 'pending' | 'in-progress' | 'completed' | 'failed' | 'partial';
+    status: EnrichmentStatus;
 
     /** When enrichment pipeline was first initiated (ISO 8601) */
     startedAt?: string;
@@ -1475,7 +2532,7 @@ export interface Session {
      */
     audio: {
       /** Status of audio review processing */
-      status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+      status: EnrichmentStageStatus;
 
       /** When audio review started (ISO 8601) */
       startedAt?: string;
@@ -1498,7 +2555,7 @@ export interface Session {
      */
     video: {
       /** Status of video chapter generation */
-      status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+      status: EnrichmentStageStatus;
 
       /** When video chapter generation started (ISO 8601) */
       startedAt?: string;
@@ -1521,7 +2578,7 @@ export interface Session {
      */
     summary: {
       /** Status of summary generation */
-      status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+      status: EnrichmentStageStatus;
 
       /** Error message if summary generation failed */
       error?: string;
@@ -1576,6 +2633,21 @@ export interface Session {
     /** When the lock will expire if not released (ISO 8601) */
     expiresAt: string;
   };
+
+  // ========================================
+  // DEVICE CONFIGURATION
+  // ========================================
+  /** Audio device configuration (optional, defaults to system default mic) */
+  audioConfig?: AudioDeviceConfig;
+
+  /** Video recording configuration (optional, defaults to main display) */
+  videoConfig?: VideoRecordingConfig;
+
+  // ========================================
+  // CONCURRENCY CONTROL
+  // ========================================
+  /** Version number for optimistic locking (incremented on every update) */
+  version?: number;
 }
 
 // Video Frame - Extracted frame from video for AI analysis
@@ -1587,6 +2659,41 @@ export interface VideoFrame {
 }
 
 // Video Chapter - Semantic segment of a session video
+/**
+ * Video Chapter - Semantic segment of a session video
+ *
+ * AI-detected topic boundaries in session recordings. Each chapter represents
+ * a distinct phase of work (e.g., "Implementing feature X", "Debugging issue Y").
+ *
+ * DETECTION:
+ * - AI analyzes video frames for context switches
+ * - Detects app changes, file switches, topic transitions
+ * - Confidence score (0-1) indicates boundary certainty
+ *
+ * PURPOSE:
+ * - Navigate long recordings quickly
+ * - Jump to specific work phases
+ * - Understand session structure at a glance
+ *
+ * @see SessionVideo for parent video
+ * @see EnrichmentPipeline for chapter generation
+ *
+ * @example
+ * ```typescript
+ * {
+ *   id: 'chapter-abc123',
+ *   sessionId: 'session-456',
+ *   startTime: 600,   // 10 minutes from session start
+ *   endTime: 1200,    // 20 minutes (10-minute chapter)
+ *   title: 'Implementing OAuth callback handler',
+ *   summary: 'Created callback endpoint and validated tokens',
+ *   keyTopics: ['OAuth', 'callback', 'token validation'],
+ *   thumbnail: 'data:image/png;base64,...',  // First frame of chapter
+ *   confidence: 0.92,  // High confidence in this boundary
+ *   createdAt: '2025-10-26T15:00:00Z'
+ * }
+ * ```
+ */
 export interface VideoChapter {
   id: string;
   sessionId: string;
@@ -1601,20 +2708,88 @@ export interface VideoChapter {
 }
 
 // Session Video - Full session screen recording with intelligent chunking
+/**
+ * Session Video - Full session screen recording with intelligent chunking
+ *
+ * Records the entire session as a single video file, then optionally chunks it
+ * into topic-aligned segments for easier navigation and on-demand analysis.
+ *
+ * STORAGE:
+ * - Full video stored via Content-Addressable Storage
+ * - fullVideoAttachmentId references complete recording
+ * - chunks[] are separate video files for each topic segment
+ *
+ * VIDEO CHAPTERS:
+ * - AI-detected semantic boundaries in the recording
+ * - chapters[] provides thumbnail + summary for each topic change
+ * - Generated during enrichment pipeline (optional, user-configurable)
+ *
+ * CHUNKING STATUS:
+ * - pending: Not yet processed
+ * - processing: Currently analyzing and splitting video
+ * - complete: All chunks generated
+ * - error: Chunking failed (see chunkingError)
+ *
+ * @see VideoChapter for chapter structure
+ * @see SessionVideoChunk for chunked segment details
+ * @see EnrichmentPipeline for video chapter generation
+ *
+ * @example
+ * ```typescript
+ * {
+ *   id: 'video-123',
+ *   sessionId: 'session-456',
+ *   fullVideoAttachmentId: 'att-video-789',
+ *   duration: 3600,  // 1 hour
+ *   chunkingStatus: 'complete',
+ *   chapters: [
+ *     {
+ *       id: 'chapter-1',
+ *       startTime: 0,
+ *       endTime: 900,
+ *       title: 'Setting up authentication flow',
+ *       summary: 'Configured OAuth provider and created login endpoint',
+ *       keyTopics: ['OAuth', 'login', 'backend']
+ *     },
+ *     {
+ *       id: 'chapter-2',
+ *       startTime: 900,
+ *       endTime: 1800,
+ *       title: 'Debugging token validation',
+ *       summary: 'Fixed JWT expiration handling issues',
+ *       keyTopics: ['JWT', 'debugging', 'tokens']
+ *     }
+ *   ]
+ * }
+ * ```
+ */
 export interface SessionVideo {
   id: string;
   sessionId: string;
-  fullVideoAttachmentId: string; // Complete session recording file
-  chunks?: SessionVideoChunk[]; // Topic-aligned video segments
+
+  /**
+   * Original video file path on disk (from recording)
+   * Used for sessions that haven't been optimized yet
+   */
+  path?: string;
+
+  /**
+   * Optimized video/audio path (background processed media)
+   * Created by BackgroundMediaProcessor after session ends
+   *
+   * For sessions with video: Contains merged video + audio in optimized H.264+AAC MP4 format
+   * For audio-only sessions: Contains concatenated MP3 audio file
+   *
+   * PREFERRED over `path` for instant playback (no runtime audio concatenation needed)
+   * @since Task 11 - Background Enrichment
+   */
+  optimizedPath?: string;
+
   chapters?: VideoChapter[]; // AI-detected chapter markers
   duration: number; // Total duration in seconds
   chunkingStatus: 'pending' | 'processing' | 'complete' | 'error';
   processedAt?: string; // When chunking completed
   chunkingError?: string; // Error message if chunking failed
-
-  // DEPRECATED: Legacy properties for backward compatibility
-  startTime?: number;
-  endTime?: number;
 }
 
 // Session Video Chunk - Topic-aligned video segment (30s-5min)
@@ -1637,13 +2812,67 @@ export interface SessionVideoChunk {
   lastAnalyzedAt?: string; // When last analyzed
 }
 
+/**
+ * Session Screenshot - Captured screen image with AI analysis
+ *
+ * Screenshots are automatically captured at intervals (default: 2 min, or adaptive).
+ * Each screenshot is analyzed by Claude Vision API to extract:
+ * - Activity detection (coding, email, slides, etc.)
+ * - OCR text extraction
+ * - Context changes (what changed since last screenshot)
+ * - Suggested actions (TODOs noticed by AI)
+ *
+ * STORAGE:
+ * - Stored via Content-Addressable Storage (CAS) using attachment hash
+ * - attachmentId references deduplicated file in /attachments-ca/
+ * - path field is DEPRECATED - use attachmentId instead
+ *
+ * AI ANALYSIS:
+ * - Powered by Sessions Agent (sessionsAgentService.ts)
+ * - Adaptive scheduling based on curiosity score (0-1)
+ * - Progress tracking (achievements, blockers, insights)
+ *
+ * @see SessionsAgentService for analysis implementation
+ * @see ContentAddressableStorage for storage system
+ *
+ * @example
+ * ```typescript
+ * {
+ *   id: 'screenshot-123',
+ *   sessionId: 'session-456',
+ *   timestamp: '2025-10-26T14:30:00Z',
+ *   attachmentId: 'att-789',  // ✅ New (CAS reference)
+ *   path: '/screenshots/img.png',  // ❌ Deprecated
+ *   analysisStatus: 'complete',
+ *   aiAnalysis: {
+ *     summary: 'Writing authentication logic in VS Code',
+ *     detectedActivity: 'coding',
+ *     extractedText: 'function validateToken(token: string) {...}',
+ *     keyElements: ['VS Code', 'TypeScript', 'auth.ts'],
+ *     confidence: 0.95,
+ *     curiosity: 0.7,  // High interest - next screenshot sooner
+ *     curiosityReason: 'Implementing new feature - want to see progress'
+ *   }
+ * }
+ * ```
+ */
 export interface SessionScreenshot {
   id: string;
   sessionId: string;
   timestamp: string;
   attachmentId: string; // Reference to Attachment entity
 
-  // DEPRECATED: Legacy property for backward compatibility
+  /**
+   * Phase 4: SHA-256 hash for content-addressable storage
+   * Used to load attachment data from ContentAddressableStorage
+   */
+  hash?: string;
+
+  /**
+   * @deprecated Use attachmentId instead. This field is maintained for backward compatibility
+   * and will be removed in a future version. The path is now managed through the
+   * ContentAddressableStorage system via attachmentId references.
+   */
   path?: string;
 
   // AI Analysis (from Sessions Agent)
@@ -1662,6 +2891,11 @@ export interface SessionScreenshot {
       blockers?: string[]; // Issues or obstacles encountered
       insights?: string[]; // Important learnings or observations
     };
+    detectedEntities?: {
+      topics: Array<{ name: string; confidence: number }>;
+      companies: Array<{ name: string; confidence: number }>;
+      contacts: Array<{ name: string; confidence: number }>;
+    };
   };
 
   // User interaction
@@ -1669,13 +2903,397 @@ export interface SessionScreenshot {
   flagged?: boolean; // User can flag important moments
 
   // Status
-  analysisStatus: 'pending' | 'analyzing' | 'complete' | 'error';
+  analysisStatus: ScreenshotAnalysisStatus;
   analysisError?: string;
 }
 
 // Audio Recording Types
-export type AudioMode = 'off' | 'transcription' | 'description'; // DEPRECATED: Will be removed
+/**
+ * @deprecated AudioMode is deprecated and will be removed in v2.0.
+ * Use audioConfig.enabled boolean instead.
+ *
+ * Migration:
+ * - 'off' → audioConfig: undefined or enabled: false
+ * - 'transcription' | 'description' → audioConfig: { enabled: true, ... }
+ *
+ * Current usage: Session interface, ChunkedSessionStorage, openAIService
+ * Will be removed after audioConfig migration is complete.
+ *
+ * @see AudioDeviceConfig for replacement
+ */
+export type AudioMode = 'off' | 'transcription' | 'description';
 
+// ============================================================================
+// Media Device Configuration
+// ============================================================================
+
+/**
+ * Audio source types for recording
+ */
+export type AudioSourceType = 'microphone' | 'system-audio' | 'both';
+
+/**
+ * Audio device information returned from backend
+ */
+export interface AudioDevice {
+  /** Unique device identifier from cpal/CoreAudio */
+  id: string;
+
+  /** Human-readable device name */
+  name: string;
+
+  /** Device type (input for mics, output for system audio loopback) */
+  deviceType: 'Input' | 'Output';
+
+  /** Whether this is the system default device */
+  isDefault: boolean;
+
+  /** Native sample rate in Hz */
+  sampleRate: number;
+
+  /** Number of audio channels */
+  channels: number;
+}
+
+/**
+ * Audio device configuration for a session
+ */
+/**
+ * Audio Device Configuration - Audio input settings for session
+ *
+ * Configures which audio sources to record during a session:
+ * - Microphone only (voice narration)
+ * - System audio only (app sounds, music)
+ * - Both (mixed with configurable balance)
+ *
+ * DEVICE SELECTION:
+ * - micDeviceId: Specific microphone (from AudioDevice list)
+ * - systemAudioDeviceId: System audio loopback device
+ * - undefined values = use system default
+ *
+ * MIXING:
+ * - balance: 0 = all mic, 100 = all system audio, 50 = equal mix
+ * - micVolume/systemVolume: Individual volume controls (0.0-1.0)
+ *
+ * @see AudioDevice for available devices
+ * @see Session.audioConfig for per-session configuration
+ *
+ * @example
+ * ```typescript
+ * {
+ *   sourceType: 'both',  // Record mic + system audio
+ *   micDeviceId: 'mic-device-123',
+ *   systemAudioDeviceId: 'loopback-device-456',
+ *   balance: 30,  // 30% mic, 70% system audio
+ *   micVolume: 0.8,
+ *   systemVolume: 0.5
+ * }
+ * ```
+ */
+export interface AudioDeviceConfig {
+  /** Selected microphone device ID */
+  micDeviceId?: string;
+
+  /** Selected system audio device ID (for computer audio capture) */
+  systemAudioDeviceId?: string;
+
+  /** Audio source type */
+  sourceType: AudioSourceType;
+
+  /** Balance between mic and system audio (0-100)
+   * 0 = all microphone, 100 = all system audio, 50 = equal mix
+   * Only applicable when sourceType is 'both'
+   */
+  balance?: number;
+
+  /** Individual volume for microphone (0.0-1.0) */
+  micVolume?: number;
+
+  /** Individual volume for system audio (0.0-1.0) */
+  systemVolume?: number;
+
+  /** Voice Activity Detection enabled
+   * When true, silent audio segments are detected and skipped for transcription (cost savings)
+   * When false, all audio is transcribed regardless of voice activity
+   * Default: false (disabled for testing)
+   */
+  vadEnabled?: boolean;
+
+  /** Voice Activity Detection threshold in decibels (-50 to -20)
+   * Lower values (e.g., -50) are more sensitive and catch quieter speech
+   * Higher values (e.g., -30) are more aggressive and filter out more audio
+   * Default: -45 (catches most speech while filtering background noise)
+   */
+  vadThreshold?: number;
+}
+
+/**
+ * Video source types for recording
+ */
+export type VideoSourceType = 'display' | 'window' | 'webcam' | 'display-with-webcam';
+
+/**
+ * Display information returned from backend
+ */
+export interface DisplayInfo {
+  /** Display ID from ScreenCaptureKit */
+  displayId: string;
+
+  /** Display name (e.g., "Built-in Retina Display") */
+  displayName: string;
+
+  /** Display width in pixels */
+  width: number;
+
+  /** Display height in pixels */
+  height: number;
+
+  /** Whether this is the primary/main display */
+  isPrimary: boolean;
+
+  /** Optional thumbnail preview (base64 PNG) */
+  thumbnail?: string;
+
+  /** Thumbnail data URI (base64 PNG with data:image/png;base64, prefix) */
+  thumbnailDataUri?: string;
+}
+
+/**
+ * Window information returned from backend
+ */
+export interface WindowInfo {
+  /** Window ID from ScreenCaptureKit */
+  windowId: string;
+
+  /** Window title */
+  title: string;
+
+  /** Owning application name */
+  owningApp: string;
+
+  /** Application bundle identifier */
+  bundleId: string;
+
+  /** Window bounds */
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+
+  /** Window layer (z-order) */
+  layer: number;
+
+  /** Thumbnail data URI (base64 PNG with data:image/png;base64, prefix) */
+  thumbnailDataUri?: string;
+}
+
+/**
+ * Webcam device information returned from backend
+ */
+export interface WebcamInfo {
+  /** Camera device ID from AVFoundation */
+  deviceId: string;
+
+  /** Camera name (e.g., "FaceTime HD Camera") */
+  deviceName: string;
+
+  /** Camera position */
+  position: 'front' | 'back' | 'unspecified';
+
+  /** Device manufacturer */
+  manufacturer: string;
+}
+
+/**
+ * Picture-in-Picture configuration
+ */
+export interface PiPConfig {
+  /** Whether PiP is enabled */
+  enabled: boolean;
+
+  /** Position of webcam overlay */
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+  /** Size of webcam overlay */
+  size: 'small' | 'medium' | 'large';
+
+  /** Border radius in pixels */
+  borderRadius?: number;
+}
+
+/**
+ * Video recording configuration for a session
+ */
+/**
+ * Video Recording Configuration - Screen recording settings for session
+ *
+ * Configures what to record during a session:
+ * - Which display(s) to capture
+ * - Whether to include webcam (Picture-in-Picture)
+ * - Video quality and frame rate
+ *
+ * SOURCE TYPES:
+ * - display: Record one or more displays
+ * - window: Record specific application windows
+ * - webcam: Record webcam only
+ * - display-with-webcam: Display + webcam overlay (PiP)
+ * - multi-source: Multiple sources with compositing (Wave 1.3)
+ *
+ * QUALITY PRESETS:
+ * - low: 720p @ 15fps (~200MB/hour)
+ * - medium: 1080p @ 30fps (~500MB/hour)
+ * - high: 1080p @ 60fps (~1GB/hour)
+ * - ultra: 4K @ 60fps (~3GB/hour)
+ *
+ * PICTURE-IN-PICTURE:
+ * - pipConfig.position: Where to overlay webcam
+ * - pipConfig.size: Webcam overlay size
+ * - pipConfig.borderRadius: Rounded corners
+ *
+ * @see DisplayInfo for available displays
+ * @see WindowInfo for available windows
+ * @see WebcamInfo for available cameras
+ * @see PiPConfig for overlay configuration
+ *
+ * @example
+ * ```typescript
+ * {
+ *   sourceType: 'display-with-webcam',
+ *   displayIds: ['display-main'],
+ *   webcamDeviceId: 'facetime-camera',
+ *   pipConfig: {
+ *     enabled: true,
+ *     position: 'bottom-right',
+ *     size: 'small',
+ *     borderRadius: 8
+ *   },
+ *   quality: 'medium',  // 1080p @ 30fps
+ *   fps: 30
+ * }
+ * ```
+ */
+export interface VideoRecordingConfig {
+  /** Video source type (now includes 'multi-source' for Wave 1.3) */
+  sourceType: VideoSourceType | 'multi-source';
+
+  /** Selected display IDs (for display recording) */
+  displayIds?: string[];
+
+  /** Selected window IDs (for window-specific recording) */
+  windowIds?: string[];
+
+  /** Selected webcam device ID */
+  webcamDeviceId?: string;
+
+  /** Multi-source recording configuration (Wave 1.3) */
+  multiSourceConfig?: {
+    sources: Array<{
+      type: 'display' | 'window' | 'webcam';
+      id: string;
+      name?: string;
+    }>;
+    compositor: 'passthrough' | 'grid' | 'sidebyside';
+  };
+
+  /** Picture-in-Picture configuration (when using webcam with display) */
+  pipConfig?: PiPConfig;
+
+  /** Video quality preset */
+  quality: 'low' | 'medium' | 'high' | 'ultra';
+
+  /** Frame rate (10-60 fps) */
+  fps: number;
+
+  /** Resolution override (optional, defaults to native) */
+  resolution?: {
+    width: number;
+    height: number;
+  };
+}
+
+/**
+ * Session recording configuration for XState machine
+ * Used to configure what gets recorded during a session
+ */
+export interface SessionRecordingConfig {
+  /** Session name */
+  name: string;
+
+  /** Session description (optional) */
+  description?: string;
+
+  /** Enable screenshot capture */
+  screenshotsEnabled: boolean;
+
+  /** Audio recording configuration (optional) */
+  audioConfig?: {
+    enabled: boolean;
+    sourceType: AudioSourceType;
+    micDeviceId?: string;
+    systemAudioDeviceId?: string;
+    balance?: number;
+    micVolume?: number;
+    systemVolume?: number;
+  };
+
+  /** Video recording configuration (optional) */
+  videoConfig?: {
+    enabled: boolean;
+    sourceType: VideoSourceType;
+    displayIds?: string[];
+    windowIds?: string[];
+    webcamDeviceId?: string;
+    quality?: 'low' | 'medium' | 'high' | 'ultra';
+    fps?: number;
+    resolution?: {
+      width: number;
+      height: number;
+    };
+  };
+}
+
+/**
+ * Session Audio Segment - Recorded audio chunk with transcription
+ *
+ * Audio is recorded in 10-second segments and transcribed using OpenAI Whisper-1.
+ * Segments are later upgraded to word-level transcripts during ONE-TIME audio review.
+ *
+ * STORAGE:
+ * - Audio WAV file stored via Content-Addressable Storage
+ * - attachmentId references deduplicated audio in /attachments-ca/
+ * - Compressed MP3 version available in attachment.compressed field
+ *
+ * TRANSCRIPTION QUALITY:
+ * - draft: Initial 10s chunk transcript from Whisper-1 (real-time)
+ * - final: Word-accurate transcript from full session re-transcription (ONE-TIME review)
+ *
+ * AI METADATA:
+ * - keyPhrases: Important phrases extracted from this segment
+ * - sentiment: Emotional tone (positive/neutral/negative)
+ * - containsTask/containsBlocker: AI-detected flags for summary generation
+ *
+ * @see OpenAI Whisper-1 for transcription
+ * @see AudioInsights for ONE-TIME comprehensive audio review
+ *
+ * @example
+ * ```typescript
+ * {
+ *   id: 'audio-123',
+ *   sessionId: 'session-456',
+ *   timestamp: '2025-10-26T14:30:00Z',
+ *   duration: 10,
+ *   transcription: 'Okay so I need to implement OAuth authentication...',
+ *   attachmentId: 'att-audio-789',
+ *   transcriptionQuality: 'draft',  // Will become 'final' after ONE-TIME review
+ *   enrichedTranscription: 'Okay, so I need to implement OAuth authentication.',  // Word-accurate
+ *   keyPhrases: ['OAuth', 'authentication', 'implement'],
+ *   sentiment: 'neutral',
+ *   containsTask: true
+ * }
+ * ```
+ */
 export interface SessionAudioSegment {
   id: string;
   sessionId: string;
@@ -1683,6 +3301,12 @@ export interface SessionAudioSegment {
   duration: number; // seconds
   transcription: string; // Speech-to-text (always from Whisper-1)
   attachmentId?: string; // Reference to audio WAV file in storage
+
+  /**
+   * Phase 4: SHA-256 hash for content-addressable storage
+   * Used to load attachment data from ContentAddressableStorage
+   */
+  hash?: string;
 
   // DEPRECATED: Legacy property for backward compatibility
   startTime?: number;
@@ -1705,6 +3329,39 @@ export interface SessionAudioSegment {
 }
 
 // Audio key moment - AI-identified important timestamp
+/**
+ * Audio Key Moment - AI-identified important timestamp in audio
+ *
+ * DEPRECATED: This type is deprecated in favor of AudioInsights.keyMoments.
+ * Kept for backward compatibility with sessions recorded before October 2025.
+ *
+ * Represents a single significant moment detected in session audio:
+ * - Achievements: "Completed the feature"
+ * - Blockers: "Hit an error I can't figure out"
+ * - Decisions: "Going with approach B instead"
+ * - Insights: "Oh, I see the pattern now"
+ *
+ * DETECTION:
+ * - AI analyzes audio transcription for semantic significance
+ * - Timestamps relative to session start (in seconds)
+ * - excerpt contains actual spoken words
+ *
+ * @deprecated Use AudioInsights.keyMoments instead
+ * @see AudioInsights for comprehensive audio analysis
+ * @see Session.audioKeyMoments for legacy usage
+ *
+ * @example
+ * ```typescript
+ * {
+ *   id: 'moment-123',
+ *   timestamp: 1245,  // 20 minutes 45 seconds from session start
+ *   label: 'Completed authentication flow',
+ *   type: 'achievement',
+ *   segmentId: 'audio-segment-789',
+ *   excerpt: 'Okay, auth flow is working now. Users can log in.'
+ * }
+ * ```
+ */
 export interface AudioKeyMoment {
   id: string;
   timestamp: number; // Seconds from session start
@@ -1714,7 +3371,153 @@ export interface AudioKeyMoment {
   excerpt: string; // What the user said
 }
 
-// Audio Insights - Comprehensive post-session audio analysis
+/**
+ * Audio Insights - Comprehensive Post-Session Audio Analysis
+ *
+ * Deep audio analysis using GPT-4o audio preview model. This is a ONE-TIME operation
+ * performed after session ends, never re-processed (cached permanently).
+ *
+ * WHY AUDIO INSIGHTS?
+ * Audio captures the emotional journey, work patterns, and environmental context that
+ * screenshots cannot. The AI listens to the entire session audio and extracts:
+ * - Emotional progression (frustration → breakthrough → satisfaction)
+ * - Key moments (decisions, achievements, blockers, insights)
+ * - Work patterns (flow states, interruptions, focus level)
+ * - Environmental context (ambient noise, work setting)
+ *
+ * PROCESSING:
+ * 1. All audio segments concatenated into single file
+ * 2. Downsampled to 16kHz mono for efficient processing
+ * 3. Sent to GPT-4o audio preview (entire session in one call)
+ * 4. AI returns structured insights (emotional journey, key moments, patterns)
+ * 5. Results cached in audioInsights field (never re-processed)
+ *
+ * COST CONSIDERATIONS:
+ * - GPT-4o audio preview: ~$0.10/minute of audio
+ * - ONE-TIME only (never re-run, always cached)
+ * - User can opt-out via enrichmentConfig.includeAudioReview: false
+ * - Cost tracked in enrichmentStatus.audio.cost
+ *
+ * DATA STRUCTURE:
+ * - narrative: Overall story from audio perspective
+ * - emotionalJourney: Emotion timeline (timestamp + emotion + description)
+ * - keyMoments: Critical events (timestamp + type + description + context)
+ * - workPatterns: Focus level, interruptions, flow states
+ * - environmentalContext: Ambient noise, work setting, time of day
+ *
+ * USAGE:
+ * ```typescript
+ * if (session.audioReviewCompleted && session.audioInsights) {
+ *   // Access emotional journey
+ *   const emotions = session.audioInsights.emotionalJourney;
+ *   console.log(emotions[0].emotion); // "focused"
+ *
+ *   // Find key moments
+ *   const breakthroughs = session.audioInsights.keyMoments
+ *     .filter(m => m.type === 'achievement');
+ *
+ *   // Check work patterns
+ *   const flowStates = session.audioInsights.workPatterns.flowStates;
+ *   console.log(`Flow state: ${flowStates[0].description}`);
+ * }
+ * ```
+ *
+ * BACKWARD COMPATIBILITY:
+ * - Legacy fields (summary, extractedTasks, etc.) retained for old sessions
+ * - New sessions use structured fields (emotionalJourney, keyMoments, etc.)
+ *
+ * KEY DIFFERENCES vs. REAL-TIME TRANSCRIPTION:
+ * - Real-time: Whisper-1, 10-second chunks, draft quality
+ * - Audio review: GPT-4o audio, full session, comprehensive analysis
+ * - Real-time: Transcription only
+ * - Audio review: Emotion, patterns, context, meaning
+ *
+ * @see Session.audioReviewCompleted to check if review is done
+ * @see Session.fullAudioAttachmentId for concatenated audio file
+ * @see Session.audioSegments for real-time transcription chunks
+ * @see enrichmentStatus.audio for processing status and cost
+ */
+/**
+ * Audio Insights - Comprehensive post-session audio analysis
+ *
+ * ONE-TIME PROCESSING: This analysis is performed exactly once after session ends.
+ * Never re-run - too expensive (~$2-5 per session depending on length).
+ *
+ * Powered by GPT-4o audio-preview model which analyzes the FULL session audio
+ * (not just transcription) to extract:
+ * - Emotional journey throughout session
+ * - Key moments (achievements, blockers, decisions, insights)
+ * - Work patterns (focus level, interruptions, flow states)
+ * - Environmental context (noise, setting, time of day)
+ *
+ * COST TRACKING:
+ * - Processing cost tracked in enrichmentStatus.audio.cost
+ * - Typical cost: $2-5 per hour of audio
+ * - User can disable via enrichmentConfig.includeAudioReview = false
+ *
+ * WORKFLOW:
+ * 1. Session ends
+ * 2. All audio segments concatenated + downsampled to 16kHz mono
+ * 3. ONE-TIME GPT-4o audio analysis
+ * 4. Results cached in this structure
+ * 5. Never re-processed (even if prompt changes)
+ *
+ * @see Session.audioInsights for stored results
+ * @see EnrichmentPipeline for processing workflow
+ * @see Session.enrichmentStatus.audio for cost tracking
+ *
+ * @example
+ * ```typescript
+ * {
+ *   narrative: 'Started focused on implementing OAuth, hit frustrating bugs mid-session, ended with breakthrough understanding of token flow',
+ *   emotionalJourney: [
+ *     {
+ *       timestamp: 0,
+ *       emotion: 'focused',
+ *       description: 'Deep concentration at session start'
+ *     },
+ *     {
+ *       timestamp: 1800,
+ *       emotion: 'frustrated',
+ *       description: 'Struggling with unexpected token expiration errors'
+ *     },
+ *     {
+ *       timestamp: 3200,
+ *       emotion: 'relieved',
+ *       description: 'Finally understood the problem'
+ *     }
+ *   ],
+ *   keyMoments: [
+ *     {
+ *       timestamp: 3245,
+ *       type: 'insight',
+ *       description: 'Realized tokens were expiring because of timezone mismatch',
+ *       context: 'This was the breakthrough that solved 2 hours of debugging',
+ *       excerpt: 'Oh wait, the timestamp is in UTC but we are checking it in local time'
+ *     }
+ *   ],
+ *   workPatterns: {
+ *     focusLevel: 'high',
+ *     interruptions: 2,
+ *     flowStates: [
+ *       {
+ *         start: 0,
+ *         end: 2100,
+ *         description: 'Deep focus on implementation'
+ *       }
+ *     ]
+ *   },
+ *   environmentalContext: {
+ *     ambientNoise: 'Quiet, occasional keyboard typing',
+ *     workSetting: 'Home office',
+ *     timeOfDay: 'Morning (inferred from energy level and "good morning" greeting)'
+ *   },
+ *   processedAt: '2025-10-26T15:30:00Z',
+ *   modelUsed: 'gpt-4o-audio-preview',
+ *   processingDuration: 45  // 45 seconds to analyze 1 hour of audio
+ * }
+ * ```
+ */
 export interface AudioInsights {
   // Overall narrative
   narrative: string; // Story of the session from audio perspective
@@ -1767,6 +3570,40 @@ export interface AudioInsights {
 }
 
 // Session Context Item - user-added context during session
+/**
+ * Session Context Item - User-added notes/markers during session
+ *
+ * Manual context added by user while session is active:
+ * - Quick notes about what they're doing
+ * - Markers for important moments
+ * - Links to existing tasks/notes
+ *
+ * TYPES:
+ * - note: Free-form text note
+ * - task: Action item (can create Task later)
+ * - marker: Timestamp marker (e.g., "Started debugging here")
+ *
+ * LINKING:
+ * - linkedItemId: References existing Note or Task
+ * - Allows associating session work with existing items
+ *
+ * DEPRECATED FIELDS:
+ * - noteId/taskId: Legacy linking (use linkedItemId instead)
+ *
+ * @see Session.contextItems for all context in a session
+ *
+ * @example
+ * ```typescript
+ * {
+ *   id: 'context-123',
+ *   sessionId: 'session-456',
+ *   timestamp: '2025-10-26T14:30:00Z',
+ *   type: 'note',
+ *   content: 'Discovered that token expiration handling was broken',
+ *   linkedItemId: 'note-789'  // Links to existing note
+ * }
+ * ```
+ */
 export interface SessionContextItem {
   id: string;
   sessionId: string;
@@ -1796,9 +3633,8 @@ export interface ActivityMetrics {
   timestamp: string;             // ISO 8601 timestamp of measurement
 }
 
-// Legacy types (for backward compatibility during refactor)
-export type TaskStatus = 'todo' | 'in-progress' | 'done' | 'archived';
-export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+// Legacy types removed - now using named exports at top of file
+// See: TaskStatus, TaskPriority (lines 83, 113)
 
 // ============================================================================
 // TYPE GUARDS & UTILITIES
@@ -1840,4 +3676,147 @@ export function getSectionsByType<T extends SummarySection['type']>(
   type: T
 ): Array<Extract<SummarySection, { type: T }>> {
   return summary.sections.filter(s => s.type === type) as Array<Extract<SummarySection, { type: T }>>;
+}
+
+// ============================================================================
+// Recording Error Types (matches Rust RecordingError from Phase 1)
+// ============================================================================
+
+export type RecordingErrorType =
+  | 'PermissionDenied'
+  | 'DeviceNotFound'
+  | 'DeviceInUse'
+  | 'SystemError'
+  | 'InvalidConfiguration'
+  | 'Timeout'
+  | 'PlatformUnsupported'
+  | 'Internal';
+
+export type RecordingPermissionType =
+  | 'screenRecording'
+  | 'microphone'
+  | 'systemAudio'
+  | 'camera';
+
+export type RecordingDeviceType =
+  | 'microphone'
+  | 'systemAudio'
+  | 'camera'
+  | 'display'
+  | 'window';
+
+export type RecordingErrorSource =
+  | 'screenCaptureKit'
+  | 'avFoundation'
+  | 'coreAudio'
+  | 'cpal'
+  | 'ffi'
+  | 'codeSignature';
+
+// Discriminated union matching Rust #[serde(tag = "type", content = "data")]
+export type RecordingError =
+  | {
+      type: 'PermissionDenied';
+      data: {
+        permission: RecordingPermissionType;
+        canRetry: boolean;
+        systemMessage?: string;
+      };
+    }
+  | {
+      type: 'DeviceNotFound';
+      data: {
+        deviceType: RecordingDeviceType;
+        deviceId?: string;
+      };
+    }
+  | {
+      type: 'DeviceInUse';
+      data: {
+        deviceType: RecordingDeviceType;
+        deviceId: string;
+      };
+    }
+  | {
+      type: 'SystemError';
+      data: {
+        source: RecordingErrorSource;
+        message: string;
+        isRecoverable: boolean;
+      };
+    }
+  | {
+      type: 'InvalidConfiguration';
+      data: {
+        field: string;
+        reason: string;
+      };
+    }
+  | {
+      type: 'Timeout';
+      data: {
+        operation: string;
+        timeoutMs: number;
+      };
+    }
+  | {
+      type: 'PlatformUnsupported';
+      data: {
+        feature: string;
+        requiredVersion: string;
+      };
+    }
+  | {
+      type: 'Internal';
+      data: {
+        message: string;
+      };
+    };
+
+// Type guards
+export function isRecordingError(error: unknown): error is RecordingError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'type' in error &&
+    'data' in error
+  );
+}
+
+export function isPermissionError(error: unknown): error is RecordingError & { type: 'PermissionDenied' } {
+  return isRecordingError(error) && error.type === 'PermissionDenied';
+}
+
+// User-friendly error messages
+export function formatRecordingError(error: RecordingError): string {
+  switch (error.type) {
+    case 'PermissionDenied':
+      return error.data.systemMessage ||
+        `${error.data.permission} permission denied. Please enable in System Settings.`;
+    case 'DeviceNotFound':
+      return `${error.data.deviceType} device not found.`;
+    case 'DeviceInUse':
+      return `${error.data.deviceType} is already in use by another application.`;
+    case 'SystemError':
+      return error.data.message || 'A system error occurred.';
+    case 'InvalidConfiguration':
+      return `Invalid ${error.data.field}: ${error.data.reason}`;
+    case 'Timeout':
+      return `${error.data.operation} timed out after ${error.data.timeoutMs}ms.`;
+    case 'PlatformUnsupported':
+      return `${error.data.feature} requires ${error.data.requiredVersion}.`;
+    case 'Internal':
+      return error.data.message || 'An internal error occurred.';
+  }
+}
+
+// Get permission display name
+export function getPermissionDisplayName(permission: RecordingPermissionType): string {
+  const names: Record<RecordingPermissionType, string> = {
+    screenRecording: 'Screen Recording',
+    microphone: 'Microphone',
+    systemAudio: 'System Audio',
+    camera: 'Camera'
+  };
+  return names[permission];
 }

@@ -75,56 +75,93 @@ export class AudioReviewService {
         throw new Error('No audio segments to review');
       }
 
-      // Stage 2: Concatenation with downsampling
-      onProgress?.({
-        stage: 'concatenating',
-        message: 'Creating full audio file...',
-        progress: 30,
-      });
+      // OPTIMIZATION: Check if we already have optimized MP3 from background processing
+      let audioBase64: string;
+      let totalDuration: number;
+      let fullAudioAttachment: Awaited<ReturnType<typeof audioStorageService.saveFullSessionAudio>>;
+      let wavBase64: string | undefined; // Only available for legacy path (needed for transcript upgrade)
 
-      // Build timeline and generate downsampled WAV (8kHz mono)
-      audioConcatenationService.buildTimeline(session.audioSegments);
-      const totalDuration = audioConcatenationService.getTotalDuration();
+      if (session.video?.optimizedPath && session.video.optimizedPath.endsWith('.mp3')) {
+        console.log(`🎵 [AUDIO REVIEW] Using pre-optimized MP3 from background processing: ${session.video.optimizedPath}`);
 
-      console.log(`🎧 [AUDIO REVIEW] Total duration: ${totalDuration.toFixed(1)}s`);
+        onProgress?.({
+          stage: 'preparing',
+          message: 'Loading optimized audio...',
+          progress: 30,
+        });
 
-      // Check if we need to chunk
-      if (totalDuration > this.MAX_DURATION_SECONDS) {
-        console.log(`⚠️  [AUDIO REVIEW] Session exceeds ${this.MAX_DURATION_SECONDS}s, using chunking strategy`);
-        return await this.reviewInChunks(session, onProgress);
+        // Read the optimized MP3 file and convert to base64
+        const fs = await import('@tauri-apps/plugin-fs');
+        const audioBuffer = await fs.readFile(session.video.optimizedPath);
+        const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+        audioBase64 = await this.blobToBase64(audioBlob);
+
+        // Use duration from video object or calculate from audioSegments
+        totalDuration = session.video.duration ||
+          session.audioSegments.reduce((sum, seg) => sum + seg.duration, 0);
+
+        // Create attachment record for the optimized MP3
+        fullAudioAttachment = await audioStorageService.saveFullSessionAudio(
+          audioBase64,
+          session.id,
+          totalDuration
+        );
+
+        console.log(`✅ [AUDIO REVIEW] Loaded optimized MP3: ${totalDuration.toFixed(1)}s`);
+      } else {
+        // LEGACY PATH: Concatenate audio segments (for old sessions without optimized MP3)
+        console.log(`🎧 [AUDIO REVIEW] No optimized MP3 found, concatenating audio segments...`);
+
+        onProgress?.({
+          stage: 'concatenating',
+          message: 'Creating full audio file...',
+          progress: 30,
+        });
+
+        // Build timeline and generate downsampled WAV (8kHz mono)
+        audioConcatenationService.buildTimeline(session.audioSegments);
+        totalDuration = audioConcatenationService.getTotalDuration();
+
+        console.log(`🎧 [AUDIO REVIEW] Total duration: ${totalDuration.toFixed(1)}s`);
+
+        // Check if we need to chunk
+        if (totalDuration > this.MAX_DURATION_SECONDS) {
+          console.log(`⚠️  [AUDIO REVIEW] Session exceeds ${this.MAX_DURATION_SECONDS}s, using chunking strategy`);
+          return await this.reviewInChunks(session, onProgress);
+        }
+
+        // Generate audio WAV (16kHz for better quality before MP3 compression)
+        const wavBlob = await audioConcatenationService.exportDownsampledWAV(
+          session.audioSegments,
+          16000 // 16kHz - matches GPT-4o internal processing
+        );
+
+        // Convert to base64
+        wavBase64 = await this.blobToBase64(wavBlob);
+
+        // Compress to MP3 for efficient transmission
+        // Use 'transcription' mode: 16kHz @ 64kbps (optimal for GPT-4o which processes at 16kHz)
+        console.log(`🗜️  [AUDIO REVIEW] Compressing audio to MP3...`);
+        audioBase64 = await audioCompressionService.compressForAPI(wavBase64, 'transcription');
+
+        // Extract size from base64 (rough estimate: base64 length * 0.75)
+        const base64Data = audioBase64.split(',')[1] || audioBase64;
+        const fileSizeMB = (base64Data.length * 0.75) / 1024 / 1024;
+        console.log(`🎧 [AUDIO REVIEW] Compressed audio: ${fileSizeMB.toFixed(1)}MB, ${totalDuration.toFixed(1)}s`);
+
+        // Check file size
+        if (fileSizeMB > this.MAX_FILE_SIZE_MB) {
+          console.log(`⚠️  [AUDIO REVIEW] File exceeds ${this.MAX_FILE_SIZE_MB}MB, using chunking strategy`);
+          return await this.reviewInChunks(session, onProgress);
+        }
+
+        // Save full audio attachment
+        fullAudioAttachment = await audioStorageService.saveFullSessionAudio(
+          audioBase64,
+          session.id,
+          totalDuration
+        );
       }
-
-      // Generate audio WAV (16kHz for better quality before MP3 compression)
-      const wavBlob = await audioConcatenationService.exportDownsampledWAV(
-        session.audioSegments,
-        16000 // 16kHz - matches GPT-4o internal processing
-      );
-
-      // Convert to base64
-      const wavBase64 = await this.blobToBase64(wavBlob);
-
-      // Compress to MP3 for efficient transmission
-      // Use 'transcription' mode: 16kHz @ 64kbps (optimal for GPT-4o which processes at 16kHz)
-      console.log(`🗜️  [AUDIO REVIEW] Compressing audio to MP3...`);
-      const audioBase64 = await audioCompressionService.compressForAPI(wavBase64, 'transcription');
-
-      // Extract size from base64 (rough estimate: base64 length * 0.75)
-      const base64Data = audioBase64.split(',')[1] || audioBase64;
-      const fileSizeMB = (base64Data.length * 0.75) / 1024 / 1024;
-      console.log(`🎧 [AUDIO REVIEW] Compressed audio: ${fileSizeMB.toFixed(1)}MB, ${totalDuration.toFixed(1)}s`);
-
-      // Check file size
-      if (fileSizeMB > this.MAX_FILE_SIZE_MB) {
-        console.log(`⚠️  [AUDIO REVIEW] File exceeds ${this.MAX_FILE_SIZE_MB}MB, using chunking strategy`);
-        return await this.reviewInChunks(session, onProgress);
-      }
-
-      // Save full audio attachment
-      const fullAudioAttachment = await audioStorageService.saveFullSessionAudio(
-        audioBase64,
-        session.id,
-        totalDuration
-      );
 
       // Stage 3: AI Analysis
       onProgress?.({
@@ -148,23 +185,27 @@ export class AudioReviewService {
       console.log(`✅ [AUDIO REVIEW] AI analysis complete in ${processingDuration.toFixed(1)}s`);
 
       // Stage 4: Upgrade segment transcripts with word-level timestamps
-      // Use WAV for Whisper (better quality for word-level timestamps)
-      onProgress?.({
-        stage: 'upgrading-transcripts',
-        message: 'Ned is cleaning up the transcript...',
-        progress: 70,
-      });
-
+      // Only run if we have WAV data (legacy path) - optimized MP3 path skips this
       let upgradedSegments: SessionAudioSegment[] | undefined;
-      try {
-        upgradedSegments = await transcriptUpgradeService.upgradeSegmentTranscripts(
-          session,
-          wavBase64 // Use uncompressed WAV for Whisper accuracy
-        );
-        console.log(`✅ [AUDIO REVIEW] Transcript upgrade complete: ${upgradedSegments.length} segments upgraded`);
-      } catch (error: any) {
-        console.warn(`⚠️  [AUDIO REVIEW] Transcript upgrade failed, keeping draft transcripts:`, error.message);
-        // Not fatal - continue with draft transcripts
+      if (wavBase64) {
+        onProgress?.({
+          stage: 'upgrading-transcripts',
+          message: 'Ned is cleaning up the transcript...',
+          progress: 70,
+        });
+
+        try {
+          upgradedSegments = await transcriptUpgradeService.upgradeSegmentTranscripts(
+            session,
+            wavBase64 // Use uncompressed WAV for Whisper accuracy
+          );
+          console.log(`✅ [AUDIO REVIEW] Transcript upgrade complete: ${upgradedSegments.length} segments upgraded`);
+        } catch (error: any) {
+          console.warn(`⚠️  [AUDIO REVIEW] Transcript upgrade failed, keeping draft transcripts:`, error.message);
+          // Not fatal - continue with draft transcripts
+        }
+      } else {
+        console.log(`⏭️  [AUDIO REVIEW] Skipping transcript upgrade (optimized MP3 path - no WAV data available)`);
       }
 
       // Stage 5: Parse and structure results

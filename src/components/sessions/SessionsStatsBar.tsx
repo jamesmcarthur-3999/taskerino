@@ -12,7 +12,7 @@ export const SessionsStatsBar = forwardRef<HTMLDivElement, SessionsStatsBarProps
         totalSessions: sessions.length,
         totalMinutes: sessions.reduce((sum, s) => sum + (s.totalDuration || 0), 0),
         totalScreenshots: sessions.reduce((sum, s) => sum + (s.screenshots?.length || 0), 0),
-        totalTasks: sessions.reduce((sum, s) => sum + (s.extractedTaskIds?.length || 0), 0),
+        // totalTasks removed - now tracked via task.relationships
       };
     }, [sessions]);
 

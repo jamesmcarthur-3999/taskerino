@@ -5,6 +5,7 @@ import { useEntities } from '../context/EntitiesContext';
 import { X, Copy, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import { truncateText, formatRelativeTime } from '../utils/helpers';
 import { getGlassClasses, getRadiusClass } from '../design-system/theme';
+import { EntityType } from '../types/relationships';
 
 export function ReferencePanel() {
   const { state: uiState, dispatch: uiDispatch } = useUI();
@@ -146,7 +147,9 @@ export function ReferencePanel() {
             const note = notesState.notes.find(n => n.id === noteId);
             if (!note) return null;
 
-            const topic = entitiesState.topics.find(t => t.id === note.topicId);
+            // Find topic from relationships
+            const topicRel = note.relationships.find(r => r.targetType === EntityType.TOPIC);
+            const topic = topicRel ? entitiesState.topics.find(t => t.id === topicRel.targetId) : undefined;
             const isExpanded = expandedNotes.has(noteId);
 
             return (

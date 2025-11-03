@@ -4,6 +4,11 @@ import type { Note, Company, Contact, Topic, ManualNoteData } from '../types';
 import { getStorage } from '../services/storage';
 import { generateId } from '../utils/helpers';
 import { useEntities } from './EntitiesContext';
+// QueryEngine removed - use UnifiedIndexManager for search operations
+import { useRelationships } from './RelationshipContext';
+import { EntityType, RelationshipType } from '../types/relationships';
+import { normalizeNotes } from '../utils/entityMigration';
+import { debug } from "../utils/debug";
 
 // Notes State
 interface NotesState {
@@ -15,6 +20,7 @@ type NotesAction =
   | { type: 'UPDATE_NOTE'; payload: Note }
   | { type: 'DELETE_NOTE'; payload: string }
   | { type: 'BATCH_ADD_NOTES'; payload: Note[] }
+  | { type: 'BATCH_UPDATE_NOTES'; payload: { ids: string[]; updates: Partial<Note> } }
   | { type: 'CREATE_MANUAL_NOTE'; payload: ManualNoteData }
   | { type: 'LOAD_NOTES'; payload: Note[] };
 
@@ -46,6 +52,18 @@ function notesReducer(state: NotesState, action: NotesAction): NotesState {
     case 'BATCH_ADD_NOTES':
       return { ...state, notes: [...state.notes, ...action.payload] };
 
+    case 'BATCH_UPDATE_NOTES': {
+      const { ids, updates } = action.payload;
+      return {
+        ...state,
+        notes: state.notes.map(note =>
+          ids.includes(note.id)
+            ? { ...note, ...updates, lastUpdated: new Date().toISOString() }
+            : note
+        ),
+      };
+    }
+
     case 'LOAD_NOTES':
       return { ...state, notes: action.payload };
 
@@ -64,6 +82,21 @@ const NotesContext = createContext<{
   deleteNote: (id: string) => void;
   batchAddNotes: (notes: Note[]) => void;
   createManualNote: (data: ManualNoteData) => void;
+
+  // Query Engine Methods (Phase 3.3)
+  // queryNotes removed - use UnifiedIndexManager directly for search operations
+
+  // Relationship helper methods (Phase C2)
+  linkNoteToTopic: (noteId: string, topicId: string) => Promise<void>;
+  unlinkNoteFromTopic: (noteId: string, topicId: string) => Promise<void>;
+  linkNoteToCompany: (noteId: string, companyId: string) => Promise<void>;
+  unlinkNoteFromCompany: (noteId: string, companyId: string) => Promise<void>;
+  linkNoteToContact: (noteId: string, contactId: string) => Promise<void>;
+  unlinkNoteFromContact: (noteId: string, contactId: string) => Promise<void>;
+
+  // Phase 5 methods: Merge and batch update
+  mergeNotes: (sourceIds: string[], targetId: string, strategy: 'append' | 'replace') => Promise<Note>;
+  batchUpdateNotes: (noteIds: string[], updates: Partial<Note>) => Promise<void>;
 } | null>(null);
 
 // Provider
@@ -75,6 +108,15 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   // Access EntitiesContext for cross-context updates
   const entitiesContext = useEntities();
 
+  // Get relationship context (may not be available during initial render)
+  let relationshipsContext;
+  try {
+    relationshipsContext = useRelationships();
+  } catch {
+    // RelationshipContext not available yet - that's OK during migration
+    relationshipsContext = null;
+  }
+
   // Load from storage on mount
   useEffect(() => {
     async function loadNotes() {
@@ -83,7 +125,9 @@ export function NotesProvider({ children }: { children: ReactNode }) {
         const notes = await storage.load<Note[]>('notes');
 
         if (Array.isArray(notes)) {
-          dispatch({ type: 'LOAD_NOTES', payload: notes });
+          // Normalize notes to ensure relationships array exists (backward compatibility)
+          const normalizedNotes = normalizeNotes(notes);
+          dispatch({ type: 'LOAD_NOTES', payload: normalizedNotes });
         }
 
         setHasLoaded(true);
@@ -107,7 +151,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       try {
         const storage = await getStorage();
         await storage.save('notes', state.notes);
-        console.log('Notes saved to storage');
+        debug.log("Notes saved to storage");
       } catch (error) {
         console.error('Failed to save notes:', error);
       }
@@ -120,336 +164,290 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     };
   }, [hasLoaded, state.notes]);
 
-  // ADD_NOTE with entity noteCount updates
-  const addNote = (note: Note) => {
+  // ADD_NOTE
+  const addNote = async (note: Note) => {
     dispatch({ type: 'ADD_NOTE', payload: note });
-
-    // Update entity noteCounts
-    const linkedCompanyIds = note.companyIds || [];
-    const linkedContactIds = note.contactIds || [];
-    const linkedTopicIds = note.topicIds || [];
-
-    // Also handle legacy topicId
-    if (note.topicId && !linkedTopicIds.includes(note.topicId)) {
-      linkedTopicIds.push(note.topicId);
-    }
-
-    const timestamp = note.timestamp;
-
-    // Create lookup Maps for O(1) access
-    const companiesMap = new Map(entitiesContext.state.companies.map(c => [c.id, c]));
-    const contactsMap = new Map(entitiesContext.state.contacts.map(c => [c.id, c]));
-    const topicsMap = new Map(entitiesContext.state.topics.map(t => [t.id, t]));
-
-    // Update companies
-    linkedCompanyIds.forEach(id => {
-      const company = companiesMap.get(id);
-      if (company) {
-        entitiesContext.dispatch({
-          type: 'UPDATE_COMPANY',
-          payload: {
-            ...company,
-            noteCount: company.noteCount + 1,
-            lastUpdated: timestamp,
-          },
-        });
-      }
-    });
-
-    // Update contacts
-    linkedContactIds.forEach(id => {
-      const contact = contactsMap.get(id);
-      if (contact) {
-        entitiesContext.dispatch({
-          type: 'UPDATE_CONTACT',
-          payload: {
-            ...contact,
-            noteCount: contact.noteCount + 1,
-            lastUpdated: timestamp,
-          },
-        });
-      }
-    });
-
-    // Update topics
-    linkedTopicIds.forEach(id => {
-      const topic = topicsMap.get(id);
-      if (topic) {
-        entitiesContext.dispatch({
-          type: 'UPDATE_TOPIC',
-          payload: {
-            ...topic,
-            noteCount: topic.noteCount + 1,
-            lastUpdated: timestamp,
-          },
-        });
-      }
-    });
   };
 
-  // UPDATE_NOTE - simple dispatch without entity updates
-  const updateNote = (note: Note) => {
+  // UPDATE_NOTE
+  const updateNote = async (note: Note) => {
     dispatch({ type: 'UPDATE_NOTE', payload: note });
   };
 
-  // DELETE_NOTE with entity noteCount updates
-  const deleteNote = (id: string) => {
+  // DELETE_NOTE
+  const deleteNote = async (id: string) => {
     const deletedNote = state.notes.find(n => n.id === id);
     if (!deletedNote) return;
 
-    dispatch({ type: 'DELETE_NOTE', payload: id });
-
-    // Update entity noteCounts
-    const linkedCompanyIds = deletedNote.companyIds || [];
-    const linkedContactIds = deletedNote.contactIds || [];
-    const linkedTopicIds = deletedNote.topicIds || [];
-
-    // Also handle legacy topicId
-    if (deletedNote.topicId && !linkedTopicIds.includes(deletedNote.topicId)) {
-      linkedTopicIds.push(deletedNote.topicId);
+    // Delete relationships
+    if (relationshipsContext) {
+      try {
+        const relationships = relationshipsContext.getRelationships(id);
+        for (const rel of relationships) {
+          await relationshipsContext.removeRelationship(rel.id);
+        }
+      } catch (error) {
+        console.error('[NotesContext] Failed to delete note relationships:', error);
+      }
     }
 
-    // Create lookup Maps for O(1) access
-    const companiesMap = new Map(entitiesContext.state.companies.map(c => [c.id, c]));
-    const contactsMap = new Map(entitiesContext.state.contacts.map(c => [c.id, c]));
-    const topicsMap = new Map(entitiesContext.state.topics.map(t => [t.id, t]));
-
-    // Update companies
-    linkedCompanyIds.forEach(id => {
-      const company = companiesMap.get(id);
-      if (company) {
-        entitiesContext.dispatch({
-          type: 'UPDATE_COMPANY',
-          payload: {
-            ...company,
-            noteCount: Math.max(0, company.noteCount - 1),
-          },
-        });
-      }
-    });
-
-    // Update contacts
-    linkedContactIds.forEach(id => {
-      const contact = contactsMap.get(id);
-      if (contact) {
-        entitiesContext.dispatch({
-          type: 'UPDATE_CONTACT',
-          payload: {
-            ...contact,
-            noteCount: Math.max(0, contact.noteCount - 1),
-          },
-        });
-      }
-    });
-
-    // Update topics
-    linkedTopicIds.forEach(id => {
-      const topic = topicsMap.get(id);
-      if (topic) {
-        entitiesContext.dispatch({
-          type: 'UPDATE_TOPIC',
-          payload: {
-            ...topic,
-            noteCount: Math.max(0, topic.noteCount - 1),
-          },
-        });
-      }
-    });
+    dispatch({ type: 'DELETE_NOTE', payload: id });
   };
 
-  // BATCH_ADD_NOTES with entity noteCount updates
+  // BATCH_ADD_NOTES
   const batchAddNotes = (notes: Note[]) => {
     dispatch({ type: 'BATCH_ADD_NOTES', payload: notes });
-
-    // Track updates for all affected entities
-    const companyUpdates = new Map<string, { count: number; lastUpdated: string }>();
-    const contactUpdates = new Map<string, { count: number; lastUpdated: string }>();
-    const topicUpdates = new Map<string, { count: number; lastUpdated: string }>();
-
-    notes.forEach(note => {
-      const timestamp = note.timestamp;
-
-      // Process company IDs
-      (note.companyIds || []).forEach(companyId => {
-        const existing = companyUpdates.get(companyId);
-        if (!existing || timestamp > existing.lastUpdated) {
-          companyUpdates.set(companyId, {
-            count: (existing?.count || 0) + 1,
-            lastUpdated: timestamp,
-          });
-        } else {
-          companyUpdates.set(companyId, {
-            ...existing,
-            count: existing.count + 1,
-          });
-        }
-      });
-
-      // Process contact IDs
-      (note.contactIds || []).forEach(contactId => {
-        const existing = contactUpdates.get(contactId);
-        if (!existing || timestamp > existing.lastUpdated) {
-          contactUpdates.set(contactId, {
-            count: (existing?.count || 0) + 1,
-            lastUpdated: timestamp,
-          });
-        } else {
-          contactUpdates.set(contactId, {
-            ...existing,
-            count: existing.count + 1,
-          });
-        }
-      });
-
-      // Process topic IDs (including legacy topicId)
-      const allTopicIds = [...(note.topicIds || [])];
-      if (note.topicId && !allTopicIds.includes(note.topicId)) {
-        allTopicIds.push(note.topicId);
-      }
-      allTopicIds.forEach(topicId => {
-        const existing = topicUpdates.get(topicId);
-        if (!existing || timestamp > existing.lastUpdated) {
-          topicUpdates.set(topicId, {
-            count: (existing?.count || 0) + 1,
-            lastUpdated: timestamp,
-          });
-        } else {
-          topicUpdates.set(topicId, {
-            ...existing,
-            count: existing.count + 1,
-          });
-        }
-      });
-    });
-
-    // Create lookup Maps for O(1) access
-    const companiesMap = new Map(entitiesContext.state.companies.map(c => [c.id, c]));
-    const contactsMap = new Map(entitiesContext.state.contacts.map(c => [c.id, c]));
-    const topicsMap = new Map(entitiesContext.state.topics.map(t => [t.id, t]));
-
-    // Apply updates to companies
-    companyUpdates.forEach((update, companyId) => {
-      const company = companiesMap.get(companyId);
-      if (company) {
-        entitiesContext.dispatch({
-          type: 'UPDATE_COMPANY',
-          payload: {
-            ...company,
-            noteCount: company.noteCount + update.count,
-            lastUpdated: update.lastUpdated,
-          },
-        });
-      }
-    });
-
-    // Apply updates to contacts
-    contactUpdates.forEach((update, contactId) => {
-      const contact = contactsMap.get(contactId);
-      if (contact) {
-        entitiesContext.dispatch({
-          type: 'UPDATE_CONTACT',
-          payload: {
-            ...contact,
-            noteCount: contact.noteCount + update.count,
-            lastUpdated: update.lastUpdated,
-          },
-        });
-      }
-    });
-
-    // Apply updates to topics
-    topicUpdates.forEach((update, topicId) => {
-      const topic = topicsMap.get(topicId);
-      if (topic) {
-        entitiesContext.dispatch({
-          type: 'UPDATE_TOPIC',
-          payload: {
-            ...topic,
-            noteCount: topic.noteCount + update.count,
-            lastUpdated: update.lastUpdated,
-          },
-        });
-      }
-    });
   };
 
-  // CREATE_MANUAL_NOTE with entity creation and noteCount updates
+  // CREATE_MANUAL_NOTE - simplified for new relationship system
   const createManualNote = (noteData: ManualNoteData) => {
-    // Create entity if needed
-    let topicId = noteData.topicId;
-
-    if (!topicId && noteData.newTopicName) {
-      const newId = generateId();
-      const timestamp = new Date().toISOString();
-      const entityType = noteData.newTopicType || 'other';
-
-      if (entityType === 'company') {
-        const newCompany: Company = {
-          id: newId,
-          name: noteData.newTopicName,
-          createdAt: timestamp,
-          lastUpdated: timestamp,
-          noteCount: 0,
-          profile: {},
-        };
-        entitiesContext.dispatch({ type: 'ADD_COMPANY', payload: newCompany });
-        topicId = newId;
-      } else if (entityType === 'person') {
-        const newContact: Contact = {
-          id: newId,
-          name: noteData.newTopicName,
-          createdAt: timestamp,
-          lastUpdated: timestamp,
-          noteCount: 0,
-          profile: {},
-        };
-        entitiesContext.dispatch({ type: 'ADD_CONTACT', payload: newContact });
-        topicId = newId;
-      } else {
-        const newTopic: Topic = {
-          id: newId,
-          name: noteData.newTopicName,
-          createdAt: timestamp,
-          lastUpdated: timestamp,
-          noteCount: 0,
-        };
-        entitiesContext.dispatch({ type: 'ADD_TOPIC', payload: newTopic });
-        topicId = newId;
-      }
-    }
-
-    if (!topicId) {
-      // If still no topic, create a default one
-      const defaultId = generateId();
-      const timestamp = new Date().toISOString();
-      const defaultTopic: Topic = {
-        id: defaultId,
-        name: 'Uncategorized',
-        createdAt: timestamp,
-        lastUpdated: timestamp,
-        noteCount: 0,
-      };
-      entitiesContext.dispatch({ type: 'ADD_TOPIC', payload: defaultTopic });
-      topicId = defaultId;
+    // Generate summary/title based on content length
+    const timestamp = new Date().toISOString();
+    let summary: string;
+    if (noteData.content.trim().length < 50) {
+      // Short note: use "Note [DATETIME]" format
+      const date = new Date(timestamp);
+      const dateStr = date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+      summary = `Note ${dateStr}`;
+    } else {
+      // Long note: truncate content for summary
+      summary = noteData.content.substring(0, 100) + (noteData.content.length > 100 ? '...' : '');
     }
 
     const newNote: Note = {
       id: generateId(),
-      topicId: topicId!,
+      relationships: [], // Empty for manual notes - user can add later
       content: noteData.content,
-      summary: noteData.content.substring(0, 100) + (noteData.content.length > 100 ? '...' : ''),
-      timestamp: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
+      summary,
+      timestamp,
+      lastUpdated: timestamp,
       source: noteData.source || 'thought',
       tags: noteData.tags || [],
     };
 
-    // Add note using the method that updates entity noteCounts
+    // Add note
     addNote(newNote);
   };
 
+  // REMOVED: queryNotes method (QueryEngine deprecated)
+  // Use UnifiedIndexManager instead:
+  //
+  // import { getUnifiedIndexManager } from '../services/storage/UnifiedIndexManager';
+  // const unifiedIndex = await getUnifiedIndexManager();
+  // const result = await unifiedIndex.unifiedSearch({
+  //   entityTypes: ['notes'],
+  //   query: 'search text',
+  //   filters: { ... },
+  //   limit: 20
+  // });
+  //
+  // See: /docs/UNIFIED_INDEX_MANAGER_IMPLEMENTATION_SUMMARY.md
+
+  // Relationship helper methods (Phase C2)
+  const linkNoteToTopic = React.useCallback(async (noteId: string, topicId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping linkNoteToTopic');
+      return;
+    }
+
+    try {
+      await relationshipsContext.addRelationship({
+        sourceType: EntityType.NOTE,
+        sourceId: noteId,
+        targetType: EntityType.TOPIC,
+        targetId: topicId,
+        type: RelationshipType.NOTE_TOPIC,
+        metadata: { source: 'manual', createdAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      console.error('[NotesContext] Failed to link note to topic:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const unlinkNoteFromTopic = React.useCallback(async (noteId: string, topicId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping unlinkNoteFromTopic');
+      return;
+    }
+
+    try {
+      const relationships = relationshipsContext.getRelationships(noteId, RelationshipType.NOTE_TOPIC);
+      const rel = relationships.find(r => r.targetId === topicId);
+      if (rel) {
+        await relationshipsContext.removeRelationship(rel.id);
+      }
+    } catch (error) {
+      console.error('[NotesContext] Failed to unlink note from topic:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const linkNoteToCompany = React.useCallback(async (noteId: string, companyId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping linkNoteToCompany');
+      return;
+    }
+
+    try {
+      await relationshipsContext.addRelationship({
+        sourceType: EntityType.NOTE,
+        sourceId: noteId,
+        targetType: EntityType.COMPANY,
+        targetId: companyId,
+        type: RelationshipType.NOTE_COMPANY,
+        metadata: { source: 'manual', createdAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      console.error('[NotesContext] Failed to link note to company:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const unlinkNoteFromCompany = React.useCallback(async (noteId: string, companyId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping unlinkNoteFromCompany');
+      return;
+    }
+
+    try {
+      const relationships = relationshipsContext.getRelationships(noteId, RelationshipType.NOTE_COMPANY);
+      const rel = relationships.find(r => r.targetId === companyId);
+      if (rel) {
+        await relationshipsContext.removeRelationship(rel.id);
+      }
+    } catch (error) {
+      console.error('[NotesContext] Failed to unlink note from company:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const linkNoteToContact = React.useCallback(async (noteId: string, contactId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping linkNoteToContact');
+      return;
+    }
+
+    try {
+      await relationshipsContext.addRelationship({
+        sourceType: EntityType.NOTE,
+        sourceId: noteId,
+        targetType: EntityType.CONTACT,
+        targetId: contactId,
+        type: RelationshipType.NOTE_CONTACT,
+        metadata: { source: 'manual', createdAt: new Date().toISOString() },
+      });
+    } catch (error) {
+      console.error('[NotesContext] Failed to link note to contact:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  const unlinkNoteFromContact = React.useCallback(async (noteId: string, contactId: string) => {
+    if (!relationshipsContext) {
+      console.warn('[NotesContext] RelationshipContext not available - skipping unlinkNoteFromContact');
+      return;
+    }
+
+    try {
+      const relationships = relationshipsContext.getRelationships(noteId, RelationshipType.NOTE_CONTACT);
+      const rel = relationships.find(r => r.targetId === contactId);
+      if (rel) {
+        await relationshipsContext.removeRelationship(rel.id);
+      }
+    } catch (error) {
+      console.error('[NotesContext] Failed to unlink note from contact:', error);
+      throw error;
+    }
+  }, [relationshipsContext]);
+
+  // Phase 5: Merge notes
+  const mergeNotes = React.useCallback(async (
+    sourceIds: string[],
+    targetId: string,
+    strategy: 'append' | 'replace'
+  ): Promise<Note> => {
+    const sourceNotes = state.notes.filter(n => sourceIds.includes(n.id));
+    const targetNote = state.notes.find(n => n.id === targetId);
+
+    if (!targetNote) {
+      throw new Error(`Target note not found: ${targetId}`);
+    }
+
+    // Merge content based on strategy
+    const mergedContent = strategy === 'append'
+      ? targetNote.content + '\n\n' + sourceNotes.map(n => n.content).join('\n\n')
+      : sourceNotes[sourceNotes.length - 1].content;
+
+    // Merge tags (deduplicate)
+    const allTags = [...targetNote.tags, ...sourceNotes.flatMap(n => n.tags || [])];
+    const mergedTags = [...new Set(allTags)];
+
+    // Create merged note
+    const mergedNote: Note = {
+      ...targetNote,
+      content: mergedContent,
+      tags: mergedTags,
+      lastUpdated: new Date().toISOString(),
+      metadata: {
+        ...targetNote.metadata,
+        aiEnrichment: {
+          ...(targetNote.metadata?.aiEnrichment || {}),
+          enrichedAt: new Date().toISOString(),
+          model: 'merge-operation',
+          autoEnriched: false,
+          // Track merge history in aiEnrichment metadata
+          relatedNoteIds: [...(targetNote.metadata?.aiEnrichment?.relatedNoteIds || []), ...sourceIds],
+        },
+      } as Note['metadata'],
+    };
+
+    // Update target note
+    dispatch({ type: 'UPDATE_NOTE', payload: mergedNote });
+
+    // Delete source notes
+    sourceIds.forEach(id => dispatch({ type: 'DELETE_NOTE', payload: id }));
+
+    return mergedNote;
+  }, [state.notes]);
+
+  // Phase 5: Batch update notes
+  const batchUpdateNotes = React.useCallback(async (
+    noteIds: string[],
+    updates: Partial<Note>
+  ): Promise<void> => {
+    dispatch({
+      type: 'BATCH_UPDATE_NOTES',
+      payload: { ids: noteIds, updates }
+    });
+  }, []);
+
   return (
-    <NotesContext.Provider value={{ state, dispatch, addNote, updateNote, deleteNote, batchAddNotes, createManualNote }}>
+    <NotesContext.Provider value={{
+      state,
+      dispatch,
+      addNote,
+      updateNote,
+      deleteNote,
+      batchAddNotes,
+      createManualNote,
+      // queryNotes removed - use UnifiedIndexManager
+      linkNoteToTopic,
+      unlinkNoteFromTopic,
+      linkNoteToCompany,
+      unlinkNoteFromCompany,
+      linkNoteToContact,
+      unlinkNoteFromContact,
+      mergeNotes,
+      batchUpdateNotes,
+    }}>
       {children}
     </NotesContext.Provider>
   );

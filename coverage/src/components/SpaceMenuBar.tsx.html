@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/157</span>
+                <span class='fraction'>0/165</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/157</span>
+                <span class='fraction'>0/165</span>
             </div>
         
             
@@ -332,7 +332,22 @@
 <a name='L267'></a><a href='#L267'>267</a>
 <a name='L268'></a><a href='#L268'>268</a>
 <a name='L269'></a><a href='#L269'>269</a>
-<a name='L270'></a><a href='#L270'>270</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L270'></a><a href='#L270'>270</a>
+<a name='L271'></a><a href='#L271'>271</a>
+<a name='L272'></a><a href='#L272'>272</a>
+<a name='L273'></a><a href='#L273'>273</a>
+<a name='L274'></a><a href='#L274'>274</a>
+<a name='L275'></a><a href='#L275'>275</a>
+<a name='L276'></a><a href='#L276'>276</a>
+<a name='L277'></a><a href='#L277'>277</a>
+<a name='L278'></a><a href='#L278'>278</a>
+<a name='L279'></a><a href='#L279'>279</a>
+<a name='L280'></a><a href='#L280'>280</a>
+<a name='L281'></a><a href='#L281'>281</a>
+<a name='L282'></a><a href='#L282'>282</a>
+<a name='L283'></a><a href='#L283'>283</a>
+<a name='L284'></a><a href='#L284'>284</a>
+<a name='L285'></a><a href='#L285'>285</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -389,6 +404,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -419,6 +437,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -493,6 +512,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -502,6 +522,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -542,6 +564,14 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -614,6 +644,8 @@ interface PrimaryAction {
   icon?: ReactNode;
   onClick: () =&gt; void;
   gradient?: 'cyan' | 'purple' | 'green';
+  disabled?: boolean;
+  className?: string;
 }
 &nbsp;
 interface ViewControl {
@@ -652,6 +684,7 @@ interface SpaceMenuBarProps {
   primaryAction?: PrimaryAction;
   viewControls?: ViewControls;
   dropdowns?: DropdownControl[];
+  glassDropdowns?: ReactNode; // For GlassSelect components
   filters?: FilterConfig;
   stats?: StatsDisplay;
   children?: ReactNode;
@@ -677,6 +710,7 @@ interface SpaceMenuBarProps {
 <span class="cstat-no" title="statement not covered" >  primaryAction,</span>
 <span class="cstat-no" title="statement not covered" >  viewControls,</span>
 <span class="cstat-no" title="statement not covered" >  dropdowns = [],</span>
+<span class="cstat-no" title="statement not covered" >  glassDropdowns,</span>
 <span class="cstat-no" title="statement not covered" >  filters,</span>
 <span class="cstat-no" title="statement not covered" >  stats,</span>
 <span class="cstat-no" title="statement not covered" >  children,</span>
@@ -766,12 +800,15 @@ interface SpaceMenuBarProps {
 <span class="cstat-no" title="statement not covered" >            &lt;&gt;</span>
 <span class="cstat-no" title="statement not covered" >              &lt;button</span>
 <span class="cstat-no" title="statement not covered" >                onClick={primaryAction.onClick}</span>
+<span class="cstat-no" title="statement not covered" >                disabled={primaryAction.disabled}</span>
 <span class="cstat-no" title="statement not covered" >                className={`</span>
                   flex items-center gap-2 px-4 py-2 rounded-full
                   shadow-md font-semibold text-sm transition-all
                   hover:shadow-lg hover:scale-[1.02] active:scale-95
                   border-2 border-transparent text-white whitespace-nowrap
+                  disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100
 <span class="cstat-no" title="statement not covered" >                  ${getGradientClass(primaryAction.gradient || 'cyan')}</span>
+<span class="cstat-no" title="statement not covered" >                  ${primaryAction.className || ''}</span>
 <span class="cstat-no" title="statement not covered" >                `.trim()}</span>
               &gt;
 <span class="cstat-no" title="statement not covered" >                {primaryAction.icon}</span>
@@ -795,11 +832,11 @@ interface SpaceMenuBarProps {
 <span class="cstat-no" title="statement not covered" >                  {view.label}</span>
 <span class="cstat-no" title="statement not covered" >                &lt;/Button&gt;</span>
 <span class="cstat-no" title="statement not covered" >              ))}</span>
-<span class="cstat-no" title="statement not covered" >              {dropdowns.length &gt; 0 &amp;&amp; &lt;Divider /&gt;}</span>
+<span class="cstat-no" title="statement not covered" >              {(dropdowns.length &gt; 0 || glassDropdowns) &amp;&amp; &lt;Divider /&gt;}</span>
 <span class="cstat-no" title="statement not covered" >            &lt;/&gt;</span>
           )}
 &nbsp;
-          {/* Dropdowns */}
+          {/* Dropdowns (legacy) */}
 <span class="cstat-no" title="statement not covered" >          {dropdowns.map((dropdown, i) =&gt; (</span>
 <span class="cstat-no" title="statement not covered" >            &lt;div key={i} className="flex items-center"&gt;</span>
 <span class="cstat-no" title="statement not covered" >              &lt;DropdownSelect</span>
@@ -812,10 +849,18 @@ interface SpaceMenuBarProps {
 <span class="cstat-no" title="statement not covered" >            &lt;/div&gt;</span>
 <span class="cstat-no" title="statement not covered" >          ))}</span>
 &nbsp;
+          {/* Glass Dropdowns (modern) */}
+<span class="cstat-no" title="statement not covered" >          {glassDropdowns &amp;&amp; (</span>
+<span class="cstat-no" title="statement not covered" >            &lt;&gt;</span>
+<span class="cstat-no" title="statement not covered" >              {glassDropdowns}</span>
+<span class="cstat-no" title="statement not covered" >              {filters &amp;&amp; &lt;Divider /&gt;}</span>
+<span class="cstat-no" title="statement not covered" >            &lt;/&gt;</span>
+          )}
+&nbsp;
           {/* Filters */}
 <span class="cstat-no" title="statement not covered" >          {filters &amp;&amp; (</span>
 <span class="cstat-no" title="statement not covered" >            &lt;&gt;</span>
-<span class="cstat-no" title="statement not covered" >              {(viewControls || dropdowns.length &gt; 0) &amp;&amp; &lt;Divider /&gt;}</span>
+<span class="cstat-no" title="statement not covered" >              {!glassDropdowns &amp;&amp; (viewControls || dropdowns.length &gt; 0) &amp;&amp; &lt;Divider /&gt;}</span>
 <span class="cstat-no" title="statement not covered" >              &lt;button</span>
 <span class="cstat-no" title="statement not covered" >                ref={filterButtonRef}</span>
 <span class="cstat-no" title="statement not covered" >                onClick={filters.onToggle}</span>
@@ -877,7 +922,7 @@ interface SpaceMenuBarProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

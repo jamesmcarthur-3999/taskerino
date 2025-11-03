@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Company, Contact, Topic, ManualTopicData } from '../types';
 import { getStorage } from '../services/storage';
 import { generateId } from '../utils/helpers';
+import { debug } from "../utils/debug";
 
 // Entities State
 interface EntitiesState {
@@ -199,7 +200,7 @@ export function EntitiesProvider({ children }: { children: ReactNode }) {
           storage.save('contacts', state.contacts),
           storage.save('topics', state.topics),
         ]);
-        console.log('Entities saved to storage');
+        debug.log("Entities saved to storage");
       } catch (error) {
         console.error('Failed to save entities:', error);
       }
@@ -226,13 +227,23 @@ export function useEntities() {
     throw new Error('useEntities must be used within EntitiesProvider');
   }
 
-  // Helper method
+  // Helper methods for adding entities
+  const addCompany = (company: Company) => {
+    context.dispatch({ type: 'ADD_COMPANY', payload: company });
+  };
+
+  const addContact = (contact: Contact) => {
+    context.dispatch({ type: 'ADD_CONTACT', payload: contact });
+  };
+
   const addTopic = (topic: Topic) => {
     context.dispatch({ type: 'ADD_TOPIC', payload: topic });
   };
 
   return {
     ...context,
+    addCompany,
+    addContact,
     addTopic,
   };
 }

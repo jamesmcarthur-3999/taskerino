@@ -13,7 +13,7 @@ import { X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import type { ImageGalleryProps } from '../types';
 import type { Attachment } from '../../../types';
 import { getRadiusClass } from '../../../design-system/theme';
-import { attachmentStorage } from '../../../services/attachmentStorage';
+import { getCAStorage } from '../../../services/storage/ContentAddressableStorage';
 
 /**
  * Detect if a URL is actually an attachment ID that needs to be loaded
@@ -54,7 +54,8 @@ export function CanvasImageGallery({
         setLoadingImages((prev) => ({ ...prev, [image.url]: true }));
 
         try {
-          const attachment = await attachmentStorage.getAttachment(image.url);
+          const caStorage = await getCAStorage();
+          const attachment = await caStorage.loadAttachment(image.url);
           if (attachment && attachment.base64) {
             setLoadedImages((prev) => ({ ...prev, [image.url]: attachment.base64! }));
           } else {

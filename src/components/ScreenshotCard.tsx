@@ -13,7 +13,7 @@
  * Focus: Showing context and insights while maintaining scannability.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Code2,
   Palette,
@@ -30,7 +30,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { GradientIconBadge } from './GradientIconBadge';
 import { ScreenshotModal } from './ScreenshotModal';
 import type { SessionScreenshot, Attachment } from '../types';
-import { attachmentStorage } from '../services/attachmentStorage';
+import { getCAStorage } from '../services/storage/ContentAddressableStorage';
 import { RADIUS, ACTIVITY_COLORS, TRANSITIONS, ICON_SIZES, getActivityGradient } from '../design-system/theme';
 
 interface ScreenshotCardProps {
@@ -99,13 +99,41 @@ export const ScreenshotCard = React.memo(function ScreenshotCard({
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [isIntersecting, setIsIntersecting] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
-  // Load screenshot attachment
+  // Intersection Observer for lazy loading (100px before entering viewport)
   useEffect(() => {
-    if (screenshot.attachmentId) {
+    if (!cardRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsIntersecting(true);
+          observer.disconnect();
+        }
+      },
+      {
+        rootMargin: '100px', // Start loading 100px before entering viewport
+        threshold: 0,
+      }
+    );
+
+    observer.observe(cardRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  // Load screenshot attachment only when intersecting (Phase 4: Content-Addressable Storage)
+  useEffect(() => {
+    if (screenshot.hash && isIntersecting) {
       setLoading(true);
-      attachmentStorage
-        .getAttachment(screenshot.attachmentId)
+      getCAStorage()
+        .then(caStorage => caStorage.loadAttachment(screenshot.hash!))
         .then((att) => {
           setAttachment(att || null);
           setLoading(false);
@@ -113,11 +141,23 @@ export const ScreenshotCard = React.memo(function ScreenshotCard({
         .catch((err) => {
           console.error('Failed to load screenshot attachment:', err);
           setLoading(false);
+          setImageError(true);
         });
-    } else {
+    } else if (!screenshot.hash) {
       setLoading(false);
     }
-  }, [screenshot.attachmentId]);
+  }, [screenshot.hash, isIntersecting]);
+
+  // Handle image load success
+  const handleImageLoad = () => {
+    setImageLoaded(true);
+  };
+
+  // Handle image load error
+  const handleImageError = () => {
+    setImageError(true);
+    setImageLoaded(false);
+  };
 
   // Detect activity type and get colors
   const activityType = detectActivity(screenshot);
@@ -189,6 +229,7 @@ export const ScreenshotCard = React.memo(function ScreenshotCard({
 
       {/* Main Card - Horizontal Layout with Rich Content */}
       <div
+        ref={cardRef}
         onClick={handleClick}
         className={`
           relative group cursor-pointer
@@ -215,38 +256,65 @@ export const ScreenshotCard = React.memo(function ScreenshotCard({
                 group-hover:shadow-md
               `}
             >
-              {loading ? (
-                <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                  <div className="text-gray-400 text-[10px]">Loading...</div>
+              {!isIntersecting || loading ? (
+                /* Skeleton placeholder while loading */
+                <div
+                  className="w-full h-full flex items-center justify-center bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse bg-[length:200%_100%]"
+                  aria-label="Loading screenshot"
+                  role="img"
+                >
+                  <Monitor size={32} className="text-gray-300" aria-hidden="true" />
                 </div>
               ) : imageUrl && !imageError ? (
                 <>
+                  {/* Lazy-loaded image with native browser lazy loading */}
                   <img
+                    ref={imgRef}
                     src={imageUrl}
-                    alt="Screenshot"
+                    alt={screenshot.aiAnalysis?.summary || screenshot.aiAnalysis?.detectedActivity || 'Session screenshot'}
+                    loading="lazy"
+                    decoding="async"
                     className={`
                       w-full h-full object-cover
                       ${TRANSITIONS.standard}
                       group-hover:scale-105
+                      ${imageLoaded ? 'opacity-100' : 'opacity-0'}
                     `}
-                    onError={() => setImageError(true)}
+                    onLoad={handleImageLoad}
+                    onError={handleImageError}
                   />
 
-                  {/* Activity Icon Badge - Top Left */}
-                  <div className="absolute top-1.5 left-1.5">
-                    <GradientIconBadge
-                      icon={ActivityIcon}
-                      iconSize={12}
-                      gradientFrom={activityColors.bg}
-                      gradientTo={activityColors.bg}
-                      iconColor={activityColors.text}
-                      size={24}
+                  {/* Show skeleton overlay while image decodes */}
+                  {!imageLoaded && (
+                    <div
+                      className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse bg-[length:200%_100%]"
+                      aria-label="Loading screenshot"
                     />
-                  </div>
+                  )}
+
+                  {/* Activity Icon Badge - Top Left */}
+                  {imageLoaded && (
+                    <div className="absolute top-1.5 left-1.5">
+                      <GradientIconBadge
+                        icon={ActivityIcon}
+                        iconSize={12}
+                        gradientFrom={activityColors.bg}
+                        gradientTo={activityColors.bg}
+                        iconColor={activityColors.text}
+                        size={24}
+                      />
+                    </div>
+                  )}
                 </>
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                  <Monitor size={32} className="text-gray-300" />
+                /* Error state - failed to load image */
+                <div
+                  className="w-full h-full flex flex-col items-center justify-center bg-red-50 text-red-500"
+                  role="alert"
+                  aria-label="Failed to load screenshot"
+                >
+                  <Monitor size={24} className="mb-1" aria-hidden="true" />
+                  <span className="text-[9px] text-center px-2">Failed to load</span>
                 </div>
               )}
             </div>

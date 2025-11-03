@@ -4,9 +4,11 @@ import { useEntities } from '../context/EntitiesContext';
 import { useTasks } from '../context/TasksContext';
 import { useUI } from '../context/UIContext';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
+import { EntityType } from '../types/relationships';
 import { clamp, easeOutQuart } from '../utils/easing';
 import { sortTopics, formatRelativeTime, truncateText, generateNoteTitle, generateId } from '../utils/helpers';
-import { Clock, FileText, Search, X, SlidersHorizontal, CheckSquare, Plus } from 'lucide-react';
+import { Clock, FileText, Search, X, SlidersHorizontal, CheckSquare, Plus, TrendingDown, TrendingUp, SortAsc, CheckCheck } from 'lucide-react';
+import { GlassSelect } from './GlassSelect';
 import { NoteDetailInline } from './NoteDetailInline';
 import { Input } from './Input';
 import { SpaceMenuBar } from './SpaceMenuBar';
@@ -14,6 +16,7 @@ import { motion } from 'framer-motion';
 import { StandardFilterPanel } from './StandardFilterPanel';
 import { InlineTagManager } from './InlineTagManager';
 import { CollapsibleSidebar } from './CollapsibleSidebar';
+import { NoteBulkOperationsBar } from './notes/NoteBulkOperationsBar';
 import type { Note } from '../types';
 import { BACKGROUND_GRADIENT, getGlassClasses, getNoteCardClasses, PANEL_FOOTER } from '../design-system/theme';
 
@@ -23,17 +26,22 @@ export default function LibraryZone() {
   const { state: tasksState } = useTasks();
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { registerScrollContainer, unregisterScrollContainer, scrollY } = useScrollAnimation();
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | undefined>();
-  const [selectedContactId, setSelectedContactId] = useState<string | undefined>();
-  const [selectedTopicId, setSelectedTopicId] = useState<string | undefined>();
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<('call' | 'email' | 'thought' | 'other')[]>([]);
   const [selectedSentiments, setSelectedSentiments] = useState<('positive' | 'neutral' | 'negative')[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<'all' | 'approved' | 'draft'>('approved'); // Show approved notes by default
   const [sortBy] = useState<'recent' | 'name' | 'noteCount'>('recent');
   const [noteSortBy, setNoteSortBy] = useState<'recent' | 'oldest' | 'alphabetical'>('recent');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedNoteIdForInline, setSelectedNoteIdForInline] = useState<string | undefined>();
+
+  // Bulk selection state
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
 
   // Ref for scrollable notes list container
   const notesListScrollRef = useRef<HTMLDivElement>(null);
@@ -215,27 +223,38 @@ export default function LibraryZone() {
   const displayedNotes = useMemo(() => {
     let notes = notesState.notes;
 
-    // Filter by company
-    if (selectedCompanyId) {
+    // Filter by status (draft vs approved)
+    if (selectedStatus === 'approved') {
+      notes = notes.filter(note => !note.status || note.status === 'approved');
+    } else if (selectedStatus === 'draft') {
+      notes = notes.filter(note => note.status === 'draft');
+    }
+    // 'all' shows both draft and approved
+
+    // Filter by companies (multi-select)
+    if (selectedCompanyIds.length > 0) {
       notes = notes.filter(note =>
-        note.companyIds?.includes(selectedCompanyId) ||
-        (note.topicId === selectedCompanyId) // Legacy support
+        note.relationships.some(rel =>
+          rel.targetType === EntityType.COMPANY && selectedCompanyIds.includes(rel.targetId)
+        )
       );
     }
 
-    // Filter by contact
-    if (selectedContactId) {
+    // Filter by contacts (multi-select)
+    if (selectedContactIds.length > 0) {
       notes = notes.filter(note =>
-        note.contactIds?.includes(selectedContactId) ||
-        (note.topicId === selectedContactId) // Legacy support
+        note.relationships.some(rel =>
+          rel.targetType === EntityType.CONTACT && selectedContactIds.includes(rel.targetId)
+        )
       );
     }
 
-    // Filter by topic
-    if (selectedTopicId) {
+    // Filter by topics (multi-select)
+    if (selectedTopicIds.length > 0) {
       notes = notes.filter(note =>
-        note.topicIds?.includes(selectedTopicId) ||
-        (note.topicId === selectedTopicId) // Legacy support
+        note.relationships.some(rel =>
+          rel.targetType === EntityType.TOPIC && selectedTopicIds.includes(rel.targetId)
+        )
       );
     }
 
@@ -286,7 +305,7 @@ export default function LibraryZone() {
     });
 
     return sorted;
-  }, [notesState.notes, selectedCompanyId, selectedContactId, selectedTopicId, selectedTags, selectedSources, selectedSentiments, searchQuery, noteSortBy]);
+  }, [notesState.notes, selectedCompanyIds, selectedContactIds, selectedTopicIds, selectedTags, selectedSources, selectedSentiments, selectedStatus, searchQuery, noteSortBy]);
 
   // Auto-select first note when displayedNotes changes
   useEffect(() => {
@@ -294,6 +313,30 @@ export default function LibraryZone() {
       setSelectedNoteIdForInline(displayedNotes[0].id);
     }
   }, [displayedNotes, selectedNoteIdForInline]);
+
+  const toggleCompany = useCallback((companyId: string) => {
+    setSelectedCompanyIds(prev =>
+      prev.includes(companyId)
+        ? prev.filter(id => id !== companyId)
+        : [...prev, companyId]
+    );
+  }, []);
+
+  const toggleContact = useCallback((contactId: string) => {
+    setSelectedContactIds(prev =>
+      prev.includes(contactId)
+        ? prev.filter(id => id !== contactId)
+        : [...prev, contactId]
+    );
+  }, []);
+
+  const toggleTopic = useCallback((topicId: string) => {
+    setSelectedTopicIds(prev =>
+      prev.includes(topicId)
+        ? prev.filter(id => id !== topicId)
+        : [...prev, topicId]
+    );
+  }, []);
 
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags(prev =>
@@ -303,7 +346,7 @@ export default function LibraryZone() {
     );
   }, []);
 
-  const activeFiltersCount = (selectedCompanyId ? 1 : 0) + (selectedContactId ? 1 : 0) + (selectedTopicId ? 1 : 0) + selectedTags.length + selectedSources.length + selectedSentiments.length + (searchQuery ? 1 : 0);
+  const activeFiltersCount = selectedCompanyIds.length + selectedContactIds.length + selectedTopicIds.length + selectedTags.length + selectedSources.length + selectedSentiments.length + (searchQuery ? 1 : 0);
 
   const handleNoteClick = useCallback((noteId: string, e: React.MouseEvent) => {
     // If Cmd/Ctrl is held, open in modal instead
@@ -321,6 +364,7 @@ export default function LibraryZone() {
     const now = new Date().toISOString();
     const newNote: Note = {
       id: generateId(),
+      relationships: [],
       content: '',
       summary: 'New Note',
       timestamp: now,
@@ -353,24 +397,40 @@ export default function LibraryZone() {
                   onClick: handleCreateNewNote,
                   gradient: 'purple',
                 }}
-                dropdowns={[
-                  {
-                    label: 'Sort',
-                    value: noteSortBy,
-                    options: [
-                      { value: 'recent', label: 'Recent' },
-                      { value: 'oldest', label: 'Oldest' },
-                      { value: 'alphabetical', label: 'A-Z' },
-                    ],
-                    onChange: (value) => setNoteSortBy(value as typeof noteSortBy),
-                  },
-                ]}
+                glassDropdowns={
+                  <>
+                    <GlassSelect
+                      value={selectedStatus}
+                      onChange={(value) => setSelectedStatus(value as typeof selectedStatus)}
+                      options={[
+                        { value: 'approved', label: 'Approved', icon: CheckCheck },
+                        { value: 'draft', label: 'Drafts', icon: FileText },
+                        { value: 'all', label: 'All Notes', icon: FileText },
+                      ]}
+                      variant="primary"
+                      triggerIcon={CheckCheck}
+                      placeholder="Status..."
+                    />
+                    <GlassSelect
+                      value={noteSortBy}
+                      onChange={(value) => setNoteSortBy(value as typeof noteSortBy)}
+                      options={[
+                        { value: 'recent', label: 'Recent First', icon: TrendingDown },
+                        { value: 'oldest', label: 'Oldest First', icon: TrendingUp },
+                        { value: 'alphabetical', label: 'A-Z', icon: SortAsc },
+                      ]}
+                      variant="primary"
+                      triggerIcon={SortAsc}
+                      placeholder="Sort by..."
+                    />
+                  </>
+                }
                 filters={{
                   active: showFilters,
                   count: [
-                    selectedCompanyId ? 1 : 0,
-                    selectedContactId ? 1 : 0,
-                    selectedTopicId ? 1 : 0,
+                    selectedCompanyIds.length,
+                    selectedContactIds.length,
+                    selectedTopicIds.length,
                     selectedTags.length,
                   ].reduce((a, b) => a + b, 0),
                   onToggle: () => setShowFilters(!showFilters),
@@ -381,23 +441,23 @@ export default function LibraryZone() {
                         {
                           title: 'COMPANIES',
                           items: sortedCompanies.map(c => ({ id: c.id, label: c.name })),
-                          selectedIds: selectedCompanyId ? [selectedCompanyId] : [],
-                          onToggle: (id) => setSelectedCompanyId(id === selectedCompanyId ? undefined : id),
-                          multiSelect: false,
+                          selectedIds: selectedCompanyIds,
+                          onToggle: toggleCompany,
+                          multiSelect: true,
                         },
                         {
                           title: 'CONTACTS',
                           items: sortedContacts.map(c => ({ id: c.id, label: c.name })),
-                          selectedIds: selectedContactId ? [selectedContactId] : [],
-                          onToggle: (id) => setSelectedContactId(id === selectedContactId ? undefined : id),
-                          multiSelect: false,
+                          selectedIds: selectedContactIds,
+                          onToggle: toggleContact,
+                          multiSelect: true,
                         },
                         {
                           title: 'TOPICS',
                           items: sortedTopics.map(t => ({ id: t.id, label: t.name })),
-                          selectedIds: selectedTopicId ? [selectedTopicId] : [],
-                          onToggle: (id) => setSelectedTopicId(id === selectedTopicId ? undefined : id),
-                          multiSelect: false,
+                          selectedIds: selectedTopicIds,
+                          onToggle: toggleTopic,
+                          multiSelect: true,
                         },
                         {
                           title: 'TAGS',
@@ -408,9 +468,9 @@ export default function LibraryZone() {
                         },
                       ]}
                       onClearAll={() => {
-                        setSelectedCompanyId(undefined);
-                        setSelectedContactId(undefined);
-                        setSelectedTopicId(undefined);
+                        setSelectedCompanyIds([]);
+                        setSelectedContactIds([]);
+                        setSelectedTopicIds([]);
                         setSelectedTags([]);
                         setSelectedSources([]);
                         setSelectedSentiments([]);
@@ -420,7 +480,40 @@ export default function LibraryZone() {
                 }}
                 stats={undefined}
                 className=""
-              />
+              >
+                {/* Select Button */}
+                <motion.button
+                  layout
+                  onClick={() => {
+                    setBulkSelectMode(!bulkSelectMode);
+                    if (bulkSelectMode) {
+                      setSelectedNoteIds(new Set());
+                    }
+                  }}
+                  className={`backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center ${
+                    bulkSelectMode
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md border-transparent'
+                      : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-purple-300'
+                  } focus:ring-2 focus:ring-purple-400 focus:border-purple-300 outline-none`}
+                  style={{
+                    paddingLeft: '16px',
+                    paddingRight: '16px',
+                    paddingTop: '8px',
+                    paddingBottom: '8px',
+                  }}
+                  transition={{
+                    layout: {
+                      type: "spring",
+                      stiffness: 400,
+                      damping: 30,
+                    }
+                  }}
+                  title="Select multiple notes"
+                >
+                  <CheckCheck size={16} />
+                  <span className="ml-2">Select</span>
+                </motion.button>
+              </SpaceMenuBar>
           </div>
 
           {/* Stats pill - side-by-side with menu */}
@@ -454,24 +547,40 @@ export default function LibraryZone() {
                   onClick: handleCreateNewNote,
                   gradient: 'purple',
                 }}
-                dropdowns={[
-                  {
-                    label: 'Sort',
-                    value: noteSortBy,
-                    options: [
-                      { value: 'recent', label: 'Recent' },
-                      { value: 'oldest', label: 'Oldest' },
-                      { value: 'alphabetical', label: 'A-Z' },
-                    ],
-                    onChange: (value) => setNoteSortBy(value as typeof noteSortBy),
-                  },
-                ]}
+                glassDropdowns={
+                  <>
+                    <GlassSelect
+                      value={selectedStatus}
+                      onChange={(value) => setSelectedStatus(value as typeof selectedStatus)}
+                      options={[
+                        { value: 'approved', label: 'Approved', icon: CheckCheck },
+                        { value: 'draft', label: 'Drafts', icon: FileText },
+                        { value: 'all', label: 'All Notes', icon: FileText },
+                      ]}
+                      variant="primary"
+                      triggerIcon={CheckCheck}
+                      placeholder="Status..."
+                    />
+                    <GlassSelect
+                      value={noteSortBy}
+                      onChange={(value) => setNoteSortBy(value as typeof noteSortBy)}
+                      options={[
+                        { value: 'recent', label: 'Recent First', icon: TrendingDown },
+                        { value: 'oldest', label: 'Oldest First', icon: TrendingUp },
+                        { value: 'alphabetical', label: 'A-Z', icon: SortAsc },
+                      ]}
+                      variant="primary"
+                      triggerIcon={SortAsc}
+                      placeholder="Sort by..."
+                    />
+                  </>
+                }
                 filters={{
                   active: showFilters,
                   count: [
-                    selectedCompanyId ? 1 : 0,
-                    selectedContactId ? 1 : 0,
-                    selectedTopicId ? 1 : 0,
+                    selectedCompanyIds.length,
+                    selectedContactIds.length,
+                    selectedTopicIds.length,
                     selectedTags.length,
                   ].reduce((a, b) => a + b, 0),
                   onToggle: () => setShowFilters(!showFilters),
@@ -482,22 +591,22 @@ export default function LibraryZone() {
                         {
                           title: 'COMPANIES',
                           items: sortedCompanies.map(c => ({ id: c.id, label: c.name })),
-                          selectedIds: selectedCompanyId ? [selectedCompanyId] : [],
-                          onToggle: (id) => setSelectedCompanyId(id === selectedCompanyId ? undefined : id),
+                          selectedIds: selectedCompanyIds,
+                          onToggle: (id) => setSelectedCompanyIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
                           multiSelect: false,
                         },
                         {
                           title: 'CONTACTS',
                           items: sortedContacts.map(c => ({ id: c.id, label: c.name })),
-                          selectedIds: selectedContactId ? [selectedContactId] : [],
-                          onToggle: (id) => setSelectedContactId(id === selectedContactId ? undefined : id),
+                          selectedIds: selectedContactIds,
+                          onToggle: (id) => setSelectedContactIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
                           multiSelect: false,
                         },
                         {
                           title: 'TOPICS',
                           items: sortedTopics.map(t => ({ id: t.id, label: t.name })),
-                          selectedIds: selectedTopicId ? [selectedTopicId] : [],
-                          onToggle: (id) => setSelectedTopicId(id === selectedTopicId ? undefined : id),
+                          selectedIds: selectedTopicIds,
+                          onToggle: (id) => setSelectedTopicIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]),
                           multiSelect: false,
                         },
                         {
@@ -513,7 +622,40 @@ export default function LibraryZone() {
                 }}
                 stats={undefined}
                 className=""
-              />
+              >
+                {/* Select Button */}
+                <motion.button
+                  layout
+                  onClick={() => {
+                    setBulkSelectMode(!bulkSelectMode);
+                    if (bulkSelectMode) {
+                      setSelectedNoteIds(new Set());
+                    }
+                  }}
+                  className={`backdrop-blur-sm border-2 rounded-full text-sm font-semibold transition-all flex items-center ${
+                    bulkSelectMode
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md border-transparent'
+                      : 'bg-white/50 border-white/60 text-gray-700 hover:bg-white/70 hover:border-purple-300'
+                  } focus:ring-2 focus:ring-purple-400 focus:border-purple-300 outline-none`}
+                  style={{
+                    paddingLeft: '16px',
+                    paddingRight: '16px',
+                    paddingTop: '8px',
+                    paddingBottom: '8px',
+                  }}
+                  transition={{
+                    layout: {
+                      type: "spring",
+                      stiffness: 400,
+                      damping: 30,
+                    }
+                  }}
+                  title="Select multiple notes"
+                >
+                  <CheckCheck size={16} />
+                  <span className="ml-2">Select</span>
+                </motion.button>
+              </SpaceMenuBar>
           </motion.div>
         )}
 
@@ -541,37 +683,104 @@ export default function LibraryZone() {
             />
           </div>
 
+          {/* Bulk Operations Bar */}
+          {bulkSelectMode && selectedNoteIds.size > 0 && (
+            <div className="px-4">
+              <NoteBulkOperationsBar
+                selectedCount={selectedNoteIds.size}
+                totalFilteredCount={displayedNotes.length}
+                onSelectAll={() => {
+                  const newSet = new Set<string>();
+                  displayedNotes.forEach(n => newSet.add(n.id));
+                  setSelectedNoteIds(newSet);
+                }}
+                onDelete={() => {
+                  if (window.confirm(`Delete ${selectedNoteIds.size} note${selectedNoteIds.size !== 1 ? 's' : ''}? This action cannot be undone.`)) {
+                    selectedNoteIds.forEach(id => {
+                      notesDispatch({ type: 'DELETE_NOTE', payload: id });
+                    });
+                    setSelectedNoteIds(new Set());
+                    setBulkSelectMode(false);
+                  }
+                }}
+                onAddToTopic={() => {
+                  // TODO: Implement topic selector modal
+                  alert('Topic selector coming soon!');
+                }}
+                onAddTags={() => {
+                  // TODO: Implement tag selector modal
+                  alert('Tag selector coming soon!');
+                }}
+                onArchive={() => {
+                  // TODO: Implement archive functionality
+                  alert('Archive functionality coming soon!');
+                }}
+              />
+            </div>
+          )}
+
           {/* Scrollable Note List */}
           <div ref={notesListScrollRef} className="flex-1 overflow-y-auto">
             {displayedNotes.length > 0 ? (
               <div className="space-y-2 p-4">
                 {displayedNotes.map((note) => {
-                  // Get all related entities
-                  const relatedCompanies = entitiesState.companies.filter(c => note.companyIds?.includes(c.id));
-                  const relatedContacts = entitiesState.contacts.filter(c => note.contactIds?.includes(c.id));
-                  const relatedTopics = entitiesState.topics.filter(t => note.topicIds?.includes(t.id));
-
-                  // Legacy support
-                  if (note.topicId) {
-                    const legacyCompany = entitiesState.companies.find(c => c.id === note.topicId);
-                    const legacyContact = entitiesState.contacts.find(c => c.id === note.topicId);
-                    const legacyTopic = entitiesState.topics.find(t => t.id === note.topicId);
-                    if (legacyCompany && !relatedCompanies.some(c => c.id === legacyCompany.id)) relatedCompanies.push(legacyCompany);
-                    if (legacyContact && !relatedContacts.some(c => c.id === legacyContact.id)) relatedContacts.push(legacyContact);
-                    if (legacyTopic && !relatedTopics.some(t => t.id === legacyTopic.id)) relatedTopics.push(legacyTopic);
-                  }
+                  // Get all related entities from relationships
+                  const relatedCompanies = entitiesState.companies.filter(c =>
+                    note.relationships.some(rel => rel.targetType === EntityType.COMPANY && rel.targetId === c.id)
+                  );
+                  const relatedContacts = entitiesState.contacts.filter(c =>
+                    note.relationships.some(rel => rel.targetType === EntityType.CONTACT && rel.targetId === c.id)
+                  );
+                  const relatedTopics = entitiesState.topics.filter(t =>
+                    note.relationships.some(rel => rel.targetType === EntityType.TOPIC && rel.targetId === t.id)
+                  );
 
                   const sentiment = note.metadata?.sentiment;
-                  const noteTasks = tasksState.tasks.filter(t => t.noteId === note.id);
+                  const noteTasks = tasksState.tasks.filter(t =>
+                    t.relationships.some(rel => rel.targetType === EntityType.NOTE && rel.targetId === note.id)
+                  );
                   const isSelected = note.id === selectedNoteIdForInline;
+                  const isChecked = selectedNoteIds.has(note.id);
 
                   return (
                     <div
                       key={note.id}
-                      className={getNoteCardClasses(isSelected)}
-                      onClick={(e) => handleNoteClick(note.id, e)}
+                      className={`${getNoteCardClasses(isSelected)} ${isChecked ? 'ring-2 ring-purple-500 bg-purple-50/20' : ''}`}
+                      onClick={(e) => {
+                        if (bulkSelectMode) {
+                          const newSet = new Set(selectedNoteIds);
+                          if (newSet.has(note.id)) {
+                            newSet.delete(note.id);
+                          } else {
+                            newSet.add(note.id);
+                          }
+                          setSelectedNoteIds(newSet);
+                        } else {
+                          handleNoteClick(note.id, e);
+                        }
+                      }}
                       style={{ transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
                     >
+                      {bulkSelectMode && (
+                        <div className="absolute top-2 left-2 z-10">
+                          <input
+                            type="checkbox"
+                            className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              const newSet = new Set(selectedNoteIds);
+                              if (newSet.has(note.id)) {
+                                newSet.delete(note.id);
+                              } else {
+                                newSet.add(note.id);
+                              }
+                              setSelectedNoteIds(newSet);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      )}
                       {/* Compact header */}
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">

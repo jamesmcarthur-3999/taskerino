@@ -9,7 +9,7 @@
 // import Anthropic from '@anthropic-ai/sdk';
 import type { Session, VideoFrame } from '../types';
 import { videoFrameExtractor } from './videoFrameExtractor';
-import { attachmentStorage } from './attachmentStorage';
+import { getCAStorage } from './storage/ContentAddressableStorage';
 import { getStorage } from './storage';
 
 export interface VideoAnalysisRequest {
@@ -56,16 +56,14 @@ class VideoAnalysisAgent {
 
     // 1. Get session data
     const session = await this.getSession(request.sessionId);
-    if (!session.video?.fullVideoAttachmentId) {
+    if (!session.video) {
       throw new Error('Session has no video recording');
     }
 
     // 2. Get video path
-    const videoAttachment = await attachmentStorage.getAttachment(
-      session.video.fullVideoAttachmentId
-    );
-    if (!videoAttachment?.path) {
-      throw new Error('Video file not found');
+    const videoPath = session.video.optimizedPath || session.video.path;
+    if (!videoPath) {
+      throw new Error('Video file path not found');
     }
 
     // 3. Determine sampling strategy
@@ -79,7 +77,7 @@ class VideoAnalysisAgent {
 
     // 4. Extract frames
     const frames = await videoFrameExtractor.extractFrames(
-      videoAttachment.path,
+      videoPath,
       timestamps
     );
 

@@ -24,9 +24,9 @@
 
 import React, { useState } from 'react';
 import { Sparkles, CheckCircle2, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
-import type { Session } from '../types';
+import type { Session, EnrichmentProgress } from '../types';
 import { EnrichmentButton } from './EnrichmentButton';
-import { sessionEnrichmentService, type EnrichmentProgress } from '../services/sessionEnrichmentService';
+import { getBackgroundEnrichmentManager } from '../services/enrichment/BackgroundEnrichmentManager';
 import { useUI } from '../context/UIContext';
 import { useEnrichmentContext } from '../context/EnrichmentContext';
 import { getStorage } from '../services/storage';
@@ -60,7 +60,7 @@ export function EnrichmentStatusBanner({
 
   // Check if session has audio or video data
   const hasAudio = session.audioSegments && session.audioSegments.length > 0;
-  const hasVideo = session.video?.fullVideoAttachmentId;
+  const hasVideo = Boolean(session.video?.path || session.video?.optimizedPath);
 
   // Don't show banner if no enrichable content
   if (!hasAudio && !hasVideo) {
@@ -84,10 +84,6 @@ export function EnrichmentStatusBanner({
    */
   const handleEnrichment = async () => {
     setIsEnriching(true);
-    setEnrichmentProgress(null);
-
-    // Start tracking in EnrichmentContext for RainbowBorderProgressIndicator
-    startTracking(session.id, session.name || 'Unnamed Session');
 
     // Notify parent that enrichment is starting
     if (onEnrichmentStart) {
@@ -95,57 +91,54 @@ export function EnrichmentStatusBanner({
     }
 
     try {
-      console.log('✨ [ENRICHMENT BANNER] Starting session enrichment...');
+      console.log('✨ [ENRICHMENT BANNER] Queuing session enrichment...');
 
-      // Start enrichment with progress tracking
-      const result = await sessionEnrichmentService.enrichSession(session, {
-        includeAudio: hasAudio && !audioCompleted ? true : false,
-        includeVideo: hasVideo && !videoCompleted ? true : false,
-        includeSummary: true,
-        forceRegenerate: false,
-        onProgress: (progress) => {
-          setEnrichmentProgress(progress);
-          updateProgress(session.id, progress); // Update EnrichmentContext for rainbow border
-          console.log(`✨ [ENRICHMENT BANNER] ${progress.stage}: ${progress.message} (${progress.progress}%)`);
-        },
+      // Queue enrichment via BackgroundEnrichmentManager
+      const manager = await getBackgroundEnrichmentManager();
+      const jobId = await manager.enqueueSession({
+        sessionId: session.id,
+        sessionName: session.name || 'Unnamed Session',
+        priority: 'high', // User-initiated = high priority
+        options: {
+          skipAudio: !hasAudio || audioCompleted,
+          skipVideo: !hasVideo || videoCompleted,
+          skipSummary: false,
+          skipCanvas: false
+        }
       });
 
-      console.log('✅ [ENRICHMENT BANNER] Enrichment complete:', result);
+      console.log('✅ [ENRICHMENT BANNER] Enrichment queued with job ID:', jobId);
 
-      // Show success notification
+      // Show notification that enrichment is queued
       addNotification({
-        type: 'success',
-        title: 'Enrichment Complete',
-        message: `Session enriched successfully. Total cost: $${result.totalCost.toFixed(1)}`,
+        type: 'info',
+        title: 'Enrichment Queued',
+        message: 'Processing in background. Check status in top-right corner.',
       });
 
-      // Notify parent of session update (reload from storage for fresh data)
+      // Notify parent that session is now being enriched
       if (onSessionUpdate) {
-        // ✅ FIX: Reload session directly from storage to avoid stale React state
+        // Reload session from storage to get updated enrichmentStatus
         const storage = await getStorage();
         const sessions = await storage.load<Session[]>('sessions') || [];
 
         if (Array.isArray(sessions)) {
           const freshSession = sessions.find((s) => s.id === session.id);
           if (freshSession) {
-            console.log('✅ [ENRICHMENT BANNER] Reloaded fresh session from storage after enrichment');
+            console.log('✅ [ENRICHMENT BANNER] Reloaded session with updated enrichment status');
             onSessionUpdate(freshSession);
-          } else {
-            console.error('❌ [ENRICHMENT BANNER] Session not found in storage after enrichment');
           }
         }
       }
     } catch (error: any) {
-      console.error('❌ [ENRICHMENT BANNER] Enrichment failed:', error);
+      console.error('❌ [ENRICHMENT BANNER] Failed to queue enrichment:', error);
 
       addNotification({
         type: 'error',
         title: 'Enrichment Failed',
-        message: error.message || 'Failed to enrich session',
+        message: error.message || 'Failed to queue enrichment',
       });
     } finally {
-      // Stop tracking in EnrichmentContext (cleans up rainbow border)
-      stopTracking(session.id);
       setIsEnriching(false);
       setEnrichmentProgress(null);
     }
@@ -269,7 +262,6 @@ export function EnrichmentStatusBanner({
 
   if (enrichmentStatus === 'completed') {
     const enrichedAt = session.enrichmentStatus?.completedAt;
-    const totalCost = session.enrichmentStatus?.totalCost || 0;
     const successGradient = getSuccessGradient('light');
 
     // Build a compact summary line
@@ -304,7 +296,7 @@ export function EnrichmentStatusBanner({
             </div>
             <p className={`text-xs ${successGradient.textSecondary} mt-0.5`}>
               Enriched {formatTimestamp(enrichedAt)}
-              {totalCost > 0 && ` • $${totalCost.toFixed(1)}`}
+              {/* Cost removed - tracked in backend only */}
             </p>
           </div>
         </div>

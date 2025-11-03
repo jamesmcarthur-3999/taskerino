@@ -876,7 +876,10 @@
 <a name='L811'></a><a href='#L811'>811</a>
 <a name='L812'></a><a href='#L812'>812</a>
 <a name='L813'></a><a href='#L813'>813</a>
-<a name='L814'></a><a href='#L814'>814</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L814'></a><a href='#L814'>814</a>
+<a name='L815'></a><a href='#L815'>815</a>
+<a name='L816'></a><a href='#L816'>816</a>
+<a name='L817'></a><a href='#L817'>817</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1479,8 +1482,11 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1704,7 +1710,7 @@
 <span class="cstat-no" title="statement not covered" >import { useUI } from '../../context/UIContext';</span>
 <span class="cstat-no" title="statement not covered" >import { useNotes } from '../../context/NotesContext';</span>
 <span class="cstat-no" title="statement not covered" >import { useTasks } from '../../context/TasksContext';</span>
-<span class="cstat-no" title="statement not covered" >import { useSessions } from '../../context/SessionsContext';</span>
+<span class="cstat-no" title="statement not covered" >import { useSessionList } from '../../context/SessionListContext';</span>
 <span class="cstat-no" title="statement not covered" >import { useEntities } from '../../context/EntitiesContext';</span>
 <span class="cstat-no" title="statement not covered" >import { nedService } from '../../services/nedService';</span>
 <span class="cstat-no" title="statement not covered" >import { contextAgent } from '../../services/contextAgent';</span>
@@ -1766,7 +1772,7 @@ interface ToolPermissionRequest {
 <span class="cstat-no" title="statement not covered" >  const { state: uiState, dispatch: uiDispatch } = useUI();</span>
 <span class="cstat-no" title="statement not covered" >  const { state: notesState } = useNotes();</span>
 <span class="cstat-no" title="statement not covered" >  const { state: tasksState, dispatch: tasksDispatch } = useTasks();</span>
-<span class="cstat-no" title="statement not covered" >  const { sessions, setActiveSession } = useSessions();</span>
+<span class="cstat-no" title="statement not covered" >  const { sessions } = useSessionList();</span>
 <span class="cstat-no" title="statement not covered" >  const { state: entitiesState } = useEntities();</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  const messages = uiState.nedConversation?.messages || [];</span>
@@ -1884,7 +1890,7 @@ interface ToolPermissionRequest {
 <span class="cstat-no" title="statement not covered" >      userProfile: settingsState.userProfile,</span>
 <span class="cstat-no" title="statement not covered" >      learnings: settingsState.learnings,</span>
 <span class="cstat-no" title="statement not covered" >      nedSettings: settingsState.nedSettings,</span>
-<span class="cstat-no" title="statement not covered" >      activeSessionId: null, // TODO: get from SessionsContext</span>
+<span class="cstat-no" title="statement not covered" >      activeSessionId: null, // TODO: get from useActiveSession() hook (Phase 1)</span>
 <span class="cstat-no" title="statement not covered" >      nedConversation: uiState.nedConversation,</span>
 <span class="cstat-no" title="statement not covered" >    } as any;</span>
 &nbsp;
@@ -2291,10 +2297,13 @@ interface ToolPermissionRequest {
 <span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >  };</span>
 &nbsp;
-  // Session actions
+  // Session actions - Navigate to sessions tab
+  // Note: Session selection is now managed locally in SessionsZone
+  // User will need to click the session after navigating to the tab
 <span class="cstat-no" title="statement not covered" >  const handleSessionView = (sessionId: string) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'sessions' });</span>
-<span class="cstat-no" title="statement not covered" >    setActiveSession(sessionId);</span>
+    // TODO: Add mechanism to pass selectedSessionId to SessionsZone via URL params or UI context
+<span class="cstat-no" title="statement not covered" >    console.log('[NedChat] Navigating to sessions tab for session:', sessionId);</span>
 <span class="cstat-no" title="statement not covered" >  };</span>
 &nbsp;
   // Ask Ned handler - append to input or send directly
@@ -2509,7 +2518,7 @@ interface ToolPermissionRequest {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

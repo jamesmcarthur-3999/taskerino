@@ -9,7 +9,7 @@
  */
 
 import type { Attachment, Session } from '../types';
-import { attachmentStorage } from './attachmentStorage';
+import { getCAStorage } from './storage/ContentAddressableStorage';
 import { audioCompressionService } from './audioCompressionService';
 
 class AudioStorageService {
@@ -57,9 +57,22 @@ class AudioStorageService {
       duration: actualDuration,
     };
 
-    await attachmentStorage.saveAttachment(attachment);
+    // Phase 4: Save to content-addressable storage
+    const caStorage = await getCAStorage();
+    const hash = await caStorage.saveAttachment(attachment);
+    attachment.hash = hash;
+    await caStorage.addReference(hash, sessionId, attachment.id);
 
-    console.log(`✅ [AUDIO STORAGE] Saved audio segment ${segmentIndex} as MP3`);
+    console.log(`✅ [AUDIO STORAGE] Saved audio segment ${segmentIndex} as MP3 (hash: ${hash.substring(0, 8)}...)`);
+
+    // VERIFY: Try loading it back immediately to confirm it's saved
+    const verified = await caStorage.loadAttachment(hash);
+    if (!verified) {
+      console.error(`❌ [AUDIO STORAGE] VERIFICATION FAILED! Just saved hash ${hash.substring(0, 8)}... but can't load it back!`);
+    } else {
+      console.log(`✅ [AUDIO STORAGE] VERIFIED: Can load hash ${hash.substring(0, 8)}... (${verified.size} bytes)`);
+    }
+
     return attachment;
   }
 
@@ -83,9 +96,12 @@ class AudioStorageService {
     const audioContext = new AudioContext();
     const audioBuffers: AudioBuffer[] = [];
 
-    // Load all segments
+    // Load all segments (Phase 4: Use CA storage with hash lookup)
+    const caStorage = await getCAStorage();
     for (const id of segmentIds) {
-      const attachment = await attachmentStorage.getAttachment(id);
+      // Note: segmentIds should contain hashes in Phase 4, but we support legacy IDs
+      // The migration will update all references to use hashes
+      const attachment = await caStorage.loadAttachment(id);
       if (!attachment?.base64) {
         console.warn(`⚠️  [AUDIO STORAGE] Segment ${id} not found, skipping`);
         continue;
@@ -139,8 +155,12 @@ class AudioStorageService {
       duration: totalDuration,
     };
 
-    await attachmentStorage.saveAttachment(attachment);
-    console.log(`✅ [AUDIO STORAGE] Stitched audio saved: ${attachment.id} (${totalDuration.toFixed(1)}s)`);
+    // Phase 4: Save to content-addressable storage
+    const hash = await caStorage.saveAttachment(attachment);
+    attachment.hash = hash;
+    await caStorage.addReference(hash, sessionId, attachment.id);
+
+    console.log(`✅ [AUDIO STORAGE] Stitched audio saved: ${attachment.id} (${totalDuration.toFixed(1)}s) (hash: ${hash.substring(0, 8)}...)`);
 
     return attachment;
   }
@@ -198,14 +218,32 @@ class AudioStorageService {
    * Convert base64 to ArrayBuffer
    */
   private base64ToArrayBuffer(base64: string): ArrayBuffer {
-    // Remove data URL prefix if present
-    const base64String = base64.split(',')[1] || base64;
-    const binaryString = atob(base64String);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+    // Strip data URL prefix if present (e.g., "data:audio/wav;base64,")
+    let base64Data = base64;
+    if (base64.startsWith('data:') && base64.includes(',')) {
+      base64Data = base64.split(',')[1];
+      console.log('[AUDIO STORAGE] Stripped data URL prefix from base64 string');
     }
-    return bytes.buffer;
+
+    // Additional validation: Check if string contains only valid base64 characters
+    const validBase64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+    if (!validBase64Regex.test(base64Data.replace(/\s/g, ''))) {
+      console.warn('[AUDIO STORAGE] Base64 string contains invalid characters, attempting cleanup');
+      // Remove any whitespace or newlines
+      base64Data = base64Data.replace(/\s/g, '');
+    }
+
+    try {
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes.buffer;
+    } catch (error) {
+      console.error('[AUDIO STORAGE] Failed to decode base64:', error);
+      throw new Error(`Invalid base64 audio data: ${error}`);
+    }
   }
 
   /**
@@ -303,39 +341,47 @@ class AudioStorageService {
       duration,
     };
 
-    await attachmentStorage.saveAttachment(attachment);
-    console.log(`✅ [AUDIO STORAGE] Saved full session audio: ${attachment.id} (${(size / 1024 / 1024).toFixed(1)}MB)`);
+    // Phase 4: Save to content-addressable storage
+    const caStorage = await getCAStorage();
+    const hash = await caStorage.saveAttachment(attachment);
+    attachment.hash = hash;
+    await caStorage.addReference(hash, sessionId, attachment.id);
+
+    console.log(`✅ [AUDIO STORAGE] Saved full session audio: ${attachment.id} (${(size / 1024 / 1024).toFixed(1)}MB) (hash: ${hash.substring(0, 8)}...)`);
 
     return attachment;
   }
 
   /**
-   * Delete audio file from storage
+   * Delete audio file from storage (Phase 4: Remove reference, GC handles deletion)
    */
-  async deleteAudio(attachmentId: string): Promise<void> {
-    await attachmentStorage.deleteAttachment(attachmentId);
-    console.log(`🗑️  [AUDIO STORAGE] Deleted audio: ${attachmentId}`);
+  async deleteAudio(hash: string, sessionId: string, attachmentId: string): Promise<void> {
+    const caStorage = await getCAStorage();
+    await caStorage.removeReference(hash, sessionId);
+    console.log(`🗑️  [AUDIO STORAGE] Removed reference for audio: ${attachmentId} (hash: ${hash.substring(0, 8)}...)`);
   }
 
   /**
-   * Get total storage size for session audio
+   * Get total storage size for session audio (Phase 4: Use hash lookup)
    */
   async getSessionAudioSize(session: Session): Promise<number> {
+    const caStorage = await getCAStorage();
     let totalSize = 0;
 
-    // Sum segment sizes
+    // Sum segment sizes (Phase 4: Use hash if available, fallback to attachmentId)
     if (session.audioSegments) {
       for (const segment of session.audioSegments) {
-        if (segment.attachmentId) {
-          const attachment = await attachmentStorage.getAttachment(segment.attachmentId);
+        const identifier = segment.hash || segment.attachmentId;
+        if (identifier) {
+          const attachment = await caStorage.loadAttachment(identifier);
           if (attachment) totalSize += attachment.size;
         }
       }
     }
 
-    // Add full audio size
+    // Add full audio size (Note: fullAudioAttachmentId may need migration to hash-based lookup)
     if (session.fullAudioAttachmentId) {
-      const attachment = await attachmentStorage.getAttachment(session.fullAudioAttachmentId);
+      const attachment = await caStorage.loadAttachment(session.fullAudioAttachmentId);
       if (attachment) totalSize += attachment.size;
     }
 

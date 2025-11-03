@@ -13,7 +13,8 @@ import { useSettings } from '../../context/SettingsContext';
 import { useUI } from '../../context/UIContext';
 import { useNotes } from '../../context/NotesContext';
 import { useTasks } from '../../context/TasksContext';
-import { useSessions } from '../../context/SessionsContext';
+import { useSessionList } from '../../context/SessionListContext';
+import { useActiveSession } from '../../context/ActiveSessionContext';
 import { useEntities } from '../../context/EntitiesContext';
 import { nedService } from '../../services/nedService';
 import { contextAgent } from '../../services/contextAgent';
@@ -75,7 +76,8 @@ export const NedChat: React.FC = () => {
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { state: notesState } = useNotes();
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
-  const { sessions, setActiveSession } = useSessions();
+  const { sessions } = useSessionList();
+  const { activeSession } = useActiveSession();
   const { state: entitiesState } = useEntities();
 
   const messages = uiState.nedConversation?.messages || [];
@@ -193,7 +195,7 @@ export const NedChat: React.FC = () => {
       userProfile: settingsState.userProfile,
       learnings: settingsState.learnings,
       nedSettings: settingsState.nedSettings,
-      activeSessionId: null, // TODO: get from SessionsContext
+      activeSessionId: activeSession?.id ?? null,
       nedConversation: uiState.nedConversation,
     } as any;
 
@@ -600,10 +602,21 @@ export const NedChat: React.FC = () => {
     }
   };
 
-  // Session actions
+  // Session actions - Navigate to sessions tab and select session
   const handleSessionView = (sessionId: string) => {
+    // First, dispatch an action to set the selected session
+    // SessionsZone can listen for this and open the session detail view
+    uiDispatch({
+      type: 'SET_UI_STATE',
+      payload: {
+        selectedSessionId: sessionId,
+      },
+    });
+
+    // Then navigate to sessions tab
     uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'sessions' });
-    setActiveSession(sessionId);
+
+    console.log('[NedChat] Navigating to sessions tab for session:', sessionId);
   };
 
   // Ask Ned handler - append to input or send directly

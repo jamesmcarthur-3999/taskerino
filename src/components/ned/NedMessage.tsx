@@ -14,6 +14,7 @@ import { NoteCard } from './NoteCard';
 import { SessionCard } from './SessionCard';
 import ReactMarkdown from 'react-markdown';
 import type { Task, Note, Session, Company, Contact } from '../../types';
+import { EntityType } from '../../types/relationships';
 import { getGlassClasses, getRadiusClass, TRANSITIONS, getInfoGradient, getSuccessGradient } from '../../design-system/theme';
 
 // Snippet component for copyable text content (NOT code)
@@ -484,20 +485,29 @@ export const NedMessage: React.FC<NedMessageProps> = ({
 
   // Helper to find source note for a task
   const findSourceNote = (task: Task) => {
-    if (!task.sourceNoteId) return null;
-    const note = allNotes.find(n => n.id === task.sourceNoteId);
+    const noteRel = task.relationships.find(r => r.targetType === EntityType.NOTE);
+    if (!noteRel) return null;
+    const note = allNotes.find(n => n.id === noteRel.targetId);
     return note ? { id: note.id, summary: note.summary } : null;
   };
 
   // Helper to find related tasks for a note
   const findRelatedTasks = (note: Note) => {
-    return allTasks.filter(t => t.sourceNoteId === note.id);
+    return allTasks.filter(t =>
+      t.relationships.some(r => r.targetType === EntityType.NOTE && r.targetId === note.id)
+    );
   };
 
   // Helper to find linked entities for a note
   const findLinkedEntities = (note: Note) => {
-    const noteCompanies = note.companyIds?.map(id => companies.find(c => c.id === id)).filter(Boolean) as Company[] || [];
-    const noteContacts = note.contactIds?.map(id => contacts.find(c => c.id === id)).filter(Boolean) as Contact[] || [];
+    const noteCompanies = note.relationships
+      .filter(r => r.targetType === EntityType.COMPANY)
+      .map(r => companies.find(c => c.id === r.targetId))
+      .filter(Boolean) as Company[];
+    const noteContacts = note.relationships
+      .filter(r => r.targetType === EntityType.CONTACT)
+      .map(r => contacts.find(c => c.id === r.targetId))
+      .filter(Boolean) as Contact[];
     return {
       companies: noteCompanies.map(c => ({ id: c.id, name: c.name })),
       contacts: noteContacts.map(c => ({ id: c.id, name: c.name })),
@@ -506,11 +516,10 @@ export const NedMessage: React.FC<NedMessageProps> = ({
 
   // Helper to count related notes for a task
   const countRelatedNotes = (task: Task) => {
-    if (!task.topicId) return 0;
+    const topicRel = task.relationships.find(r => r.targetType === EntityType.TOPIC);
+    if (!topicRel) return 0;
     return allNotes.filter(n =>
-      n.companyIds?.includes(task.topicId || '') ||
-      n.contactIds?.includes(task.topicId || '') ||
-      n.topicIds?.includes(task.topicId || '')
+      n.relationships.some(r => r.targetType === EntityType.TOPIC && r.targetId === topicRel.targetId)
     ).length;
   };
 

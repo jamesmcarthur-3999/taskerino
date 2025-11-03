@@ -10,6 +10,7 @@ import { Sparkles, Check, X, Edit3 } from 'lucide-react';
 import type { Session } from '../types';
 import { videoChapteringService } from '../services/videoChapteringService';
 import type { ChapterProposal } from '../services/videoChapteringService';
+import { useUI } from '../context/UIContext';
 
 interface ChapterGeneratorProps {
   session: Session;
@@ -17,6 +18,7 @@ interface ChapterGeneratorProps {
 }
 
 export function ChapterGenerator({ session, onChaptersSaved }: ChapterGeneratorProps) {
+  const { dispatch: uiDispatch } = useUI();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [proposals, setProposals] = useState<ChapterProposal[]>([]);
@@ -29,7 +31,15 @@ export function ChapterGenerator({ session, onChaptersSaved }: ChapterGeneratorP
       setProposals(chapters);
     } catch (error) {
       console.error('Failed to generate chapters:', error);
-      // TODO: Show error notification
+
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'error',
+          title: 'Chapter Generation Failed',
+          message: error instanceof Error ? error.message : 'An unexpected error occurred',
+        },
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -41,9 +51,26 @@ export function ChapterGenerator({ session, onChaptersSaved }: ChapterGeneratorP
       await videoChapteringService.saveChapters(session.id, proposals);
       setProposals([]); // Clear proposals
       onChaptersSaved(); // This triggers parent reload
+
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'success',
+          title: 'Chapters Saved',
+          message: `${proposals.length} chapter${proposals.length !== 1 ? 's' : ''} saved successfully`,
+        },
+      });
     } catch (error) {
       console.error('Failed to save chapters:', error);
-      // Could add error notification here
+
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'error',
+          title: 'Save Failed',
+          message: error instanceof Error ? error.message : 'Failed to save chapters',
+        },
+      });
     } finally {
       setIsSaving(false);
     }

@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/208</span>
+                <span class='fraction'>0/210</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/208</span>
+                <span class='fraction'>0/210</span>
             </div>
         
             
@@ -353,7 +353,9 @@
 <a name='L288'></a><a href='#L288'>288</a>
 <a name='L289'></a><a href='#L289'>289</a>
 <a name='L290'></a><a href='#L290'>290</a>
-<a name='L291'></a><a href='#L291'>291</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L291'></a><a href='#L291'>291</a>
+<a name='L292'></a><a href='#L292'>292</a>
+<a name='L293'></a><a href='#L293'>293</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -467,24 +469,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -492,7 +478,25 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -654,7 +658,7 @@
 <span class="cstat-no" title="statement not covered" >import React, { useState, useEffect, useRef } from 'react';</span>
 <span class="cstat-no" title="statement not covered" >import { ChevronLeft, ChevronRight, Eye, Flag } from 'lucide-react';</span>
 import type { Session, SessionScreenshot } from '../types';
-<span class="cstat-no" title="statement not covered" >import { attachmentStorage } from '../services/attachmentStorage';</span>
+<span class="cstat-no" title="statement not covered" >import { getCAStorage } from '../services/storage/ContentAddressableStorage';</span>
 <span class="cstat-no" title="statement not covered" >import { ScreenshotViewer } from './ScreenshotViewer';</span>
 <span class="cstat-no" title="statement not covered" >import { useLazyImage } from '../hooks/useLazyImage';</span>
 <span class="cstat-no" title="statement not covered" >import { getGlassClasses, RADIUS, TRANSITIONS } from '../design-system/theme';</span>
@@ -752,15 +756,16 @@ interface ScreenshotScrubberProps {
 <span class="cstat-no" title="statement not covered" >      return;</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
-    // Load from storage
+    // Load from storage (Phase 4: Content-Addressable Storage)
 <span class="cstat-no" title="statement not covered" >    const loadImage = async () =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >      setLoading(true);</span>
 <span class="cstat-no" title="statement not covered" >      try {</span>
-<span class="cstat-no" title="statement not covered" >        const attachment = await attachmentStorage.getAttachment(currentScreenshot.attachmentId);</span>
+<span class="cstat-no" title="statement not covered" >        const caStorage = await getCAStorage();</span>
+<span class="cstat-no" title="statement not covered" >        const attachment = await caStorage.loadAttachment(currentScreenshot.hash!);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        if (attachment?.base64) {</span>
           // Cache it
-<span class="cstat-no" title="statement not covered" >          imageCache.current.set(currentScreenshot.attachmentId, attachment.base64);</span>
+<span class="cstat-no" title="statement not covered" >          imageCache.current.set(currentScreenshot.hash!, attachment.base64);</span>
 <span class="cstat-no" title="statement not covered" >          setCurrentScreenshotImage(attachment.base64);</span>
 <span class="cstat-no" title="statement not covered" >        }</span>
 <span class="cstat-no" title="statement not covered" >      } catch (error) {</span>
@@ -778,17 +783,18 @@ interface ScreenshotScrubberProps {
 <span class="cstat-no" title="statement not covered" >    if (!currentScreenshot) return;</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    const currentIndex = screenshots.indexOf(currentScreenshot);</span>
-<span class="cstat-no" title="statement not covered" >    const preloadIds = [</span>
-<span class="cstat-no" title="statement not covered" >      screenshots[currentIndex - 1]?.attachmentId,</span>
-<span class="cstat-no" title="statement not covered" >      screenshots[currentIndex + 1]?.attachmentId,</span>
+<span class="cstat-no" title="statement not covered" >    const preloadHashes = [</span>
+<span class="cstat-no" title="statement not covered" >      screenshots[currentIndex - 1]?.hash,</span>
+<span class="cstat-no" title="statement not covered" >      screenshots[currentIndex + 1]?.hash,</span>
 <span class="cstat-no" title="statement not covered" >    ].filter(Boolean);</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >    preloadIds.forEach(async (id) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      if (id &amp;&amp; !imageCache.current.has(id)) {</span>
+<span class="cstat-no" title="statement not covered" >    preloadHashes.forEach(async (hash) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      if (hash &amp;&amp; !imageCache.current.has(hash)) {</span>
 <span class="cstat-no" title="statement not covered" >        try {</span>
-<span class="cstat-no" title="statement not covered" >          const attachment = await attachmentStorage.getAttachment(id);</span>
+<span class="cstat-no" title="statement not covered" >          const caStorage = await getCAStorage();</span>
+<span class="cstat-no" title="statement not covered" >          const attachment = await caStorage.loadAttachment(hash);</span>
 <span class="cstat-no" title="statement not covered" >          if (attachment?.base64) {</span>
-<span class="cstat-no" title="statement not covered" >            imageCache.current.set(id, attachment.base64);</span>
+<span class="cstat-no" title="statement not covered" >            imageCache.current.set(hash, attachment.base64);</span>
 <span class="cstat-no" title="statement not covered" >          }</span>
 <span class="cstat-no" title="statement not covered" >        } catch (error) {</span>
           // Silent fail for preload
@@ -940,7 +946,7 @@ interface ScreenshotScrubberProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

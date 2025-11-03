@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/239</span>
+                <span class='fraction'>0/247</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/239</span>
+                <span class='fraction'>0/247</span>
             </div>
         
             
@@ -369,7 +369,17 @@
 <a name='L304'></a><a href='#L304'>304</a>
 <a name='L305'></a><a href='#L305'>305</a>
 <a name='L306'></a><a href='#L306'>306</a>
-<a name='L307'></a><a href='#L307'>307</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L307'></a><a href='#L307'>307</a>
+<a name='L308'></a><a href='#L308'>308</a>
+<a name='L309'></a><a href='#L309'>309</a>
+<a name='L310'></a><a href='#L310'>310</a>
+<a name='L311'></a><a href='#L311'>311</a>
+<a name='L312'></a><a href='#L312'>312</a>
+<a name='L313'></a><a href='#L313'>313</a>
+<a name='L314'></a><a href='#L314'>314</a>
+<a name='L315'></a><a href='#L315'>315</a>
+<a name='L316'></a><a href='#L316'>316</a>
+<a name='L317'></a><a href='#L317'>317</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -399,6 +409,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -411,6 +425,12 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -703,6 +723,8 @@ interface RichTextEditorProps {
   editable?: boolean;
   minimal?: boolean; // Minimal toolbar for simple use cases
   maxHeight?: string; // Max height for the editor container (e.g., '400px', '50vh')
+  onFocus?: () =&gt; void; // Called when editor receives focus
+  onBlur?: () =&gt; void; // Called when editor loses focus
 }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >export function RichTextEditor({</span>
@@ -714,6 +736,8 @@ interface RichTextEditorProps {
 <span class="cstat-no" title="statement not covered" >  editable = true,</span>
 <span class="cstat-no" title="statement not covered" >  minimal = false,</span>
 <span class="cstat-no" title="statement not covered" >  maxHeight,</span>
+<span class="cstat-no" title="statement not covered" >  onFocus,</span>
+<span class="cstat-no" title="statement not covered" >  onBlur,</span>
 <span class="cstat-no" title="statement not covered" >}: RichTextEditorProps) {</span>
 <span class="cstat-no" title="statement not covered" >  const { colorScheme } = useTheme();</span>
 &nbsp;
@@ -772,6 +796,12 @@ interface RichTextEditorProps {
 <span class="cstat-no" title="statement not covered" >    autofocus: autoFocus,</span>
 <span class="cstat-no" title="statement not covered" >    onUpdate: ({ editor }) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >      onChange(editor.getHTML());</span>
+<span class="cstat-no" title="statement not covered" >    },</span>
+<span class="cstat-no" title="statement not covered" >    onFocus: () =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      onFocus?.();</span>
+<span class="cstat-no" title="statement not covered" >    },</span>
+<span class="cstat-no" title="statement not covered" >    onBlur: () =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      onBlur?.();</span>
 <span class="cstat-no" title="statement not covered" >    },</span>
 <span class="cstat-no" title="statement not covered" >    editorProps: {</span>
 <span class="cstat-no" title="statement not covered" >      attributes: {</span>
@@ -988,7 +1018,7 @@ interface RichTextEditorProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

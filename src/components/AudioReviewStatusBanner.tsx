@@ -14,7 +14,7 @@ import { Music, CheckCircle2, Loader2 } from 'lucide-react';
 import type { Session } from '../types';
 import { audioReviewService } from '../services/audioReviewService';
 import { sessionsAgentService } from '../services/sessionsAgentService';
-import { useSessions } from '../context/SessionsContext';
+import { useSessionList } from '../context/SessionListContext';
 import { useUI } from '../context/UIContext';
 import { useNotes } from '../context/NotesContext';
 
@@ -31,7 +31,7 @@ export function AudioReviewStatusBanner({
   onSummaryRegenerationStart,
   onSummaryRegenerationComplete,
 }: AudioReviewStatusBannerProps) {
-  const { sessions, updateSession } = useSessions();
+  const { sessions, updateSession } = useSessionList();
   const { addNotification } = useUI();
   const { state: notesState } = useNotes();
   const [isReviewing, setIsReviewing] = useState(false);
@@ -83,7 +83,7 @@ export function AudioReviewStatusBanner({
       };
 
       // Save to database
-      updateSession(updatedSession);
+      updateSession(updatedSession.id, updatedSession);
 
       // Show success notification
       addNotification({
@@ -147,7 +147,7 @@ export function AudioReviewStatusBanner({
           },
         };
 
-        updateSession(sessionWithSummary);
+        updateSession(sessionWithSummary.id, sessionWithSummary);
 
         addNotification({
           type: 'success',

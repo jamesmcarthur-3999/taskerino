@@ -168,6 +168,160 @@ export const NED_TOOLS = {
     },
   },
 
+  // ==================== DATA GATHERING TOOLS ====================
+
+  get_audio_data: {
+    name: 'get_audio_data',
+    description: 'Retrieve audio data from a session in multiple modes: (1) segment - load specific audio segment by ID, (2) time_range - extract audio for a time range, (3) full_session - get complete session audio. Returns base64-encoded audio data and waveform.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        mode: {
+          type: 'string',
+          enum: ['segment', 'time_range', 'full_session'],
+          description: 'Audio retrieval mode',
+        },
+        session_id: {
+          type: 'string',
+          description: 'ID of the session to load audio from',
+        },
+        segment_id: {
+          type: 'string',
+          description: 'Audio segment ID (required for segment mode)',
+        },
+        start_time: {
+          type: 'number',
+          description: 'Start time in seconds (required for time_range mode)',
+        },
+        end_time: {
+          type: 'number',
+          description: 'End time in seconds (required for time_range mode)',
+        },
+        format: {
+          type: 'string',
+          enum: ['wav', 'mp3'],
+          description: 'Audio format (default: wav)',
+        },
+      },
+      required: ['mode', 'session_id'],
+    },
+  },
+
+  get_video_data: {
+    name: 'get_video_data',
+    description: 'Retrieve video data from a session: (1) frames_at_timestamps - extract frames at specific timestamps, (2) frames_by_interval - extract frames at regular intervals, (3) metadata - get video file metadata. Returns base64-encoded PNG frames.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        mode: {
+          type: 'string',
+          enum: ['frames_at_timestamps', 'frames_by_interval', 'metadata'],
+          description: 'Video retrieval mode',
+        },
+        session_id: {
+          type: 'string',
+          description: 'ID of the session to load video from',
+        },
+        timestamps: {
+          type: 'array',
+          items: { type: 'number' },
+          description: 'Array of timestamps in seconds (for frames_at_timestamps mode)',
+        },
+        interval_seconds: {
+          type: 'number',
+          description: 'Interval in seconds between frames (for frames_by_interval mode)',
+        },
+        max_frames: {
+          type: 'number',
+          description: 'Maximum number of frames to extract (default: 50, max: 100)',
+        },
+      },
+      required: ['mode', 'session_id'],
+    },
+  },
+
+  get_transcript: {
+    name: 'get_transcript',
+    description: 'Retrieve transcript data from a session: (1) segments - get audio segments with transcriptions (filterable by time/quality), (2) full_transcript - get complete transcript in various formats (plain, srt, vtt, json). Use this to analyze what was said during a session.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        mode: {
+          type: 'string',
+          enum: ['segments', 'full_transcript'],
+          description: 'Transcript retrieval mode',
+        },
+        session_id: {
+          type: 'string',
+          description: 'ID of the session to load transcript from',
+        },
+        start_time: {
+          type: 'number',
+          description: 'Filter segments starting from this time (seconds)',
+        },
+        end_time: {
+          type: 'number',
+          description: 'Filter segments ending at this time (seconds)',
+        },
+        quality_filter: {
+          type: 'string',
+          enum: ['all', 'draft', 'final'],
+          description: 'Filter segments by transcription quality (segments mode only)',
+        },
+        format: {
+          type: 'string',
+          enum: ['plain', 'srt', 'vtt', 'json'],
+          description: 'Output format for full_transcript mode (default: plain)',
+        },
+        quality: {
+          type: 'string',
+          enum: ['draft', 'final', 'best'],
+          description: 'Transcript quality preference (full_transcript mode): draft, final, or best (default: best)',
+        },
+      },
+      required: ['mode', 'session_id'],
+    },
+  },
+
+  get_session_timeline: {
+    name: 'get_session_timeline',
+    description: 'Build a chronological timeline of session events including screenshots with AI analysis, audio segments with transcriptions, achievements detected by AI, and blockers. Use this to understand the flow and progression of a work session.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        session_id: {
+          type: 'string',
+          description: 'ID of the session to build timeline for',
+        },
+        include_screenshots: {
+          type: 'boolean',
+          description: 'Include screenshots in timeline (default: true)',
+        },
+        include_audio: {
+          type: 'boolean',
+          description: 'Include audio segments in timeline (default: true)',
+        },
+        include_achievements: {
+          type: 'boolean',
+          description: 'Include detected achievements in timeline (default: false)',
+        },
+        include_blockers: {
+          type: 'boolean',
+          description: 'Include detected blockers in timeline (default: false)',
+        },
+        start_time: {
+          type: 'number',
+          description: 'Filter timeline from this time (seconds)',
+        },
+        end_time: {
+          type: 'number',
+          description: 'Filter timeline until this time (seconds)',
+        },
+      },
+      required: ['session_id'],
+    },
+  },
+
   // ==================== WRITE TOOLS (Permission Required) ====================
 
   create_task: {
@@ -351,6 +505,10 @@ export const READ_TOOLS = [
   'get_session_summary',
   'get_active_session',
   'get_screenshot_image',
+  'get_audio_data',
+  'get_video_data',
+  'get_transcript',
+  'get_session_timeline',
 ];
 
 export const WRITE_TOOLS = [
@@ -424,6 +582,12 @@ export interface ToolPermission {
 // ============================================================================
 
 export const TOOL_DESCRIPTIONS: Record<string, string> = {
+  // Read tools
+  get_audio_data: 'Retrieve audio data from sessions',
+  get_video_data: 'Extract video frames from sessions',
+  get_transcript: 'Get session transcripts',
+  get_session_timeline: 'Build chronological session timelines',
+  // Write tools
   create_task: 'Create new tasks',
   update_task: 'Modify existing tasks',
   complete_task: 'Mark tasks as complete',

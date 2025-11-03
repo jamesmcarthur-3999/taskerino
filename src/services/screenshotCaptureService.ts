@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Session, SessionScreenshot, Attachment } from '../types';
 import { generateId } from '../utils/helpers';
 import { createThumbnail, getBase64Size } from '../utils/imageCompression';
-import { attachmentStorage } from './attachmentStorage';
+import { getCAStorage } from './storage/ContentAddressableStorage';
 import { adaptiveScreenshotScheduler } from './adaptiveScreenshotScheduler';
 
 /**
@@ -19,6 +19,7 @@ export class ScreenshotCaptureService {
   private intervalMinutes: number = 2;
   private isAdaptiveMode: boolean = false; // Track if using adaptive scheduler
   private permissionChecked: boolean = false;
+  private errorCallback: ((error: Error) => void) | null = null;
 
   /**
    * Check if screen recording permission is granted (macOS)
@@ -59,7 +60,11 @@ export class ScreenshotCaptureService {
   /**
    * Start automatic screenshot capture for a session
    */
-  async startCapture(session: Session, onScreenshotCaptured: (screenshot: SessionScreenshot) => void): Promise<void> {
+  async startCapture(
+    session: Session,
+    onScreenshotCaptured: (screenshot: SessionScreenshot) => Promise<void>,
+    onError?: (error: Error) => void
+  ): Promise<void> {
     console.log(`🔵 [CAPTURE SERVICE] startCapture() called for session: ${session.id}`);
 
     // Check if using adaptive mode
@@ -70,10 +75,11 @@ export class ScreenshotCaptureService {
 
     // Start menu bar countdown
     try {
+      // Pass ISO string to Rust (Rust expects String, not number)
       const lastScreenshotTime = session.lastScreenshotTime || new Date().toISOString();
       await invoke('start_menubar_countdown', {
         intervalMinutes: effectiveInterval,
-        lastScreenshotTime,
+        lastScreenshotTime,  // ISO string format (e.g., "2025-10-28T00:15:46.864Z")
         sessionId: session.id,
       });
       console.log('📊 [CAPTURE SERVICE] Menu bar countdown started');
@@ -83,6 +89,19 @@ export class ScreenshotCaptureService {
 
     // Check and request screen recording permission first
     if (!this.permissionChecked) {
+      // First check if the app has the screen-recording entitlement
+      try {
+        const hasEntitlement = await invoke<boolean>('check_screen_recording_entitlement');
+        if (!hasEntitlement) {
+          // This is EXPECTED in dev mode (unsigned builds) - not a fatal error
+          console.log('[CAPTURE SERVICE] Screen-recording entitlement not found (expected in dev mode)');
+          console.log('[CAPTURE SERVICE] Screen recording will still work if permission is granted.');
+          // Still continue - we want to check permissions too
+        }
+      } catch (err) {
+        console.error('❌ [CAPTURE SERVICE] Failed to check entitlement:', err);
+      }
+
       const hasPermission = await this.checkScreenRecordingPermission();
 
       if (!hasPermission) {
@@ -90,8 +109,9 @@ export class ScreenshotCaptureService {
         const granted = await this.requestScreenRecordingPermission();
 
         if (!granted) {
-          console.error('❌ [CAPTURE SERVICE] Screen recording permission denied. Screenshots will not work properly.');
-          console.warn('⚠️ Please grant permission in System Settings > Privacy & Security > Screen Recording, then restart the app.');
+          const error = new Error('Screen recording permission denied. Please grant permission in System Settings > Privacy & Security > Screen Recording');
+          console.error('❌ [CAPTURE SERVICE]', error.message);
+          if (onError) onError(error);
           // Continue anyway - the user might grant permission later
         }
       } else {
@@ -101,11 +121,12 @@ export class ScreenshotCaptureService {
     }
 
     // Stop any existing capture (but don't stop menubar countdown - we'll restart it)
-    this.stopCapture(true);
+    await this.stopCapture(true);
 
     this.activeSessionId = session.id;
     this.intervalMinutes = effectiveInterval;
     this.isAdaptiveMode = isAdaptiveMode; // Track mode for menubar sync
+    this.errorCallback = onError || null; // Store error callback
 
     // Route to appropriate scheduler
     if (isAdaptiveMode) {
@@ -150,8 +171,9 @@ export class ScreenshotCaptureService {
 
   /**
    * Stop automatic screenshot capture
+   * @param keepMenubarRunning - If true, keep menubar countdown running (for restart scenarios)
    */
-  stopCapture(skipMenubarUpdate: boolean = false): void {
+  async stopCapture(keepMenubarRunning: boolean = false): Promise<void> {
     // Stop fixed interval if active
     if (this.captureInterval) {
       clearInterval(this.captureInterval);
@@ -169,9 +191,9 @@ export class ScreenshotCaptureService {
     this.isAdaptiveMode = false;
 
     // Stop menu bar countdown (unless we're restarting)
-    if (!skipMenubarUpdate) {
+    if (!keepMenubarRunning) {
       try {
-        invoke('stop_menubar_countdown');
+        await invoke('stop_menubar_countdown');
         console.log('📊 Menu bar countdown stopped');
       } catch (error) {
         console.error('❌ Failed to stop menu bar countdown:', error);
@@ -182,7 +204,7 @@ export class ScreenshotCaptureService {
   /**
    * Pause automatic screenshot capture (keeps session ID)
    */
-  pauseCapture(): void {
+  async pauseCapture(): Promise<void> {
     // Pause fixed interval if active
     if (this.captureInterval) {
       clearInterval(this.captureInterval);
@@ -198,7 +220,7 @@ export class ScreenshotCaptureService {
 
     // Stop menu bar countdown while paused
     try {
-      invoke('stop_menubar_countdown');
+      await invoke('stop_menubar_countdown');
       console.log('📊 Menu bar countdown paused');
     } catch (error) {
       console.error('❌ Failed to pause menu bar countdown:', error);
@@ -208,7 +230,7 @@ export class ScreenshotCaptureService {
   /**
    * Resume automatic screenshot capture
    */
-  resumeCapture(session: Session, onScreenshotCaptured: (screenshot: SessionScreenshot) => void): void {
+  async resumeCapture(session: Session, onScreenshotCaptured: (screenshot: SessionScreenshot) => Promise<void>): Promise<void> {
     const isAdaptiveMode = session.screenshotInterval === -1;
 
     if (this.activeSessionId === session.id) {
@@ -218,7 +240,7 @@ export class ScreenshotCaptureService {
       try {
         const lastScreenshotTime = session.lastScreenshotTime || new Date().toISOString();
         const effectiveInterval = isAdaptiveMode ? 2 : (session.screenshotInterval || 2);
-        invoke('start_menubar_countdown', {
+        await invoke('start_menubar_countdown', {
           intervalMinutes: effectiveInterval,
           lastScreenshotTime,
           sessionId: session.id,
@@ -276,20 +298,23 @@ export class ScreenshotCaptureService {
         thumbnail: thumbnailBase64,
       };
 
-      // Save attachment to file system (not localStorage!)
-      await attachmentStorage.saveAttachment(attachment);
+      // Save to Phase 4 content-addressable storage
+      const caStorage = await getCAStorage();
+      const hash = await caStorage.saveAttachment(attachment);
+      await caStorage.addReference(hash, sessionId, attachmentId);
 
-      // Create screenshot record (WITHOUT base64 data)
+      // Create screenshot record (WITHOUT base64 data, WITH hash for Phase 4)
       const screenshot: SessionScreenshot = {
         id: generateId(),
         sessionId,
         timestamp,
         attachmentId,
+        hash,  // Phase 4: SHA-256 hash for CA storage
         analysisStatus: 'pending',
         flagged: false,
       };
 
-      console.log('✅ Composite screenshot captured and saved (Rust-compressed, no JS blocking)');
+      console.log('✅ Composite screenshot captured and saved (Phase 4 CA storage)');
 
       return screenshot;
     } catch (error) {
@@ -313,7 +338,7 @@ export class ScreenshotCaptureService {
   /**
    * Private method to capture and process a screenshot
    */
-  private async captureAndProcess(onScreenshotCaptured: (screenshot: SessionScreenshot) => void): Promise<void> {
+  private async captureAndProcess(onScreenshotCaptured: (screenshot: SessionScreenshot) => Promise<void>): Promise<void> {
     if (!this.activeSessionId) return;
 
     try {
@@ -343,20 +368,23 @@ export class ScreenshotCaptureService {
         thumbnail: thumbnailBase64,
       };
 
-      // Save attachment to file system (not localStorage!)
-      await attachmentStorage.saveAttachment(attachment);
+      // Save to Phase 4 content-addressable storage
+      const caStorage = await getCAStorage();
+      const hash = await caStorage.saveAttachment(attachment);
+      await caStorage.addReference(hash, this.activeSessionId, attachmentId);
 
-      // Create screenshot record (WITHOUT base64 data)
+      // Create screenshot record (WITHOUT base64 data, WITH hash for Phase 4)
       const screenshot: SessionScreenshot = {
         id: screenshotId,
         sessionId: this.activeSessionId,
         timestamp,
         attachmentId,
+        hash,  // Phase 4: SHA-256 hash for CA storage
         analysisStatus: 'pending',
         flagged: false,
       };
 
-      console.log('✅ Composite screenshot captured and saved (Rust-compressed, no JS blocking)');
+      console.log('✅ Composite screenshot captured and saved (Phase 4 CA storage)');
 
       // Update menu bar countdown with new timestamp (ONLY for fixed interval mode)
       // In adaptive mode, the scheduler handles menubar updates with dynamic timing
@@ -376,9 +404,20 @@ export class ScreenshotCaptureService {
       }
 
       // Notify caller (screenshot object has NO base64 data, keeping localStorage small)
-      onScreenshotCaptured(screenshot);
+      // IMPORTANT: Await to ensure persistence completes before continuing
+      console.log('[SCREENSHOT SERVICE] Invoking onScreenshotCaptured callback with screenshot:', screenshot.id);
+      await onScreenshotCaptured(screenshot);
+      console.log('[SCREENSHOT SERVICE] onScreenshotCaptured callback completed');
+
     } catch (error) {
       console.error('❌ Auto-capture failed:', error);
+
+      // Emit error to callback if provided
+      if (this.errorCallback && error instanceof Error) {
+        this.errorCallback(error);
+      } else if (this.errorCallback) {
+        this.errorCallback(new Error(String(error)));
+      }
 
       // Don't throw - just log the error and continue with next capture
       // This prevents the interval from stopping due to temporary failures

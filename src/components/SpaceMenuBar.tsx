@@ -11,6 +11,8 @@ interface PrimaryAction {
   icon?: ReactNode;
   onClick: () => void;
   gradient?: 'cyan' | 'purple' | 'green';
+  disabled?: boolean;
+  className?: string;
 }
 
 interface ViewControl {
@@ -49,6 +51,7 @@ interface SpaceMenuBarProps {
   primaryAction?: PrimaryAction;
   viewControls?: ViewControls;
   dropdowns?: DropdownControl[];
+  glassDropdowns?: ReactNode; // For GlassSelect components
   filters?: FilterConfig;
   stats?: StatsDisplay;
   children?: ReactNode;
@@ -74,6 +77,7 @@ export function SpaceMenuBar({
   primaryAction,
   viewControls,
   dropdowns = [],
+  glassDropdowns,
   filters,
   stats,
   children,
@@ -163,12 +167,15 @@ export function SpaceMenuBar({
             <>
               <button
                 onClick={primaryAction.onClick}
+                disabled={primaryAction.disabled}
                 className={`
                   flex items-center gap-2 px-4 py-2 rounded-full
                   shadow-md font-semibold text-sm transition-all
                   hover:shadow-lg hover:scale-[1.02] active:scale-95
                   border-2 border-transparent text-white whitespace-nowrap
+                  disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100
                   ${getGradientClass(primaryAction.gradient || 'cyan')}
+                  ${primaryAction.className || ''}
                 `.trim()}
               >
                 {primaryAction.icon}
@@ -192,11 +199,11 @@ export function SpaceMenuBar({
                   {view.label}
                 </Button>
               ))}
-              {dropdowns.length > 0 && <Divider />}
+              {(dropdowns.length > 0 || glassDropdowns) && <Divider />}
             </>
           )}
 
-          {/* Dropdowns */}
+          {/* Dropdowns (legacy) */}
           {dropdowns.map((dropdown, i) => (
             <div key={i} className="flex items-center">
               <DropdownSelect
@@ -209,10 +216,18 @@ export function SpaceMenuBar({
             </div>
           ))}
 
+          {/* Glass Dropdowns (modern) */}
+          {glassDropdowns && (
+            <>
+              {glassDropdowns}
+              {filters && <Divider />}
+            </>
+          )}
+
           {/* Filters */}
           {filters && (
             <>
-              {(viewControls || dropdowns.length > 0) && <Divider />}
+              {!glassDropdowns && (viewControls || dropdowns.length > 0) && <Divider />}
               <button
                 ref={filterButtonRef}
                 onClick={filters.onToggle}

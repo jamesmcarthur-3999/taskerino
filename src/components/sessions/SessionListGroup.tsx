@@ -19,7 +19,7 @@ interface SessionListGroupProps {
 }
 
 // Threshold for enabling virtualization - only virtualize if group has more than this many items
-const VIRTUALIZATION_THRESHOLD = 20;
+const VIRTUALIZATION_THRESHOLD = 8;
 
 export function SessionListGroup({
   groupedSessions,

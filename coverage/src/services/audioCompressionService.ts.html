@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/175</span>
+                <span class='fraction'>0/179</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/175</span>
+                <span class='fraction'>0/179</span>
             </div>
         
             
@@ -351,7 +351,17 @@
 <a name='L286'></a><a href='#L286'>286</a>
 <a name='L287'></a><a href='#L287'>287</a>
 <a name='L288'></a><a href='#L288'>288</a>
-<a name='L289'></a><a href='#L289'>289</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L289'></a><a href='#L289'>289</a>
+<a name='L290'></a><a href='#L290'>290</a>
+<a name='L291'></a><a href='#L291'>291</a>
+<a name='L292'></a><a href='#L292'>292</a>
+<a name='L293'></a><a href='#L293'>293</a>
+<a name='L294'></a><a href='#L294'>294</a>
+<a name='L295'></a><a href='#L295'>295</a>
+<a name='L296'></a><a href='#L296'>296</a>
+<a name='L297'></a><a href='#L297'>297</a>
+<a name='L298'></a><a href='#L298'>298</a>
+<a name='L299'></a><a href='#L299'>299</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -446,8 +456,18 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -663,7 +683,7 @@ interface CompressionSettings {
 <span class="cstat-no" title="statement not covered" >  optimized: {</span>
 <span class="cstat-no" title="statement not covered" >    transcriptionSampleRate: 16000, // Whisper's native training rate</span>
 <span class="cstat-no" title="statement not covered" >    descriptionSampleRate: 24000,   // Better for environmental sounds</span>
-<span class="cstat-no" title="statement not covered" >    transcriptionBitrate: 64,        // Good speech quality</span>
+<span class="cstat-no" title="statement not covered" >    transcriptionBitrate: 96,        // Better speech quality (increased from 64)</span>
 <span class="cstat-no" title="statement not covered" >    descriptionBitrate: 128,         // Better for complex audio</span>
 <span class="cstat-no" title="statement not covered" >  },</span>
 <span class="cstat-no" title="statement not covered" >  balanced: {</span>
@@ -731,16 +751,26 @@ interface CompressionSettings {
 <span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
   /**
-   * Compress audio for long-term storage (higher quality than API compression)
-   * Uses 64kbps MP3 encoding, mono, 16kHz sample rate
+   * Compress audio for long-term storage (NO downsampling to preserve playback speed)
+   * Uses 96kbps MP3 encoding, mono, original sample rate (44.1kHz or 48kHz)
+   *
+   * CRITICAL: Must NOT downsample for storage or playback will be at wrong speed!
+   * The browser's AudioContext runs at 48kHz, so 16kHz audio plays at 1/3 speed.
    */
 <span class="cstat-no" title="statement not covered" >  async compressForStorage(base64Wav: string): Promise&lt;string&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    const settings = this.getSettings();</span>
-    // Use transcription settings (16kHz, 64kbps) for storage
+    // Detect original sample rate from WAV
+<span class="cstat-no" title="statement not covered" >    const audioContext = new AudioContext();</span>
+<span class="cstat-no" title="statement not covered" >    const arrayBuffer = this.base64ToArrayBuffer(base64Wav);</span>
+<span class="cstat-no" title="statement not covered" >    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);</span>
+<span class="cstat-no" title="statement not covered" >    const originalSampleRate = audioBuffer.sampleRate;</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    console.log(`💾 [AUDIO COMPRESSION] Storage: Using original sample rate ${originalSampleRate}Hz (NO downsampling)`);</span>
+&nbsp;
+    // Use original sample rate with higher bitrate for storage
 <span class="cstat-no" title="statement not covered" >    return this.compressAudio(</span>
 <span class="cstat-no" title="statement not covered" >      base64Wav,</span>
-<span class="cstat-no" title="statement not covered" >      settings.transcriptionSampleRate,  // 16000 Hz</span>
-<span class="cstat-no" title="statement not covered" >      settings.transcriptionBitrate      // 64 kbps</span>
+<span class="cstat-no" title="statement not covered" >      originalSampleRate,  // Keep original (44100 or 48000 Hz)</span>
+<span class="cstat-no" title="statement not covered" >      96                    // 96 kbps for better quality</span>
 <span class="cstat-no" title="statement not covered" >    );</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
@@ -934,7 +964,7 @@ interface CompressionSettings {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

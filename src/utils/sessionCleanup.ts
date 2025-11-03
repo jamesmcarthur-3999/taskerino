@@ -39,20 +39,8 @@ export function collectSessionAttachmentIds(session: Session): string[] {
     attachmentIds.push(session.fullAudioAttachmentId);
   }
 
-  // Video attachments
-  if (session.video) {
-    // Full video attachment
-    if (session.video.fullVideoAttachmentId) {
-      attachmentIds.push(session.video.fullVideoAttachmentId);
-    }
-
-    // Video chunks
-    session.video.chunks?.forEach(chunk => {
-      if (chunk.attachmentId) {
-        attachmentIds.push(chunk.attachmentId);
-      }
-    });
-  }
+  // Video attachments - SessionVideo doesn't use CAS, only file paths
+  // Video files are managed separately via file system cleanup
 
   return attachmentIds;
 }

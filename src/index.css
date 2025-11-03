@@ -146,6 +146,16 @@
     }
   }
 
+  /* Shimmer slide animation for overlay effects */
+  @keyframes shimmer-slide {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     .animate-pulse-slow {
       animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -169,6 +179,11 @@
       animation: shimmer 2s infinite linear;
       will-change: transform;
     }
+
+    .animate-shimmer-slide {
+      animation: shimmer-slide 1.5s infinite ease-in-out;
+      will-change: transform;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -185,6 +200,11 @@
 
     .animate-shimmer::after {
       display: none;
+    }
+
+    .animate-shimmer-slide {
+      animation: none;
+      opacity: 0.5;
     }
   }
 

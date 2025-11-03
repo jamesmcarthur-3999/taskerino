@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { getStorage } from '../services/storage';
+import { debug } from "../utils/debug";
 
 // Types (extracted from AppContext)
 interface AISettings {
@@ -60,12 +61,97 @@ interface NedSettings {
   };
 }
 
+/**
+ * Session Recording Defaults
+ *
+ * User-customizable defaults for session recording.
+ * Merged from sessionDefaults.ts for centralized configuration.
+ */
+interface SessionRecordingDefaults {
+  // Video defaults
+  video: {
+    codec: 'h264' | 'h265' | 'vp9';
+    bitrate: number; // kbps
+    resolution: 'native' | { width: number; height: number };
+    frameRate: number;
+  };
+
+  // Screenshot defaults
+  screenshot: {
+    format: 'png' | 'jpg' | 'webp';
+    quality: number; // 0-100
+  };
+
+  // Audio defaults
+  audio: {
+    sampleRate: number; // Hz
+    bitDepth: 16 | 24;
+  };
+
+  // PiP defaults
+  pip: {
+    position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+    size: 'small' | 'medium' | 'large';
+    borderEnabled: boolean;
+  };
+
+  // Audio recording advanced settings
+  audioRecording: {
+    micGain: number; // 0-200 (100 = unity)
+    systemAudioGain: number; // 0-200 (100 = unity)
+    micNoiseReduction: boolean;
+    micEchoCancellation: boolean;
+    autoLeveling: boolean;
+    compression: boolean;
+    compressionThreshold: number; // dB
+    perAppAudioEnabled: boolean;
+    vadThreshold: number; // -50 to -20 dB, default -45
+  };
+
+  // Last-used device selections (for restoring on next session)
+  lastUsedDevices: {
+    micDeviceId?: string;
+    systemAudioDeviceId?: string;
+    webcamDeviceId?: string;
+    displayIds?: string[];
+  };
+}
+
+/**
+ * Enrichment Strategy Settings
+ *
+ * Controls which enrichment implementation to use.
+ * - 'legacy': Hardcoded 10-stage pipeline (current production)
+ * - 'ai-agent': AI-driven enrichment with tool use (new, experimental)
+ */
+interface EnrichmentSettings {
+  // Strategy selection
+  strategy: 'legacy' | 'ai-agent';
+
+  // Legacy strategy config
+  legacy: {
+    enableIncremental?: boolean;
+    enableCaching?: boolean;
+  };
+
+  // AI agent strategy config
+  aiAgent: {
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+    enableToolUse?: boolean;
+    enableStreaming?: boolean;
+  };
+}
+
 interface SettingsState {
   aiSettings: AISettings;
   learningSettings: LearningSettings;
   userProfile: UserProfile;
   learnings: UserLearnings;
   nedSettings: NedSettings;
+  sessionRecordingDefaults: SessionRecordingDefaults;
+  enrichmentSettings: EnrichmentSettings;
 }
 
 type SettingsAction =
@@ -73,6 +159,8 @@ type SettingsAction =
   | { type: 'UPDATE_LEARNING_SETTINGS'; payload: Partial<LearningSettings> }
   | { type: 'UPDATE_USER_PROFILE'; payload: Partial<UserProfile> }
   | { type: 'UPDATE_NED_SETTINGS'; payload: Partial<NedSettings> }
+  | { type: 'UPDATE_SESSION_RECORDING_DEFAULTS'; payload: Partial<SessionRecordingDefaults> }
+  | { type: 'UPDATE_ENRICHMENT_SETTINGS'; payload: Partial<EnrichmentSettings> }
   | { type: 'GRANT_NED_PERMISSION'; payload: { toolName: string; level: 'forever' | 'session' | 'always-ask'; sessionOnly?: boolean } }
   | { type: 'REVOKE_NED_PERMISSION'; payload: { toolName: string; sessionOnly?: boolean } }
   | { type: 'CLEAR_SESSION_PERMISSIONS' }
@@ -81,7 +169,7 @@ type SettingsAction =
 // Default state (copied from AppContext)
 const defaultState: SettingsState = {
   aiSettings: {
-    systemInstructions: `You are a helpful assistant that organizes notes and extracts actionable tasks. Be concise and focus on what matters.`,
+    systemInstructions: `You help users capture information by deciding how to best organize it using the tools available to you.`,
     autoMergeNotes: true,
     autoExtractTasks: true,
   },
@@ -124,6 +212,58 @@ const defaultState: SettingsState = {
       estimatedCost: 0,
     },
   },
+  sessionRecordingDefaults: {
+    video: {
+      codec: 'h264',
+      bitrate: 5000, // kbps
+      resolution: 'native',
+      frameRate: 30,
+    },
+    screenshot: {
+      format: 'webp',
+      quality: 80,
+    },
+    audio: {
+      sampleRate: 48000, // Hz
+      bitDepth: 16,
+    },
+    pip: {
+      position: 'bottom-right',
+      size: 'medium',
+      borderEnabled: true,
+    },
+    audioRecording: {
+      micGain: 100, // Unity gain (no change)
+      systemAudioGain: 100, // Unity gain (no change)
+      micNoiseReduction: false,
+      micEchoCancellation: false,
+      autoLeveling: false,
+      compression: false,
+      compressionThreshold: -20, // dB
+      perAppAudioEnabled: false,
+      vadThreshold: -45, // dB (-50 = very sensitive, -40 = normal, -30 = aggressive)
+    },
+    lastUsedDevices: {
+      micDeviceId: undefined,
+      systemAudioDeviceId: undefined,
+      webcamDeviceId: undefined,
+      displayIds: undefined,
+    },
+  },
+  enrichmentSettings: {
+    strategy: 'legacy', // Default to legacy for backward compatibility
+    legacy: {
+      enableIncremental: true,
+      enableCaching: true,
+    },
+    aiAgent: {
+      model: 'claude-3-5-sonnet-20241022',
+      temperature: 0.7,
+      maxTokens: 4096,
+      enableToolUse: true,
+      enableStreaming: true,
+    },
+  },
 };
 
 // Reducer (copied logic from AppContext reducer)
@@ -140,6 +280,34 @@ function settingsReducer(state: SettingsState, action: SettingsAction): Settings
 
     case 'UPDATE_NED_SETTINGS':
       return { ...state, nedSettings: { ...state.nedSettings, ...action.payload } };
+
+    case 'UPDATE_SESSION_RECORDING_DEFAULTS':
+      return {
+        ...state,
+        sessionRecordingDefaults: {
+          ...state.sessionRecordingDefaults,
+          ...action.payload,
+          // Ensure nested objects are merged properly
+          video: action.payload.video ? { ...state.sessionRecordingDefaults.video, ...action.payload.video } : state.sessionRecordingDefaults.video,
+          screenshot: action.payload.screenshot ? { ...state.sessionRecordingDefaults.screenshot, ...action.payload.screenshot } : state.sessionRecordingDefaults.screenshot,
+          audio: action.payload.audio ? { ...state.sessionRecordingDefaults.audio, ...action.payload.audio } : state.sessionRecordingDefaults.audio,
+          pip: action.payload.pip ? { ...state.sessionRecordingDefaults.pip, ...action.payload.pip } : state.sessionRecordingDefaults.pip,
+          audioRecording: action.payload.audioRecording ? { ...state.sessionRecordingDefaults.audioRecording, ...action.payload.audioRecording } : state.sessionRecordingDefaults.audioRecording,
+          lastUsedDevices: action.payload.lastUsedDevices ? { ...state.sessionRecordingDefaults.lastUsedDevices, ...action.payload.lastUsedDevices } : state.sessionRecordingDefaults.lastUsedDevices,
+        },
+      };
+
+    case 'UPDATE_ENRICHMENT_SETTINGS':
+      return {
+        ...state,
+        enrichmentSettings: {
+          ...state.enrichmentSettings,
+          ...action.payload,
+          // Ensure nested objects are merged properly
+          legacy: action.payload.legacy ? { ...state.enrichmentSettings.legacy, ...action.payload.legacy } : state.enrichmentSettings.legacy,
+          aiAgent: action.payload.aiAgent ? { ...state.enrichmentSettings.aiAgent, ...action.payload.aiAgent } : state.enrichmentSettings.aiAgent,
+        },
+      };
 
     case 'GRANT_NED_PERMISSION': {
       const { toolName, level, sessionOnly } = action.payload;
@@ -240,6 +408,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
               userProfile: settings.userProfile || defaultState.userProfile,
               learnings: settings.learnings || defaultState.learnings,
               nedSettings: settings.nedSettings || defaultState.nedSettings,
+              sessionRecordingDefaults: settings.sessionRecordingDefaults || defaultState.sessionRecordingDefaults,
+              enrichmentSettings: settings.enrichmentSettings || defaultState.enrichmentSettings,
             },
           });
         }
@@ -269,8 +439,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           userProfile: state.userProfile,
           learnings: state.learnings,
           nedSettings: state.nedSettings,
+          sessionRecordingDefaults: state.sessionRecordingDefaults,
+          enrichmentSettings: state.enrichmentSettings,
         });
-        console.log('Settings saved to storage');
+        debug.log("Settings saved to storage");
       } catch (error) {
         console.error('Failed to save settings:', error);
       }
@@ -297,4 +469,108 @@ export function useSettings() {
     throw new Error('useSettings must be used within SettingsProvider');
   }
   return context;
+}
+
+// ============================================================================
+// Helper Hooks for Session Recording Defaults
+// ============================================================================
+
+/**
+ * Hook for managing session recording defaults
+ * Provides convenient methods for updating recording settings
+ */
+export function useSessionRecordingDefaults() {
+  const { state, dispatch } = useSettings();
+
+  const updateAudioRecordingDefaults = useCallback((updates: Partial<SessionRecordingDefaults['audioRecording']>) => {
+    dispatch({
+      type: 'UPDATE_SESSION_RECORDING_DEFAULTS',
+      payload: {
+        audioRecording: updates as SessionRecordingDefaults['audioRecording'],
+      } as Partial<SessionRecordingDefaults>,
+    });
+  }, [dispatch]);
+
+  const updateLastUsedDevices = useCallback((updates: Partial<SessionRecordingDefaults['lastUsedDevices']>) => {
+    dispatch({
+      type: 'UPDATE_SESSION_RECORDING_DEFAULTS',
+      payload: {
+        lastUsedDevices: updates,
+      },
+    });
+  }, [dispatch]);
+
+  const updateVideoDefaults = useCallback((updates: Partial<SessionRecordingDefaults['video']>) => {
+    dispatch({
+      type: 'UPDATE_SESSION_RECORDING_DEFAULTS',
+      payload: {
+        video: updates as SessionRecordingDefaults['video'],
+      } as Partial<SessionRecordingDefaults>,
+    });
+  }, [dispatch]);
+
+  const updatePipDefaults = useCallback((updates: Partial<SessionRecordingDefaults['pip']>) => {
+    dispatch({
+      type: 'UPDATE_SESSION_RECORDING_DEFAULTS',
+      payload: {
+        pip: updates as SessionRecordingDefaults['pip'],
+      } as Partial<SessionRecordingDefaults>,
+    });
+  }, [dispatch]);
+
+  return {
+    sessionRecordingDefaults: state.sessionRecordingDefaults,
+    updateAudioRecordingDefaults,
+    updateLastUsedDevices,
+    updateVideoDefaults,
+    updatePipDefaults,
+  };
+}
+
+/**
+ * Hook for managing enrichment strategy settings
+ * Provides convenient methods for switching between legacy and AI agent strategies
+ */
+export function useEnrichmentSettings() {
+  const { state, dispatch } = useSettings();
+
+  const updateEnrichmentSettings = useCallback((updates: Partial<EnrichmentSettings>) => {
+    dispatch({
+      type: 'UPDATE_ENRICHMENT_SETTINGS',
+      payload: updates,
+    });
+  }, [dispatch]);
+
+  const switchStrategy = useCallback((strategy: 'legacy' | 'ai-agent') => {
+    dispatch({
+      type: 'UPDATE_ENRICHMENT_SETTINGS',
+      payload: { strategy },
+    });
+  }, [dispatch]);
+
+  const updateLegacyConfig = useCallback((updates: Partial<EnrichmentSettings['legacy']>) => {
+    dispatch({
+      type: 'UPDATE_ENRICHMENT_SETTINGS',
+      payload: {
+        legacy: updates as EnrichmentSettings['legacy'],
+      },
+    });
+  }, [dispatch]);
+
+  const updateAIAgentConfig = useCallback((updates: Partial<EnrichmentSettings['aiAgent']>) => {
+    dispatch({
+      type: 'UPDATE_ENRICHMENT_SETTINGS',
+      payload: {
+        aiAgent: updates as EnrichmentSettings['aiAgent'],
+      },
+    });
+  }, [dispatch]);
+
+  return {
+    enrichmentSettings: state.enrichmentSettings,
+    updateEnrichmentSettings,
+    switchStrategy,
+    updateLegacyConfig,
+    updateAIAgentConfig,
+  };
 }

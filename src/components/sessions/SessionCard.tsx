@@ -1,12 +1,15 @@
 import React from 'react';
-import { Trash2, Sparkles } from 'lucide-react';
+import { Trash2, Sparkles, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { Session } from '../../types';
-import { useSessions } from '../../context/SessionsContext';
+import { useSessionList } from '../../context/SessionListContext';
 import { useUI } from '../../context/UIContext';
 import { useTasks } from '../../context/TasksContext';
 import { InlineTagManager } from '../InlineTagManager';
 import { tagUtils } from '../../utils/tagUtils';
-import { getSuccessGradient, getInfoGradient, getGlassClasses } from '../../design-system/theme';
+import { getSuccessGradient, getInfoGradient, getGlassClasses, getWarningGradient, getDangerGradient } from '../../design-system/theme';
+import { useEnrichmentContext } from '../../context/EnrichmentContext';
+import { EntityType, RelationshipType } from '../../types/relationships';
+import { generateId } from '../../utils/helpers';
 
 interface SessionCardProps {
   session: Session;
@@ -29,11 +32,18 @@ export function SessionCard({
   isNewlyCompleted = false,
   isViewing = false,
 }: SessionCardProps) {
-  const { sessions, updateSession, deleteSession, addExtractedTask } = useSessions();
+  const { sessions, updateSession, deleteSession } = useSessionList();
   const { addNotification } = useUI();
   const { dispatch: tasksDispatch } = useTasks();
+  const { getActiveEnrichment } = useEnrichmentContext();
   const startDate = new Date(session.startTime);
   const endDate = session.endTime ? new Date(session.endTime) : null;
+
+  // Check if session is being enriched
+  const enrichmentStatus = session.enrichmentStatus?.status || 'idle';
+  const activeEnrichment = getActiveEnrichment(session.id);
+  const isEnriching = enrichmentStatus === 'in-progress' || enrichmentStatus === 'pending' || !!activeEnrichment;
+  const enrichmentFailed = enrichmentStatus === 'failed';
 
   // Handler to extract all recommended tasks from summary
   const handleExtractAllTasks = (e: React.MouseEvent) => {
@@ -49,16 +59,30 @@ export function SessionCard({
     }
 
     // Create tasks from all recommendations
+    const now = new Date().toISOString();
+
     session.summary.recommendedTasks.forEach(taskRec => {
+      const taskId = generateId();
       const newTask = {
-        id: `task-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        id: taskId,
+        relationships: [
+          {
+            id: generateId(),
+            sourceType: EntityType.TASK,
+            sourceId: taskId,
+            targetType: EntityType.SESSION,
+            targetId: session.id,
+            type: RelationshipType.TASK_SESSION,
+            canonical: true,
+            metadata: { source: 'ai' as const, createdAt: now },
+          },
+        ],
         title: taskRec.title,
         done: false,
         priority: taskRec.priority,
         status: 'todo' as const,
         createdBy: 'ai' as const,
-        createdAt: new Date().toISOString(),
-        sourceSessionId: session.id,
+        createdAt: now,
         sourceExcerpt: taskRec.title,
         description: taskRec.context || `Extracted from session: ${session.name}`,
         contextForAgent: taskRec.context
@@ -68,8 +92,9 @@ export function SessionCard({
       };
 
       tasksDispatch({ type: 'ADD_TASK', payload: newTask });
-      addExtractedTask(session.id, newTask.id);
     });
+
+    // No need to update session - relationships track the link
 
     addNotification({
       type: 'success',
@@ -79,18 +104,25 @@ export function SessionCard({
   };
 
   // Handler to delete session
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent opening detail view
 
     if (window.confirm(`Delete session "${session.name}"? This action cannot be undone.`)) {
-      deleteSession(session.id,
-      );
+      try {
+        await deleteSession(session.id);
 
-      addNotification({
-        type: 'success',
-        title: 'Session Deleted',
-        message: `"${session.name}" has been deleted.`,
-      });
+        addNotification({
+          type: 'success',
+          title: 'Session Deleted',
+          message: `"${session.name}" has been deleted.`,
+        });
+      } catch (error) {
+        addNotification({
+          type: 'error',
+          title: 'Delete Failed',
+          message: error instanceof Error ? error.message : 'Failed to delete session',
+        });
+      }
     }
   };
 
@@ -105,6 +137,8 @@ export function SessionCard({
   // Get semantic gradients from design system
   const successGradient = getSuccessGradient('light');
   const infoGradient = getInfoGradient('light');
+  const warningGradient = getWarningGradient('light');
+  const dangerGradient = getDangerGradient('light');
 
   return (
     <div
@@ -116,14 +150,34 @@ export function SessionCard({
           ? `${infoGradient.container} border-cyan-400 shadow-lg`
           : isViewing
           ? `${getGlassClasses('medium')} border-cyan-400/80 shadow-lg shadow-cyan-200/20 ring-2 ring-cyan-400/30`
+          : isEnriching
+          ? `${warningGradient.container} border-amber-300/60 shadow-md`
+          : enrichmentFailed
+          ? `${dangerGradient.container} border-red-300/60`
           : `${getGlassClasses('subtle')} hover:bg-white/60 hover:border-cyan-300/60`
       }`}
     >
-      {/* NEW badge for newly completed sessions */}
-      {isNewlyCompleted && (
+      {/* Status badges (top-right) */}
+      {isNewlyCompleted && !isEnriching && !enrichmentFailed && (
         <div className={`absolute top-3 right-3 px-2.5 py-1 ${getSuccessGradient('strong').container} text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1`}>
           <Sparkles size={12} />
           <span>NEW</span>
+        </div>
+      )}
+
+      {/* Enriching badge */}
+      {isEnriching && (
+        <div className="absolute top-3 right-3 px-2.5 py-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1">
+          <Loader2 size={12} className="animate-spin" />
+          <span>ENRICHING</span>
+        </div>
+      )}
+
+      {/* Failed badge */}
+      {enrichmentFailed && (
+        <div className="absolute top-3 right-3 px-2.5 py-1 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-full text-xs font-bold shadow-lg animate-in zoom-in duration-300 flex items-center gap-1">
+          <AlertCircle size={12} />
+          <span>FAILED</span>
         </div>
       )}
       {/* Checkbox - Shows in bulk select mode */}
@@ -213,7 +267,7 @@ export function SessionCard({
             <InlineTagManager
               tags={session.tags}
               onTagsChange={(newTags) => {
-                updateSession({ ...session, tags: newTags });
+                updateSession(session.id, { tags: newTags });
               }}
               allTags={tagUtils.getTopTags(sessions, (s) => s.tags || [], 20)}
               onTagClick={onTagClick ? (tag) => onTagClick(tag) : undefined}

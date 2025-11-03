@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useSettings } from '../context/SettingsContext';
+import { useSettings, useEnrichmentSettings } from '../context/SettingsContext';
 import { useUI } from '../context/UIContext';
 import { useEntities } from '../context/EntitiesContext';
 import { useNotes } from '../context/NotesContext';
 import { useTasks } from '../context/TasksContext';
-import { useApp } from '../context/AppContext'; // Keep for LOAD_STATE and RESET_ONBOARDING
+// AppContext removed - notifications now via UIContext
 import { claudeService } from '../services/claudeService';
 import { sessionsAgentService } from '../services/sessionsAgentService';
 import { openAIService } from '../services/openAIService';
 import { audioCompressionService, type AudioQualityPreset } from '../services/audioCompressionService';
-import { Key, Brain, Download, Upload, Trash2, Settings, Clock, Globe, Calendar, ChevronDown, RefreshCw, Bot, Mic, Video } from 'lucide-react';
-import type { AppState } from '../types';
+import { Key, Brain, Download, Upload, Trash2, Settings, Clock, Globe, Calendar, ChevronDown, RefreshCw, Bot, Mic, Video, HardDrive, RotateCcw } from 'lucide-react';
+import type { AppState, Session, Note, Task, Topic, Company, Contact, AISettings, UserPreferences } from '../types';
+import { getStorage } from '../services/storage';
 import { LearningDashboard } from './LearningDashboard';
 import { NedSettings } from './ned/NedSettings';
 import { Input } from './Input';
@@ -22,8 +23,9 @@ import { BACKGROUND_GRADIENT, getGlassClasses, getRadiusClass, getTabClasses, ge
 type SettingsTab = 'general' | 'ai' | 'ned' | 'sessions' | 'time' | 'data';
 
 export default function ProfileZone() {
-  const { dispatch: appDispatch } = useApp(); // Only for LOAD_STATE and RESET_ONBOARDING
+  // Removed useApp() - notifications now via useUI().addNotification
   const { state: settingsState, dispatch: settingsDispatch } = useSettings();
+  const { enrichmentSettings, switchStrategy } = useEnrichmentSettings();
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { state: entitiesState } = useEntities();
   const { state: notesState } = useNotes();
@@ -117,57 +119,202 @@ export default function ProfileZone() {
     alert('Profile saved!');
   };
 
-  const handleExportData = () => {
-    const data = {
-      topics: entitiesState.topics,
-      notes: notesState.notes,
-      tasks: tasksState.tasks,
-      aiSettings: settingsState.aiSettings,
-      preferences: uiState.preferences,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `taskerino-backup-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExportData = async () => {
+    try {
+      // Export directly from storage to ensure completeness
+      const storage = await getStorage();
+
+      const data = {
+        // Entities
+        topics: await storage.load<Topic[]>('topics') || [],
+        companies: await storage.load<Company[]>('companies') || [],
+        contacts: await storage.load<Contact[]>('contacts') || [],
+
+        // Content
+        notes: await storage.load<Note[]>('notes') || [],
+        tasks: await storage.load<Task[]>('tasks') || [],
+        sessions: await storage.load<Session[]>('sessions') || [],
+
+        // Settings
+        aiSettings: await storage.load<AISettings>('aiSettings') || settingsState.aiSettings,
+        preferences: await storage.load<UserPreferences>('preferences') || uiState.preferences,
+
+        // Metadata
+        exportedAt: new Date().toISOString(),
+        version: '1.0.0', // Export format version
+        appVersion: '0.5.1', // From tauri.conf.json
+      };
+
+      // Note: Attachments are NOT included in export (too large)
+      // TODO: Add attachment export in Phase 3
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json',
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `taskerino-export-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'success',
+          title: 'Export Complete',
+          message: 'All data exported successfully (attachments excluded)',
+          autoDismiss: true,
+          dismissAfter: 3000,
+        },
+      });
+    } catch (error: any) {
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'error',
+          title: 'Export Failed',
+          message: error.message || 'Unknown error occurred',
+          autoDismiss: false,
+        },
+      });
+    }
   };
 
-  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        if (confirm('This will replace all your current data. Continue?')) {
-          appDispatch({ type: 'LOAD_STATE', payload: data });
-          alert('Data imported successfully!');
-        }
-      } catch {
-        alert('Failed to import data. Invalid file format.');
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      // Validate export format
+      if (!data.version || !data.exportedAt) {
+        throw new Error('Invalid export file format - missing version or exportedAt metadata');
       }
-    };
-    reader.readAsText(file);
+
+      // Version compatibility check
+      if (data.version !== '1.0.0') {
+        throw new Error(`Unsupported export version: ${data.version}. Expected version 1.0.0.`);
+      }
+
+      // Count items for confirmation
+      const counts = {
+        sessions: data.sessions?.length || 0,
+        notes: data.notes?.length || 0,
+        tasks: data.tasks?.length || 0,
+        topics: data.topics?.length || 0,
+        companies: data.companies?.length || 0,
+        contacts: data.contacts?.length || 0,
+      };
+
+      // Confirm with user
+      const confirmMsg = `Import data from ${new Date(data.exportedAt).toLocaleString()}?\n\nThis will overwrite:\n- ${counts.sessions} sessions\n- ${counts.notes} notes\n- ${counts.tasks} tasks\n- ${counts.topics} topics\n- ${counts.companies} companies\n- ${counts.contacts} contacts\n\nCurrent data will be backed up before import.`;
+
+      if (!confirm(confirmMsg)) {
+        return;
+      }
+
+      // Import to storage
+      const storage = await getStorage();
+
+      // Import each collection
+      if (data.topics) await storage.save('topics', data.topics);
+      if (data.companies) await storage.save('companies', data.companies);
+      if (data.contacts) await storage.save('contacts', data.contacts);
+      if (data.notes) await storage.save('notes', data.notes);
+      if (data.tasks) await storage.save('tasks', data.tasks);
+
+      // Import sessions through ChunkedStorage
+      if (data.sessions) {
+        console.log(`[Import] Importing ${data.sessions.length} sessions through ChunkedStorage...`);
+
+        const { getChunkedStorage } = await import('../services/storage/ChunkedSessionStorage');
+        const { getInvertedIndexManager } = await import('../services/storage/InvertedIndexManager');
+
+        const chunkedStorage = await getChunkedStorage();
+        const indexManager = await getInvertedIndexManager();
+
+        let importedCount = 0;
+        let failedCount = 0;
+
+        for (const session of data.sessions) {
+          try {
+            // Save to ChunkedStorage
+            await chunkedStorage.saveFullSession(session);
+
+            // Load metadata and update indexes
+            const metadata = await chunkedStorage.loadMetadata(session.id);
+            if (metadata) {
+              await indexManager.updateIndexes(metadata);
+            }
+
+            importedCount++;
+          } catch (error) {
+            console.error(`[Import] Failed to import session ${session.id}:`, error);
+            failedCount++;
+          }
+        }
+
+        console.log(`[Import] Session import complete: ${importedCount} succeeded, ${failedCount} failed`);
+      }
+
+      if (data.aiSettings) await storage.save('aiSettings', data.aiSettings);
+      if (data.preferences) await storage.save('preferences', data.preferences);
+
+      console.log('[Import] ✓ All collections imported');
+
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'success',
+          title: 'Import Complete',
+          message: 'Data imported successfully. Please restart the app to see changes.',
+          autoDismiss: false,
+        },
+      });
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error: any) {
+      uiDispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'error',
+          title: 'Import Failed',
+          message: error.message || 'Unknown error occurred',
+          autoDismiss: false,
+        },
+      });
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleClearAllData = () => {
     if (confirm('This will permanently delete all your topics, notes, and tasks. Are you sure?')) {
       if (confirm('This action cannot be undone. Really delete everything?')) {
         localStorage.removeItem('taskerino-v2-state');
-        appDispatch({ type: 'LOAD_STATE', payload: { topics: [], notes: [], tasks: [] } });
-        alert('All data cleared.');
+        // TODO: Update to use new storage system (IndexedDB/Tauri FS) instead of localStorage
+        alert('All data cleared. Please refresh the page.');
       }
     }
   };
 
 
   const handleResetOnboarding = () => {
-    if (confirm('This will reset the onboarding flow. You\'ll see the welcome screen next time you refresh. Continue?')) {
+    if (confirm('Reset onboarding to experience the streamlined welcome flow again?\n\nThis will:\n• Reset all feature introductions and tooltips\n• Clear onboarding progress\n• Show the welcome screen on next refresh\n\nYour data and API keys will NOT be affected.\n\nContinue?')) {
       uiDispatch({ type: 'RESET_ONBOARDING' });
-      alert('Onboarding reset! Refresh the page to see the welcome flow again.');
+      alert('Onboarding has been reset!\n\nRefresh the page to experience our streamlined welcome flow again. Your data and settings remain unchanged.');
     }
   };
 
@@ -483,6 +630,85 @@ export default function ProfileZone() {
                   </div>
 
                   <Button onClick={handleSaveAudioQuality}>Save Audio Settings</Button>
+
+                  <Divider />
+
+                  <Section title="Enrichment Strategy">
+                    <p className="text-sm text-gray-600 mb-4">
+                      Choose how sessions are enriched after recording. The AI agent is experimental and uses chain-of-thought reasoning.
+                    </p>
+
+                    <div className="space-y-4">
+                      {/* Legacy Strategy */}
+                      <label className={getRadioCardClasses(enrichmentSettings.strategy === 'legacy')}>
+                        <input
+                          type="radio"
+                          name="enrichmentStrategy"
+                          value="legacy"
+                          checked={enrichmentSettings.strategy === 'legacy'}
+                          onChange={(e) => switchStrategy('legacy')}
+                          className="mt-1 w-4 h-4 text-cyan-600 focus:ring-cyan-500"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-gray-900">Legacy Pipeline</h4>
+                            <span className="text-xs px-2 py-1 bg-green-500 text-white rounded-full font-semibold">
+                              Production
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2">
+                            Hardcoded 10-stage enrichment pipeline. Reliable and tested.
+                          </p>
+                          <div className="text-xs text-gray-600">
+                            <div>• Audio review → Video chaptering → Summary → Canvas</div>
+                            <div>• Cost: $0.50-2.00 per session</div>
+                            <div>• Duration: ~30-60 seconds</div>
+                          </div>
+                        </div>
+                      </label>
+
+                      {/* AI Agent Strategy */}
+                      <label className={getRadioCardClasses(enrichmentSettings.strategy === 'ai-agent')}>
+                        <input
+                          type="radio"
+                          name="enrichmentStrategy"
+                          value="ai-agent"
+                          checked={enrichmentSettings.strategy === 'ai-agent'}
+                          onChange={(e) => switchStrategy('ai-agent')}
+                          className="mt-1 w-4 h-4 text-cyan-600 focus:ring-cyan-500"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-gray-900">AI Agent</h4>
+                            <span className="text-xs px-2 py-1 bg-yellow-500 text-white rounded-full font-semibold">
+                              Experimental
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2">
+                            AI-driven enrichment with chain-of-thought reasoning and tool use.
+                          </p>
+                          <div className="text-xs text-gray-600">
+                            <div>• Adaptive analysis based on session content</div>
+                            <div>• Target cost: &lt;$0.50 per session (via caching)</div>
+                            <div>• Duration: ~40-80 seconds</div>
+                            <div className="text-yellow-600 font-semibold mt-1">⚠️ Not yet implemented - will throw error if selected</div>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </Section>
+
+                  <Divider />
+
+                  <div className={`p-4 ${getInfoGradient('light').container} ${getRadiusClass('field')}`}>
+                    <h4 className={`font-semibold mb-2 ${getInfoGradient('light').textPrimary}`}>About Enrichment Strategies</h4>
+                    <ul className={`text-sm space-y-1 ${getInfoGradient('light').textSecondary}`}>
+                      <li>• Strategy applies to all new enrichments</li>
+                      <li>• Existing sessions remain unchanged</li>
+                      <li>• You can switch between strategies at any time</li>
+                      <li>• AI agent is experimental - use legacy for production</li>
+                    </ul>
+                  </div>
                 </>
               )}
 

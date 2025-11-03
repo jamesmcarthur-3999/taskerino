@@ -6,23 +6,37 @@
  */
 
 import type { AppState, Session } from '../types';
+import { EntityType, RelationshipType } from '../types/relationships';
 import type { ToolCall, ToolResult } from './nedTools';
 import { contextAgent } from './contextAgent';
 import { sessionsQueryAgent } from './sessionsQueryAgent';
 import { nedMemory } from './nedMemory';
 import { sessionsAgentService } from './sessionsAgentService';
-import { attachmentStorage } from './attachmentStorage';
+import { getCAStorage } from './storage/ContentAddressableStorage';
 import { generateId, stripHtmlTags } from '../utils/helpers';
+import {
+  getAudioData,
+  getVideoData,
+  getTranscript,
+  getSessionTimeline
+} from './ai-tools';
+import { AIDeduplicationService } from './aiDeduplication';
+import { getStorage } from './storage';
 
 type DispatchFunction = (action: any) => void;
 
 export class NedToolExecutor {
   private appState: AppState;
   private dispatch: DispatchFunction;
+  private deduplicationService: AIDeduplicationService;
 
   constructor(appState: AppState, dispatch: DispatchFunction) {
     this.appState = appState;
     this.dispatch = dispatch;
+
+    // Initialize deduplication service with storage adapter
+    // Note: Storage will be initialized asynchronously on first use
+    this.deduplicationService = new AIDeduplicationService(getStorage() as any);
   }
 
   /**
@@ -64,6 +78,34 @@ export class NedToolExecutor {
 
         case 'get_screenshot_image':
           return await this.getScreenshotImage(tool);
+
+        // ==================== DATA GATHERING TOOLS ====================
+
+        case 'get_audio_data':
+          return await this.getAudioData(tool);
+
+        case 'get_video_data':
+          return await this.getVideoData(tool);
+
+        case 'get_transcript':
+          return await this.getTranscript(tool);
+
+        case 'get_session_timeline':
+          return await this.getSessionTimeline(tool);
+
+        // ==================== SEARCH TOOLS ====================
+
+        case 'search_notes':
+          return await this.searchNotes(tool);
+
+        case 'search_tasks':
+          return await this.searchTasks(tool);
+
+        case 'find_similar_notes':
+          return await this.findSimilarNotes(tool);
+
+        case 'find_similar_tasks':
+          return await this.findSimilarTasks(tool);
 
         // ==================== WRITE TOOLS ====================
 
@@ -132,10 +174,16 @@ export class NedToolExecutor {
       content: {
         summary: result.summary,
         tasks: result.tasks.map(t => {
-          const topic = t.topicId ? this.appState.topics.find(top => top.id === t.topicId) : null;
-          const relatedNotes = t.sourceNoteId
-            ? this.appState.notes.filter(n => n.id === t.sourceNoteId)
-            : [];
+          // Get topic from relationships
+          const topicRel = t.relationships.find(r => r.targetType === EntityType.TOPIC);
+          const topicId = topicRel?.targetId;
+          const topic = topicId ? this.appState.topics.find(top => top.id === topicId) : null;
+
+          // Get related notes from relationships
+          const noteRelIds = t.relationships
+            .filter(r => r.targetType === EntityType.NOTE)
+            .map(r => r.targetId);
+          const relatedNotes = this.appState.notes.filter(n => noteRelIds.includes(n.id));
 
           return {
             id: t.id,
@@ -147,7 +195,7 @@ export class NedToolExecutor {
             dueDate: t.dueDate,
             dueTime: t.dueTime,
             tags: t.tags,
-            sourceNoteId: t.sourceNoteId,
+            sourceNoteId: noteRelIds[0], // First note for backward compat
             createdBy: t.createdBy,
             createdAt: t.createdAt,
             topic: topic ? {
@@ -162,9 +210,14 @@ export class NedToolExecutor {
           };
         }),
         notes: result.notes.map(n => {
-          const topic = n.topicId ? this.appState.topics.find(top => top.id === n.topicId) : null;
+          // Get topic from relationships
+          const topicRel = n.relationships.find(r => r.targetType === EntityType.TOPIC);
+          const topicId = topicRel?.targetId;
+          const topic = topicId ? this.appState.topics.find(top => top.id === topicId) : null;
+
+          // Get related tasks - tasks that have a relationship to this note
           const relatedTasks = this.appState.tasks.filter(t =>
-            t.sourceNoteId === n.id
+            t.relationships.some(r => r.targetType === EntityType.NOTE && r.targetId === n.id)
           );
 
           return {
@@ -271,15 +324,24 @@ export class NedToolExecutor {
         };
       }
 
-      // Get related notes (from task.sourceNoteId field)
-      const relatedNotes = task.sourceNoteId
-        ? this.appState.notes.filter(n => n.id === task.sourceNoteId)
-        : [];
+      // Get related notes from relationships
+      const noteRelIds = task.relationships
+        .filter(r => r.targetType === EntityType.NOTE)
+        .map(r => r.targetId);
+      const relatedNotes = this.appState.notes.filter(n => noteRelIds.includes(n.id));
 
-      // Get topic/company/contact details
-      const topic = task.topicId ? this.appState.topics.find(t => t.id === task.topicId) : null;
-      const company = task.topicId ? this.appState.companies.find(c => c.id === task.topicId) : null;
-      const contact = task.topicId ? this.appState.contacts.find(c => c.id === task.topicId) : null;
+      // Get topic/company/contact details from relationships
+      const topicRel = task.relationships.find(r => r.targetType === EntityType.TOPIC);
+      const topicId = topicRel?.targetId;
+      const topic = topicId ? this.appState.topics.find(t => t.id === topicId) : null;
+
+      const companyRel = task.relationships.find(r => r.targetType === EntityType.COMPANY);
+      const companyId = companyRel?.targetId;
+      const company = companyId ? this.appState.companies.find(c => c.id === companyId) : null;
+
+      const contactRel = task.relationships.find(r => r.targetType === EntityType.CONTACT);
+      const contactId = contactRel?.targetId;
+      const contact = contactId ? this.appState.contacts.find(c => c.id === contactId) : null;
 
       return {
         tool_use_id: tool.id,
@@ -298,7 +360,7 @@ export class NedToolExecutor {
             createdAt: task.createdAt,
             createdBy: task.createdBy,
             completedAt: task.completedAt,
-            sourceNoteId: task.sourceNoteId,
+            sourceNoteId: noteRelIds[0], // First note for backward compat
           },
           related_notes: relatedNotes.map(n => ({
             id: n.id,
@@ -331,15 +393,23 @@ export class NedToolExecutor {
         };
       }
 
-      // Get related tasks (tasks that reference this note in their sourceNoteId field)
+      // Get related tasks - tasks that have a relationship to this note
       const relatedTasks = this.appState.tasks.filter(t =>
-        t.sourceNoteId === note.id
+        t.relationships.some(r => r.targetType === EntityType.NOTE && r.targetId === note.id)
       );
 
-      // Get topic/company/contact details
-      const topic = note.topicId ? this.appState.topics.find(t => t.id === note.topicId) : null;
-      const company = note.topicId ? this.appState.companies.find(c => c.id === note.topicId) : null;
-      const contact = note.topicId ? this.appState.contacts.find(c => c.id === note.topicId) : null;
+      // Get topic/company/contact details from relationships
+      const topicRel = note.relationships.find(r => r.targetType === EntityType.TOPIC);
+      const topicId = topicRel?.targetId;
+      const topic = topicId ? this.appState.topics.find(t => t.id === topicId) : null;
+
+      const companyRel = note.relationships.find(r => r.targetType === EntityType.COMPANY);
+      const companyId = companyRel?.targetId;
+      const company = companyId ? this.appState.companies.find(c => c.id === companyId) : null;
+
+      const contactRel = note.relationships.find(r => r.targetType === EntityType.CONTACT);
+      const contactId = contactRel?.targetId;
+      const contact = contactId ? this.appState.contacts.find(c => c.id === contactId) : null;
 
       return {
         tool_use_id: tool.id,
@@ -384,6 +454,7 @@ export class NedToolExecutor {
 
     const newTask = {
       id: generateId(),
+      relationships: [],
       title,
       description,
       priority: priority || 'medium',
@@ -534,13 +605,27 @@ export class NedToolExecutor {
     // Strip any HTML tags from AI-generated content to ensure clean markdown/plain text
     const cleanContent = stripHtmlTags(content);
 
+    const noteId = generateId();
+    const now = new Date().toISOString();
+
     const newNote = {
-      id: generateId(),
+      id: noteId,
+      relationships: topic_id ? [
+        {
+          id: generateId(),
+          sourceType: EntityType.NOTE,
+          sourceId: noteId,
+          targetType: EntityType.TOPIC,
+          targetId: topic_id,
+          type: RelationshipType.NOTE_TOPIC,
+          canonical: true,
+          metadata: { source: 'ai' as const, createdAt: now },
+        },
+      ] : [],
       content: cleanContent,
       summary: cleanContent.substring(0, 100) + (cleanContent.length > 100 ? '...' : ''),
-      topicId: topic_id,
-      timestamp: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
+      timestamp: now,
+      lastUpdated: now,
       source: 'thought' as const,
       tags: tags || [],
     };
@@ -660,6 +745,269 @@ export class NedToolExecutor {
     };
   }
 
+  // ==================== SEARCH TOOL IMPLEMENTATIONS ====================
+
+  /**
+   * Search notes using QueryEngine with filters
+   */
+  private async searchNotes(tool: ToolCall): Promise<ToolResult> {
+    const { query, topicId, tags, dateRange, limit = 20 } = tool.input;
+
+    try {
+      // Use UnifiedIndexManager for O(log n) search (was O(n) linear filtering)
+      const { getUnifiedIndexManager } = await import('./storage/UnifiedIndexManager');
+      const unifiedIndex = await getUnifiedIndexManager();
+
+      // Build unified query
+      const searchQuery: any = {
+        entityTypes: ['notes'],
+        limit,
+      };
+
+      if (query) {
+        searchQuery.query = query;
+      }
+
+      if (topicId) {
+        searchQuery.relatedTo = {
+          entityType: 'topic',
+          entityId: topicId,
+        };
+      }
+
+      if (tags || dateRange) {
+        searchQuery.filters = {};
+        if (tags && tags.length > 0) {
+          searchQuery.filters.tags = tags;
+        }
+        if (dateRange) {
+          searchQuery.timeRange = {
+            start: dateRange.start,
+            end: dateRange.end,
+          };
+        }
+      }
+
+      // Execute search (O(log n) via inverted indexes)
+      const searchResult = await unifiedIndex.unifiedSearch(searchQuery);
+      const noteIds = searchResult.results.notes.map(r => r.id);
+
+      // Load full notes from appState
+      const results = this.appState.notes.filter((n: any) => noteIds.includes(n.id));
+
+      return {
+        tool_use_id: tool.id,
+        content: {
+          notes: results.map((n: any) => ({
+            id: n.id,
+            summary: n.summary,
+            content: n.content?.substring(0, 200) + (n.content?.length > 200 ? '...' : ''),
+            timestamp: n.timestamp,
+            tags: n.tags || [],
+            source: n.source,
+          })),
+          total: results.length,
+          query_used: query || 'none',
+          search_time_ms: searchResult.took,
+        },
+        full_notes: results, // For UI rendering
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Error searching notes: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        is_error: true,
+      };
+    }
+  }
+
+  /**
+   * Search tasks using UnifiedIndexManager with O(log n) performance
+   */
+  private async searchTasks(tool: ToolCall): Promise<ToolResult> {
+    const { query, status, priority, dateRange, limit = 20 } = tool.input;
+
+    try {
+      // Use UnifiedIndexManager for O(log n) search (was O(n) linear filtering)
+      const { getUnifiedIndexManager } = await import('./storage/UnifiedIndexManager');
+      const unifiedIndex = await getUnifiedIndexManager();
+
+      // Build unified query
+      const searchQuery: any = {
+        entityTypes: ['tasks'],
+        limit,
+      };
+
+      if (query) {
+        searchQuery.query = query;
+      }
+
+      if (status || priority || dateRange) {
+        searchQuery.filters = {};
+        if (status && status.length > 0) {
+          searchQuery.filters.status = status;
+        }
+        if (priority && priority.length > 0) {
+          searchQuery.filters.priority = priority;
+        }
+      }
+
+      if (dateRange) {
+        searchQuery.timeRange = {
+          start: dateRange.start,
+          end: dateRange.end,
+        };
+      }
+
+      // Execute search (O(log n) via inverted indexes)
+      const searchResult = await unifiedIndex.unifiedSearch(searchQuery);
+      const taskIds = searchResult.results.tasks.map(r => r.id);
+
+      // Load full tasks from appState
+      const results = this.appState.tasks.filter((t: any) => taskIds.includes(t.id));
+
+      return {
+        tool_use_id: tool.id,
+        content: {
+          tasks: results.map((t: any) => ({
+            id: t.id,
+            title: t.title,
+            description: t.description,
+            status: t.status,
+            priority: t.priority,
+            done: t.done,
+            createdAt: t.createdAt,
+          })),
+          total: results.length,
+          query_used: query || 'none',
+          search_time_ms: searchResult.took,
+        },
+        full_tasks: results, // For UI rendering
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Error searching tasks: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        is_error: true,
+      };
+    }
+  }
+
+  /**
+   * Find notes similar to given content (for duplicate detection)
+   *
+   * Uses AIDeduplicationService for semantic similarity detection with
+   * Levenshtein distance and context-aware matching.
+   */
+  private async findSimilarNotes(tool: ToolCall): Promise<ToolResult> {
+    const { summary, content, topicId, minSimilarity = 0.7 } = tool.input;
+
+    try {
+      // Use AIDeduplicationService for proper semantic similarity
+      const similarResults = await this.deduplicationService.findSimilarNotes({
+        summary,
+        content,
+        topicId,
+        minSimilarity,
+        maxResults: 10,
+      });
+
+      // Transform results to match expected tool output format
+      const similar = similarResults.map(result => ({
+        note: result.entity,
+        similarity: result.similarity,
+        confidence: result.confidence,
+        shouldMerge: result.shouldMerge,
+        reason: result.reason,
+      }));
+
+      return {
+        tool_use_id: tool.id,
+        content: {
+          similar: similar.map(s => ({
+            note: {
+              id: s.note.id,
+              summary: s.note.summary,
+              content: s.note.content?.substring(0, 200),
+              timestamp: s.note.timestamp,
+            },
+            similarity: s.similarity,
+            confidence: s.confidence,
+            shouldMerge: s.shouldMerge,
+            reason: s.reason,
+          })),
+          total: similar.length,
+          threshold: minSimilarity,
+        },
+        full_notes: similar.map(s => s.note), // For UI rendering
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Error finding similar notes: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        is_error: true,
+      };
+    }
+  }
+
+  /**
+   * Find tasks similar to given title (for duplicate detection)
+   *
+   * Uses AIDeduplicationService for semantic similarity detection with
+   * Levenshtein distance and context-aware matching.
+   */
+  private async findSimilarTasks(tool: ToolCall): Promise<ToolResult> {
+    const { title, description, contextNoteId, minSimilarity = 0.8 } = tool.input;
+
+    try {
+      // Use AIDeduplicationService for proper semantic similarity
+      const similarResults = await this.deduplicationService.findSimilarTasks({
+        title,
+        description,
+        contextNoteId,
+        minSimilarity,
+        maxResults: 10,
+      });
+
+      // Transform results to match expected tool output format
+      const similar = similarResults.map(result => ({
+        task: result.entity,
+        similarity: result.similarity,
+        confidence: result.confidence,
+        shouldMerge: result.shouldMerge,
+        reason: result.reason,
+      }));
+
+      return {
+        tool_use_id: tool.id,
+        content: {
+          similar: similar.map(s => ({
+            task: {
+              id: s.task.id,
+              title: s.task.title,
+              description: s.task.description,
+              status: s.task.status,
+              done: s.task.done,
+            },
+            similarity: s.similarity,
+            confidence: s.confidence,
+            shouldMerge: s.shouldMerge,
+            reason: s.reason,
+          })),
+          total: similar.length,
+          threshold: minSimilarity,
+        },
+        full_tasks: similar.map(s => s.task), // For UI rendering
+      };
+    } catch (error) {
+      return {
+        tool_use_id: tool.id,
+        content: `Error finding similar tasks: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        is_error: true,
+      };
+    }
+  }
+
   // ==================== SESSION TOOL IMPLEMENTATIONS ====================
 
   /**
@@ -701,8 +1049,9 @@ export class NedToolExecutor {
           duration: s.totalDuration || this.calculateSessionDuration(s),
           screenshotCount: s.screenshots.length,
           audioSegmentCount: audioSegments.length,
-          extractedTaskCount: s.extractedTaskIds.length,
-          extractedNoteCount: s.extractedNoteIds.length,
+          // extractedTaskCount/extractedNoteCount removed - now tracked via relationships
+          extractedTaskCount: 0,
+          extractedNoteCount: 0,
           tags: s.tags,
           activityType: s.activityType,
           // Include summary of screenshot activities for context
@@ -755,15 +1104,15 @@ export class NedToolExecutor {
       };
     }
 
-    // Get extracted tasks
-    const extractedTasks = session.extractedTaskIds
-      .map(taskId => this.appState.tasks.find(t => t.id === taskId))
-      .filter(Boolean);
+    // Get extracted tasks - tasks that have a relationship to this session
+    const extractedTasks = this.appState.tasks.filter((t: any) =>
+      t.relationships?.some((r: any) => r.targetType === EntityType.SESSION && r.targetId === session.id)
+    );
 
-    // Get extracted notes
-    const extractedNotes = session.extractedNoteIds
-      .map(noteId => this.appState.notes.find(n => n.id === noteId))
-      .filter(Boolean);
+    // Get extracted notes - notes that have a relationship to this session
+    const extractedNotes = this.appState.notes.filter((n: any) =>
+      n.relationships?.some((r: any) => r.targetType === EntityType.SESSION && r.targetId === session.id)
+    );
 
     // Format screenshots with analysis
     const screenshots = session.screenshots.map(ss => ({
@@ -965,8 +1314,10 @@ export class NedToolExecutor {
     }
 
     try {
-      // Load the attachment containing the screenshot
-      const attachment = await attachmentStorage.getAttachment(screenshot.attachmentId);
+      // Load the attachment containing the screenshot (Phase 4: Use hash if available)
+      const caStorage = await getCAStorage();
+      const identifier = screenshot.hash || screenshot.attachmentId;
+      const attachment = await caStorage.loadAttachment(identifier);
 
       if (!attachment || !attachment.base64) {
         return {
@@ -1033,5 +1384,88 @@ export class NedToolExecutor {
     // Calculate active duration: (end - start - total paused time) in minutes
     const activeMs = endMs - startMs - totalPausedMs;
     return Math.floor(activeMs / (1000 * 60));
+  }
+
+
+  // ==================== DATA GATHERING TOOL HANDLERS ====================
+
+  /**
+   * Get audio data from a session
+   */
+  private async getAudioData(tool: ToolCall): Promise<ToolResult> {
+    const result = await getAudioData(tool.input as any);
+
+    if (!result.success) {
+      return {
+        tool_use_id: tool.id,
+        content: result.error?.userMessage || 'Failed to retrieve audio data',
+        is_error: true,
+      };
+    }
+
+    return {
+      tool_use_id: tool.id,
+      content: JSON.stringify(result.data, null, 2),
+    };
+  }
+
+  /**
+   * Get video data from a session
+   */
+  private async getVideoData(tool: ToolCall): Promise<ToolResult> {
+    const result = await getVideoData(tool.input as any);
+
+    if (!result.success) {
+      return {
+        tool_use_id: tool.id,
+        content: result.error?.userMessage || 'Failed to retrieve video data',
+        is_error: true,
+      };
+    }
+
+    return {
+      tool_use_id: tool.id,
+      content: JSON.stringify(result.data, null, 2),
+    };
+  }
+
+  /**
+   * Get transcript from a session
+   */
+  private async getTranscript(tool: ToolCall): Promise<ToolResult> {
+    const result = await getTranscript(tool.input as any);
+
+    if (!result.success) {
+      return {
+        tool_use_id: tool.id,
+        content: result.error?.userMessage || 'Failed to retrieve transcript',
+        is_error: true,
+      };
+    }
+
+    return {
+      tool_use_id: tool.id,
+      content: JSON.stringify(result.data, null, 2),
+    };
+  }
+
+  /**
+   * Get session timeline
+   */
+  private async getSessionTimeline(tool: ToolCall): Promise<ToolResult> {
+    const result = await getSessionTimeline(tool.input as any);
+
+    if (!result.success) {
+      return {
+        tool_use_id: tool.id,
+        content: result.error?.userMessage || 'Failed to build session timeline',
+        is_error: true,
+      };
+    }
+
+    return {
+      tool_use_id: tool.id,
+      content: JSON.stringify(result.data, null, 2),
+    };
   }
 }

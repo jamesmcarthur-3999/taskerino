@@ -7,7 +7,7 @@
  */
 
 import type { SessionAudioSegment } from '../types';
-import { attachmentStorage } from './attachmentStorage';
+import { getCAStorage } from './storage/ContentAddressableStorage';
 
 interface SegmentTimeMapping {
   segmentId: string;
@@ -17,6 +17,7 @@ interface SegmentTimeMapping {
   duration: number;
   audioBuffer?: AudioBuffer;
   attachmentId: string;
+  hash?: string; // Phase 4: Content-addressable storage hash
 }
 
 interface ConcatenationOptions {
@@ -29,9 +30,13 @@ export class AudioConcatenationService {
   private audioContext: AudioContext | null = null;
   private segmentMappings: Map<string, SegmentTimeMapping> = new Map();
   private totalDuration: number = 0;
-  private loadedBuffers: Map<string, AudioBuffer> = new Map();
-  // Session-based WAV cache: sessionId -> { blob, url, timestamp }
-  private sessionWAVCache: Map<string, { blob: Blob; url: string; timestamp: number }> = new Map();
+
+  // ❌ REMOVED: Unbounded caches caused 15GB memory leak
+  // private loadedBuffers: Map<string, AudioBuffer> = new Map();
+  // private sessionWAVCache: Map<string, { blob: Blob; url: string; timestamp: number }> = new Map();
+
+  // FUTURE: Consider LRU cache (100MB limit) for performance optimization
+  // Currently using on-demand loading (no caching) to prevent memory leaks
 
   /**
    * Initialize audio context
@@ -59,6 +64,30 @@ export class AudioConcatenationService {
     this.segmentMappings.clear();
     this.totalDuration = 0;
 
+    // DEBUG: Log segments received by buildTimeline
+    const segmentsWithHash = segments.filter(s => s.hash).length;
+    const segmentsWithoutHash = segments.filter(s => !s.hash).length;
+    console.log(`🎵 [AUDIO CONCAT] buildTimeline: ${segments.length} segments (${segmentsWithHash} with hash, ${segmentsWithoutHash} WITHOUT hash)`);
+
+    if (segments.length > 0) {
+      console.log(`🔍 [DEBUG] First segment:`, {
+        id: segments[0].id,
+        attachmentId: segments[0].attachmentId || 'MISSING',
+        hash: segments[0].hash ? segments[0].hash.substring(0, 16) + '...' : 'MISSING',
+        timestamp: segments[0].timestamp,
+      });
+
+      if (segmentsWithoutHash > 0) {
+        const noHashExample = segments.find(s => !s.hash);
+        console.error(`❌ [AUDIO CONCAT] Example segment WITHOUT hash:`, {
+          id: noHashExample!.id,
+          attachmentId: noHashExample!.attachmentId || 'none',
+          timestamp: noHashExample!.timestamp,
+          keys: Object.keys(noHashExample!),
+        });
+      }
+    }
+
     // Sort segments by timestamp
     const sortedSegments = [...segments].sort((a, b) =>
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -69,6 +98,17 @@ export class AudioConcatenationService {
       const duration = segment.duration;
       const endTime = startTime + duration;
 
+      // DEBUG: Log segment structure to diagnose missing attachmentIds
+      if (!segment.attachmentId) {
+        console.warn(`⚠️  [AUDIO CONCAT] Segment ${segment.id} has no attachmentId!`, {
+          id: segment.id,
+          duration: segment.duration,
+          timestamp: segment.timestamp,
+          hasAttachmentId: !!segment.attachmentId,
+          segmentKeys: Object.keys(segment),
+        });
+      }
+
       this.segmentMappings.set(segment.id, {
         segmentId: segment.id,
         segmentIndex: index,
@@ -76,6 +116,7 @@ export class AudioConcatenationService {
         endTime,
         duration,
         attachmentId: segment.attachmentId || '',
+        hash: segment.hash, // Phase 4: Preserve hash for CA storage lookup
       });
 
       this.totalDuration = endTime;
@@ -86,7 +127,8 @@ export class AudioConcatenationService {
       }
     });
 
-    console.log(`🎵 [AUDIO CONCAT] Timeline built: ${sortedSegments.length} segments, ${this.totalDuration.toFixed(1)}s total`);
+    const missingCount = sortedSegments.filter(s => !s.attachmentId).length;
+    console.log(`🎵 [AUDIO CONCAT] Timeline built: ${sortedSegments.length} segments, ${this.totalDuration.toFixed(1)}s total${missingCount > 0 ? ` (${missingCount} missing attachmentIds!)` : ''}`);
   }
 
   /**
@@ -132,23 +174,46 @@ export class AudioConcatenationService {
 
   /**
    * Load audio buffer for a specific segment
+   *
+   * NOTE: Caching removed to fix 15GB memory leak. Audio is loaded from storage on-demand.
+   * FUTURE: Consider LRU cache (100MB limit) for performance optimization.
    */
   async loadSegmentAudio(segmentId: string): Promise<AudioBuffer | null> {
-    // Check cache first
-    if (this.loadedBuffers.has(segmentId)) {
-      return this.loadedBuffers.get(segmentId)!;
-    }
+    // ❌ REMOVED: Cache check (caused memory leak)
+    // Always load from storage now (no unbounded caching)
 
     const mapping = this.segmentMappings.get(segmentId);
     if (!mapping || !mapping.attachmentId) {
-      console.warn(`⚠️  [AUDIO CONCAT] Cannot load audio for segment ${segmentId}: no attachment ID`);
+      console.warn(`⚠️  [AUDIO CONCAT] Cannot load audio for segment ${segmentId}: no attachment ID`, {
+        hasMapping: !!mapping,
+        attachmentId: mapping?.attachmentId || 'MISSING',
+        mapping: mapping,
+      });
       return null;
     }
 
     try {
-      const attachment = await attachmentStorage.getAttachment(mapping.attachmentId);
+      // Phase 4: Load from CA storage using hash
+      if (!mapping.hash) {
+        console.error(`❌ [AUDIO CONCAT] Segment ${segmentId} has no hash - cannot load from CA storage!`, {
+          attachmentId: mapping.attachmentId,
+          segmentKeys: Object.keys(mapping),
+        });
+        return null;
+      }
+
+      const caStorage = await getCAStorage();
+      console.log(`[AUDIO CONCAT] Loading segment ${segmentId} from CA storage (hash: ${mapping.hash.substring(0, 16)}...)`);
+      const attachment = await caStorage.loadAttachment(mapping.hash);
+
       if (!attachment || !attachment.base64) {
-        console.warn(`⚠️  [AUDIO CONCAT] No audio data for segment ${segmentId}`);
+        console.error(`❌ [AUDIO CONCAT] CA storage lookup failed for segment ${segmentId}`, {
+          hash: mapping.hash,
+          hashPrefix: mapping.hash.substring(0, 8),
+          attachmentId: mapping.attachmentId,
+          hasAttachment: !!attachment,
+          hasBase64: attachment?.base64 ? true : false,
+        });
         return null;
       }
 
@@ -156,9 +221,10 @@ export class AudioConcatenationService {
       const arrayBuffer = this.base64ToArrayBuffer(attachment.base64);
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-      // Cache the buffer
-      this.loadedBuffers.set(segmentId, audioBuffer);
-      console.log(`✅ [AUDIO CONCAT] Loaded segment ${segmentId}: ${audioBuffer.duration.toFixed(1)}s`);
+      // ❌ REMOVED: Cache storage (caused memory leak)
+      // Audio will be re-loaded if needed (trade-off: performance vs memory)
+
+      console.log(`✅ [AUDIO CONCAT] Loaded segment ${segmentId}: ${audioBuffer.duration.toFixed(1)}s (no caching)`);
 
       return audioBuffer;
     } catch (error) {
@@ -168,26 +234,19 @@ export class AudioConcatenationService {
   }
 
   /**
-   * Preload audio for segments around current time (for smooth playback)
+   * Preload audio for segments around current time (deprecated method, now a no-op)
+   *
+   * NOTE: Unbounded caches were removed to fix 15GB memory leak.
+   * Preloading is no longer effective without caching. This method is kept
+   * for backward compatibility but does nothing.
+   *
+   * @param sessionTime - Current playback time
+   * @param windowSeconds - Time window to preload (ignored)
+   * @deprecated Caching removed in Phase 4, preloading no longer effective
    */
   async preloadAroundTime(sessionTime: number, windowSeconds: number = 30): Promise<void> {
-    const segmentsToLoad: string[] = [];
-
-    for (const [segmentId, mapping] of this.segmentMappings.entries()) {
-      if (
-        mapping.startTime <= sessionTime + windowSeconds &&
-        mapping.endTime >= sessionTime - windowSeconds
-      ) {
-        if (!this.loadedBuffers.has(segmentId)) {
-          segmentsToLoad.push(segmentId);
-        }
-      }
-    }
-
-    if (segmentsToLoad.length > 0) {
-      console.log(`📦 [AUDIO CONCAT] Preloading ${segmentsToLoad.length} segments around ${sessionTime.toFixed(1)}s`);
-      await Promise.all(segmentsToLoad.map(id => this.loadSegmentAudio(id)));
-    }
+    // ❌ REMOVED: Preloading (no cache to preload into)
+    console.log('ℹ️  [AUDIO CONCAT] preloadAroundTime() is now a no-op (caches removed in Phase 4)');
   }
 
   /**
@@ -219,22 +278,19 @@ export class AudioConcatenationService {
   }
 
   /**
-   * Export concatenated audio as single WAV file (with session-based caching)
+   * Export concatenated audio as single WAV file
    * Loads all segments and concatenates them into one audio buffer
+   *
+   * NOTE: Session-based caching was removed to fix 15GB memory leak.
+   * Consider LRU caching in future (Phase 2).
    *
    * @param segments - Audio segments to concatenate
    * @param options - Concatenation options
-   * @param sessionId - Optional session ID for caching (recommended for performance)
+   * @param sessionId - Optional session ID (currently unused, reserved for future caching)
    */
   async exportAsWAV(segments: SessionAudioSegment[], options: ConcatenationOptions = {}, sessionId?: string): Promise<Blob> {
-    // Check cache first if sessionId is provided
-    if (sessionId) {
-      const cached = this.sessionWAVCache.get(sessionId);
-      if (cached) {
-        console.log(`✅ [AUDIO CONCAT] Using cached WAV for session ${sessionId} (${(cached.blob.size / 1024 / 1024).toFixed(1)}MB)`);
-        return cached.blob;
-      }
-    }
+    // ❌ REMOVED: Cache check (caused memory leak)
+    // Always generate fresh WAV now (no unbounded caching)
 
     console.log(`🎵 [AUDIO CONCAT] Exporting ${segments.length} segments as WAV...`);
 
@@ -310,16 +366,9 @@ export class AudioConcatenationService {
     const wavBlob = this.audioBufferToWAV(outputBuffer);
     console.log(`✅ [AUDIO CONCAT] Exported WAV: ${(wavBlob.size / 1024 / 1024).toFixed(1)}MB`);
 
-    // Cache the result if sessionId is provided
-    if (sessionId) {
-      const url = URL.createObjectURL(wavBlob);
-      this.sessionWAVCache.set(sessionId, {
-        blob: wavBlob,
-        url,
-        timestamp: Date.now(),
-      });
-      console.log(`💾 [AUDIO CONCAT] Cached WAV for session ${sessionId}`);
-    }
+    // ❌ REMOVED: Cache storage (caused memory leak)
+    // No longer caching concatenated WAV to prevent 15GB RAM usage
+    // Future: Implement LRU cache with 100MB limit (Phase 2)
 
     return wavBlob;
   }
@@ -428,24 +477,39 @@ export class AudioConcatenationService {
   }
 
   /**
-   * Export concatenated audio as MP3 (requires lamejs)
+   * Export concatenated audio as MP3 (deprecated method)
+   *
+   * DEPRECATED: This method is obsolete. Use the new MP3 concatenation workflow:
+   * 1. Load MP3 attachments from ContentAddressableStorage
+   * 2. Write to temp files
+   * 3. Call `concatenate_mp3_files` Tauri command (ffmpeg stream copy)
+   *
+   * See: BackgroundMediaProcessor.concatenateAudio() for the new implementation
+   *
+   * @deprecated Use MP3 concatenation via ffmpeg instead (see BackgroundMediaProcessor)
    */
   async exportAsMP3(segments: SessionAudioSegment[], options: ConcatenationOptions = {}): Promise<Blob> {
-    // First create WAV
+    // Create WAV (old approach - inefficient)
     const wavBlob = await this.exportAsWAV(segments, options);
 
-    // TODO: Convert WAV to MP3 using lamejs
-    // For now, return WAV (this will be implemented in export service)
-    console.log('ℹ️  [AUDIO CONCAT] MP3 encoding will be handled by export service');
+    // Return WAV (caller should handle MP3 conversion if needed)
+    console.warn('⚠️  [AUDIO CONCAT] exportAsMP3() is deprecated - use ffmpeg concatenation instead');
     return wavBlob;
   }
 
   /**
-   * Get cached WAV URL for a session (if available)
+   * Get cached WAV URL for a session (deprecated method, always returns null)
+   *
+   * NOTE: Unbounded caches were removed to fix 15GB memory leak.
+   * This method is kept for backward compatibility but always returns null.
+   *
+   * @param sessionId - Session ID (ignored)
+   * @returns Always null (no more caching)
+   * @deprecated Caching removed in Phase 4
    */
   getCachedWAVUrl(sessionId: string): string | null {
-    const cached = this.sessionWAVCache.get(sessionId);
-    return cached ? cached.url : null;
+    // ❌ REMOVED: Cache retrieval (no more caches)
+    return null;
   }
 
   /**
@@ -456,51 +520,33 @@ export class AudioConcatenationService {
   }
 
   /**
-   * Clear cached audio buffers and session WAV cache
-   * @param sessionId - Optional session ID to clear only that session's cache
+   * Clear cached audio buffers (deprecated method, now a no-op)
+   *
+   * NOTE: Unbounded caches were removed to fix 15GB memory leak.
+   * This method is kept for backward compatibility but does nothing.
+   *
+   * @param sessionId - Optional session ID (ignored)
+   * @deprecated Use memory-efficient on-demand loading instead
    */
   clearCache(sessionId?: string): void {
-    if (sessionId) {
-      // Clear only specific session's WAV cache
-      const cached = this.sessionWAVCache.get(sessionId);
-      if (cached) {
-        URL.revokeObjectURL(cached.url);
-        this.sessionWAVCache.delete(sessionId);
-        console.log(`🗑️  [AUDIO CONCAT] Cleared WAV cache for session ${sessionId}`);
-      }
-    } else {
-      // Clear all caches
-      this.loadedBuffers.clear();
-
-      // Revoke all blob URLs before clearing
-      for (const [sessionId, cached] of this.sessionWAVCache.entries()) {
-        URL.revokeObjectURL(cached.url);
-      }
-      this.sessionWAVCache.clear();
-
-      console.log('🗑️  [AUDIO CONCAT] Cleared all audio caches');
-    }
+    // ❌ REMOVED: Cache clearing (no more caches to clear)
+    console.log('ℹ️  [AUDIO CONCAT] clearCache() is now a no-op (caches removed in Phase 4)');
   }
 
   /**
-   * Get cache statistics
+   * Get cache statistics (deprecated method, returns zeros)
+   *
+   * NOTE: Unbounded caches were removed to fix 15GB memory leak.
+   * This method is kept for backward compatibility but always returns 0.
+   *
+   * @deprecated Caching removed in Phase 4
    */
   getCacheStats(): { segmentsCached: number; sessionsCached: number; totalSize: number } {
-    let bufferSize = 0;
-    for (const buffer of this.loadedBuffers.values()) {
-      // Rough estimate: samples * channels * 4 bytes per float32
-      bufferSize += buffer.length * buffer.numberOfChannels * 4;
-    }
-
-    let wavSize = 0;
-    for (const cached of this.sessionWAVCache.values()) {
-      wavSize += cached.blob.size;
-    }
-
+    // ❌ REMOVED: Cache statistics (no more caches to report)
     return {
-      segmentsCached: this.loadedBuffers.size,
-      sessionsCached: this.sessionWAVCache.size,
-      totalSize: bufferSize + wavSize,
+      segmentsCached: 0,
+      sessionsCached: 0,
+      totalSize: 0,
     };
   }
 
@@ -508,13 +554,32 @@ export class AudioConcatenationService {
    * Utility: Convert base64 to ArrayBuffer
    */
   private base64ToArrayBuffer(base64: string): ArrayBuffer {
-    const base64String = base64.split(',')[1] || base64;
-    const binaryString = atob(base64String);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+    // Strip data URL prefix if present (e.g., "data:audio/wav;base64,")
+    let base64Data = base64;
+    if (base64.startsWith('data:') && base64.includes(',')) {
+      base64Data = base64.split(',')[1];
+      console.log('[AUDIO CONCAT] Stripped data URL prefix from base64 string');
     }
-    return bytes.buffer;
+
+    // Additional validation: Check if string contains only valid base64 characters
+    const validBase64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+    if (!validBase64Regex.test(base64Data.replace(/\s/g, ''))) {
+      console.warn('[AUDIO CONCAT] Base64 string contains invalid characters, attempting cleanup');
+      // Remove any whitespace or newlines
+      base64Data = base64Data.replace(/\s/g, '');
+    }
+
+    try {
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes.buffer;
+    } catch (error) {
+      console.error('[AUDIO CONCAT] Failed to decode base64:', error);
+      throw new Error(`Invalid base64 audio data: ${error}`);
+    }
   }
 
   /**

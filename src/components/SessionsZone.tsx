@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
-import { useSessions } from '../context/SessionsContext';
+import { useActiveSession } from '../context/ActiveSessionContext';
+import { useSessionList } from '../context/SessionListContext';
+import { useRecording } from '../context/RecordingContext';
 import { useUI } from '../context/UIContext';
+import { useEnrichmentContext } from '../context/EnrichmentContext';
 import { useTasks } from '../context/TasksContext';
+import { useEntities } from '../context/EntitiesContext';
 import { Play, Pause, Square, Clock, Calendar, Tag, Activity, CheckCircle2, AlertCircle, Target, Lightbulb, Search, FileText, CheckSquare, TrendingUp, Camera, BookOpen, Trash2, Sparkles, Save, Filter, SlidersHorizontal, CheckCheck, Video, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Session, SessionScreenshot, SessionAudioSegment, SessionContextItem } from '../types';
-import { screenshotCaptureService } from '../services/screenshotCaptureService';
-import { adaptiveScreenshotScheduler } from '../services/adaptiveScreenshotScheduler';
-import { audioRecordingService } from '../services/audioRecordingService';
-import { videoRecordingService } from '../services/videoRecordingService';
 import { videoStorageService } from '../services/videoStorageService';
 import { sessionsAgentService } from '../services/sessionsAgentService';
-import { attachmentStorage } from '../services/attachmentStorage';
+import { getCAStorage } from '../services/storage/ContentAddressableStorage';
+import { LiveSessionEventEmitter } from '../services/liveSession/events';
 import { SessionTimeline } from './SessionTimeline';
 import { checkScreenRecordingPermission, showMacOSPermissionInstructions } from '../utils/permissions';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -22,6 +23,7 @@ import { useTheme } from '../context/ThemeContext';
 // Lazy load heavy components to reduce initial bundle size
 const SessionDetailView = lazy(() => import('./SessionDetailView').then(module => ({ default: module.SessionDetailView })));
 const ActiveSessionView = lazy(() => import('./ActiveSessionView').then(module => ({ default: module.ActiveSessionView })));
+const SessionProcessingScreen = lazy(() => import('./sessions/SessionProcessingScreen').then(module => ({ default: module.SessionProcessingScreen })));
 import { listen } from '@tauri-apps/api/event';
 import { getTemplates, saveTemplate, type SessionTemplate } from '../utils/sessionTemplates';
 import { loadLastSessionSettings, saveLastSessionSettings, getSettingsSummary, type LastSessionSettings } from '../utils/lastSessionSettings';
@@ -41,19 +43,75 @@ import { SessionsSortMenu } from './sessions/SessionsSortMenu';
 import { SessionsSearchBar } from './sessions/SessionsSearchBar';
 import { BulkOperationsBar } from './sessions/BulkOperationsBar';
 import { ActiveFiltersDisplay } from './sessions/ActiveFiltersDisplay';
-import { SessionsFilterMenu } from './sessions/SessionsFilterMenu';
 import { SessionListGroup } from './sessions/SessionListGroup';
 import { SessionCard } from './sessions/SessionCard';
 import { SessionsTopBar } from './sessions/SessionsTopBar';
 import { SessionsListPanel } from './sessions/SessionsListPanel';
 import { groupSessionsByDate, calculateTotalStats } from '../utils/sessionHelpers';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import { RecordingErrorBanner } from './sessions/RecordingErrorBanner';
+import { invoke } from '@tauri-apps/api/core';
+import { eventBus } from '../utils/eventBus';
 
 export default function SessionsZone() {
-  const { sessions, activeSessionId, startSession, endSession, pauseSession, resumeSession, updateSession, deleteSession, addScreenshot, addAudioSegment, updateScreenshotAnalysis, addScreenshotComment, toggleScreenshotFlag, setActiveSession, addExtractedTask, addExtractedNote, addContextItem } = useSessions();
+  // Phase 1 Contexts - specialized context hooks
+  const {
+    activeSession,
+    activeSessionId,
+    startSession,
+    endSession,
+    pauseSession,
+    resumeSession,
+    updateActiveSession,
+    addScreenshot,
+    addAudioSegment,
+    updateScreenshotAnalysis,
+    addScreenshotComment,
+    toggleScreenshotFlag,
+    addExtractedTask,
+    addExtractedNote,
+    addContextItem
+  } = useActiveSession();
+
+  const { sessions, loading, error, deleteSession, updateSession, refreshSessions } = useSessionList();
+
+  const {
+    recordingState,
+    startScreenshots,
+    stopScreenshots,
+    pauseScreenshots,
+    resumeScreenshots,
+    getActiveScreenshotSessionId,
+    isCapturing,
+    startAudio,
+    stopAudio,
+    pauseAudio,
+    resumeAudio,
+    getActiveAudioSessionId,
+    isAudioRecording,
+    getAudioDevices,
+    startVideo,
+    stopVideo,
+    getActiveVideoSessionId,
+    isVideoRecording,
+    checkVideoPermission,
+    enumerateDisplays,
+    enumerateWindows,
+    enumerateWebcams,
+    updateCuriosityScore,
+    stopAll,
+    pauseAll,
+    resumeAll,
+    clearError,
+    clearAllErrors,
+    getActiveErrors,
+  } = useRecording();
   const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
+  const { state: entitiesState, addTopic, addCompany, addContact } = useEntities();
   const { scrollY, registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
+  const { activeEnrichments, hasActiveEnrichments } = useEnrichmentContext();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [lastMetadataUpdate, setLastMetadataUpdate] = useState<string | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
@@ -78,6 +136,8 @@ export default function SessionsZone() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
 
   // Sort dropdown state
   const [showSortDropdown, setShowSortDropdown] = useState(false);
@@ -88,6 +148,20 @@ export default function SessionsZone() {
   // Bulk selection state
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+
+  // TASK 11: Media processing screen state
+  const [processingSessionId, setProcessingSessionId] = useState<string | null>(null);
+
+  // Device enumeration state (loaded once for all SessionsTopBar instances)
+  const [audioDevices, setAudioDevices] = useState<import('../types').AudioDevice[]>([]);
+  const [displays, setDisplays] = useState<import('../types').DisplayInfo[]>([]);
+  const [windows, setWindows] = useState<import('../types').WindowInfo[]>([]);
+  const [webcams, setWebcams] = useState<import('../types').WebcamInfo[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [devicesCacheTimestamp, setDevicesCacheTimestamp] = useState<number | null>(null);
+
+  // Device cache TTL: 5 minutes (300000ms) - prevents 1GB+ memory spike from repeated enumeration
+  const DEVICE_CACHE_TTL_MS = 5 * 60 * 1000;
 
   // Sidebar state - control sidebar expansion from parent
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
@@ -146,26 +220,161 @@ export default function SessionsZone() {
     setCollapseReason(reason);
   };
 
-  // Ref to track active session ID for audio chunk listener (avoids stale closures)
-  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  // Active session is now retrieved from useActiveSession() hook above (Phase 1)
+  // NOTE: Previously used activeSessionIdRef and stateRef to work around stale closures.
+  // Now using ActiveSession context which provides fresh state automatically.
+  // This replaces the old `const activeSession = sessions.find(...)` pattern.
+  // See: /Users/jamesmcarthur/Documents/taskerino/docs/sessions-rewrite/REFS_ELIMINATION_PLAN.md
 
-  // Ref to track previous active session ID for detecting completion transitions
-  const prevActiveSessionIdRef = useRef<string | null>(null);
+  // State: Track previous active session ID for detecting completion transitions
+  // Converted from ref to state for proper React flow
+  const [prevActiveSessionId, setPrevActiveSessionId] = useState<string | null>(null);
 
-  // Ref to track video recording initialization attempts (prevents duplicate starts)
-  const videoRecordingInitializedRef = useRef<string | null>(null);
-
-  // Ref to store latest state (avoids stale closures in callbacks)
-  const stateRef = useRef({ sessions });
-
-  // Ref to store audio segment handler (prevents duplicate event listeners)
-  const handleAudioSegmentProcessedRef = useRef<((segment: SessionAudioSegment) => void) | null>(null);
-
-  // Ref to track if audio listener is already active (prevents duplicate registration in StrictMode)
-  const audioListenerActiveRef = useRef<boolean>(false);
+  // State: Track video recording initialization (prevents duplicate starts)
+  // Converted from ref to state for proper React state management
+  const [videoInitializedSessionId, setVideoInitializedSessionId] = useState<string | null>(null);
 
   // Ref for session list scroll container (enables auto-scroll to live session)
   const sessionListScrollRef = useRef<HTMLDivElement>(null);
+
+  // LAZY LOADING: Devices are NOT loaded on mount to prevent UI freeze
+  // Device enumeration can block waiting for macOS permissions (audio/screen recording)
+  // Instead, devices are loaded on-demand when user opens device selector modals
+  // This ensures the Sessions zone loads instantly without hanging
+
+  // Lazy load devices with timeout protection (called by SessionsTopBar when needed)
+  // NOTE: This can be called with forceReload=true to bypass cache after permission changes
+  const loadDevices = useCallback(async (forceReload = false) => {
+    // Check if cache is still valid (5-minute TTL)
+    const now = Date.now();
+    const cacheAge = devicesCacheTimestamp ? now - devicesCacheTimestamp : Infinity;
+    const isCacheValid = cacheAge < DEVICE_CACHE_TTL_MS;
+
+    if (!forceReload && isCacheValid && (audioDevices.length > 0 || displays.length > 0 || windows.length > 0 || webcams.length > 0)) {
+      console.log(`📱 [SESSIONS ZONE] Using cached devices (age: ${Math.round(cacheAge / 1000)}s / ${DEVICE_CACHE_TTL_MS / 1000}s TTL)`);
+      return; // Cache is still valid
+    }
+
+    if (loadingDevices) {
+      console.log('📱 [SESSIONS ZONE] Device loading already in progress, skipping');
+      return; // Already loading
+    }
+
+    if (forceReload) {
+      console.log('🔄 [SESSIONS ZONE] Force reloading devices (permission change or cache expired)');
+    }
+
+    setLoadingDevices(true);
+    try {
+      console.log('📱 [SESSIONS ZONE] Starting device enumeration (lazy load)...');
+
+      // Check screen recording permission FIRST (required for displays/windows)
+      console.log('🔒 [SESSIONS ZONE] Checking screen recording permission...');
+      const hasScreenPermission = await checkVideoPermission();
+      console.log(`🔒 [SESSIONS ZONE] Screen recording permission: ${hasScreenPermission ? 'GRANTED' : 'DENIED'}`);
+
+      // Timeout wrapper to prevent indefinite hangs
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Device enumeration timed out after 10s')), 10000)
+      );
+
+      const result = await Promise.race([
+        Promise.all([
+          // Audio devices - usually work without special permissions
+          getAudioDevices().catch(err => {
+            console.warn('⚠️ [SESSIONS ZONE] Audio device enumeration failed:', err);
+            toast.error('Failed to load audio devices', {
+              description: err.message || 'Check microphone permissions in System Settings'
+            });
+            return [] as import('../types').AudioDevice[];
+          }),
+
+          // Displays - requires screen recording permission
+          hasScreenPermission
+            ? enumerateDisplays().catch(err => {
+                console.warn('⚠️ [SESSIONS ZONE] Display enumeration failed:', err);
+                toast.error('Failed to load displays', {
+                  description: err.message
+                });
+                return [] as import('../types').DisplayInfo[];
+              })
+            : (console.log('⚠️ [SESSIONS ZONE] Skipping display enumeration - no screen recording permission'),
+               Promise.resolve([] as import('../types').DisplayInfo[])),
+
+          // Windows - requires screen recording permission
+          hasScreenPermission
+            ? enumerateWindows().catch(err => {
+                console.warn('⚠️ [SESSIONS ZONE] Window enumeration failed:', err);
+                toast.error('Failed to load windows', {
+                  description: err.message
+                });
+                return [] as import('../types').WindowInfo[];
+              })
+            : (console.log('⚠️ [SESSIONS ZONE] Skipping window enumeration - no screen recording permission'),
+               Promise.resolve([] as import('../types').WindowInfo[])),
+
+          // Webcams - requires camera permission (will fail gracefully if denied)
+          enumerateWebcams().catch(err => {
+            console.warn('⚠️ [SESSIONS ZONE] Webcam enumeration failed:', err);
+            // Only show error if it's not a permission issue
+            if (!err.message?.includes('permission') && !err.message?.includes('authorized')) {
+              toast.error('Failed to load webcams', {
+                description: 'Check camera permissions in System Settings'
+              });
+            }
+            return [] as import('../types').WebcamInfo[];
+          }),
+        ]),
+        timeoutPromise
+      ]).catch(err => {
+        console.error('❌ [SESSIONS ZONE] Device loading timeout:', err);
+        toast.error('Device loading timed out', {
+          description: 'Some devices may not be available'
+        });
+        return [
+          [] as import('../types').AudioDevice[],
+          [] as import('../types').DisplayInfo[],
+          [] as import('../types').WindowInfo[],
+          [] as import('../types').WebcamInfo[]
+        ] as [import('../types').AudioDevice[], import('../types').DisplayInfo[], import('../types').WindowInfo[], import('../types').WebcamInfo[]];
+      });
+
+      const [audio, disp, wins, cams] = result;
+      setAudioDevices(audio);
+      setDisplays(disp);
+      setWindows(wins);
+      setWebcams(cams);
+      setDevicesCacheTimestamp(Date.now()); // Update cache timestamp
+
+      // Show permission warning if needed
+      if (!hasScreenPermission && (disp.length === 0 || wins.length === 0)) {
+        toast.warning('Screen Recording Permission Required', {
+          description: 'Grant permission in System Settings to record displays or windows',
+          duration: 8000,
+        });
+      }
+
+      console.log('📱 [SESSIONS ZONE] Devices loaded:', {
+        audioCount: audio.length,
+        displayCount: disp.length,
+        windowCount: wins.length,
+        webcamCount: cams.length,
+        screenPermission: hasScreenPermission
+      });
+    } catch (error) {
+      console.error('❌ [SESSIONS ZONE] Failed to load devices:', error);
+      toast.error('Failed to load recording devices', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Set empty arrays so UI doesn't break
+      setAudioDevices([]);
+      setDisplays([]);
+      setWindows([]);
+      setWebcams([]);
+    } finally {
+      setLoadingDevices(false);
+    }
+  }, [audioDevices.length, displays.length, windows.length, webcams.length, loadingDevices, devicesCacheTimestamp, DEVICE_CACHE_TTL_MS, checkVideoPermission, getAudioDevices, enumerateDisplays, enumerateWindows, enumerateWebcams]);
 
   // Register session list as scroll container for menu morphing
   useEffect(() => {
@@ -194,29 +403,17 @@ export default function SessionsZone() {
   // State for compact mode - enables icon-only buttons when space is constrained
   const [compactMode, setCompactMode] = useState(false);
 
-  const activeSession = sessions.find(s => s.id === activeSessionId);
-
   // Get the selected session from state by ID (always fresh, never stale)
   const selectedSessionForDetail = selectedSessionId
     ? sessions.find(s => s.id === selectedSessionId)
     : null;
 
-  // Debug logging for right panel rendering decision
-  console.log('🖼️ [Right Panel] Render decision:', {
-    selectedSessionId,
-    selectedSessionForDetail: selectedSessionForDetail?.id,
-    selectedSessionForDetailStatus: selectedSessionForDetail?.status,
-    activeSessionId,
-    activeSession: activeSession?.id,
-    activeSessionStatus: activeSession?.status,
-    willShow: selectedSessionForDetail ? 'selectedSessionForDetail' : activeSession ? 'activeSession' : 'empty'
-  });
 
-  // Update refs on every render (cheap operation, avoids stale closures)
+  // Update prevActiveSessionId state to detect completion transitions
+  // Converted from ref-based tracking to state-based for proper React flow
   useEffect(() => {
-    activeSessionIdRef.current = activeSessionId;
-    stateRef.current = { sessions };
-  }, [activeSessionId, sessions]);
+    setPrevActiveSessionId(activeSessionId ?? null);
+  }, [activeSessionId]);
 
   // Show sessions intro tooltip when user first opens Sessions zone with no sessions
   useEffect(() => {
@@ -245,10 +442,10 @@ export default function SessionsZone() {
    
 
   // Get all past sessions, filtering out corrupted ones
-  const allPastSessions = sessions
+  const allPastSessions = useMemo(() => sessions
     .filter(s => {
-      // Only include completed sessions
-      if (s.status !== 'completed') return false;
+      // Only include completed and interrupted sessions (both represent past work)
+      if (s.status !== 'completed' && s.status !== 'interrupted') return false;
 
       // Filter out corrupted sessions with invalid data
       if (!s.id || !s.name || !s.startTime) {
@@ -267,7 +464,7 @@ export default function SessionsZone() {
     })
     .sort((a, b) =>
       new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-    );
+    ), [sessions]);
 
   // Extract unique tags for filter options
   const uniqueTags = useMemo(() => {
@@ -299,6 +496,25 @@ export default function SessionsZone() {
   }, [allPastSessions]);
 
   // Apply filters, search, and sorting
+  // Query Engine Integration (Phase 3.3)
+  // NOTE: The query engine provides 40x faster queries when indexes are built.
+  // For now, we use in-memory filtering, but the query engine can be used like this:
+  //
+  // const { querySessions } = useSessions();
+  // const filters: QueryFilter[] = [];
+  //
+  // if (selectedFilter && selectedFilter !== 'all') {
+  //   filters.push({ field: 'status', operator: '=', value: 'completed' });
+  // }
+  //
+  // const results = await querySessions(
+  //   filters,
+  //   { field: 'date', direction: 'desc' },
+  //   100
+  // );
+  //
+  // This would use the date/status indexes automatically for 40x speedup.
+
   const filteredSessions = useMemo(() => {
     let filtered = allPastSessions;
 
@@ -320,6 +536,26 @@ export default function SessionsZone() {
     if (selectedTags.length > 0) {
       filtered = filtered.filter(s =>
         s.tags && s.tags.some(tag => selectedTags.includes(tag))
+      );
+    }
+
+    // Apply company filters (using unified relationships)
+    if (selectedCompanyIds.length > 0) {
+      filtered = filtered.filter(s =>
+        s.relationships?.some(rel =>
+          rel.targetType === 'company' &&
+          selectedCompanyIds.includes(rel.targetId)
+        )
+      );
+    }
+
+    // Apply contact filters (using unified relationships)
+    if (selectedContactIds.length > 0) {
+      filtered = filtered.filter(s =>
+        s.relationships?.some(rel =>
+          rel.targetType === 'contact' &&
+          selectedContactIds.includes(rel.targetId)
+        )
       );
     }
 
@@ -374,7 +610,7 @@ export default function SessionsZone() {
     });
 
     return sorted;
-  }, [allPastSessions, selectedCategories, selectedSubCategories, selectedTags, selectedFilter, searchQuery, sortBy]);
+  }, [allPastSessions, selectedCategories, selectedSubCategories, selectedTags, selectedCompanyIds, selectedContactIds, selectedFilter, searchQuery, sortBy]);
 
   // Memoize grouped sessions to avoid re-calculating on every render
   const groupedSessions = useMemo(() => groupSessionsByDate(filteredSessions), [filteredSessions]);
@@ -473,32 +709,36 @@ export default function SessionsZone() {
 
   /**
    * Handle screenshot capture callback
-   * Note: Only depends on addScreenshot and updateScreenshotAnalysis to avoid recreating on every session update
-   * Uses stateRef to access latest state without causing callback recreation
+   * NOTE: Previously used activeSessionIdRef and stateRef to avoid stale closures.
+   * Now uses activeSession from context which provides fresh state automatically.
+   * This callback will re-create when activeSession changes, which is correct behavior.
    */
+  // Store activeSession in a ref so the callback can always get the fresh value
+  const activeSessionRef = useRef(activeSession);
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
+
   const handleScreenshotCaptured = useCallback(async (screenshot: SessionScreenshot) => {
-    console.log('📸 Screenshot captured, starting AI analysis...');
+    console.log('📸 Screenshot captured, starting AI analysis...', screenshot.id);
 
-    // Get current active session ID from ref (avoids stale closure)
-    const currentActiveSessionId = activeSessionIdRef.current;
-    if (!currentActiveSessionId) return;
+    // Add screenshot to session (Phase 1 API - no sessionId needed)
+    await addScreenshot(screenshot);
 
-    // Add screenshot to session
-    addScreenshot(currentActiveSessionId, screenshot);
-
-    // Get the session from stateRef to check autoAnalysis setting
-    const sessionForAnalysis = stateRef.current.sessions.find(s => s.id === currentActiveSessionId);
-    if (!sessionForAnalysis) return;
+    // Get fresh activeSession from ref (not from closure)
+    const currentSession = activeSessionRef.current;
 
     // Trigger AI analysis if enabled
-    if (sessionForAnalysis.autoAnalysis) {
+    if (currentSession?.autoAnalysis) {
       try {
         // Update status to 'analyzing'
         updateScreenshotAnalysis(screenshot.id, undefined, 'analyzing');
 
-        // Load the screenshot attachment from storage
+        // Load the screenshot attachment from storage (Phase 4)
         console.log('📷 Loading screenshot attachment:', screenshot.attachmentId);
-        const attachment = await attachmentStorage.getAttachment(screenshot.attachmentId);
+        const caStorage = await getCAStorage();
+        const identifier = screenshot.hash || screenshot.attachmentId;
+        const attachment = await caStorage.loadAttachment(identifier);
 
         if (!attachment || !attachment.base64) {
           throw new Error('Screenshot attachment not found or has no image data');
@@ -511,10 +751,10 @@ export default function SessionsZone() {
           mimeType
         });
 
-        // Analyze with AI (use sessionForAnalysis which has latest state)
+        // Analyze with AI
         const analysis = await sessionsAgentService.analyzeScreenshot(
           screenshot,
-          sessionForAnalysis,
+          currentSession,
           screenshotData,
           mimeType
         );
@@ -524,10 +764,71 @@ export default function SessionsZone() {
 
         console.log('✅ Screenshot analysis complete');
 
+        // Emit event for Live Session Intelligence
+        LiveSessionEventEmitter.emitScreenshotAnalyzed(currentSession.id, screenshot);
+
         // Feed AI curiosity score back to adaptive scheduler (if active)
-        if (analysis && analysis.curiosity !== undefined && adaptiveScreenshotScheduler.isActive()) {
-          adaptiveScreenshotScheduler.updateCuriosityScore(analysis.curiosity);
+        if (analysis && analysis.curiosity !== undefined) {
+          updateCuriosityScore(analysis.curiosity);
           console.log(`🧠 [ADAPTIVE] Curiosity score updated: ${analysis.curiosity.toFixed(1)}`);
+        }
+
+        // Auto-create lightweight entities from detected entities (topics, companies, contacts)
+        // NOTE: We do NOT auto-create notes/tasks - those require user confirmation
+        if (analysis && analysis.detectedEntities) {
+          const { topics, companies, contacts } = analysis.detectedEntities;
+
+          // Create topics (subjects/projects/concepts)
+          topics.forEach(topic => {
+            // Check if topic already exists (fuzzy match)
+            const existing = entitiesState.topics.find(t =>
+              t.name.toLowerCase() === topic.name.toLowerCase()
+            );
+            if (!existing && topic.confidence >= 0.5) {
+              console.log(`🏷️ [SESSION] Auto-creating topic: ${topic.name} (confidence: ${topic.confidence.toFixed(2)})`);
+              addTopic({
+                id: `topic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: topic.name,
+                noteCount: 0,
+                createdAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString(),
+              });
+            }
+          });
+
+          // Create companies (organizations)
+          companies.forEach(company => {
+            const existing = entitiesState.companies.find(c =>
+              c.name.toLowerCase() === company.name.toLowerCase()
+            );
+            if (!existing && company.confidence >= 0.5) {
+              console.log(`🏢 [SESSION] Auto-creating company: ${company.name} (confidence: ${company.confidence.toFixed(2)})`);
+              addCompany({
+                id: `company_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: company.name,
+                noteCount: 0,
+                createdAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString(),
+              });
+            }
+          });
+
+          // Create contacts (people)
+          contacts.forEach(contact => {
+            const existing = entitiesState.contacts.find(c =>
+              c.name.toLowerCase() === contact.name.toLowerCase()
+            );
+            if (!existing && contact.confidence >= 0.5) {
+              console.log(`👤 [SESSION] Auto-creating contact: ${contact.name} (confidence: ${contact.confidence.toFixed(2)})`);
+              addContact({
+                id: `contact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: contact.name,
+                noteCount: 0,
+                createdAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString(),
+              });
+            }
+          });
         }
       } catch (error) {
         console.error('❌ Screenshot analysis failed:', error);
@@ -539,212 +840,48 @@ export default function SessionsZone() {
         );
       }
     }
-  }, [updateScreenshotAnalysis]);
+  }, [addScreenshot, updateScreenshotAnalysis, updateCuriosityScore]);
 
   /**
    * Handle audio segment processed callback
-   * Note: Only depends on addAudioSegment to avoid recreating on every session update
+   * NOTE: Previously used activeSessionIdRef to avoid stale closures.
+   * Now uses activeSession from context which provides fresh state automatically.
+   * This callback will re-create when activeSession changes, which is correct behavior.
    */
   const handleAudioSegmentProcessed = useCallback(async (segment: SessionAudioSegment) => {
     console.log('🎤 Audio segment processed:', segment.id);
 
-    // Get current active session ID from ref (avoids stale closure)
-    const currentActiveSessionId = activeSessionIdRef.current;
-    if (!currentActiveSessionId) return;
+    // Get current active session from context (always fresh, no stale closure)
+    if (!activeSession) return;
 
-    // Add audio segment to session
-    addAudioSegment(currentActiveSessionId, segment);
+    // Add audio segment to session (Phase 1 API - no sessionId needed)
+    addAudioSegment(segment);
 
     console.log('✅ Audio segment added to session');
-  }, [addAudioSegment]);
-
-  // Update ref whenever callback changes
-  useEffect(() => {
-    handleAudioSegmentProcessedRef.current = handleAudioSegmentProcessed;
-  }, [handleAudioSegmentProcessed]);
+  }, [activeSession, addAudioSegment]);
 
   /**
    * Manage screenshot capture and audio recording lifecycle
    */
+  // Minimal observer for UI state only - machine handles all service orchestration
   useEffect(() => {
-    console.log('🔵 [SESSIONS ZONE] useEffect triggered');
-    console.log('🔵 [SESSIONS ZONE] activeSession:', activeSession?.id, 'status:', activeSession?.status);
-
     if (!activeSession) {
-      // No active session - stop capture and audio
-      console.log('⛔ [SESSIONS ZONE] No active session, stopping capture and audio');
-      screenshotCaptureService.stopCapture();
-      audioRecordingService.stopRecording();
+      console.log('⛔ [SESSIONS ZONE] No active session');
       return;
     }
 
-    if (activeSession.status === 'active') {
-      // Active session - start or resume capture
-      const isCapturingThisSession = screenshotCaptureService.getActiveSessionId() === activeSession.id;
-      const isCurrentlyCapturing = screenshotCaptureService.isCapturing();
-      const isAudioRecording = audioRecordingService.isCurrentlyRecording();
+    console.log(`[SESSIONS ZONE] Active session status: ${activeSession.status}`);
 
-      console.log('🔵 [SESSIONS ZONE] Active session detected');
-      console.log('🔵 [SESSIONS ZONE] isCapturingThisSession:', isCapturingThisSession);
-      console.log('🔵 [SESSIONS ZONE] isCurrentlyCapturing:', isCurrentlyCapturing);
-      console.log('🔵 [SESSIONS ZONE] isAudioRecording:', isAudioRecording);
-
-      // Handle screenshot capture based on enableScreenshots setting
-      if (activeSession.enableScreenshots) {
-        // Only start capture if not already capturing this session, or if we need to restart for settings changes
-        // Check if we're already capturing this specific session
-        if (!isCurrentlyCapturing || !isCapturingThisSession) {
-          console.log('🚀 [SESSIONS ZONE] Starting screenshot capture for session:', activeSession.id);
-
-          // Check permissions before starting (macOS only, non-blocking)
-          checkScreenRecordingPermission().then(hasPermission => {
-            if (!hasPermission) {
-              console.warn('⚠️ Screen recording permission may not be granted');
-              showMacOSPermissionInstructions();
-            } else {
-              console.log('✅ [SESSIONS ZONE] Screen recording permission granted');
-            }
-          });
-
-          screenshotCaptureService.startCapture(activeSession, handleScreenshotCaptured);
-        } else {
-          console.log('✅ [SESSIONS ZONE] Already capturing for this session');
-        }
-      } else {
-        // Screenshots are disabled - stop capture if running
-        if (isCurrentlyCapturing && isCapturingThisSession) {
-          console.log('⏹️ [SESSIONS ZONE] Stopping screenshot capture (disabled by user)');
-          screenshotCaptureService.stopCapture();
-        } else {
-          console.log('⏭️ [SESSIONS ZONE] Screenshot capture disabled for this session (audio-only mode)');
-        }
-      }
-
-      // Handle audio recording based on audioRecording setting
-      if (activeSession.audioRecording) {
-        // Audio is enabled
-        if (!isAudioRecording) {
-          console.log('🚀 [SESSIONS ZONE] Starting audio recording');
-          audioRecordingService.startRecording(activeSession, handleAudioSegmentProcessed)
-            .catch(error => {
-              console.error('❌ [SESSIONS ZONE] Failed to start audio recording:', error);
-              // Don't throw - audio failure shouldn't stop the session
-            });
-        } else {
-          console.log('✅ [SESSIONS ZONE] Already recording audio');
-        }
-      } else {
-        // Audio is disabled - stop recording if running
-        if (isAudioRecording) {
-          console.log('⏹️ [SESSIONS ZONE] Stopping audio recording (disabled by user)');
-          audioRecordingService.stopRecording();
-        }
-      }
-
-      // Handle video recording based on videoRecording setting
-      console.log('🎬 [SESSIONS ZONE] Video recording check - videoRecording flag:', activeSession.videoRecording, 'session:', activeSession.id);
-      if (activeSession.videoRecording) {
-        // Video is enabled - check backend recording status
-        const activeVideoSessionId = videoRecordingService.getActiveSessionId();
-        const isAlreadyRecordingThisSession = activeVideoSessionId === activeSession.id;
-        const hasAttemptedInitialization = videoRecordingInitializedRef.current === activeSession.id;
-
-        console.log('🎬 [SESSIONS ZONE] Video is ENABLED - activeVideoSessionId:', activeVideoSessionId, 'currentSession:', activeSession.id, 'hasAttempted:', hasAttemptedInitialization);
-
-        if (!isAlreadyRecordingThisSession && !hasAttemptedInitialization) {
-          // Mark as attempted to prevent duplicate initialization
-          videoRecordingInitializedRef.current = activeSession.id;
-
-          // Check backend recording status and forcefully stop any existing recording
-          console.log('🎬 [SESSIONS ZONE] Checking backend recording status...');
-          videoRecordingService.isCurrentlyRecording()
-            .then(isRecording => {
-              console.log('🎬 [SESSIONS ZONE] Backend recording status:', isRecording);
-
-              if (isRecording) {
-                console.warn('⚠️ [SESSIONS ZONE] Backend has active recording - forcefully stopping before starting new one');
-                return videoRecordingService.stopRecording()
-                  .catch(err => {
-                    console.error('❌ [SESSIONS ZONE] Failed to stop existing recording:', err);
-                    // Continue anyway - try to start
-                    
-                  });
-              }
-              
-            })
-            .then(() => {
-              // Now start the new recording
-              console.log('🎬 [SESSIONS ZONE] Starting video recording for session:', activeSession.id);
-              return videoRecordingService.startRecording(activeSession);
-            })
-            .then(() => {
-              console.log('✅ [SESSIONS ZONE] Video recording started successfully for session:', activeSession.id);
-            })
-            .catch(error => {
-              console.error('❌ [SESSIONS ZONE] Failed to start video recording:', error);
-              // Reset the flag so user can retry manually if needed
-              videoRecordingInitializedRef.current = null;
-              // Don't throw - video failure shouldn't stop the session
-            });
-        } else if (isAlreadyRecordingThisSession) {
-          console.log('✅ [SESSIONS ZONE] Already recording video for this session:', activeSession.id);
-        } else {
-          console.log('ℹ️ [SESSIONS ZONE] Video initialization already attempted for session:', activeSession.id);
-        }
-      } else {
-        // Video is disabled - stop recording if running
-        console.log('⚠️ [SESSIONS ZONE] Video is DISABLED for session:', activeSession.id);
-        const activeVideoSessionId = videoRecordingService.getActiveSessionId();
-        if (activeVideoSessionId === activeSession.id) {
-          console.log('⏹️ [SESSIONS ZONE] Stopping video recording (disabled by user)');
-          videoRecordingService.stopRecording()
-            .catch(error => {
-              console.error('❌ [SESSIONS ZONE] Failed to stop video recording:', error);
-            });
-          // Reset initialization flag when video is disabled
-          videoRecordingInitializedRef.current = null;
-        } else {
-          console.log('ℹ️ [SESSIONS ZONE] No video to stop for this session');
-        }
-      }
-    } else if (activeSession.status === 'paused') {
-      // Paused session - pause capture and audio
-      console.log('⏸️ [SESSIONS ZONE] Session paused, pausing capture and audio');
-      screenshotCaptureService.pauseCapture();
-      audioRecordingService.pauseRecording();
-    } else if (activeSession.status === 'completed') {
-      // Completed session - stop capture and audio, but allow grace period for pending audio
-      console.log('⏹️ [SESSIONS ZONE] Session completed, stopping capture');
-      screenshotCaptureService.stopCapture();
-
-      // Stop audio recording (Rust backend stops sending new chunks)
-      console.log('⏹️ [SESSIONS ZONE] Stopping audio recording (waiting for pending chunks...)');
-      audioRecordingService.stopRecording();
-
-      // NOTE: Video stopping is handled by the dedicated useEffect below (VIDEO COMPLETION)
-      // to avoid race conditions and duplicate stops. The separate useEffect ensures video
-      // is stopped exactly once when the session completes.
-
-      // Wait for pending audio chunks to be processed before cleanup
-      // Audio events may still arrive for ~5 seconds after stopping
+    // Session agent cleanup on completion
+    if (activeSession.status === 'completed') {
       const cleanupTimer = setTimeout(() => {
-        console.log('🧹 [SESSIONS ZONE] Grace period ended, clearing session context');
+        console.log('🧹 [SESSIONS ZONE] Clearing session context');
         sessionsAgentService.clearSessionContext(activeSession.id);
       }, 5000);
 
       return () => clearTimeout(cleanupTimer);
     }
-
-    // Cleanup on unmount
-    return () => {
-      console.log('🔵 [SESSIONS ZONE] useEffect cleanup');
-      if (activeSession?.status === 'completed') {
-        screenshotCaptureService.stopCapture();
-        audioRecordingService.stopRecording();
-        // NOTE: Video stopping is handled by dedicated useEffect (VIDEO COMPLETION)
-      }
-    };
-  }, [activeSession?.id, activeSession?.status, activeSession?.audioRecording, activeSession?.videoRecording, activeSession?.enableScreenshots, activeSession?.screenshotInterval, handleScreenshotCaptured, handleAudioSegmentProcessed]);
+  }, [activeSession?.id, activeSession?.status]);
 
   /**
    * Detect session completion transition and stop video recording
@@ -753,31 +890,30 @@ export default function SessionsZone() {
    * It catches the moment when a session completes and stops the video exactly once.
    */
   useEffect(() => {
-    const prevSessionId = prevActiveSessionIdRef.current;
     const currentSessionId = activeSessionId;
 
     console.log('🎬 [VIDEO COMPLETION] Checking for session completion transition');
-    console.log('🎬 [VIDEO COMPLETION] prevSessionId:', prevSessionId, 'currentSessionId:', currentSessionId);
+    console.log('🎬 [VIDEO COMPLETION] prevSessionId:', prevActiveSessionId, 'currentSessionId:', currentSessionId);
 
     // Detect session completion: had active session, now undefined
-    if (prevSessionId && !currentSessionId) {
-      const completedSession = sessions.find(s => s.id === prevSessionId && s.status === 'completed');
+    if (prevActiveSessionId && !currentSessionId) {
+      const completedSession = sessions.find(s => s.id === prevActiveSessionId && s.status === 'completed');
 
-      console.log('🎬 [VIDEO COMPLETION] Detected activeSessionId cleared, looking for completed session:', prevSessionId);
+      console.log('🎬 [VIDEO COMPLETION] Detected activeSessionId cleared, looking for completed session:', prevActiveSessionId);
       console.log('🎬 [VIDEO COMPLETION] Found completed session:', completedSession?.id, 'status:', completedSession?.status);
 
       if (completedSession) {
         console.log('⏹️ [VIDEO COMPLETION] Session completed, stopping video recording...');
 
         // Check if video was recording for this session
-        const activeVideoSessionId = videoRecordingService.getActiveSessionId();
+        const activeVideoSessionId = getActiveVideoSessionId();
         console.log('🎬 [VIDEO COMPLETION] activeVideoSessionId:', activeVideoSessionId, 'completedSessionId:', completedSession.id);
 
         if (activeVideoSessionId === completedSession.id) {
           console.log('⏹️ [VIDEO COMPLETION] Stopping video recording for completed session:', completedSession.id);
 
           // Stop recording - this is the ONLY place video stopping happens
-          videoRecordingService.stopRecording()
+          stopVideo()
             .then(async (sessionVideo) => {
               if (sessionVideo) {
                 console.log('✅ [VIDEO COMPLETION] Video recording stopped, sessionVideo:', sessionVideo);
@@ -789,10 +925,9 @@ export default function SessionsZone() {
                   return;
                 }
 
-                // Update session with video data
+                // Update session with video data (Phase 1 API - id and updates)
                 console.log('✅ [VIDEO COMPLETION] Updating session with video data for session:', freshSession.id);
-                updateSession({
-                  ...freshSession, // Use fresh session to avoid overwriting concurrent updates
+                updateSession(freshSession.id, {
                   video: sessionVideo
                 });
                 console.log('✅ [VIDEO COMPLETION] Session updated with video');
@@ -805,24 +940,64 @@ export default function SessionsZone() {
               }
 
               // Reset initialization flag after stopping
-              videoRecordingInitializedRef.current = null;
+              setVideoInitializedSessionId(null);
             })
             .catch(error => {
               console.error('❌ [VIDEO COMPLETION] Failed to stop video recording:', error);
               // Reset flag even on error to allow retry in next session
-              videoRecordingInitializedRef.current = null;
+              setVideoInitializedSessionId(null);
             });
         } else {
           console.log('ℹ️ [VIDEO COMPLETION] No video to stop - activeVideoSessionId:', activeVideoSessionId, 'completedSession:', completedSession.id);
           // Reset flag since this session is ending
-          videoRecordingInitializedRef.current = null;
+          setVideoInitializedSessionId(null);
         }
       }
     }
 
-    // Update prev ref for next render
-    prevActiveSessionIdRef.current = currentSessionId ?? null;
-  }, [activeSessionId, sessions, updateSession]);
+    // Update prev state for next render
+    setPrevActiveSessionId(currentSessionId ?? null);
+  }, [activeSessionId, sessions, updateSession, prevActiveSessionId, getActiveVideoSessionId, stopVideo]);
+
+  /**
+   * TASK 11: Listen for media processing events to show/hide processing screen
+   * MEMORY LEAK FIX: Use functional setState to avoid dependency on processingSessionId
+   */
+  useEffect(() => {
+    // Subscribe to processing start event (emitted from ActiveSessionContext)
+    const unsubscribeProgress = eventBus.on('media-processing-progress', (event: any) => {
+      console.log('[SessionsZone] Media processing progress:', event);
+      // Show processing screen for this session (functional setState)
+      setProcessingSessionId(prev => {
+        if (!prev || prev !== event.sessionId) {
+          return event.sessionId;
+        }
+        return prev;
+      });
+    });
+
+    // Subscribe to complete event (hide processing screen)
+    const unsubscribeComplete = eventBus.on('media-processing-complete', (event: any) => {
+      console.log('[SessionsZone] Media processing complete:', event);
+      // Hide processing screen after a delay (let user see "Complete!" state)
+      setTimeout(() => {
+        setProcessingSessionId(null);
+      }, 2000);
+    });
+
+    // Subscribe to error event (hide processing screen)
+    const unsubscribeError = eventBus.on('media-processing-error', (event: any) => {
+      console.error('[SessionsZone] Media processing error:', event);
+      // Hide processing screen on error
+      setProcessingSessionId(null);
+    });
+
+    return () => {
+      unsubscribeProgress();
+      unsubscribeComplete();
+      unsubscribeError();
+    };
+  }, []); // Stable - no dependencies, prevents listener accumulation
 
   /**
    * Listen for menu bar session control events
@@ -838,7 +1013,7 @@ export default function SessionsZone() {
       unlistenPause = await listen('menubar-pause-session', () => {
         console.log('📊 [MENU BAR] Pause session requested');
         if (activeSession) {
-          pauseSession(activeSession.id );
+          pauseSession();
         }
       });
 
@@ -846,7 +1021,7 @@ export default function SessionsZone() {
       unlistenResume = await listen('menubar-resume-session', () => {
         console.log('📊 [MENU BAR] Resume session requested');
         if (activeSession) {
-          resumeSession(activeSession.id );
+          resumeSession();
         }
       });
 
@@ -885,7 +1060,7 @@ export default function SessionsZone() {
             };
 
             // Save screenshot to attachmentStorage
-            const attachment = {
+            const attachment: any = {
               id: attachmentId,
               type: 'screenshot' as const,
               name: `Quick Capture ${new Date().toLocaleTimeString()}.png`,
@@ -895,7 +1070,11 @@ export default function SessionsZone() {
               base64: base64Data,
             };
 
-            await attachmentStorage.saveAttachment(attachment);
+            // Phase 4: Save to CA storage
+            const caStorage = await getCAStorage();
+            const hash = await caStorage.saveAttachment(attachment);
+            attachment.hash = hash;
+            await caStorage.addReference(hash, activeSession.id, attachment.id);
 
             // Trigger the regular screenshot handler
             handleScreenshotCaptured(screenshot);
@@ -918,99 +1097,6 @@ export default function SessionsZone() {
       if (unlistenQuickCapture) unlistenQuickCapture();
     };
   }, [activeSession, pauseSession, resumeSession, endSession, handleScreenshotCaptured]);
-
-  /**
-   * Listen for audio-chunk events from Rust audio recorder
-   * Using refs to prevent duplicate listeners and stale closures
-   *
-   * CRITICAL FIX: This effect handles the async nature of listen() properly to prevent
-   * duplicate listeners in React Strict Mode. The cleanup function ensures that any
-   * in-progress setup is canceled and existing listeners are properly removed.
-   */
-  useEffect(() => {
-    let unlistenAudioChunk: (() => void) | undefined;
-    let isCancelled = false;
-
-    const setupAudioListener = async () => {
-      // Check if listener is already active (prevents duplicate registration)
-      if (audioListenerActiveRef.current) {
-        console.log('🎤 [AUDIO LISTENER] Already active, skipping duplicate setup');
-        return;
-      }
-
-      console.log('🎤 [AUDIO LISTENER] Setting up audio-chunk listener');
-
-      // Mark listener as active
-      audioListenerActiveRef.current = true;
-
-      const unlistenFn = await listen<{sessionId: string; audioBase64: string; duration: number}>('audio-chunk', async (event) => {
-        console.log('🎤 [AUDIO CHUNK] Received audio chunk from Rust');
-
-        const { sessionId, audioBase64, duration } = event.payload;
-
-        // Debug logging
-        console.log('🎤 [AUDIO CHUNK] Payload sessionId:', sessionId);
-        console.log('🎤 [AUDIO CHUNK] activeSessionIdRef.current:', activeSessionIdRef.current);
-
-        // Only process if this is for the active session (read from ref to avoid stale closure)
-        if (!activeSessionIdRef.current || activeSessionIdRef.current !== sessionId) {
-          console.warn('⚠️  [AUDIO CHUNK] Received audio for inactive session, ignoring', {
-            hasActiveSession: !!activeSessionIdRef.current,
-            activeSessionId: activeSessionIdRef.current,
-            receivedSessionId: sessionId,
-            match: activeSessionIdRef.current === sessionId
-          });
-          return;
-        }
-
-        // Get current handler from ref (prevents stale closure)
-        const handler = handleAudioSegmentProcessedRef.current;
-        if (!handler) {
-          console.warn('⚠️  [AUDIO CHUNK] No handler available, ignoring');
-          return;
-        }
-
-        // Process the audio chunk through OpenAI and create the segment
-        // The audioRecordingService will create the SessionAudioSegment and call our callback
-        try {
-          await audioRecordingService.processAudioChunk(
-            audioBase64,
-            duration,
-            sessionId,
-            handler
-          );
-        } catch (error) {
-          console.error('❌ [AUDIO CHUNK] Failed to process audio chunk:', error);
-        }
-      });
-
-      // Check if cleanup was called while we were setting up
-      if (isCancelled) {
-        console.log('🎤 [AUDIO LISTENER] Setup was cancelled, cleaning up immediately');
-        unlistenFn();
-        return;
-      }
-
-      // Store the unlisten function for cleanup
-      unlistenAudioChunk = unlistenFn;
-      console.log('🎤 [AUDIO LISTENER] Audio-chunk listener registered successfully');
-    };
-
-    setupAudioListener();
-
-    // Cleanup listener on unmount or re-render
-    return () => {
-      console.log('🎤 [AUDIO LISTENER] Cleanup called');
-      isCancelled = true;
-      if (unlistenAudioChunk) {
-        console.log('🎤 [AUDIO LISTENER] Removing audio-chunk listener');
-        unlistenAudioChunk();
-        unlistenAudioChunk = undefined;
-      }
-      // Reset the active flag to allow re-registration
-      audioListenerActiveRef.current = false;
-    };
-  }, []); // Empty dependencies - listener is set up once and uses refs for current values
 
   /**
    * Scroll-driven content expansion
@@ -1234,8 +1320,7 @@ export default function SessionsZone() {
           return;
         }
 
-        updateSession({
-          ...freshSession,  // Use fresh data, not stale closure
+        updateSession(freshSession.id, {
           name: metadata.title,
           description: metadata.description,
         });
@@ -1353,8 +1438,7 @@ export default function SessionsZone() {
           return;
         }
 
-        updateSession({
-          ...freshSession,  // Use fresh data, not stale closure
+        updateSession(freshSession.id, {
           summary,
         });
 
@@ -1392,19 +1476,27 @@ export default function SessionsZone() {
    */
   useEffect(() => {
     // When there's no active session but there was one before, it completed
-    if (!activeSession && prevActiveSessionIdRef.current) {
-      const completedSessionId = prevActiveSessionIdRef.current;
-      const completedSession = sessions.find(s => s.id === completedSessionId);
+    if (!activeSession && prevActiveSessionId) {
+      const completedSession = sessions.find(s => s.id === prevActiveSessionId);
 
       if (completedSession && completedSession.status === 'completed') {
-        console.log('🎬 Session completed, transitioning to summary view:', completedSessionId);
+        console.log('🎬 Session completed, transitioning to summary view:', prevActiveSessionId);
         setSelectedSessionId(completedSession.id);
       }
     }
+  }, [activeSession, sessions, prevActiveSessionId]);
 
-    // Update the ref for next render
-    prevActiveSessionIdRef.current = activeSession?.id || null;
-  }, [activeSession, sessions]);
+  // Helper to open System Settings for permissions
+  const openSystemSettings = useCallback(async (permission: string) => {
+    try {
+      await invoke('open_system_preferences', { pane: permission });
+    } catch (error) {
+      console.error('Failed to open System Settings:', error);
+      toast.error('Could not open System Settings', {
+        description: 'Please open System Settings manually and grant the required permission.'
+      });
+    }
+  }, []);
 
   const handleStartSession = (sessionData: Partial<Session>) => {
     startSession({
@@ -1420,7 +1512,9 @@ export default function SessionsZone() {
       audioMode: sessionData.audioMode || 'off',
       audioReviewCompleted: false,
       videoRecording: sessionData.videoRecording ?? false,
-    });
+      audioConfig: sessionData.audioConfig, // PASS THROUGH AUDIO CONFIG
+      videoConfig: sessionData.videoConfig, // PASS THROUGH VIDEO CONFIG
+    }, handleScreenshotCaptured); // Pass screenshot callback for AI analysis
   };
 
   // Session settings state (for top controls)
@@ -1434,6 +1528,7 @@ export default function SessionsZone() {
       name: 'Quick Session',
       description: 'Started quickly without description',
       status: 'active',
+      relationships: [],
       tags: [],
       screenshotInterval: lastSettings.screenshotInterval,
       enableScreenshots: lastSettings.enableScreenshots,
@@ -1442,8 +1537,41 @@ export default function SessionsZone() {
       audioMode: lastSettings.audioRecording ? 'transcription' : 'off',
       audioReviewCompleted: false,
       videoRecording: lastSettings.videoRecording,
-    });
+    }, handleScreenshotCaptured); // Pass screenshot callback for AI analysis
   };
+
+  // Wrapper to accept Partial<Session> from modal and provide all required defaults
+  const handleStartSessionFromModal = useCallback(async (config: Partial<Session>) => {
+    const audioRecording = config.audioRecording ?? lastSettings.audioRecording;
+    const sessionData = {
+      name: config.name || `Session ${new Date().toLocaleString()}`,
+      description: config.description || '',
+      status: 'active' as const,
+      relationships: [],
+      tags: config.tags || [],
+      screenshotInterval: config.screenshotInterval ?? lastSettings.screenshotInterval,
+      enableScreenshots: config.enableScreenshots ?? lastSettings.enableScreenshots,
+      autoAnalysis: config.autoAnalysis ?? lastSettings.autoAnalysis,
+      audioRecording,
+      audioMode: audioRecording ? ('transcription' as const) : ('off' as const),
+      audioReviewCompleted: false,
+      videoRecording: config.videoRecording ?? lastSettings.videoRecording,
+      ...(config.audioConfig && { audioConfig: config.audioConfig }),
+      ...(config.videoConfig && { videoConfig: config.videoConfig }),
+    };
+
+    // Save settings for next time
+    saveLastSessionSettings({
+      screenshotInterval: sessionData.screenshotInterval,
+      enableScreenshots: sessionData.enableScreenshots,
+      autoAnalysis: sessionData.autoAnalysis,
+      audioRecording: sessionData.audioRecording,
+      videoRecording: sessionData.videoRecording,
+      audioSourceType: sessionData.audioConfig?.sourceType || 'microphone',
+    });
+
+    await startSessionWithCountdown(sessionData, handleScreenshotCaptured);
+  }, [lastSettings, startSessionWithCountdown, handleScreenshotCaptured]);
 
   // Update settings handlers
   const updateScreenshots = (enabled: boolean) => {
@@ -1454,7 +1582,14 @@ export default function SessionsZone() {
 
     // If session is active, update the running session too
     if (activeSession) {
-      updateSession({ ...activeSession, enableScreenshots: enabled });
+      updateActiveSession({ enableScreenshots: enabled });
+
+      // Show user feedback
+      addNotification({
+        type: 'info',
+        title: 'Screenshot Settings Updated',
+        message: enabled ? 'Screenshots enabled for active session' : 'Screenshots disabled for active session',
+      });
     }
   };
 
@@ -1466,7 +1601,14 @@ export default function SessionsZone() {
 
     // If session is active, update the running session too
     if (activeSession) {
-      updateSession({ ...activeSession, audioRecording: enabled });
+      updateActiveSession({ audioRecording: enabled });
+
+      // Show user feedback
+      addNotification({
+        type: 'info',
+        title: 'Audio Settings Updated',
+        message: enabled ? 'Audio recording enabled for active session' : 'Audio recording disabled for active session',
+      });
     }
   };
 
@@ -1478,7 +1620,14 @@ export default function SessionsZone() {
 
     // If session is active, update the running session too
     if (activeSession) {
-      updateSession({ ...activeSession, videoRecording: enabled });
+      updateActiveSession({ videoRecording: enabled });
+
+      // Show user feedback
+      addNotification({
+        type: 'info',
+        title: 'Video Settings Updated',
+        message: enabled ? 'Video recording enabled for active session' : 'Video recording disabled for active session',
+      });
     }
   };
 
@@ -1490,7 +1639,23 @@ export default function SessionsZone() {
 
     // If session is active, update the running session too
     if (activeSession) {
-      updateSession({ ...activeSession, screenshotInterval: interval });
+      updateActiveSession({ screenshotInterval: interval });
+
+      // Determine interval label for user feedback
+      const intervalLabel = interval === -1 ? 'Adaptive (AI-driven)' :
+                           interval === 10/60 ? '10 seconds' :
+                           interval === 0.5 ? '30 seconds' :
+                           interval === 1 ? '1 minute' :
+                           interval === 2 ? '2 minutes' :
+                           interval === 3 ? '3 minutes' :
+                           interval === 5 ? '5 minutes' : `${interval} minutes`;
+
+      // Show user feedback
+      addNotification({
+        type: 'info',
+        title: 'Screenshot Interval Updated',
+        message: `Screenshot interval changed to ${intervalLabel}`,
+      });
     }
   };
 
@@ -1516,7 +1681,7 @@ export default function SessionsZone() {
   } : lastSettings;
 
   return (
-    <div className={`h-full w-full relative flex flex-col ${BACKGROUND_GRADIENT.primary} overflow-hidden`}>
+    <div className={`h-full w-full relative flex flex-col ${BACKGROUND_GRADIENT.primary}`}>
       {/* Animated gradient overlay */}
       <div className={`absolute inset-0 ${BACKGROUND_GRADIENT.secondary} pointer-events-none`} />
 
@@ -1554,19 +1719,52 @@ export default function SessionsZone() {
         />
       </div>
 
+      {/* Loading state */}
+      {loading && (
+        <div className="relative z-10 flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mb-4"></div>
+            <p className="text-gray-400">Loading sessions...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error state */}
+      {!loading && error && (
+        <div className="relative z-10 flex-1 flex items-center justify-center">
+          <div className="text-center max-w-md">
+            <div className="text-red-500 mb-4">
+              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-200 mb-2">Failed to Load Sessions</h3>
+            <p className="text-gray-400 mb-6">{error}</p>
+            <button
+              onClick={() => refreshSessions()}
+              className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main content with padding */}
-      <div ref={mainContainerRef} className="relative z-10 flex-1 flex flex-col px-6 pb-6 min-h-0" style={{ paddingTop: '96px' }}>
+      {!loading && !error && (
+        <div ref={mainContainerRef} className="relative z-10 flex-1 flex flex-col px-6 pb-6 min-h-0" style={{ paddingTop: '96px' }}>
 
         {/* Hidden measurement element - always in FULL mode (compactMode=false) */}
         <div ref={menuBarMeasurementRef} style={{ visibility: 'hidden', position: 'absolute', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: -9999 }}>
           <SessionsTopBar
-            activeSession={activeSession}
+            activeSession={activeSession ?? undefined}
             sessions={sessions}
             allPastSessions={allPastSessions}
             isStarting={isStarting}
             isEnding={isEnding}
             countdown={countdown}
             handleQuickStart={handleQuickStart}
+            startSession={handleStartSessionFromModal}
             handleEndSession={handleEndSession}
             pauseSession={pauseSession}
             resumeSession={resumeSession}
@@ -1575,6 +1773,7 @@ export default function SessionsZone() {
             updateAudio={updateAudio}
             updateVideo={updateVideo}
             updateInterval={updateInterval}
+            updateActiveSession={updateActiveSession}
             sortBy={sortBy}
             onSortChange={setSortBy}
             selectedCategories={selectedCategories}
@@ -1583,29 +1782,42 @@ export default function SessionsZone() {
             onCategoriesChange={setSelectedCategories}
             onSubCategoriesChange={setSelectedSubCategories}
             onTagsChange={setSelectedTags}
+            selectedCompanyIds={selectedCompanyIds}
+            selectedContactIds={selectedContactIds}
+            onCompanyIdsChange={setSelectedCompanyIds}
+            onContactIdsChange={setSelectedContactIds}
+            companies={entitiesState.companies}
+            contacts={entitiesState.contacts}
             bulkSelectMode={bulkSelectMode}
             selectedSessionIds={selectedSessionIds}
             onBulkSelectModeChange={setBulkSelectMode}
             onSelectedSessionIdsChange={setSelectedSessionIds}
+            audioDevices={audioDevices}
+            displays={displays}
+            windows={windows}
+            webcams={webcams}
+            loadingDevices={loadingDevices}
+            onLoadDevices={loadDevices}
             compactMode={false}
           />
         </div>
 
         {/* Top Controls Bar with Stats Pill - Side by Side Layout */}
         <motion.div
-          className="flex items-center justify-between gap-4 mb-4"
+          className="flex items-center justify-between gap-4 mb-4 relative z-50"
           animate={{ opacity: scrollY < 100 ? 1 : 0 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
         >
           <div className="bg-white/40 backdrop-blur-2xl rounded-[9999px] border-2 border-white/50 shadow-xl px-4 py-2">
             <SessionsTopBar
-                activeSession={activeSession}
+                activeSession={activeSession ?? undefined}
                 sessions={sessions}
                 allPastSessions={allPastSessions}
                 isStarting={isStarting}
                 isEnding={isEnding}
                 countdown={countdown}
                 handleQuickStart={handleQuickStart}
+                startSession={handleStartSessionFromModal}
                 handleEndSession={handleEndSession}
                 pauseSession={pauseSession}
                 resumeSession={resumeSession}
@@ -1614,6 +1826,7 @@ export default function SessionsZone() {
                 updateAudio={updateAudio}
                 updateVideo={updateVideo}
                 updateInterval={updateInterval}
+                updateActiveSession={updateActiveSession}
                 sortBy={sortBy}
                 onSortChange={setSortBy}
                 selectedCategories={selectedCategories}
@@ -1622,10 +1835,22 @@ export default function SessionsZone() {
                 onCategoriesChange={setSelectedCategories}
                 onSubCategoriesChange={setSelectedSubCategories}
                 onTagsChange={setSelectedTags}
+                selectedCompanyIds={selectedCompanyIds}
+                selectedContactIds={selectedContactIds}
+                onCompanyIdsChange={setSelectedCompanyIds}
+                onContactIdsChange={setSelectedContactIds}
+                companies={entitiesState.companies}
+                contacts={entitiesState.contacts}
                 bulkSelectMode={bulkSelectMode}
                 selectedSessionIds={selectedSessionIds}
                 onBulkSelectModeChange={setBulkSelectMode}
                 onSelectedSessionIdsChange={setSelectedSessionIds}
+                audioDevices={audioDevices}
+                displays={displays}
+                windows={windows}
+                webcams={webcams}
+                loadingDevices={loadingDevices}
+                onLoadDevices={loadDevices}
                 compactMode={compactMode}
               />
           </div>
@@ -1637,20 +1862,21 @@ export default function SessionsZone() {
         {/* Dropdown Menu - Shows when MenuButton is toggled while scrolled */}
         {scrollY >= 100 && uiState.zoneMenuPinned && (
           <motion.div
-            className="fixed top-20 left-24 z-50 bg-white/40 backdrop-blur-2xl rounded-[40px] border-2 border-white/50 shadow-2xl ring-1 ring-black/5 px-6 py-3"
+            className="fixed top-20 left-24 z-[100] bg-white/40 backdrop-blur-2xl rounded-[40px] border-2 border-white/50 shadow-2xl ring-1 ring-black/5 px-6 py-3"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
           >
             <SessionsTopBar
-                activeSession={activeSession}
+                activeSession={activeSession ?? undefined}
                 sessions={sessions}
                 allPastSessions={allPastSessions}
                 isStarting={isStarting}
                 isEnding={isEnding}
                 countdown={countdown}
                 handleQuickStart={handleQuickStart}
+                startSession={handleStartSessionFromModal}
                 handleEndSession={handleEndSession}
                 pauseSession={pauseSession}
                 resumeSession={resumeSession}
@@ -1659,6 +1885,7 @@ export default function SessionsZone() {
                 updateAudio={updateAudio}
                 updateVideo={updateVideo}
                 updateInterval={updateInterval}
+                updateActiveSession={updateActiveSession}
                 sortBy={sortBy}
                 onSortChange={setSortBy}
                 selectedCategories={selectedCategories}
@@ -1667,10 +1894,22 @@ export default function SessionsZone() {
                 onCategoriesChange={setSelectedCategories}
                 onSubCategoriesChange={setSelectedSubCategories}
                 onTagsChange={setSelectedTags}
+                selectedCompanyIds={selectedCompanyIds}
+                selectedContactIds={selectedContactIds}
+                onCompanyIdsChange={setSelectedCompanyIds}
+                onContactIdsChange={setSelectedContactIds}
+                companies={entitiesState.companies}
+                contacts={entitiesState.contacts}
                 bulkSelectMode={bulkSelectMode}
                 selectedSessionIds={selectedSessionIds}
                 onBulkSelectModeChange={setBulkSelectMode}
                 onSelectedSessionIdsChange={setSelectedSessionIds}
+                audioDevices={audioDevices}
+                displays={displays}
+                windows={windows}
+                webcams={webcams}
+                loadingDevices={loadingDevices}
+                onLoadDevices={loadDevices}
                 compactMode={compactMode}
               />
           </motion.div>
@@ -1761,7 +2000,67 @@ export default function SessionsZone() {
                   <LoadingSpinner size="lg" message="Loading active session..." colorScheme="ocean" />
                 </div>
               }>
-                <ActiveSessionView session={selectedSessionForDetail} />
+                <div className="flex flex-col h-full">
+                  {/* ERROR BANNERS - Show at top of active session panel */}
+                  {!isEnding && (
+                    <div className="p-4 space-y-2">
+                      <AnimatePresence mode="popLayout">
+                        {recordingState.lastError.screenshots && (
+                          <RecordingErrorBanner
+                            key="screenshots-error"
+                            service="screenshots"
+                            error={recordingState.lastError.screenshots}
+                            onRetry={() => {
+                              clearError('screenshots');
+                              if (activeSession) {
+                                startScreenshots(activeSession, addScreenshot);
+                              }
+                            }}
+                            onDismiss={() => clearError('screenshots')}
+                            onOpenSettings={openSystemSettings}
+                          />
+                        )}
+                        {recordingState.lastError.audio && (
+                          <RecordingErrorBanner
+                            key="audio-error"
+                            service="audio"
+                            error={recordingState.lastError.audio}
+                            onRetry={() => {
+                              clearError('audio');
+                              if (activeSession) {
+                                startAudio(activeSession, addAudioSegment)
+                                  .catch(err => console.error('Retry failed:', err));
+                              }
+                            }}
+                            onDismiss={() => clearError('audio')}
+                            onOpenSettings={openSystemSettings}
+                          />
+                        )}
+                        {recordingState.lastError.video && (
+                          <RecordingErrorBanner
+                            key="video-error"
+                            service="video"
+                            error={recordingState.lastError.video}
+                            onRetry={() => {
+                              clearError('video');
+                              if (activeSession) {
+                                startVideo(activeSession)
+                                  .catch(err => console.error('Retry failed:', err));
+                              }
+                            }}
+                            onDismiss={() => clearError('video')}
+                            onOpenSettings={openSystemSettings}
+                          />
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
+                  {/* Use activeSession directly for fresh data (no 1-second debounce lag) */}
+                  <div className="flex-1 overflow-hidden">
+                    <ActiveSessionView session={activeSession || selectedSessionForDetail} />
+                  </div>
+                </div>
               </Suspense>
             ) : (
               // Selected session is a completed past session - show SessionDetailView
@@ -1795,7 +2094,60 @@ export default function SessionsZone() {
                 <LoadingSpinner size="lg" message="Loading active session..." colorScheme="ocean" />
               </div>
             }>
-              <ActiveSessionView session={activeSession} />
+              <div className="flex flex-col h-full">
+                {/* ERROR BANNERS - Show at top of active session panel */}
+                {!isEnding && (
+                  <div className="p-4 space-y-2">
+                    <AnimatePresence mode="popLayout">
+                      {recordingState.lastError.screenshots && (
+                        <RecordingErrorBanner
+                          key="screenshots-error"
+                          service="screenshots"
+                          error={recordingState.lastError.screenshots}
+                          onRetry={() => {
+                            clearError('screenshots');
+                            startScreenshots(activeSession, addScreenshot);
+                          }}
+                          onDismiss={() => clearError('screenshots')}
+                          onOpenSettings={openSystemSettings}
+                        />
+                      )}
+                      {recordingState.lastError.audio && (
+                        <RecordingErrorBanner
+                          key="audio-error"
+                          service="audio"
+                          error={recordingState.lastError.audio}
+                          onRetry={() => {
+                            clearError('audio');
+                            startAudio(activeSession, addAudioSegment)
+                              .catch(err => console.error('Retry failed:', err));
+                          }}
+                          onDismiss={() => clearError('audio')}
+                          onOpenSettings={openSystemSettings}
+                        />
+                      )}
+                      {recordingState.lastError.video && (
+                        <RecordingErrorBanner
+                          key="video-error"
+                          service="video"
+                          error={recordingState.lastError.video}
+                          onRetry={() => {
+                            clearError('video');
+                            startVideo(activeSession)
+                              .catch(err => console.error('Retry failed:', err));
+                          }}
+                          onDismiss={() => clearError('video')}
+                          onOpenSettings={openSystemSettings}
+                        />
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                <div className="flex-1 overflow-hidden">
+                  <ActiveSessionView session={activeSession} />
+                </div>
+              </div>
             </Suspense>
           ) : (
             // Empty state
@@ -1816,6 +2168,7 @@ export default function SessionsZone() {
         </div>
         {/* End of Two-Panel Layout */}
       </div>
+      )}
 
       {/* Subtle toast notification during countdown */}
       {isStarting && countdown !== null && countdown > 0 && (
@@ -1830,6 +2183,16 @@ export default function SessionsZone() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Enrichment Progress: Rainbow border only (no modal) */}
+      {/* The RainbowBorderProgressIndicator on SessionCards is sufficient */}
+
+      {/* TASK 11: Media Processing Screen Overlay */}
+      {processingSessionId && (
+        <Suspense fallback={null}>
+          <SessionProcessingScreen sessionId={processingSessionId} />
+        </Suspense>
       )}
 
     </div>

@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/334</span>
+                <span class='fraction'>0/340</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/334</span>
+                <span class='fraction'>0/340</span>
             </div>
         
             
@@ -571,7 +571,15 @@
 <a name='L506'></a><a href='#L506'>506</a>
 <a name='L507'></a><a href='#L507'>507</a>
 <a name='L508'></a><a href='#L508'>508</a>
-<a name='L509'></a><a href='#L509'>509</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L509'></a><a href='#L509'>509</a>
+<a name='L510'></a><a href='#L510'>510</a>
+<a name='L511'></a><a href='#L511'>511</a>
+<a name='L512'></a><a href='#L512'>512</a>
+<a name='L513'></a><a href='#L513'>513</a>
+<a name='L514'></a><a href='#L514'>514</a>
+<a name='L515'></a><a href='#L515'>515</a>
+<a name='L516'></a><a href='#L516'>516</a>
+<a name='L517'></a><a href='#L517'>517</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -867,6 +875,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -897,12 +907,14 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -923,14 +935,18 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1375,10 +1391,13 @@ export interface NavButtonProps {
 <span class="cstat-no" title="statement not covered" >    const { type, onClick: onQuickActionClick, onPause, onResume, onStop, isSessionActive } = quickAction;</span>
 &nbsp;
     // Session controls (dual buttons)
+    // Using div with role="button" to avoid nested button error
 <span class="cstat-no" title="statement not covered" >    if (type === 'session-controls') {</span>
 <span class="cstat-no" title="statement not covered" >      return (</span>
 <span class="cstat-no" title="statement not covered" >        &lt;div key="session-controls" className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-2 transition-all duration-200 opacity-100 scale-100"&gt;</span>
-<span class="cstat-no" title="statement not covered" >          &lt;motion.button</span>
+<span class="cstat-no" title="statement not covered" >          &lt;motion.div</span>
+<span class="cstat-no" title="statement not covered" >            role="button"</span>
+<span class="cstat-no" title="statement not covered" >            tabIndex={0}</span>
 <span class="cstat-no" title="statement not covered" >            onClick={(e) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >              e.stopPropagation();</span>
 <span class="cstat-no" title="statement not covered" >              e.preventDefault();</span>
@@ -1411,8 +1430,10 @@ export interface NavButtonProps {
             ) : (
 <span class="cstat-no" title="statement not covered" >              &lt;Play className="w-3.5 h-3.5" /&gt;</span>
             )}
-<span class="cstat-no" title="statement not covered" >          &lt;/motion.button&gt;</span>
-<span class="cstat-no" title="statement not covered" >          &lt;motion.button</span>
+<span class="cstat-no" title="statement not covered" >          &lt;/motion.div&gt;</span>
+<span class="cstat-no" title="statement not covered" >          &lt;motion.div</span>
+<span class="cstat-no" title="statement not covered" >            role="button"</span>
+<span class="cstat-no" title="statement not covered" >            tabIndex={0}</span>
 <span class="cstat-no" title="statement not covered" >            onClick={(e) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >              e.stopPropagation();</span>
 <span class="cstat-no" title="statement not covered" >              e.preventDefault();</span>
@@ -1433,15 +1454,18 @@ export interface NavButtonProps {
 <span class="cstat-no" title="statement not covered" >            transition={prefersReducedMotion ? { duration: 0 } : contentSpring}</span>
           &gt;
 <span class="cstat-no" title="statement not covered" >            &lt;Square className="w-3.5 h-3.5" /&gt;</span>
-<span class="cstat-no" title="statement not covered" >          &lt;/motion.button&gt;</span>
+<span class="cstat-no" title="statement not covered" >          &lt;/motion.div&gt;</span>
 <span class="cstat-no" title="statement not covered" >        &lt;/div&gt;</span>
       );
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
     // Default quick action (Plus button)
+    // Using div with role="button" to avoid nested button error
 <span class="cstat-no" title="statement not covered" >    return (</span>
-<span class="cstat-no" title="statement not covered" >      &lt;motion.button</span>
+<span class="cstat-no" title="statement not covered" >      &lt;motion.div</span>
 <span class="cstat-no" title="statement not covered" >        key="quick-action"</span>
+<span class="cstat-no" title="statement not covered" >        role="button"</span>
+<span class="cstat-no" title="statement not covered" >        tabIndex={0}</span>
 <span class="cstat-no" title="statement not covered" >        onClick={(e) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >          e.stopPropagation();</span>
 <span class="cstat-no" title="statement not covered" >          e.preventDefault();</span>
@@ -1469,7 +1493,7 @@ export interface NavButtonProps {
 <span class="cstat-no" title="statement not covered" >        style={{ pointerEvents: showQuickAction ? 'auto' : 'none' }}</span>
       &gt;
 <span class="cstat-no" title="statement not covered" >        &lt;Plus className="w-3.5 h-3.5" /&gt;</span>
-<span class="cstat-no" title="statement not covered" >      &lt;/motion.button&gt;</span>
+<span class="cstat-no" title="statement not covered" >      &lt;/motion.div&gt;</span>
     );
 <span class="cstat-no" title="statement not covered" >  };</span>
 &nbsp;
@@ -1594,7 +1618,7 @@ export interface NavButtonProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

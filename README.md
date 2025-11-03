@@ -62,12 +62,27 @@ Your organized knowledge base with rich context:
 - Delete notes or entire topics
 
 ### 📹 Sessions - Smart Work Session Recording
-Capture your entire work session with automatic screenshots, audio, and optional video:
+Capture your entire work session with comprehensive media controls:
 
+**Recording Capabilities:**
 - **Adaptive screenshot capture** - AI determines optimal intervals based on activity
-- **Audio recording** - Record your thoughts and meetings
-- **Video recording** - Full screen recording with chaptering (macOS)
-- **AI-powered enrichment** - Automatic summary, insights, and key moments detection
+- **Dual-source audio** - Record microphone and system audio simultaneously with real-time mixing
+- **Multi-display video** - Capture one or multiple displays at once (macOS)
+- **Picture-in-Picture** - Overlay your webcam on screen recordings with customizable position and size
+- **Hot-swapping** - Change devices mid-recording without stopping your session
+- **Quality presets** - From 720p/15fps to 4K/30fps with file size estimates
+
+**Media Controls:**
+- **Device selection** - Choose from all available microphones, displays, and webcams
+- **Audio balance slider** - Mix microphone and system audio (0-100%)
+- **Audio level meters** - Real-time visual feedback of input levels
+- **PiP configuration** - 4 corner positions × 3 size presets (Small/Medium/Large)
+- **Window-specific recording** - Capture individual application windows
+
+**AI-Powered Features:**
+- **Automatic enrichment** - Summary, insights, and key moments detection
+- **Audio transcription** - Automatic speech-to-text with OpenAI Whisper
+- **Video chaptering** - AI-generated chapter markers for easy navigation
 - **Session timeline** - Interactive timeline with screenshots and key moments
 - **Morphing Canvas** - Dynamic AI-generated review layouts
 - **Cost controls** - Set maximum AI processing costs
@@ -363,6 +378,20 @@ npm run build
 - Clear old data: Settings → Clear All Data
 - Browser localStorage has limits (~5-10MB)
 - Export & clear periodically for best performance
+
+## 📚 Documentation
+
+**For Developers:**
+- **[CLAUDE.md](CLAUDE.md)** - Comprehensive developer guide and AI agent instructions
+- **[Documentation Index](docs/INDEX.md)** - Navigate all project documentation
+- **[User Guide](docs/user-guides/USER_GUIDE.md)** - Complete user documentation
+- **[API Reference](docs/developer/API_REFERENCE_GUIDE.md)** - API documentation
+- **[Sessions Rewrite](docs/sessions-rewrite/)** - Sessions system architecture and progress
+
+**For Contributors:**
+- [Contributing Guide](CONTRIBUTING.md) - How to contribute
+- [Deployment Guide](DEPLOYMENT.md) - Production deployment
+- [Keyboard Shortcuts](KEYBOARD_SHORTCUTS.md) - All shortcuts reference
 
 ## 📝 License
 

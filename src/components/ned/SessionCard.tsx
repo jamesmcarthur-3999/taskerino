@@ -11,7 +11,7 @@
  * - Session navigation
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   PlayCircle,
@@ -31,6 +31,9 @@ import {
   Calendar
 } from 'lucide-react';
 import type { Session } from '../../types';
+import { EntityType } from '../../types/relationships';
+import { useTasks } from '../../context/TasksContext';
+import { useNotes } from '../../context/NotesContext';
 import { EnrichmentLoadingBar } from './EnrichmentLoadingBar';
 import { getGlassClasses, getRadiusClass, TRANSITIONS, getStatusBadgeClasses } from '../../design-system/theme';
 
@@ -80,6 +83,26 @@ export const SessionCard = React.memo<SessionCardProps>(({
   const [isHovered, setIsHovered] = useState(false);
   const [showActivities, setShowActivities] = useState(false);
   const [showExtracted, setShowExtracted] = useState(false);
+
+  const { state: tasksState } = useTasks();
+  const { state: notesState } = useNotes();
+
+  // Count tasks and notes linked to this session
+  const extractedTaskCount = useMemo(() => {
+    return tasksState.tasks.filter(task =>
+      task.relationships.some(r =>
+        r.targetType === EntityType.SESSION && r.targetId === session.id
+      )
+    ).length;
+  }, [tasksState.tasks, session.id]);
+
+  const extractedNoteCount = useMemo(() => {
+    return notesState.notes.filter(note =>
+      note.relationships.some(r =>
+        r.targetType === EntityType.SESSION && r.targetId === session.id
+      )
+    ).length;
+  }, [notesState.notes, session.id]);
 
   const formatDuration = (minutes: number) => {
     if (minutes < 60) return `${minutes}m`;
@@ -290,7 +313,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
       )}
 
       {/* Extracted Tasks/Notes */}
-      {(session.extractedTaskIds.length > 0 || session.extractedNoteIds.length > 0) && (
+      {(extractedTaskCount > 0 || extractedNoteCount > 0) && (
         <div className="px-4 py-3">
           <button
             onClick={() => setShowExtracted(!showExtracted)}
@@ -298,7 +321,7 @@ export const SessionCard = React.memo<SessionCardProps>(({
           >
             <ListTodo className="w-3.5 h-3.5" />
             <span>
-              Extracted {session.extractedTaskIds.length} task{session.extractedTaskIds.length !== 1 ? 's' : ''}, {session.extractedNoteIds.length} note{session.extractedNoteIds.length !== 1 ? 's' : ''}
+              Extracted {extractedTaskCount} task{extractedTaskCount !== 1 ? 's' : ''}, {extractedNoteCount} note{extractedNoteCount !== 1 ? 's' : ''}
             </span>
             {showExtracted ? (
               <ChevronUp className="w-3 h-3" />
@@ -315,16 +338,16 @@ export const SessionCard = React.memo<SessionCardProps>(({
                 className={`mt-2 p-3 ${getRadiusClass('field')} bg-white/50 border border-white/60`}
               >
                 <div className="flex items-center gap-4 text-xs text-gray-600">
-                  {session.extractedTaskIds.length > 0 && (
+                  {extractedTaskCount > 0 && (
                     <div className="flex items-center gap-1.5">
                       <ListTodo className="w-3.5 h-3.5" />
-                      <span>{session.extractedTaskIds.length} task{session.extractedTaskIds.length !== 1 ? 's' : ''}</span>
+                      <span>{extractedTaskCount} task{extractedTaskCount !== 1 ? 's' : ''}</span>
                     </div>
                   )}
-                  {session.extractedNoteIds.length > 0 && (
+                  {extractedNoteCount > 0 && (
                     <div className="flex items-center gap-1.5">
                       <FileText className="w-3.5 h-3.5" />
-                      <span>{session.extractedNoteIds.length} note{session.extractedNoteIds.length !== 1 ? 's' : ''}</span>
+                      <span>{extractedNoteCount} note{extractedNoteCount !== 1 ? 's' : ''}</span>
                     </div>
                   )}
                 </div>

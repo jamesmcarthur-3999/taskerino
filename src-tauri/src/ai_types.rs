@@ -5,15 +5,6 @@ use serde::{Deserialize, Serialize};
 // ============================================================================
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct WhisperTranscriptionRequest {
-    pub file: Vec<u8>,
-    pub model: String,
-    pub language: Option<String>,
-    pub response_format: Option<String>,
-    pub timestamp_granularities: Option<Vec<String>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct WhisperWord {
     pub word: String,
     pub start: f64,
@@ -125,10 +116,20 @@ pub struct ClaudeImageSource {
     #[serde(rename = "type")]
     pub source_type: String, // "base64"
 
-    #[serde(alias = "mediaType")]  // Accept camelCase from TypeScript
-    pub media_type: String,         // "image/jpeg", "image/png", etc. - serializes as snake_case for Claude API
+    #[serde(alias = "mediaType")] // Accept camelCase from TypeScript
+    pub media_type: String, // "image/jpeg", "image/png", etc. - serializes as snake_case for Claude API
 
-    pub data: String,        // base64 encoded image
+    pub data: String, // base64 encoded image
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ClaudeTool {
+    pub name: String,
+    pub description: String,
+    #[serde(rename = "input_schema", alias = "inputSchema")]
+    pub input_schema: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -137,8 +138,10 @@ pub struct ClaudeChatRequest {
     pub model: String,
     pub max_tokens: u32,
     pub messages: Vec<ClaudeMessage>,
-    pub system: Option<serde_json::Value>,  // Accepts both String and Array with cache_control
+    pub system: Option<serde_json::Value>, // Accepts both String and Array with cache_control
     pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ClaudeTool>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -155,6 +158,12 @@ pub struct ClaudeChatResponse {
 pub enum ClaudeResponseContent {
     #[serde(rename = "text")]
     Text { text: String },
+    #[serde(rename = "tool_use")]
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -178,88 +187,10 @@ pub struct ClaudeStreamingRequest {
     pub model: String,
     pub max_tokens: u32,
     pub messages: Vec<ClaudeMessage>,
-    pub system: Option<serde_json::Value>,  // Accepts both String and Array with cache_control
+    pub system: Option<serde_json::Value>, // Accepts both String and Array with cache_control
     pub temperature: Option<f32>,
     pub tools: Option<Vec<ClaudeTool>>,
     pub stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extended_thinking: Option<bool>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ClaudeTool {
-    pub name: String,
-    pub description: String,
-    #[serde(rename = "input_schema", alias = "inputSchema")]
-    pub input_schema: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_control: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "type")]
-pub enum ClaudeStreamChunk {
-    #[serde(rename = "message_start")]
-    MessageStart { message: ClaudeStreamMessage },
-    #[serde(rename = "content_block_start")]
-    ContentBlockStart { index: usize, content_block: ClaudeStreamContentBlock },
-    #[serde(rename = "content_block_delta")]
-    ContentBlockDelta { index: usize, delta: ClaudeStreamDelta },
-    #[serde(rename = "content_block_stop")]
-    ContentBlockStop { index: usize },
-    #[serde(rename = "message_delta")]
-    MessageDelta { delta: ClaudeStreamMessageDelta },
-    #[serde(rename = "message_stop")]
-    MessageStop,
-    #[serde(rename = "ping")]
-    Ping,
-    #[serde(rename = "error")]
-    Error { error: ClaudeStreamError },
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ClaudeStreamMessage {
-    pub id: String,
-    pub model: String,
-    pub role: String,
-    pub content: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "type")]
-pub enum ClaudeStreamContentBlock {
-    #[serde(rename = "text")]
-    Text { text: String },
-    #[serde(rename = "tool_use")]
-    ToolUse {
-        id: String,
-        name: String,
-        input: serde_json::Value,
-    },
-    #[serde(rename = "thinking")]
-    Thinking { text: String },
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "type")]
-pub enum ClaudeStreamDelta {
-    #[serde(rename = "text_delta")]
-    TextDelta { text: String },
-    #[serde(rename = "input_json_delta")]
-    InputJsonDelta { partial_json: String },
-    #[serde(rename = "thinking_delta")]
-    ThinkingDelta { thinking: String },
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ClaudeStreamMessageDelta {
-    pub stop_reason: Option<String>,
-    pub stop_sequence: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ClaudeStreamError {
-    #[serde(rename = "type")]
-    pub error_type: String,
-    pub message: String,
 }

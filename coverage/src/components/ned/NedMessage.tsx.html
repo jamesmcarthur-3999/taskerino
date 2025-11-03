@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/525</span>
+                <span class='fraction'>0/534</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/525</span>
+                <span class='fraction'>0/534</span>
             </div>
         
             
@@ -808,7 +808,16 @@
 <a name='L743'></a><a href='#L743'>743</a>
 <a name='L744'></a><a href='#L744'>744</a>
 <a name='L745'></a><a href='#L745'>745</a>
-<a name='L746'></a><a href='#L746'>746</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L746'></a><a href='#L746'>746</a>
+<a name='L747'></a><a href='#L747'>747</a>
+<a name='L748'></a><a href='#L748'>748</a>
+<a name='L749'></a><a href='#L749'>749</a>
+<a name='L750'></a><a href='#L750'>750</a>
+<a name='L751'></a><a href='#L751'>751</a>
+<a name='L752'></a><a href='#L752'>752</a>
+<a name='L753'></a><a href='#L753'>753</a>
+<a name='L754'></a><a href='#L754'>754</a>
+<a name='L755'></a><a href='#L755'>755</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -825,6 +834,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1293,6 +1303,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1303,8 +1314,11 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1313,9 +1327,13 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1569,6 +1587,7 @@
 <span class="cstat-no" title="statement not covered" >import { SessionCard } from './SessionCard';</span>
 <span class="cstat-no" title="statement not covered" >import ReactMarkdown from 'react-markdown';</span>
 import type { Task, Note, Session, Company, Contact } from '../../types';
+<span class="cstat-no" title="statement not covered" >import { EntityType } from '../../types/relationships';</span>
 <span class="cstat-no" title="statement not covered" >import { getGlassClasses, getRadiusClass, TRANSITIONS, getInfoGradient, getSuccessGradient } from '../../design-system/theme';</span>
 &nbsp;
 // Snippet component for copyable text content (NOT code)
@@ -2039,20 +2058,29 @@ interface NedMessageProps {
 &nbsp;
   // Helper to find source note for a task
 <span class="cstat-no" title="statement not covered" >  const findSourceNote = (task: Task) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    if (!task.sourceNoteId) return null;</span>
-<span class="cstat-no" title="statement not covered" >    const note = allNotes.find(n =&gt; n.id === task.sourceNoteId);</span>
+<span class="cstat-no" title="statement not covered" >    const noteRel = task.relationships.find(r =&gt; r.targetType === EntityType.NOTE);</span>
+<span class="cstat-no" title="statement not covered" >    if (!noteRel) return null;</span>
+<span class="cstat-no" title="statement not covered" >    const note = allNotes.find(n =&gt; n.id === noteRel.targetId);</span>
 <span class="cstat-no" title="statement not covered" >    return note ? { id: note.id, summary: note.summary } : null;</span>
 <span class="cstat-no" title="statement not covered" >  };</span>
 &nbsp;
   // Helper to find related tasks for a note
 <span class="cstat-no" title="statement not covered" >  const findRelatedTasks = (note: Note) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    return allTasks.filter(t =&gt; t.sourceNoteId === note.id);</span>
+<span class="cstat-no" title="statement not covered" >    return allTasks.filter(t =&gt;</span>
+<span class="cstat-no" title="statement not covered" >      t.relationships.some(r =&gt; r.targetType === EntityType.NOTE &amp;&amp; r.targetId === note.id)</span>
+<span class="cstat-no" title="statement not covered" >    );</span>
 <span class="cstat-no" title="statement not covered" >  };</span>
 &nbsp;
   // Helper to find linked entities for a note
 <span class="cstat-no" title="statement not covered" >  const findLinkedEntities = (note: Note) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    const noteCompanies = note.companyIds?.map(id =&gt; companies.find(c =&gt; c.id === id)).filter(Boolean) as Company[] || [];</span>
-<span class="cstat-no" title="statement not covered" >    const noteContacts = note.contactIds?.map(id =&gt; contacts.find(c =&gt; c.id === id)).filter(Boolean) as Contact[] || [];</span>
+<span class="cstat-no" title="statement not covered" >    const noteCompanies = note.relationships</span>
+<span class="cstat-no" title="statement not covered" >      .filter(r =&gt; r.targetType === EntityType.COMPANY)</span>
+<span class="cstat-no" title="statement not covered" >      .map(r =&gt; companies.find(c =&gt; c.id === r.targetId))</span>
+<span class="cstat-no" title="statement not covered" >      .filter(Boolean) as Company[];</span>
+<span class="cstat-no" title="statement not covered" >    const noteContacts = note.relationships</span>
+<span class="cstat-no" title="statement not covered" >      .filter(r =&gt; r.targetType === EntityType.CONTACT)</span>
+<span class="cstat-no" title="statement not covered" >      .map(r =&gt; contacts.find(c =&gt; c.id === r.targetId))</span>
+<span class="cstat-no" title="statement not covered" >      .filter(Boolean) as Contact[];</span>
 <span class="cstat-no" title="statement not covered" >    return {</span>
 <span class="cstat-no" title="statement not covered" >      companies: noteCompanies.map(c =&gt; ({ id: c.id, name: c.name })),</span>
 <span class="cstat-no" title="statement not covered" >      contacts: noteContacts.map(c =&gt; ({ id: c.id, name: c.name })),</span>
@@ -2061,11 +2089,10 @@ interface NedMessageProps {
 &nbsp;
   // Helper to count related notes for a task
 <span class="cstat-no" title="statement not covered" >  const countRelatedNotes = (task: Task) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    if (!task.topicId) return 0;</span>
+<span class="cstat-no" title="statement not covered" >    const topicRel = task.relationships.find(r =&gt; r.targetType === EntityType.TOPIC);</span>
+<span class="cstat-no" title="statement not covered" >    if (!topicRel) return 0;</span>
 <span class="cstat-no" title="statement not covered" >    return allNotes.filter(n =&gt;</span>
-<span class="cstat-no" title="statement not covered" >      n.companyIds?.includes(task.topicId || '') ||</span>
-<span class="cstat-no" title="statement not covered" >      n.contactIds?.includes(task.topicId || '') ||</span>
-<span class="cstat-no" title="statement not covered" >      n.topicIds?.includes(task.topicId || '')</span>
+<span class="cstat-no" title="statement not covered" >      n.relationships.some(r =&gt; r.targetType === EntityType.TOPIC &amp;&amp; r.targetId === topicRel.targetId)</span>
 <span class="cstat-no" title="statement not covered" >    ).length;</span>
 <span class="cstat-no" title="statement not covered" >  };</span>
 &nbsp;
@@ -2305,7 +2332,7 @@ interface NedMessageProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-20T22:29:51.488Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

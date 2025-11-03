@@ -1,11 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTasks } from '../context/TasksContext';
 import { useNotes } from '../context/NotesContext';
 import { useUI } from '../context/UIContext';
-import { Calendar, Clock, CheckSquare, Circle, Plus, X, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, CheckSquare, Circle, Plus, X, Trash2, CheckCircle2, AlertCircle, Settings } from 'lucide-react';
 import type { Task, SubTask } from '../types';
 import { formatRelativeTime, isTaskOverdue, isTaskDueToday, generateId } from '../utils/helpers';
 import { getRadiusClass } from '../design-system/theme';
+import { RelationshipPills } from './relationships/RelationshipPills';
+import { RelationshipModal } from './relationships/RelationshipModal';
+import { RelationshipCardSection } from './relationships/RelationshipCardSection';
+import { EntityType, RelationshipType } from '../types/relationships';
+import { TopicPillManager } from './TopicPillManager';
+import { CompanyPillManager } from './CompanyPillManager';
+import { ContactPillManager } from './ContactPillManager';
+import { useEntities } from '../context/EntitiesContext';
 
 interface TaskDetailInlineProps {
   taskId: string;
@@ -16,7 +24,31 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
   const { state: notesState } = useNotes();
   const { dispatch: uiDispatch } = useUI();
+  const { state: entitiesState, addCompany, addContact, addTopic } = useEntities();
   const task = tasksState.tasks.find(t => t.id === taskId);
+
+  // Compute topicId from relationships
+  const taskTopicId = useMemo(() => {
+    if (!task) return undefined;
+    const topicRel = task.relationships.find(r => r.targetType === EntityType.TOPIC);
+    return topicRel?.targetId;
+  }, [task?.relationships]);
+
+  // Compute companyIds from relationships
+  const taskCompanyIds = useMemo(() => {
+    if (!task) return [];
+    return task.relationships
+      .filter(r => r.targetType === EntityType.COMPANY)
+      .map(r => r.targetId);
+  }, [task?.relationships]);
+
+  // Compute contactIds from relationships
+  const taskContactIds = useMemo(() => {
+    if (!task) return [];
+    return task.relationships
+      .filter(r => r.targetType === EntityType.CONTACT)
+      .map(r => r.targetId);
+  }, [task?.relationships]);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -29,6 +61,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
   const [subtasks, setSubtasks] = useState<SubTask[]>([]);
   const [newSubtask, setNewSubtask] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -120,6 +153,139 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
     if (confirm('Delete this task?')) {
       tasksDispatch({ type: 'DELETE_TASK', payload: taskId });
     }
+  };
+
+  const handleTopicChange = (topicId: string | undefined) => {
+    if (!task) return;
+
+    // Remove existing topic relationships
+    const nonTopicRelationships = task.relationships.filter(
+      r => r.targetType !== EntityType.TOPIC
+    );
+
+    // Add new topic relationship if topicId is provided
+    const newRelationships = topicId
+      ? [
+          ...nonTopicRelationships,
+          {
+            id: generateId(),
+            sourceType: EntityType.TASK,
+            sourceId: task.id,
+            targetType: EntityType.TOPIC,
+            targetId: topicId,
+            type: RelationshipType.TASK_TOPIC,
+            canonical: true,
+            metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+          },
+        ]
+      : nonTopicRelationships;
+
+    tasksDispatch({
+      type: 'UPDATE_TASK',
+      payload: {
+        ...task,
+        relationships: newRelationships,
+      }
+    });
+  };
+
+  const handleCompaniesChange = (companyIds: string[]) => {
+    if (!task) return;
+
+    // Remove existing company relationships
+    const nonCompanyRelationships = task.relationships.filter(
+      r => r.targetType !== EntityType.COMPANY
+    );
+
+    // Add new company relationships
+    const newCompanyRelationships = companyIds.map(companyId => ({
+      id: generateId(),
+      sourceType: EntityType.TASK,
+      sourceId: task.id,
+      targetType: EntityType.COMPANY,
+      targetId: companyId,
+      type: RelationshipType.TASK_COMPANY,
+      canonical: true,
+      metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+    }));
+
+    tasksDispatch({
+      type: 'UPDATE_TASK',
+      payload: {
+        ...task,
+        relationships: [...nonCompanyRelationships, ...newCompanyRelationships],
+      }
+    });
+  };
+
+  const handleContactsChange = (contactIds: string[]) => {
+    if (!task) return;
+
+    // Remove existing contact relationships
+    const nonContactRelationships = task.relationships.filter(
+      r => r.targetType !== EntityType.CONTACT
+    );
+
+    // Add new contact relationships
+    const newContactRelationships = contactIds.map(contactId => ({
+      id: generateId(),
+      sourceType: EntityType.TASK,
+      sourceId: task.id,
+      targetType: EntityType.CONTACT,
+      targetId: contactId,
+      type: RelationshipType.TASK_CONTACT,
+      canonical: true,
+      metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+    }));
+
+    tasksDispatch({
+      type: 'UPDATE_TASK',
+      payload: {
+        ...task,
+        relationships: [...nonContactRelationships, ...newContactRelationships],
+      }
+    });
+
+    // TODO: Also create/remove TASK_CONTACT relationships
+  };
+
+  // Entity creation callbacks
+  const handleCreateCompany = async (name: string) => {
+    const newCompany = {
+      id: generateId(),
+      name,
+      createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      noteCount: 0,
+      profile: {},
+    };
+    addCompany(newCompany);
+    return newCompany;
+  };
+
+  const handleCreateContact = async (name: string) => {
+    const newContact = {
+      id: generateId(),
+      name,
+      createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      noteCount: 0,
+      profile: {},
+    };
+    addContact(newContact);
+    return newContact;
+  };
+
+  const handleCreateTopic = async (name: string) => {
+    const newTopic = {
+      id: generateId(),
+      name,
+      createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      noteCount: 0,
+    };
+    addTopic(newTopic);
+    return newTopic;
   };
 
   if (!task) {
@@ -412,6 +578,75 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
           </div>
         </div>
 
+        {/* Topic Section */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Topic
+          </label>
+          <TopicPillManager
+            topicId={taskTopicId}
+            onTopicChange={handleTopicChange}
+            allTopics={entitiesState.topics}
+            editable={true}
+            onCreateTopic={handleCreateTopic}
+          />
+        </div>
+
+        {/* Companies Section */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Companies
+          </label>
+          <CompanyPillManager
+            companyIds={taskCompanyIds}
+            onCompaniesChange={handleCompaniesChange}
+            allCompanies={entitiesState.companies}
+            editable={true}
+            onCreateCompany={handleCreateCompany}
+          />
+        </div>
+
+        {/* Contacts Section */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Contacts
+          </label>
+          <ContactPillManager
+            contactIds={taskContactIds}
+            onContactsChange={handleContactsChange}
+            allContacts={entitiesState.contacts}
+            editable={true}
+            onCreateContact={handleCreateContact}
+          />
+        </div>
+
+        {/* Related Content Sections */}
+        <div className="space-y-4">
+          <RelationshipCardSection
+            entityId={task.id}
+            entityType={EntityType.TASK}
+            title="Related Notes"
+            filterTypes={[RelationshipType.TASK_NOTE]}
+            maxVisible={8}
+            variant="default"
+            showActions={true}
+            showExcerpts={false}
+            onAddClick={() => setRelationshipModalOpen(true)}
+          />
+
+          <RelationshipCardSection
+            entityId={task.id}
+            entityType={EntityType.TASK}
+            title="Related Sessions"
+            filterTypes={[RelationshipType.TASK_SESSION]}
+            maxVisible={8}
+            variant="default"
+            showActions={true}
+            showExcerpts={false}
+            onAddClick={() => setRelationshipModalOpen(true)}
+          />
+        </div>
+
         {/* AI Context (if present) */}
         {task.aiContext && (
           <div className={`p-4 bg-purple-50/60 backdrop-blur-sm border border-purple-200 ${getRadiusClass('field')}`}>
@@ -442,6 +677,14 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
           </div>
         )}
       </div>
+
+      {/* Relationship Management Modal */}
+      <RelationshipModal
+        open={relationshipModalOpen}
+        onClose={() => setRelationshipModalOpen(false)}
+        entityId={task.id}
+        entityType={EntityType.TASK}
+      />
     </div>
   );
 }

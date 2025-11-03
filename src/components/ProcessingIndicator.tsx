@@ -131,7 +131,7 @@ export function ProcessingIndicator() {
               <div className="max-h-64 overflow-y-auto">
                 {completedJobs.map((job) => {
                   const taskCount = job.result?.tasks.length || 0;
-                  const topicCount = job.result?.detectedTopics.length || 0;
+                  const noteCount = job.result?.notes.length || 0;
 
                   return (
                     <div key={job.id} className="p-4 border-b border-gray-100 last:border-b-0">
@@ -143,7 +143,7 @@ export function ProcessingIndicator() {
                             {job.input.length > 60 ? '...' : ''}
                           </p>
                           <p className="text-xs text-gray-600 mt-1">
-                            {taskCount} tasks, {topicCount} topics detected
+                            {noteCount} notes, {taskCount} tasks detected
                           </p>
                           {/* Actions */}
                           <div className="flex items-center gap-2 mt-3">

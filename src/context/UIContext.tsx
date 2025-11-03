@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { TabType, Notification, ProcessingJob, SearchHistoryItem, UserPreferences, OnboardingState, NedMessage, NedMessageContent } from '../types';
 import { getStorage } from '../services/storage';
 import { generateId } from '../utils/helpers';
+import { debug } from "../utils/debug";
 
 // UI State interface
 interface UIState {
@@ -785,7 +786,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
           },
           searchHistory: state.searchHistory,
         });
-        console.log('UI state saved to storage');
+        debug.log("UI state saved to storage");
       } catch (error) {
         console.error('Failed to save UI state:', error);
       }

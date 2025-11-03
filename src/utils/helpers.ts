@@ -1,11 +1,48 @@
+/**
+ * @file helpers.ts - Core utility functions for Taskerino
+ *
+ * @overview
+ * Provides essential helper functions for ID generation, entity creation, matching algorithms,
+ * filtering, sorting, and text formatting throughout the application.
+ */
+
 import type { Topic, Note, Task } from '../types';
+import { EntityType } from '../types/relationships';
 import DOMPurify from 'dompurify';
 
+/**
+ * Generates a unique ID for entities (topics, notes, tasks, sessions, etc.)
+ *
+ * @returns A unique string ID in the format `{timestamp}-{random}`
+ *
+ * @example
+ * ```typescript
+ * const noteId = generateId();
+ * // Returns something like: "1730000000000-a7b3c4d5e"
+ * ```
+ *
+ * @implementation
+ * - Uses current timestamp for chronological ordering
+ * - Appends 9-character random string (base36) for uniqueness
+ * - Format ensures IDs are sortable by creation time
+ */
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-// Topic helpers
+/**
+ * Creates a new Topic entity
+ *
+ * @param name - The topic name (e.g., "Work", "Personal", "Project X")
+ * @returns A fully initialized Topic object with generated ID and timestamps
+ *
+ * @example
+ * ```typescript
+ * const workTopic = createTopic("Work");
+ * console.log(workTopic.name); // "Work"
+ * console.log(workTopic.noteCount); // 0
+ * ```
+ */
 export function createTopic(
   name: string
 ): Topic {
@@ -19,31 +56,63 @@ export function createTopic(
   };
 }
 
-// Note helpers
+/**
+ * Creates a new Note entity
+ *
+ * @param content - Full note content (can be HTML or markdown)
+ * @param summary - Brief summary of the note (1-2 sentences)
+ * @param options - Optional fields (timestamp, tags, relationships, etc.)
+ * @returns A fully initialized Note object
+ *
+ * @example
+ * ```typescript
+ * const note = createNote(
+ *   "Met with Sarah about the Q4 roadmap...",
+ *   "Q4 Roadmap Discussion",
+ *   { tags: ["meeting", "roadmap"], source: "capture" }
+ * );
+ * ```
+ */
 export function createNote(
-  topicId: string,
   content: string,
   summary: string,
-  options?: Partial<Omit<Note, 'id' | 'topicId' | 'content' | 'summary'>>
+  options?: Partial<Omit<Note, 'id' | 'content' | 'summary'>>
 ): Note {
   const now = new Date().toISOString();
   return {
     id: generateId(),
-    topicId,
+    relationships: options?.relationships || [],
     content,
     summary,
-    sourceText: options?.sourceText, // Original input text for validation
     timestamp: options?.timestamp || now,
     lastUpdated: options?.lastUpdated || now,
     source: options?.source || 'thought',
     tags: options?.tags || [],
-    parentNoteId: options?.parentNoteId,
     updates: options?.updates || [],
-    metadata: options?.metadata,
   };
 }
 
-// Task helpers
+/**
+ * Creates a new Task entity
+ *
+ * @param title - Task title/description
+ * @param options - Optional fields (priority, dueDate, subtasks, tags, relationships, etc.)
+ * @returns A fully initialized Task object
+ *
+ * @example
+ * ```typescript
+ * const task = createTask("Review Q4 roadmap", {
+ *   priority: "high",
+ *   dueDate: "2025-11-01",
+ *   tags: ["roadmap", "review"]
+ * });
+ * ```
+ *
+ * @implementation
+ * - Defaults createdBy to 'manual'
+ * - Sets default priority to 'medium'
+ * - Defaults status based on done flag
+ */
 export function createTask(
   title: string,
   options?: Partial<Omit<Task, 'id' | 'title' | 'createdAt' | 'createdBy'>>
@@ -53,31 +122,42 @@ export function createTask(
   // Determine default status based on done flag or explicit status
   const status = options?.status || (options?.done ? 'done' : 'todo');
 
-  // Determine creation source
-  const createdBy = options?.noteId ? 'ai' : 'manual';
-
   return {
     id: generateId(),
     title,
+    relationships: options?.relationships || [],
     done: options?.done || false,
     priority: options?.priority || 'medium',
-    topicId: options?.topicId,
-    noteId: options?.noteId,
     dueDate: options?.dueDate,
     createdAt: now,
     completedAt: options?.completedAt,
-
-    // Phase 1 fields
     description: options?.description,
     status,
     subtasks: options?.subtasks || [],
     tags: options?.tags || [],
-    createdBy,
+    createdBy: 'manual',
     aiContext: options?.aiContext,
   };
 }
 
-// Topic matching helpers
+/**
+ * Finds a matching topic using fuzzy matching algorithm
+ *
+ * @param name - Topic name to match against
+ * @param existingTopics - Array of existing topics to search
+ * @returns Matching Topic if found, undefined otherwise
+ *
+ * @example
+ * ```typescript
+ * const topics = [createTopic("Work Projects")];
+ * const match = findMatchingTopic("work", topics);
+ * // Returns the "Work Projects" topic (fuzzy match)
+ * ```
+ *
+ * @algorithm
+ * 1. Try exact match (case-insensitive)
+ * 2. Try fuzzy match (contains or is contained)
+ */
 export function findMatchingTopic(
   name: string,
   existingTopics: Topic[]
@@ -100,6 +180,24 @@ export function findMatchingTopic(
   });
 }
 
+/**
+ * Calculates confidence score for topic match (0.0 to 1.0)
+ *
+ * @param detectedName - Detected topic name from AI
+ * @param topic - Existing topic to match against
+ * @returns Confidence score: 1.0 = exact match, 0.0 = no match
+ *
+ * @example
+ * ```typescript
+ * const confidence = calculateMatchConfidence("work", workTopic);
+ * console.log(confidence); // 0.8 (high confidence)
+ * ```
+ *
+ * @algorithm
+ * - Exact match → 1.0
+ * - Contains match → length ratio (0.5-1.0)
+ * - Word overlap → Jaccard similarity (intersection / union)
+ */
 export function calculateMatchConfidence(
   detectedName: string,
   topic: Topic
@@ -128,7 +226,29 @@ export function calculateMatchConfidence(
   return intersection.size / union.size; // Jaccard similarity
 }
 
-// Note similarity helpers
+/**
+ * Finds similar notes within the same topic for merge suggestions
+ *
+ * @param content - Content to match against
+ * @param topicId - Topic ID to search within
+ * @param existingNotes - Array of existing notes
+ * @param dayThreshold - Only consider notes from last N days (default: 7)
+ * @returns Array of similar notes sorted by similarity (highest first)
+ *
+ * @example
+ * ```typescript
+ * const similar = findSimilarNotes(
+ *   "Discussed Q4 roadmap with Sarah",
+ *   topicId,
+ *   allNotes,
+ *   7  // Last 7 days
+ * );
+ * ```
+ *
+ * @threshold
+ * - Returns notes with >30% similarity
+ * - Uses word-based matching (keywords >3 chars)
+ */
 export function findSimilarNotes(
   content: string,
   topicId: string,
@@ -140,7 +260,9 @@ export function findSimilarNotes(
 
   const topicNotes = existingNotes.filter(
     note =>
-      note.topicId === topicId &&
+      note.relationships.some(rel =>
+        rel.targetType === EntityType.TOPIC && rel.targetId === topicId
+      ) &&
       now - new Date(note.timestamp).getTime() < threshold
   );
 
@@ -203,14 +325,43 @@ export function sortNotes(
 }
 
 export function filterNotesByTopic(notes: Note[], topicId: string): Note[] {
-  return notes.filter(note => note.topicId === topicId);
+  return notes.filter(note =>
+    note.relationships.some(rel =>
+      rel.targetType === EntityType.TOPIC && rel.targetId === topicId
+    )
+  );
 }
 
 export function filterTasksByTopic(tasks: Task[], topicId: string): Task[] {
-  return tasks.filter(task => task.topicId === topicId);
+  return tasks.filter(task =>
+    task.relationships.some(rel =>
+      rel.targetType === EntityType.TOPIC && rel.targetId === topicId
+    )
+  );
 }
 
 // Formatting helpers
+/**
+ * Formats a timestamp as relative time (e.g., "5m ago", "2h ago")
+ *
+ * @param timestamp - ISO 8601 timestamp string
+ * @returns Human-readable relative time string
+ *
+ * @example
+ * ```typescript
+ * formatRelativeTime(new Date().toISOString());  // "just now"
+ * formatRelativeTime(Date.now() - 5 * 60 * 1000);  // "5m ago"
+ * ```
+ *
+ * @format
+ * - <60s → "just now"
+ * - <60m → "Xm ago"
+ * - <24h → "Xh ago"
+ * - <7d → "Xd ago"
+ * - <4w → "Xw ago"
+ * - <12mo → "Xmo ago"
+ * - ≥12mo → Full date (MM/DD/YYYY)
+ */
 export function formatRelativeTime(timestamp: string): string {
   const now = Date.now();
   const then = new Date(timestamp).getTime();
@@ -234,8 +385,20 @@ export function formatRelativeTime(timestamp: string): string {
 }
 
 /**
- * Strip HTML tags from text content
- * Use this to sanitize AI-generated note content that may contain unwanted HTML
+ * Strips all HTML tags from text content
+ *
+ * @param text - Text with potential HTML tags
+ * @returns Plain text with tags removed and entities decoded
+ *
+ * @example
+ * ```typescript
+ * stripHtmlTags("<p>Hello &amp; goodbye</p>");  // "Hello & goodbye"
+ * ```
+ *
+ * @use_case
+ * - Sanitize AI-generated content that may contain unwanted HTML
+ * - Clean text for preview/display
+ * - Extract plain text for search indexing
  */
 export function stripHtmlTags(text: string): string {
   if (!text) return '';
@@ -428,6 +591,36 @@ function decodeHtmlEntities(text: string): string {
 }
 
 // Format note content - handles both plain text and HTML
+/**
+ * Formats note content with HTML/markdown support and XSS protection
+ *
+ * @param content - Raw content (plain text, markdown, or HTML)
+ * @returns Sanitized HTML ready for dangerouslySetInnerHTML
+ *
+ * @example
+ * ```typescript
+ * const html = formatNoteContent("# Header\n\n**Bold** text");
+ * // Returns: "<h1>Header</h1><p><strong>Bold</strong> text</p>"
+ * ```
+ *
+ * @security
+ * - Uses DOMPurify to prevent XSS attacks
+ * - Only allows safe HTML tags (h1-h4, p, strong, em, ul, ol, li, etc.)
+ * - Strips scripts, inline event handlers, and dangerous attributes
+ *
+ * @markdown_support
+ * - Headers: # ## ###
+ * - Bold: **text**
+ * - Italic: *text*
+ * - Bullet lists: - item or * item
+ * - Numbered lists: 1. item
+ *
+ * @implementation
+ * 1. Decode HTML entities first
+ * 2. Check if already HTML → sanitize and return
+ * 3. Convert markdown to HTML
+ * 4. Sanitize final output with DOMPurify
+ */
 export function formatNoteContent(content: string): string {
   if (!content) return '';
 
@@ -436,11 +629,8 @@ export function formatNoteContent(content: string): string {
   const decoded = decodeHtmlEntities(content);
 
   // Now check if the decoded content is already HTML (has actual HTML tags)
-  const hasHtmlTags = decoded.includes('<p>') || decoded.includes('<div>') ||
-                      decoded.includes('<br') || decoded.includes('<h1') ||
-                      decoded.includes('<h2') || decoded.includes('<h3') ||
-                      decoded.includes('<ul') || decoded.includes('<ol') ||
-                      decoded.includes('<strong') || decoded.includes('<em');
+  // Use robust regex to detect ANY HTML tag, not just specific ones
+  const hasHtmlTags = /<[a-z][\w-]*(\s[^>]*)?>/i.test(decoded);
 
   // If it already has HTML tags after decoding, return it sanitized
   if (hasHtmlTags) {
@@ -550,8 +740,22 @@ export function formatNoteContent(content: string): string {
 }
 
 /**
- * Deduplicate tasks by comparing titles and due dates
- * Returns tasks that don't already exist in the provided list
+ * Deduplicates tasks by comparing titles, due dates, and other attributes
+ *
+ * @param newTasks - Array of new tasks to check
+ * @param existingTasks - Array of existing tasks to compare against
+ * @returns Array of tasks that don't already exist
+ *
+ * @example
+ * ```typescript
+ * const unique = deduplicateTasks(aiExtractedTasks, existingTasks);
+ * // Only returns tasks that aren't duplicates
+ * ```
+ *
+ * @duplicate_criteria
+ * A task is considered a duplicate if:
+ * - Exact title match (case-insensitive) AND
+ * - (Same due date OR (same priority AND same topic))
  */
 export function deduplicateTasks(newTasks: Task[], existingTasks: Task[]): Task[] {
   return newTasks.filter(newTask => {
@@ -566,8 +770,10 @@ export function deduplicateTasks(newTasks: Task[], existingTasks: Task[]): Task[
         : !newTask.dueDate && !existing.dueDate;
 
       // Same topic (if both have one)
-      const topicMatch = newTask.topicId && existing.topicId
-        ? existing.topicId === newTask.topicId
+      const newTaskTopicRel = newTask.relationships.find(r => r.targetType === EntityType.TOPIC);
+      const existingTopicRel = existing.relationships.find(r => r.targetType === EntityType.TOPIC);
+      const topicMatch = newTaskTopicRel && existingTopicRel
+        ? existingTopicRel.targetId === newTaskTopicRel.targetId
         : true;
 
       // Same priority

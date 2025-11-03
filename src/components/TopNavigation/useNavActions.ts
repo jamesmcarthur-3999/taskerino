@@ -187,6 +187,7 @@ export function useNavActions(
 
     const newTask: Task = {
       id: generateId(),
+      relationships: [],
       title: taskTitle,
       done: false,
       priority: 'medium',
@@ -239,6 +240,7 @@ export function useNavActions(
 
     const newNote = {
       id: generateId(),
+      relationships: [],
       content: noteInput,
       summary: noteInput.substring(0, 100),
       timestamp: new Date().toISOString(),

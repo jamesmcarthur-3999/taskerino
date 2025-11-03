@@ -1,14 +1,13 @@
+use rayon::prelude::*;
+use std::path::PathBuf;
+use std::time::Instant;
 /**
  * Attachment Loader Module (Task 3A)
  *
  * Parallel attachment loading using Rust + Rayon
  * Batch loads attachment metadata for faster initial renders
  */
-
 use tauri::{AppHandle, Manager};
-use rayon::prelude::*;
-use std::time::Instant;
-use std::path::PathBuf;
 
 use crate::session_models::AttachmentMeta;
 
@@ -19,9 +18,12 @@ use crate::session_models::AttachmentMeta;
 #[tauri::command]
 pub async fn load_attachments_metadata_parallel(
     attachment_ids: Vec<String>,
-    app_handle: AppHandle
+    app_handle: AppHandle,
 ) -> Result<Vec<AttachmentMeta>, String> {
-    println!("🦀 [RUST] Loading {} attachment metadata in parallel...", attachment_ids.len());
+    println!(
+        "🦀 [RUST] Loading {} attachment metadata in parallel...",
+        attachment_ids.len()
+    );
     let start = Instant::now();
 
     // Get attachments directory
@@ -65,8 +67,15 @@ pub async fn load_attachments_metadata_parallel(
         .collect();
 
     let elapsed = start.elapsed();
-    println!("✅ [RUST] Loaded {} metadata files in {:?} (parallel)", metadata.len(), elapsed);
-    println!("⚡ [PERFORMANCE] CPU cores utilized: {}", rayon::current_num_threads());
+    println!(
+        "✅ [RUST] Loaded {} metadata files in {:?} (parallel)",
+        metadata.len(),
+        elapsed
+    );
+    println!(
+        "⚡ [PERFORMANCE] CPU cores utilized: {}",
+        rayon::current_num_threads()
+    );
 
     Ok(metadata)
 }
@@ -78,9 +87,12 @@ pub async fn load_attachments_metadata_parallel(
 #[tauri::command]
 pub async fn check_attachments_exist(
     attachment_ids: Vec<String>,
-    app_handle: AppHandle
+    app_handle: AppHandle,
 ) -> Result<Vec<String>, String> {
-    println!("🦀 [RUST] Checking existence of {} attachments...", attachment_ids.len());
+    println!(
+        "🦀 [RUST] Checking existence of {} attachments...",
+        attachment_ids.len()
+    );
     let start = Instant::now();
 
     let data_dir = app_handle
@@ -107,8 +119,12 @@ pub async fn check_attachments_exist(
         .collect();
 
     let elapsed = start.elapsed();
-    println!("✅ [RUST] Checked {} attachments in {:?}, found {}",
-        total_count, elapsed, existing.len());
+    println!(
+        "✅ [RUST] Checked {} attachments in {:?}, found {}",
+        total_count,
+        elapsed,
+        existing.len()
+    );
 
     Ok(existing)
 }
@@ -117,9 +133,7 @@ pub async fn check_attachments_exist(
  * Get total size of attachments (for storage analytics)
  */
 #[tauri::command]
-pub async fn get_attachments_total_size(
-    app_handle: AppHandle
-) -> Result<u64, String> {
+pub async fn get_attachments_total_size(app_handle: AppHandle) -> Result<u64, String> {
     println!("🦀 [RUST] Calculating total attachment size...");
     let start = Instant::now();
 
@@ -140,17 +154,17 @@ pub async fn get_attachments_total_size(
 
     // Calculate total size in PARALLEL
     let total_size: u64 = entries
-        .par_bridge()  // Convert iterator to parallel iterator
-        .filter_map(|entry| {
-            entry.ok().and_then(|e| {
-                e.metadata().ok().map(|m| m.len())
-            })
-        })
+        .par_bridge() // Convert iterator to parallel iterator
+        .filter_map(|entry| entry.ok().and_then(|e| e.metadata().ok().map(|m| m.len())))
         .sum();
 
     let elapsed = start.elapsed();
-    println!("✅ [RUST] Total size: {} bytes ({} MB) calculated in {:?}",
-        total_size, total_size / 1024 / 1024, elapsed);
+    println!(
+        "✅ [RUST] Total size: {} bytes ({} MB) calculated in {:?}",
+        total_size,
+        total_size / 1024 / 1024,
+        elapsed
+    );
 
     Ok(total_size)
 }
@@ -168,9 +182,7 @@ pub struct AttachmentCounts {
 }
 
 #[tauri::command]
-pub async fn count_attachments_by_type(
-    app_handle: AppHandle
-) -> Result<AttachmentCounts, String> {
+pub async fn count_attachments_by_type(app_handle: AppHandle) -> Result<AttachmentCounts, String> {
     println!("🦀 [RUST] Counting attachments by type...");
     let start = Instant::now();
 
