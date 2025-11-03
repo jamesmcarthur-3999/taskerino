@@ -782,7 +782,7 @@ export class NedToolExecutor {
       }
 
       // Execute search (O(log n) via inverted indexes)
-      const searchResult = await unifiedIndex.search(searchQuery);
+      const searchResult = await unifiedIndex.unifiedSearch(searchQuery);
       const noteIds = searchResult.results.notes.map(r => r.id);
 
       // Load full notes from appState
@@ -853,7 +853,7 @@ export class NedToolExecutor {
       }
 
       // Execute search (O(log n) via inverted indexes)
-      const searchResult = await unifiedIndex.search(searchQuery);
+      const searchResult = await unifiedIndex.unifiedSearch(searchQuery);
       const taskIds = searchResult.results.tasks.map(r => r.id);
 
       // Load full tasks from appState

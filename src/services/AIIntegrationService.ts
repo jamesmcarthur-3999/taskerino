@@ -93,8 +93,6 @@ class AIIntegrationService {
         const newTopic: Topic = {
           id: generateId(),
           name: topicData.name,
-          type: topicData.type === 'company' ? 'company' :
-                topicData.type === 'person' ? 'person' : 'other',
           createdAt: new Date().toISOString(),
           lastUpdated: new Date().toISOString(),
           noteCount: 0,

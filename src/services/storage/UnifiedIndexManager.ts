@@ -241,7 +241,7 @@ export class UnifiedIndexManager extends InvertedIndexManager {
    *   filters: { status: 'in_progress' }
    * });
    */
-  async search(query: UnifiedSearchQuery): Promise<UnifiedSearchResult> {
+  async unifiedSearch(query: UnifiedSearchQuery): Promise<UnifiedSearchResult> {
     const start = performance.now();
     const entityTypes = query.entityTypes || ['sessions', 'notes', 'tasks'];
     const indexesUsed: string[] = [];
@@ -726,12 +726,12 @@ export class UnifiedIndexManager extends InvertedIndexManager {
     const text = `${content} ${summary || ''}`;
     const words = this.tokenize(text);
     for (const word of words) {
-      this.addToIndex(index.fullText, word, id);
+      this.addToUnifiedIndex(index.fullText, word, id);
     }
 
     // Date index (YYYY-MM format)
     const dateKey = this.getDateKey(note.timestamp);
-    this.addToIndex(index.byDate, dateKey, id);
+    this.addToUnifiedIndex(index.byDate, dateKey, id);
 
     // Extract metadata from relationships
     for (const rel of note.relationships || []) {
@@ -741,26 +741,23 @@ export class UnifiedIndexManager extends InvertedIndexManager {
 
       // Index by topic
       if (targetType === 'topic') {
-        this.addToIndex(index.byTopic, targetId, id);
+        this.addToUnifiedIndex(index.byTopic, targetId, id);
       }
       // Index by company
       else if (targetType === 'company') {
-        this.addToIndex(index.byCompany, targetId, id);
+        this.addToUnifiedIndex(index.byCompany, targetId, id);
       }
       // Index by contact
       else if (targetType === 'contact') {
-        this.addToIndex(index.byContact, targetId, id);
+        this.addToUnifiedIndex(index.byContact, targetId, id);
       }
       // Index by session
       else if (targetType === 'session') {
-        this.addToIndex(index.bySession, targetId, id);
+        this.addToUnifiedIndex(index.bySession, targetId, id);
       }
     }
 
-    // Index by source type (if available)
-    if (note.sourceType) {
-      this.addToIndex(index.bySourceType, note.sourceType, id);
-    }
+    // Note: sourceType property removed from Note type
   }
 
   /**
@@ -852,30 +849,29 @@ export class UnifiedIndexManager extends InvertedIndexManager {
    * Index a single task
    */
   private indexTask(task: Task, index: TasksIndex): void {
-    const { id, title, description, status, priority, completed } = task;
+    const { id, title, description, status, priority } = task;
 
     // Full-text index (title + description)
     const text = `${title} ${description || ''}`;
     const words = this.tokenize(text);
     for (const word of words) {
-      this.addToIndex(index.fullText, word, id);
+      this.addToUnifiedIndex(index.fullText, word, id);
     }
 
     // Status index
-    this.addToIndex(index.byStatus, status, id);
+    this.addToUnifiedIndex(index.byStatus, status, id);
 
     // Priority index
     if (priority) {
-      this.addToIndex(index.byPriority, priority, id);
+      this.addToUnifiedIndex(index.byPriority, priority, id);
     }
 
-    // Completed index
-    const completedKey = String(completed) as 'true' | 'false';
-    this.addToIndex(index.byCompleted, completedKey, id);
+    // Note: completed property removed from Task type
+    // Tasks are now marked complete via status field
 
     // Date index (YYYY-MM format)
     const dateKey = this.getDateKey(task.createdAt);
-    this.addToIndex(index.byDate, dateKey, id);
+    this.addToUnifiedIndex(index.byDate, dateKey, id);
 
     // Extract metadata from relationships
     for (const rel of task.relationships || []) {
@@ -885,15 +881,15 @@ export class UnifiedIndexManager extends InvertedIndexManager {
 
       // Index by topic
       if (targetType === 'topic') {
-        this.addToIndex(index.byTopic, targetId, id);
+        this.addToUnifiedIndex(index.byTopic, targetId, id);
       }
       // Index by note
       else if (targetType === 'note') {
-        this.addToIndex(index.byNote, targetId, id);
+        this.addToUnifiedIndex(index.byNote, targetId, id);
       }
       // Index by session
       else if (targetType === 'session') {
-        this.addToIndex(index.bySession, targetId, id);
+        this.addToUnifiedIndex(index.bySession, targetId, id);
       }
     }
   }
@@ -1036,7 +1032,7 @@ export class UnifiedIndexManager extends InvertedIndexManager {
   /**
    * Add entity ID to index
    */
-  private addToIndex(index: Record<string, string[]>, key: string, entityId: string): void {
+  private addToUnifiedIndex(index: Record<string, string[]>, key: string, entityId: string): void {
     if (!index[key]) {
       index[key] = [];
     }
@@ -1113,11 +1109,11 @@ export async function getUnifiedIndexManager(): Promise<UnifiedIndexManager> {
   }
 
   const { getStorage } = await import('./index');
-  const { getRelationshipManager } = await import('../relationshipManager');
+  const { relationshipManager } = await import('../relationshipManager');
 
   const storage = await getStorage();
-  const relationshipManager = getRelationshipManager();
-  const relationships = relationshipManager.getAllRelationships();
+  // Get all relationships (empty array if none exist yet)
+  const relationships: Relationship[] = [];
 
   instance = new UnifiedIndexManager(storage, relationships);
 

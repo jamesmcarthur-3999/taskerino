@@ -296,10 +296,15 @@ ${topics.map(t => `- ${t.name} (ID: ${t.id}, ${t.noteCount} notes)`).join('\n') 
 
 **Notes (${notes.length}):**
 ${notes.map(n => {
+  // Extract entity IDs from relationships
+  const companyIds = n.relationships.filter(r => r.type === 'note-company').map(r => r.targetId);
+  const contactIds = n.relationships.filter(r => r.type === 'note-contact').map(r => r.targetId);
+  const topicIds = n.relationships.filter(r => r.type === 'note-topic').map(r => r.targetId);
+
   const entities = [
-    ...(n.companyIds || []).map(id => companies.find(c => c.id === id)?.name).filter(Boolean),
-    ...(n.contactIds || []).map(id => contacts.find(c => c.id === id)?.name).filter(Boolean),
-    ...(n.topicIds || []).map(id => topics.find(t => t.id === id)?.name).filter(Boolean),
+    ...companyIds.map((id: string) => companies.find(c => c.id === id)?.name).filter(Boolean),
+    ...contactIds.map((id: string) => contacts.find(c => c.id === id)?.name).filter(Boolean),
+    ...topicIds.map((id: string) => topics.find(t => t.id === id)?.name).filter(Boolean),
   ];
   return `- [${n.id}] ${n.summary.substring(0, 150)} (${n.timestamp.split('T')[0]}, tags: ${n.tags.join(', ') || 'none'}, entities: ${entities.join(', ') || 'none'})`;
 }).join('\n')}

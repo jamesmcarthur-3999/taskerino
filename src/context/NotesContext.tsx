@@ -241,7 +241,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   //
   // import { getUnifiedIndexManager } from '../services/storage/UnifiedIndexManager';
   // const unifiedIndex = await getUnifiedIndexManager();
-  // const result = await unifiedIndex.search({
+  // const result = await unifiedIndex.unifiedSearch({
   //   entityTypes: ['notes'],
   //   query: 'search text',
   //   filters: { ... },

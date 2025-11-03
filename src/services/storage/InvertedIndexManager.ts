@@ -219,7 +219,7 @@ interface Indexes {
 // ============================================================================
 
 export class InvertedIndexManager {
-  private storage: StorageAdapter;
+  protected storage: StorageAdapter;
   private indexes: Indexes | null = null;
   private readonly INDEX_VERSION = 1;
   private readonly INDEX_PREFIX = 'session-indexes';

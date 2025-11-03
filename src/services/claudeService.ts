@@ -84,7 +84,7 @@ export class ClaudeService {
         try {
           const unifiedIndex = await getUnifiedIndexManager();
 
-          const result = await unifiedIndex.search({
+          const result = await unifiedIndex.unifiedSearch({
             entityTypes: ['notes'],
             query: query,
             relatedTo: topicId ? {
@@ -136,7 +136,7 @@ export class ClaudeService {
         try {
           const unifiedIndex = await getUnifiedIndexManager();
 
-          const result = await unifiedIndex.search({
+          const result = await unifiedIndex.unifiedSearch({
             entityTypes: ['tasks'],
             query: query,
             filters: {
@@ -188,7 +188,7 @@ export class ClaudeService {
           // Combine summary and content for search query
           const searchQuery = [summary, content].filter(Boolean).join(' ');
 
-          const result = await unifiedIndex.search({
+          const result = await unifiedIndex.unifiedSearch({
             entityTypes: ['notes'],
             query: searchQuery,
             relatedTo: topicId ? {
@@ -237,7 +237,7 @@ export class ClaudeService {
           // Combine title and description for search
           const searchQuery = [title, description].filter(Boolean).join(' ');
 
-          const result = await unifiedIndex.search({
+          const result = await unifiedIndex.unifiedSearch({
             entityTypes: ['tasks'],
             query: searchQuery,
             relatedTo: contextNoteId ? {

@@ -1487,8 +1487,8 @@ export class ChunkedSessionStorage {
 
       // References
       trackingNoteId: session.trackingNoteId,
-      extractedTaskIds: session.relationships?.filter(r => r.type === 'task').map(r => r.targetId) || [],
-      extractedNoteIds: session.relationships?.filter(r => r.type === 'note').map(r => r.targetId) || [],
+      extractedTaskIds: session.relationships?.filter(r => r.targetType === 'task').map(r => r.targetId) || [],
+      extractedNoteIds: session.relationships?.filter(r => r.targetType === 'note').map(r => r.targetId) || [],
       relationships: session.relationships || [],
       relationshipVersion: 1, // Current relationship system version
 

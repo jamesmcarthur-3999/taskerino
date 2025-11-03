@@ -498,8 +498,8 @@ export class AIDeduplicationService {
   ): number {
     let confidence = this.calculateNoteSimilarity(summary, content, existingNote);
 
-    // Bonus for same topic
-    if (topicId && (existingNote.topicIds?.includes(topicId) || existingNote.topicId === topicId)) {
+    // Bonus for same topic (using relationships)
+    if (topicId && existingNote.relationships.some(r => r.type === 'note-topic' && r.targetId === topicId)) {
       confidence = Math.min(1.0, confidence + 0.1);
     }
 
