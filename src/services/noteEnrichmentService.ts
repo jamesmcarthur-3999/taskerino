@@ -46,6 +46,14 @@ export interface NoteEnrichmentResult {
     companies: Array<{ name: string; confidence: number }>;
     contacts: Array<{ name: string; confidence: number }>;
   };
+
+  // DEPRECATED: Old format for backwards compatibility (will be removed)
+  suggestedTopicIds?: string[];
+  suggestedCompanyIds?: string[];
+  suggestedContactIds?: string[];
+  newTopics?: Array<{ name: string; type?: string }>;
+  newCompanies?: Array<{ name: string }>;
+  newContacts?: Array<{ name: string }>;
 }
 
 /**

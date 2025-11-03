@@ -25,7 +25,7 @@ export function DemoCanvas({ session }: DemoCanvasProps) {
   // Get summary data
   const summary = session.summary;
   const hasAudio = session.audioSegments && session.audioSegments.length > 0;
-  const hasVideo = session.video?.fullVideoAttachmentId;
+  const hasVideo = session.video?.path || session.video?.optimizedPath;
 
   // Determine canvas theme based on session type
   const theme = getCanvasTheme(session);

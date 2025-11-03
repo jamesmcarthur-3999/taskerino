@@ -86,13 +86,14 @@ export interface SummaryRequestedEvent {
  *
  * Fired when user responds to an AI question (via ask_user_question tool).
  * AI can incorporate this answer into its next summary update.
+ * answer is null if the question timed out without user response.
  */
 export interface UserQuestionAnsweredEvent {
   type: 'user-question-answered';
   sessionId: string;
   questionId: string;
   question: string;
-  answer: string;
+  answer: string | null;
   timestamp: string;  // ISO 8601
 }
 
@@ -224,7 +225,7 @@ export class LiveSessionEventEmitter {
     sessionId: string,
     questionId: string,
     question: string,
-    answer: string
+    answer: string | null
   ): void {
     const event: UserQuestionAnsweredEvent = {
       type: 'user-question-answered',

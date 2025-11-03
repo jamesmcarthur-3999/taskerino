@@ -60,7 +60,7 @@ export function EnrichmentStatusBanner({
 
   // Check if session has audio or video data
   const hasAudio = session.audioSegments && session.audioSegments.length > 0;
-  const hasVideo = Boolean(session.video?.fullVideoAttachmentId);
+  const hasVideo = Boolean(session.video?.path || session.video?.optimizedPath);
 
   // Don't show banner if no enrichable content
   if (!hasAudio && !hasVideo) {
