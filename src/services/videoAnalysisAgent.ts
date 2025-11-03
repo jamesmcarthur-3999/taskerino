@@ -77,7 +77,7 @@ class VideoAnalysisAgent {
 
     // 4. Extract frames
     const frames = await videoFrameExtractor.extractFrames(
-      videoAttachment.path,
+      videoPath,
       timestamps
     );
 

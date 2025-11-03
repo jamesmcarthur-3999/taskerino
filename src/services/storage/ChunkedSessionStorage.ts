@@ -121,7 +121,8 @@ export interface SessionMetadata {
   video?: {
     id: string;
     sessionId: string;
-    fullVideoAttachmentId?: string; // Optional: audio-only sessions won't have this
+    path?: string; // Original video file path
+    optimizedPath?: string; // Background-processed optimized video/audio path
     duration: number;
     chunkingStatus: 'pending' | 'processing' | 'complete' | 'error';
     processedAt?: string;
@@ -1486,10 +1487,10 @@ export class ChunkedSessionStorage {
 
       // References
       trackingNoteId: session.trackingNoteId,
-      extractedTaskIds: session.extractedTaskIds,
-      extractedNoteIds: session.extractedNoteIds,
-      relationships: session.relationships,
-      relationshipVersion: session.relationshipVersion,
+      extractedTaskIds: session.relationships?.filter(r => r.type === 'task').map(r => r.targetId) || [],
+      extractedNoteIds: session.relationships?.filter(r => r.type === 'note').map(r => r.targetId) || [],
+      relationships: session.relationships || [],
+      relationshipVersion: 1, // Current relationship system version
 
       // Chunk manifests (will be updated when chunks are saved)
       chunks: {
@@ -1567,7 +1568,7 @@ export class ChunkedSessionStorage {
    * Convert SessionMetadata back to partial Session
    * (without large arrays - those are loaded separately)
    */
-  private metadataToSession(metadata: SessionMetadata): Pick<Session, 'id' | 'name' | 'description' | 'status' | 'startTime' | 'endTime' | 'lastScreenshotTime' | 'pausedAt' | 'totalPausedTime' | 'screenshotInterval' | 'autoAnalysis' | 'enableScreenshots' | 'audioMode' | 'audioRecording' | 'videoRecording' | 'trackingNoteId' | 'extractedTaskIds' | 'extractedNoteIds' | 'relationships' | 'relationshipVersion' | 'tags' | 'category' | 'subCategory' | 'activityType' | 'totalDuration' | 'audioReviewCompleted' | 'fullAudioAttachmentId' | 'transcriptUpgradeCompleted' | 'enrichmentStatus' | 'enrichmentConfig' | 'enrichmentLock' | 'audioConfig' | 'videoConfig' | 'version'> {
+  private metadataToSession(metadata: SessionMetadata): Pick<Session, 'id' | 'name' | 'description' | 'status' | 'startTime' | 'endTime' | 'lastScreenshotTime' | 'pausedAt' | 'totalPausedTime' | 'screenshotInterval' | 'autoAnalysis' | 'enableScreenshots' | 'audioMode' | 'audioRecording' | 'videoRecording' | 'trackingNoteId' | 'relationships' | 'tags' | 'category' | 'subCategory' | 'activityType' | 'totalDuration' | 'audioReviewCompleted' | 'fullAudioAttachmentId' | 'transcriptUpgradeCompleted' | 'enrichmentStatus' | 'enrichmentConfig' | 'enrichmentLock' | 'audioConfig' | 'videoConfig' | 'version'> {
     return {
       id: metadata.id,
       name: metadata.name,
@@ -1585,10 +1586,7 @@ export class ChunkedSessionStorage {
       audioRecording: metadata.audioRecording,
       videoRecording: metadata.videoRecording,
       trackingNoteId: metadata.trackingNoteId,
-      extractedTaskIds: metadata.extractedTaskIds,
-      extractedNoteIds: metadata.extractedNoteIds,
-      relationships: metadata.relationships,
-      relationshipVersion: metadata.relationshipVersion,
+      relationships: metadata.relationships || [],
       tags: metadata.tags,
       category: metadata.category,
       subCategory: metadata.subCategory,

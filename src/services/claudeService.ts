@@ -1542,7 +1542,12 @@ Returns tasks with relevance scores (0-1). Threshold default: 0.8 (stricter than
       while (response.stopReason === 'tool_use' && toolIterations < maxToolIterations) {
         toolIterations++;
 
-        const toolCalls = response.content.filter((c: any) => c.type === 'tool_use');
+        // Type guard for tool_use content blocks
+        const isToolUse = (c: ClaudeContentBlock): c is { type: 'tool_use'; id: string; name: string; input: Record<string, any> } => {
+          return c.type === 'tool_use';
+        };
+
+        const toolCalls = response.content.filter(isToolUse);
         console.log(`[claudeService] Tool iteration ${toolIterations}: Claude used ${toolCalls.length} tools`);
 
         // Execute all tools and collect results
@@ -2301,7 +2306,6 @@ Be specific - explain what changed and why.
 Return the FULL updated result in this format:
 {
   "aiSummary": "Explanation of changes",
-  "detectedTopics": ${JSON.stringify(currentResult.detectedTopics || [])},
   "notes": [
     {
       "content": "...",
@@ -2385,12 +2389,14 @@ Return valid JSON only (no markdown).`;
 
       // Build updated result with new conversation context
       const updatedNotes = aiResponse.notes && aiResponse.notes.length > 0 ? [{
-        topicId: aiResponse.primaryTopic?.name || 'General',
-        topicName: aiResponse.primaryTopic?.name || 'General',
+        id: aiResponse.notes[0].id || 'note-1', // Required field
+        action: aiResponse.notes[0].action,
+        targetId: aiResponse.notes[0].targetId,
+        mergeWith: aiResponse.notes[0].mergeWith,
+        mergeStrategy: aiResponse.notes[0].mergeStrategy,
+        reasoning: aiResponse.notes[0].reasoning,
         content: aiResponse.notes[0].content,
         summary: aiResponse.notes[0].summary,
-        sourceText: context.originalCapture,
-        isNew: true,
         tags: aiResponse.notes[0].tags || [],
         source: aiResponse.notes[0].source || 'thought',
         sentiment: aiResponse.notes[0].sentiment || 'neutral',
@@ -2431,7 +2437,6 @@ Return valid JSON only (no markdown).`;
         aiSummary: aiResponse.aiSummary || 'I\'ve updated the capture based on your request.',
         notes: updatedNotes,
         tasks: aiResponse.tasks || currentResult.tasks,
-        detectedTopics: currentResult.detectedTopics, // Keep existing topics
         conversationContext: {
           ...context,
           messages: [

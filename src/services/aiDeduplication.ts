@@ -199,11 +199,15 @@ export class AIDeduplicationService {
     let candidateTasks = allTasks;
 
     if (contextNoteId) {
-      // Only consider tasks from the same note
-      candidateTasks = allTasks.filter(task => task.noteId === contextNoteId);
+      // Only consider tasks from the same note (using relationships)
+      candidateTasks = allTasks.filter(task =>
+        task.relationships.some(r => r.type === 'task-note' && r.targetId === contextNoteId)
+      );
     } else if (contextSessionId) {
-      // Only consider tasks from the same session
-      candidateTasks = allTasks.filter(task => task.sourceSessionId === contextSessionId);
+      // Only consider tasks from the same session (using relationships)
+      candidateTasks = allTasks.filter(task =>
+        task.relationships.some(r => r.type === 'task-session' && r.targetId === contextSessionId)
+      );
     }
 
     // Calculate similarity scores
@@ -265,9 +269,9 @@ export class AIDeduplicationService {
     let candidateNotes = allNotes;
 
     if (topicId) {
-      // Only consider notes from the same topic
+      // Only consider notes from the same topic (using relationships)
       candidateNotes = allNotes.filter(note =>
-        note.topicIds?.includes(topicId) || note.topicId === topicId
+        note.relationships.some(r => r.type === 'note-topic' && r.targetId === topicId)
       );
     }
 
@@ -459,9 +463,9 @@ export class AIDeduplicationService {
     let confidence = this.calculateTaskSimilarity(title, description, existingTask);
 
     // Bonus for same context (note or session)
-    if (contextNoteId && existingTask.noteId === contextNoteId) {
+    if (contextNoteId && existingTask.relationships.some(r => r.type === 'task-note' && r.targetId === contextNoteId)) {
       confidence = Math.min(1.0, confidence + 0.1);
-    } else if (contextSessionId && existingTask.sourceSessionId === contextSessionId) {
+    } else if (contextSessionId && existingTask.relationships.some(r => r.type === 'task-session' && r.targetId === contextSessionId)) {
       confidence = Math.min(1.0, confidence + 0.1);
     }
 

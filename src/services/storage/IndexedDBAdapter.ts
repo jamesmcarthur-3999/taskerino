@@ -990,7 +990,7 @@ export class IndexedDBAdapter extends StorageAdapter {
         const request = store.put(record);
 
         request.onsuccess = () => {
-          debug.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
+          console.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
           resolve();
         };
 
@@ -1016,7 +1016,7 @@ export class IndexedDBAdapter extends StorageAdapter {
         const request = store.put(record);
 
         request.onsuccess = () => {
-          debug.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
+          console.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
           resolve();
         };
 
@@ -1055,7 +1055,7 @@ export class IndexedDBAdapter extends StorageAdapter {
           if (result && result.data) {
             resolve({ index: result.data.index as T, metadata: result.data.metadata });
           } else {
-            debug.log(`[Index] No ${indexType} index found for ${collection}`);
+            console.log(`[Index] No ${indexType} index found for ${collection}`);
             resolve(null);
           }
         };
@@ -1077,7 +1077,7 @@ export class IndexedDBAdapter extends StorageAdapter {
           if (result) {
             resolve({ index: result.index as T, metadata: result.metadata });
           } else {
-            debug.log(`[Index] No ${indexType} index found for ${collection}`);
+            console.log(`[Index] No ${indexType} index found for ${collection}`);
             resolve(null);
           }
         };
