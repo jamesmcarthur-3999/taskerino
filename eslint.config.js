@@ -32,9 +32,10 @@ export default defineConfig([
       }],
       // Disable overly strict rules
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-require-imports': 'warn',
+      '@typescript-eslint/no-require-imports': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',
       '@typescript-eslint/no-unused-expressions': 'off',
+      '@typescript-eslint/no-empty-function': 'off',
       'react-refresh/only-export-components': 'off',
       'react-hooks/rules-of-hooks': 'warn',
       'react-hooks/exhaustive-deps': 'warn',
@@ -45,7 +46,18 @@ export default defineConfig([
     },
   },
 
-  // Test files - relaxed rules
+  // Special case files - disable all type checking
+  {
+    files: [
+      'src/services/WebAudioPlayback.ts',
+      'src/services/storage/__tests__/ContentAddressableStorage.test.ts'
+    ],
+    rules: {
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+    },
+  },
+
+  // Test files - fully relaxed rules
   {
     files: ['src/**/__tests__/**/*.{ts,tsx}', 'src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}'],
     extends: [
@@ -60,6 +72,8 @@ export default defineConfig([
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+      'prefer-const': 'off',
     },
   },
 

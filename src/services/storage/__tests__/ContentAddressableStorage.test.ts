@@ -51,6 +51,7 @@ class MockStorageAdapter implements StorageAdapter {
   async importData(): Promise<void> {}
   async isAvailable(): Promise<boolean> {
     return true;
+  }
   async listBackups(): Promise<any[]> {
     return [];
   }

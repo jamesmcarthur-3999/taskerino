@@ -35,9 +35,10 @@ vi.mock('../../context/NotesContext', () => ({
   }),
 }));
 
-vi.mock('../../context/SessionsContext', () => ({
-  useSessions: () => ({
+vi.mock('../../context/SessionListContext', () => ({
+  useSessionList: () => ({
     sessions: [],
+    getSessionById: vi.fn(),
     updateSession: vi.fn(),
   }),
 }));
