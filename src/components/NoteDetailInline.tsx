@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import type { Note } from '../types';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import type { Note, Topic, Company, Contact } from '../types';
 import { useNotes } from '../context/NotesContext';
 import { useEntities } from '../context/EntitiesContext';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
-import { FileText, Trash2, Clock, Sparkles, Columns, Focus, Settings } from 'lucide-react';
+import { FileText, Trash2, Clock, Sparkles, Columns, Focus, Settings, CheckCircle2, Edit3 } from 'lucide-react';
 import { formatRelativeTime, generateId } from '../utils/helpers';
 import { RichTextEditor } from './RichTextEditor';
 import { InlineTagManager } from './InlineTagManager';
@@ -13,6 +13,9 @@ import { ICON_SIZES, getGlassClasses, getRadiusClass } from '../design-system/th
 import { RelationshipModal } from './relationships/RelationshipModal';
 import { RelationshipCardSection } from './relationships/RelationshipCardSection';
 import { EntityType, RelationshipType } from '../types/relationships';
+import { NoteEnrichmentButton } from './notes/NoteEnrichmentButton';
+import { NoteEnrichmentSuggestions, type SuggestionType } from './notes/NoteEnrichmentSuggestions';
+import { getNoteEnrichmentService, type NoteEnrichmentResult } from '../services/noteEnrichmentService';
 
 interface NoteDetailInlineProps {
   noteId: string;
@@ -24,7 +27,7 @@ type SaveStatus = 'idle' | 'saving' | 'saved';
 
 export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }: NoteDetailInlineProps) {
   const { state: notesState, updateNote, deleteNote } = useNotes();
-  const { state: entitiesState, addCompany, addContact } = useEntities();
+  const { state: entitiesState, addCompany, addContact, addTopic } = useEntities();
   const { registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
   const [editedContent, setEditedContent] = useState('');
   const [editedSummary, setEditedSummary] = useState('');
@@ -38,6 +41,12 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
   const isInitialMount = useRef(true);
   const rafIdRef = useRef<number | null>(null);
 
+  // Enrichment state
+  const [enrichmentResult, setEnrichmentResult] = useState<NoteEnrichmentResult | null>(null);
+  const [isEnriching, setIsEnriching] = useState(false);
+  const autoEnrichedNotesRef = useRef<Set<string>>(new Set());
+  const enrichmentService = getNoteEnrichmentService();
+
   // Find the note from state
   const note = notesState.notes.find(n => n.id === noteId);
 
@@ -49,6 +58,22 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
     });
     return Array.from(tagSet);
   }, [notesState.notes]);
+
+  // Compute companyIds from relationships
+  const noteCompanyIds = useMemo(() => {
+    if (!note) return [];
+    return note.relationships
+      .filter(r => r.targetType === EntityType.COMPANY)
+      .map(r => r.targetId);
+  }, [note?.relationships]);
+
+  // Compute contactIds from relationships
+  const noteContactIds = useMemo(() => {
+    if (!note) return [];
+    return note.relationships
+      .filter(r => r.targetType === EntityType.CONTACT)
+      .map(r => r.targetId);
+  }, [note?.relationships]);
 
   // Initialize edited values when note changes
   useEffect(() => {
@@ -152,6 +177,17 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
     }
   };
 
+  const handleToggleStatus = () => {
+    if (!note) return;
+    const newStatus = note.status === 'approved' ? 'draft' : 'approved';
+    const updatedNote: Note = {
+      ...note,
+      status: newStatus,
+      lastUpdated: new Date().toISOString(),
+    };
+    updateNote(updatedNote);
+  };
+
   const handleTagsChange = (newTags: string[]) => {
     if (!note) return;
     const updatedNote: Note = {
@@ -163,18 +199,54 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
 
   const handleCompaniesChange = (companyIds: string[]) => {
     if (!note) return;
+
+    // Remove all existing company relationships
+    const nonCompanyRelationships = note.relationships.filter(
+      r => r.targetType !== EntityType.COMPANY
+    );
+
+    // Add new company relationships
+    const newCompanyRelationships = companyIds.map(companyId => ({
+      id: generateId(),
+      sourceType: EntityType.NOTE,
+      sourceId: note.id,
+      targetType: EntityType.COMPANY,
+      targetId: companyId,
+      type: RelationshipType.NOTE_COMPANY,
+      canonical: true,
+      metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+    }));
+
     const updatedNote: Note = {
       ...note,
-      companyIds,
+      relationships: [...nonCompanyRelationships, ...newCompanyRelationships],
     };
     updateNote(updatedNote);
   };
 
   const handleContactsChange = (contactIds: string[]) => {
     if (!note) return;
+
+    // Remove all existing contact relationships
+    const nonContactRelationships = note.relationships.filter(
+      r => r.targetType !== EntityType.CONTACT
+    );
+
+    // Add new contact relationships
+    const newContactRelationships = contactIds.map(contactId => ({
+      id: generateId(),
+      sourceType: EntityType.NOTE,
+      sourceId: note.id,
+      targetType: EntityType.CONTACT,
+      targetId: contactId,
+      type: RelationshipType.NOTE_CONTACT,
+      canonical: true,
+      metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+    }));
+
     const updatedNote: Note = {
       ...note,
-      contactIds,
+      relationships: [...nonContactRelationships, ...newContactRelationships],
     };
     updateNote(updatedNote);
   };
@@ -206,6 +278,239 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
     return newContact;
   };
 
+  // Auto-enrichment trigger: enrich note when content is saved and hasn't been auto-enriched yet
+  useEffect(() => {
+    if (!note || !noteId) return;
+
+    // Skip if already auto-enriched
+    if (autoEnrichedNotesRef.current.has(noteId)) return;
+
+    // Skip if already has enrichment
+    if (note.metadata?.aiEnrichment) return;
+
+    // Skip if content is too short (< 50 characters)
+    if (!note.content || note.content.trim().length < 50) return;
+
+    // Only trigger after content has been edited and saved
+    if (saveStatus === 'saved') {
+      // Mark as auto-enriched to prevent re-trigger
+      autoEnrichedNotesRef.current.add(noteId);
+
+      // Trigger enrichment in background
+      handleEnrichNote(true);
+    }
+  }, [saveStatus, noteId, note?.metadata?.aiEnrichment]);
+
+  // Manual or auto enrichment handler
+  const handleEnrichNote = useCallback(async (autoTriggered = false) => {
+    if (!note || isEnriching) return;
+
+    setIsEnriching(true);
+    setEnrichmentResult(null);
+
+    try {
+      const result = await enrichmentService.enrichNote(
+        note,
+        {
+          existingNotes: notesState.notes,
+          existingTopics: entitiesState.topics,
+          existingCompanies: entitiesState.companies,
+          existingContacts: entitiesState.contacts,
+        },
+        {
+          generateTitle: true,
+          extractTags: true,
+          generateSummary: true,
+          findRelations: true,
+          analyzeEntities: true,
+        }
+      );
+
+      if (result.success) {
+        setEnrichmentResult(result);
+
+        // Update note with enrichment metadata
+        const updatedNote: Note = {
+          ...note,
+          metadata: {
+            ...note.metadata,
+            aiEnrichment: {
+              enrichedAt: new Date().toISOString(),
+              model: 'claude-sonnet-4-5',
+              autoEnriched: autoTriggered,
+              suggestedTitle: result.suggestedTitle,
+              suggestedTags: result.suggestedTags,
+              suggestedSummary: result.suggestedSummary,
+              keyTopics: result.keyTopics,
+              sentiment: result.sentiment,
+              relatedNoteIds: result.relatedNoteIds,
+              suggestedCompanyIds: result.suggestedCompanyIds,
+              suggestedContactIds: result.suggestedContactIds,
+              suggestedTopicIds: result.suggestedTopicIds,
+              newCompanies: result.newCompanies,
+              newContacts: result.newContacts,
+              newTopics: result.newTopics,
+            },
+          },
+        };
+        updateNote(updatedNote);
+      } else {
+        console.error('[NOTE ENRICHMENT] Enrichment failed:', result.error);
+      }
+    } catch (error) {
+      console.error('[NOTE ENRICHMENT] Enrichment error:', error);
+    } finally {
+      setIsEnriching(false);
+    }
+  }, [note, isEnriching, enrichmentService, notesState.notes, entitiesState, updateNote]);
+
+  // Apply enrichment suggestion
+  const handleApplySuggestion = useCallback((type: SuggestionType, value: any) => {
+    if (!note) return;
+
+    let updatedNote = { ...note };
+
+    switch (type) {
+      case 'title':
+        updatedNote.summary = value;
+        setEditedSummary(value);
+        break;
+
+      case 'tags':
+        updatedNote.tags = value;
+        break;
+
+      case 'summary':
+        // Store summary in metadata if not already the title
+        updatedNote.metadata = {
+          ...updatedNote.metadata,
+          keyPoints: [value],
+        };
+        break;
+
+      case 'linkCompany':
+        updatedNote.relationships = [...updatedNote.relationships, {
+          id: generateId(),
+          sourceType: EntityType.NOTE,
+          sourceId: note.id,
+          targetType: EntityType.COMPANY,
+          targetId: value,
+          type: RelationshipType.NOTE_COMPANY,
+          canonical: true,
+          metadata: { source: 'ai' as const, createdAt: new Date().toISOString() },
+        }];
+        break;
+
+      case 'linkContact':
+        updatedNote.relationships = [...updatedNote.relationships, {
+          id: generateId(),
+          sourceType: EntityType.NOTE,
+          sourceId: note.id,
+          targetType: EntityType.CONTACT,
+          targetId: value,
+          type: RelationshipType.NOTE_CONTACT,
+          canonical: true,
+          metadata: { source: 'ai' as const, createdAt: new Date().toISOString() },
+        }];
+        break;
+
+      case 'linkTopic':
+        updatedNote.relationships = [...updatedNote.relationships, {
+          id: generateId(),
+          sourceType: EntityType.NOTE,
+          sourceId: note.id,
+          targetType: EntityType.TOPIC,
+          targetId: value,
+          type: RelationshipType.NOTE_TOPIC,
+          canonical: true,
+          metadata: { source: 'ai' as const, createdAt: new Date().toISOString() },
+        }];
+        break;
+
+      case 'createCompany':
+        {
+          const newCompany: Company = {
+            id: generateId(),
+            name: value.name,
+            createdAt: new Date().toISOString(),
+            lastUpdated: new Date().toISOString(),
+            noteCount: 0,
+            profile: {
+              description: value.description,
+            },
+          };
+          addCompany(newCompany);
+          updatedNote.relationships = [...updatedNote.relationships, {
+            id: generateId(),
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.COMPANY,
+            targetId: newCompany.id,
+            type: RelationshipType.NOTE_COMPANY,
+            canonical: true,
+            metadata: { source: 'ai' as const, createdAt: new Date().toISOString() },
+          }];
+        }
+        break;
+
+      case 'createContact':
+        {
+          const newContact: Contact = {
+            id: generateId(),
+            name: value.name,
+            createdAt: new Date().toISOString(),
+            lastUpdated: new Date().toISOString(),
+            noteCount: 0,
+            profile: {
+              email: value.email,
+              role: value.role,
+            },
+          };
+          addContact(newContact);
+          updatedNote.relationships = [...updatedNote.relationships, {
+            id: generateId(),
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.CONTACT,
+            targetId: newContact.id,
+            type: RelationshipType.NOTE_CONTACT,
+            canonical: true,
+            metadata: { source: 'ai' as const, createdAt: new Date().toISOString() },
+          }];
+        }
+        break;
+
+      case 'createTopic':
+        {
+          const newTopic: Topic = {
+            id: generateId(),
+            name: value.name,
+            createdAt: new Date().toISOString(),
+            lastUpdated: new Date().toISOString(),
+            noteCount: 0,
+          };
+          addTopic(newTopic);
+          updatedNote.relationships = [...updatedNote.relationships, {
+            id: generateId(),
+            sourceType: EntityType.NOTE,
+            sourceId: note.id,
+            targetType: EntityType.TOPIC,
+            targetId: newTopic.id,
+            type: RelationshipType.NOTE_TOPIC,
+            canonical: true,
+            metadata: { source: 'ai' as const, createdAt: new Date().toISOString() },
+          }];
+        }
+        break;
+    }
+
+    updateNote(updatedNote);
+  }, [note, updateNote, addCompany, addContact, addTopic]);
+
+  // Dismiss enrichment suggestions
+  const handleDismissSuggestions = useCallback(() => {
+    setEnrichmentResult(null);
+  }, []);
 
   // Show loading or empty state if no note
   if (!note) {
@@ -295,7 +600,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
                   Companies
                 </label>
                 <CompanyPillManager
-                  companyIds={note.companyIds || []}
+                  companyIds={noteCompanyIds}
                   onCompaniesChange={handleCompaniesChange}
                   allCompanies={entitiesState.companies}
                   editable={true}
@@ -309,7 +614,7 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
                   Contacts
                 </label>
                 <ContactPillManager
-                  contactIds={note.contactIds || []}
+                  contactIds={noteContactIds}
                   onContactsChange={handleContactsChange}
                   allContacts={entitiesState.contacts}
                   editable={true}
@@ -325,6 +630,30 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
                   {note.source}
                 </span>
               </div>
+
+              {/* Status Toggle */}
+              <button
+                onClick={handleToggleStatus}
+                className={`flex items-center gap-1.5 px-2 py-0.5 ${getRadiusClass('pill')} transition-all hover:scale-105 active:scale-95 font-medium ${
+                  note.status === 'approved'
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'
+                    : 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-300'
+                }`}
+                title={note.status === 'approved' ? 'Click to mark as draft' : 'Click to approve'}
+              >
+                {note.status === 'approved' ? (
+                  <>
+                    <CheckCircle2 size={12} />
+                    <span>Approved</span>
+                  </>
+                ) : (
+                  <>
+                    <Edit3 size={12} />
+                    <span>Draft</span>
+                  </>
+                )}
+              </button>
+
               {note.metadata?.sentiment && (
                 <div className="flex items-center gap-1">
                   <span>
@@ -346,6 +675,11 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            <NoteEnrichmentButton
+              note={note}
+              onEnrich={() => handleEnrichNote(false)}
+              disabled={isEnriching}
+            />
             {onToggleSidebar && (
               <button
                 onClick={() => onToggleSidebar(!isSidebarExpanded)}
@@ -379,6 +713,19 @@ export function NoteDetailInline({ noteId, onToggleSidebar, isSidebarExpanded }:
       {/* Scrollable Content Area */}
       <div ref={contentRef} className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-8 py-6 max-w-5xl mx-auto space-y-4">
+
+        {/* Enrichment Suggestions */}
+        {enrichmentResult && (
+          <NoteEnrichmentSuggestions
+            note={note}
+            enrichment={enrichmentResult}
+            existingTopics={entitiesState.topics}
+            existingCompanies={entitiesState.companies}
+            existingContacts={entitiesState.contacts}
+            onApplySuggestion={handleApplySuggestion}
+            onDismiss={handleDismissSuggestions}
+          />
+        )}
 
         {/* Key Takeaways - Compact Card */}
         {note.metadata?.keyPoints && note.metadata.keyPoints.length > 0 && (

@@ -1,3 +1,5 @@
+import { debug } from '../utils/debug';
+
 interface EnrichmentLock {
   sessionId: string;
   lockedBy: string; // Process identifier
@@ -22,7 +24,7 @@ export class EnrichmentLockService {
     this.cleanupIntervalId = null;
     this.processId = this.getProcessId();
 
-    console.log('🔒 [ENRICHMENT LOCK] Service initialized', {
+    debug.log('🔒 [ENRICHMENT LOCK] Service initialized', {
       processId: this.processId,
       defaultTimeoutMinutes,
       cleanupIntervalMs: this.cleanupIntervalMs,
@@ -57,7 +59,7 @@ export class EnrichmentLockService {
           return false;
         } else {
           // Lock has expired, log and proceed to acquire
-          console.log('🔒 [ENRICHMENT LOCK] Removing expired lock', {
+          debug.log('🔒 [ENRICHMENT LOCK] Removing expired lock', {
             sessionId,
             lockedBy: existingLock.lockedBy,
             expiredAt: new Date(existingLock.expiresAt).toISOString(),
@@ -157,7 +159,7 @@ export class EnrichmentLockService {
 
       // Clean up if expired
       if (!isLocked) {
-        console.log('🔒 [ENRICHMENT LOCK] Lock expired during check', {
+        debug.log('🔒 [ENRICHMENT LOCK] Lock expired during check', {
           sessionId,
           lockedBy: lock.lockedBy,
           expiredAt: new Date(lock.expiresAt).toISOString(),
@@ -285,7 +287,7 @@ export class EnrichmentLockService {
           this.locks.delete(sessionId);
           cleanedCount++;
 
-          console.log('🔒 [ENRICHMENT LOCK] Expired lock cleaned up', {
+          debug.log('🔒 [ENRICHMENT LOCK] Expired lock cleaned up', {
             sessionId,
             lockedBy: lock.lockedBy,
             lockedAt: new Date(lock.lockedAt).toISOString(),
@@ -296,7 +298,7 @@ export class EnrichmentLockService {
       }
 
       if (cleanedCount > 0) {
-        console.log('🔒 [ENRICHMENT LOCK] Cleanup completed', {
+        debug.log('🔒 [ENRICHMENT LOCK] Cleanup completed', {
           cleanedCount,
           remainingLocks: this.locks.size,
         });
@@ -322,7 +324,7 @@ export class EnrichmentLockService {
       this.cleanupExpiredLocks();
     }, this.cleanupIntervalMs);
 
-    console.log('🔒 [ENRICHMENT LOCK] Cleanup interval started', {
+    debug.log('🔒 [ENRICHMENT LOCK] Cleanup interval started', {
       intervalMs: this.cleanupIntervalMs,
     });
   }
@@ -335,7 +337,7 @@ export class EnrichmentLockService {
     if (this.cleanupIntervalId) {
       clearInterval(this.cleanupIntervalId);
       this.cleanupIntervalId = null;
-      console.log('🔒 [ENRICHMENT LOCK] Cleanup interval stopped');
+      debug.log('🔒 [ENRICHMENT LOCK] Cleanup interval stopped');
     }
   }
 
@@ -378,7 +380,7 @@ export class EnrichmentLockService {
     const lockCount = this.locks.size;
     this.locks.clear();
 
-    console.log('🔒 [ENRICHMENT LOCK] Service destroyed', {
+    debug.log('🔒 [ENRICHMENT LOCK] Service destroyed', {
       clearedLocks: lockCount,
     });
   }

@@ -1,5 +1,7 @@
 # Taskerino Context Architecture Guide
 
+**Last Updated**: November 2, 2025
+
 ## Quick Reference
 
 ### Context Hierarchy
@@ -23,7 +25,9 @@ App.tsx
 | Companies, contacts, topics | EntitiesContext | `import { useEntities } from '../context/EntitiesContext'` |
 | Notes CRUD | NotesContext | `import { useNotes } from '../context/NotesContext'` |
 | Tasks CRUD | TasksContext | `import { useTasks } from '../context/TasksContext'` |
-| Sessions, screenshots, audio | SessionsContext | `import { useSessions } from '../context/SessionsContext'` |
+| Session list, filtering | SessionListContext | `import { useSessionList } from '../context/SessionListContext'` |
+| Active session lifecycle | ActiveSessionContext | `import { useActiveSession } from '../context/ActiveSessionContext'` |
+| Recording services | RecordingContext | `import { useRecording } from '../context/RecordingContext'` |
 
 ---
 
@@ -212,21 +216,51 @@ dispatch({ type: 'DELETE_TASK', payload: 'task-123' })
 
 ---
 
-### SessionsContext
+### Session Contexts (Phase 1 - New)
 
-**Hook:** `useSessions()`
+**⚠️ DEPRECATED: SessionsContext removed Oct 27, 2025. Use specialized Phase 1 contexts instead.**
+
+#### SessionListContext
+
+**Hook:** `useSessionList()`
 
 **State:**
 ```typescript
 {
   sessions: Session[]
-  activeSessionId?: string
+  filteredSessions: Session[]
+  loading: boolean
+  error: string | null
 }
 ```
 
-**Methods (All actions are methods):**
+**Methods:**
 ```typescript
 const {
+  sessions,
+  filteredSessions,
+  updateSession,
+  deleteSession,
+  refreshSessions
+} = useSessionList();
+```
+
+#### ActiveSessionContext
+
+**Hook:** `useActiveSession()`
+
+**State:**
+```typescript
+{
+  activeSession: Session | null
+  activeSessionId: string | null
+}
+```
+
+**Methods:**
+```typescript
+const {
+  activeSession,
   startSession,
   endSession,
   pauseSession,
@@ -234,30 +268,36 @@ const {
   addScreenshot,
   addAudioSegment,
   updateScreenshotAnalysis
-} = useSessions();
+} = useActiveSession();
 
 // Start a new session
-startSession({
-  title: 'Work Session',
+await startSession({
+  name: 'Work Session',
   description: 'Deep work on project',
   screenshotInterval: 120
-})
-
-// Add screenshot
-addScreenshot(sessionId, {
-  id: generateId(),
-  timestamp: new Date().toISOString(),
-  filePath: '/path/to/screenshot.png',
-  analysisStatus: 'pending'
-})
+});
 ```
 
-**Critical Actions (Auto-saved immediately):**
-- `startSession()`
-- `endSession()`
-- `addScreenshot()`
-- `addAudioSegment()`
-- `updateScreenshotAnalysis()`
+#### RecordingContext
+
+**Hook:** `useRecording()`
+
+**Methods:**
+```typescript
+const {
+  startScreenshots,
+  stopScreenshots,
+  startAudio,
+  stopAudio,
+  startVideo,
+  stopVideo,
+  isCapturing,
+  isAudioRecording,
+  isVideoRecording
+} = useRecording();
+```
+
+**See**: `/docs/sessions-rewrite/CONTEXT_MIGRATION_GUIDE.md` for complete migration guide.
 
 ---
 
@@ -382,33 +422,37 @@ function BulkActions() {
 }
 ```
 
-### Pattern 5: Session Recording
+### Pattern 5: Session Recording (Phase 1)
 
 ```typescript
-import { useSessions } from '../context/SessionsContext';
+import { useActiveSession } from '../context/ActiveSessionContext';
+import { useRecording } from '../context/RecordingContext';
 import { useUI } from '../context/UIContext';
 
 function SessionControls() {
   const {
-    sessions,
+    activeSession,
     activeSessionId,
     startSession,
     endSession,
     pauseSession,
     resumeSession
-  } = useSessions();
+  } = useActiveSession();
+  const { startScreenshots, startAudio } = useRecording();
   const { addNotification } = useUI();
-  
-  const activeSession = sessions.find(s => s.id === activeSessionId);
-  
-  const handleStart = () => {
-    startSession({
-      title: 'Work Session',
+
+  const handleStart = async () => {
+    await startSession({
+      name: 'Work Session',
       description: '',
       screenshotInterval: 120,
-      captureAudio: true
+      audioMode: 'transcription'
     });
-    
+
+    // Start recording services
+    await startScreenshots(activeSessionId!, 120);
+    await startAudio(activeSessionId!, 'default');
+
     addNotification({
       type: 'info',
       title: 'Session started',
@@ -416,10 +460,10 @@ function SessionControls() {
       autoDismiss: true
     });
   };
-  
-  const handleEnd = () => {
+
+  const handleEnd = async () => {
     if (activeSessionId) {
-      endSession(activeSessionId);
+      await endSession();
     }
   };
 }
@@ -497,7 +541,7 @@ describe('NotesContext with EntitiesContext', () => {
 2. **Avoid unnecessary re-renders** - Only subscribe to contexts you need
 3. **Use helper methods** - They're optimized for cross-context updates
 4. **Leverage debounced persistence** - State saves automatically every 5s
-5. **Critical actions save immediately** - SessionsContext handles this automatically
+5. **Critical actions save immediately** - ActiveSessionContext handles this automatically
 
 ---
 
@@ -510,7 +554,7 @@ describe('NotesContext with EntitiesContext', () => {
 **Solution:** 
 - Check browser console for storage errors
 - Verify context providers are properly nested
-- For critical data, use SessionsContext (immediate save)
+- For critical data, use ActiveSessionContext (immediate save)
 
 ### Problem: Cross-context updates not working
 **Solution:**

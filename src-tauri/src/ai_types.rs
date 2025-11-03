@@ -122,6 +122,16 @@ pub struct ClaudeImageSource {
     pub data: String, // base64 encoded image
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ClaudeTool {
+    pub name: String,
+    pub description: String,
+    #[serde(rename = "input_schema", alias = "inputSchema")]
+    pub input_schema: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeChatRequest {
@@ -130,6 +140,8 @@ pub struct ClaudeChatRequest {
     pub messages: Vec<ClaudeMessage>,
     pub system: Option<serde_json::Value>, // Accepts both String and Array with cache_control
     pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ClaudeTool>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -146,6 +158,12 @@ pub struct ClaudeChatResponse {
 pub enum ClaudeResponseContent {
     #[serde(rename = "text")]
     Text { text: String },
+    #[serde(rename = "tool_use")]
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -159,12 +177,20 @@ pub struct ClaudeUsage {
     pub cache_read_input_tokens: Option<u32>,
 }
 
+// ============================================================================
+// Claude Streaming Types
+// ============================================================================
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ClaudeTool {
-    pub name: String,
-    pub description: String,
-    #[serde(rename = "input_schema", alias = "inputSchema")]
-    pub input_schema: serde_json::Value,
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeStreamingRequest {
+    pub model: String,
+    pub max_tokens: u32,
+    pub messages: Vec<ClaudeMessage>,
+    pub system: Option<serde_json::Value>, // Accepts both String and Array with cache_control
+    pub temperature: Option<f32>,
+    pub tools: Option<Vec<ClaudeTool>>,
+    pub stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_control: Option<serde_json::Value>,
+    pub extended_thinking: Option<bool>,
 }

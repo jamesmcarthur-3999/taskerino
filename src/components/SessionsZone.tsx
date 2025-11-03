@@ -11,6 +11,7 @@ import type { Session, SessionScreenshot, SessionAudioSegment, SessionContextIte
 import { videoStorageService } from '../services/videoStorageService';
 import { sessionsAgentService } from '../services/sessionsAgentService';
 import { getCAStorage } from '../services/storage/ContentAddressableStorage';
+import { LiveSessionEventEmitter } from '../services/liveSession/events';
 import { SessionTimeline } from './SessionTimeline';
 import { checkScreenRecordingPermission, showMacOSPermissionInstructions } from '../utils/permissions';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -23,7 +24,6 @@ import { useTheme } from '../context/ThemeContext';
 const SessionDetailView = lazy(() => import('./SessionDetailView').then(module => ({ default: module.SessionDetailView })));
 const ActiveSessionView = lazy(() => import('./ActiveSessionView').then(module => ({ default: module.ActiveSessionView })));
 const SessionProcessingScreen = lazy(() => import('./sessions/SessionProcessingScreen').then(module => ({ default: module.SessionProcessingScreen })));
-import { EnrichmentProgressModal } from './EnrichmentProgressModal';
 import { listen } from '@tauri-apps/api/event';
 import { getTemplates, saveTemplate, type SessionTemplate } from '../utils/sessionTemplates';
 import { loadLastSessionSettings, saveLastSessionSettings, getSettingsSummary, type LastSessionSettings } from '../utils/lastSessionSettings';
@@ -109,7 +109,7 @@ export default function SessionsZone() {
   } = useRecording();
   const { state: uiState, dispatch: uiDispatch, addNotification } = useUI();
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
-  const { state: entitiesState } = useEntities();
+  const { state: entitiesState, addTopic, addCompany, addContact } = useEntities();
   const { scrollY, registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
   const { activeEnrichments, hasActiveEnrichments } = useEnrichmentContext();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -764,10 +764,71 @@ export default function SessionsZone() {
 
         console.log('✅ Screenshot analysis complete');
 
+        // Emit event for Live Session Intelligence
+        LiveSessionEventEmitter.emitScreenshotAnalyzed(currentSession.id, screenshot);
+
         // Feed AI curiosity score back to adaptive scheduler (if active)
         if (analysis && analysis.curiosity !== undefined) {
           updateCuriosityScore(analysis.curiosity);
           console.log(`🧠 [ADAPTIVE] Curiosity score updated: ${analysis.curiosity.toFixed(1)}`);
+        }
+
+        // Auto-create lightweight entities from detected entities (topics, companies, contacts)
+        // NOTE: We do NOT auto-create notes/tasks - those require user confirmation
+        if (analysis && analysis.detectedEntities) {
+          const { topics, companies, contacts } = analysis.detectedEntities;
+
+          // Create topics (subjects/projects/concepts)
+          topics.forEach(topic => {
+            // Check if topic already exists (fuzzy match)
+            const existing = entitiesState.topics.find(t =>
+              t.name.toLowerCase() === topic.name.toLowerCase()
+            );
+            if (!existing && topic.confidence >= 0.5) {
+              console.log(`🏷️ [SESSION] Auto-creating topic: ${topic.name} (confidence: ${topic.confidence.toFixed(2)})`);
+              addTopic({
+                id: `topic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: topic.name,
+                noteCount: 0,
+                createdAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString(),
+              });
+            }
+          });
+
+          // Create companies (organizations)
+          companies.forEach(company => {
+            const existing = entitiesState.companies.find(c =>
+              c.name.toLowerCase() === company.name.toLowerCase()
+            );
+            if (!existing && company.confidence >= 0.5) {
+              console.log(`🏢 [SESSION] Auto-creating company: ${company.name} (confidence: ${company.confidence.toFixed(2)})`);
+              addCompany({
+                id: `company_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: company.name,
+                noteCount: 0,
+                createdAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString(),
+              });
+            }
+          });
+
+          // Create contacts (people)
+          contacts.forEach(contact => {
+            const existing = entitiesState.contacts.find(c =>
+              c.name.toLowerCase() === contact.name.toLowerCase()
+            );
+            if (!existing && contact.confidence >= 0.5) {
+              console.log(`👤 [SESSION] Auto-creating contact: ${contact.name} (confidence: ${contact.confidence.toFixed(2)})`);
+              addContact({
+                id: `contact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: contact.name,
+                noteCount: 0,
+                createdAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString(),
+              });
+            }
+          });
         }
       } catch (error) {
         console.error('❌ Screenshot analysis failed:', error);
@@ -1467,6 +1528,7 @@ export default function SessionsZone() {
       name: 'Quick Session',
       description: 'Started quickly without description',
       status: 'active',
+      relationships: [],
       tags: [],
       screenshotInterval: lastSettings.screenshotInterval,
       enableScreenshots: lastSettings.enableScreenshots,
@@ -1485,6 +1547,7 @@ export default function SessionsZone() {
       name: config.name || `Session ${new Date().toLocaleString()}`,
       description: config.description || '',
       status: 'active' as const,
+      relationships: [],
       tags: config.tags || [],
       screenshotInterval: config.screenshotInterval ?? lastSettings.screenshotInterval,
       enableScreenshots: config.enableScreenshots ?? lastSettings.enableScreenshots,

@@ -17,7 +17,6 @@ import { InlineTagManager } from './InlineTagManager';
 import { CompanyPillManager } from './CompanyPillManager';
 import { ContactPillManager } from './ContactPillManager';
 import { RainbowBorderProgressIndicator } from './RainbowBorderProgressIndicator';
-import { EnrichmentProgressModal } from './EnrichmentProgressModal';
 import { getBackgroundEnrichmentManager } from '../services/enrichment/BackgroundEnrichmentManager';
 import { getStorage } from '../services/storage';
 import { getChunkedStorage } from '../services/storage/ChunkedSessionStorage';
@@ -444,8 +443,21 @@ export function SessionDetailView({
 
   const handleExtractTask = (title: string, priority: 'low' | 'medium' | 'high' | 'urgent', context?: string) => {
     const now = new Date().toISOString();
+    const taskId = generateId();
     const newTask: Task = {
-      id: generateId(),
+      id: taskId,
+      relationships: [
+        {
+          id: generateId(),
+          sourceType: EntityType.TASK,
+          sourceId: taskId,
+          targetType: EntityType.SESSION,
+          targetId: session.id,
+          type: RelationshipType.TASK_SESSION,
+          canonical: true,
+          metadata: { source: 'ai' as const, createdAt: now },
+        },
+      ],
       title: title.trim(),
       done: false,
       priority,
@@ -454,7 +466,6 @@ export function SessionDetailView({
       createdAt: now,
 
       // Session linkage
-      sourceSessionId: session.id,
       sourceExcerpt: title,
 
       // Rich context for AI agents
@@ -499,15 +510,27 @@ export function SessionDetailView({
     const cleanContent = stripHtmlTags(content.trim());
 
     const now = new Date().toISOString();
+    const noteId = generateId();
     const newNote: Note = {
-      id: generateId(),
+      id: noteId,
+      relationships: [
+        {
+          id: generateId(),
+          sourceType: EntityType.NOTE,
+          sourceId: noteId,
+          targetType: EntityType.SESSION,
+          targetId: session.id,
+          type: RelationshipType.NOTE_SESSION,
+          canonical: true,
+          metadata: { source: 'manual' as const, createdAt: now },
+        },
+      ],
       content: cleanContent,
       summary: cleanContent.split('\n')[0].substring(0, 100),
       timestamp: now,
       lastUpdated: now,
       source: 'thought',
       tags: [],
-      sourceSessionId: session.id,
 
       // Rich metadata following capture box pattern
       metadata: {
@@ -547,17 +570,19 @@ export function SessionDetailView({
   const handleCompaniesChange = (companyIds: string[]) => {
     if (!currentSession) return;
 
-    updateSessionInContext(currentSession.id, {
-      companyIds,
-    });
+    // TODO: Update to use relationships array
+    // Sessions don't directly store company/contact IDs
+    // They are inferred from notes/tasks linked to the session
+    console.log('Company IDs update requested:', companyIds);
   };
 
   const handleContactsChange = (contactIds: string[]) => {
     if (!currentSession) return;
 
-    updateSessionInContext(currentSession.id, {
-      contactIds,
-    });
+    // TODO: Update to use relationships array
+    // Sessions don't directly store company/contact IDs
+    // They are inferred from notes/tasks linked to the session
+    console.log('Contact IDs update requested:', contactIds);
   };
 
   const handleSessionUpdate = (updatedSession: Session) => {
@@ -595,11 +620,11 @@ export function SessionDetailView({
         sessionName: currentSession.name,
         priority: 'high', // User-initiated re-enrichment = high priority
         options: {
-          includeAudio: options.audio ?? false,
-          includeVideo: options.video ?? false,
-          includeSummary: true,
-          includeCanvas: true,
-          forceRegenerate: true
+          skipAudio: !(options.audio ?? false),
+          skipVideo: !(options.video ?? false),
+          skipSummary: false,
+          skipCanvas: false,
+          forceReTranscribe: options.audio ?? false
         }
       });
 
@@ -773,7 +798,7 @@ export function SessionDetailView({
               {/* Companies Section */}
               <div className="flex-shrink-0 min-w-0">
                 <CompanyPillManager
-                  companyIds={currentSession.companyIds || []}
+                  companyIds={[]} // TODO: Derive from related notes/tasks
                   onCompaniesChange={handleCompaniesChange}
                   allCompanies={entitiesState.companies}
                   editable={currentSession.status === 'completed'}
@@ -783,7 +808,7 @@ export function SessionDetailView({
               {/* Contacts Section */}
               <div className="flex-shrink-0 min-w-0">
                 <ContactPillManager
-                  contactIds={currentSession.contactIds || []}
+                  contactIds={[]} // TODO: Derive from related notes/tasks
                   onContactsChange={handleContactsChange}
                   allContacts={entitiesState.contacts}
                   editable={currentSession.status === 'completed'}
@@ -861,7 +886,7 @@ export function SessionDetailView({
                         </div>
                       </button>
                     )}
-                    {currentSession.video?.fullVideoAttachmentId && (
+                    {currentSession.video && (
                       <button
                         onClick={() => handleReEnrich({ audio: false, video: true })}
                         className={`w-full px-4 py-3 text-left hover:${getSuccessGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 ${currentSession.audioSegments?.length ? 'border-t border-gray-100' : ''}`}
@@ -873,7 +898,7 @@ export function SessionDetailView({
                         </div>
                       </button>
                     )}
-                    {currentSession.audioSegments?.length && currentSession.video?.fullVideoAttachmentId && (
+                    {currentSession.audioSegments?.length && currentSession.video && (
                       <button
                         onClick={() => handleReEnrich({ audio: true, video: true })}
                         className={`w-full px-4 py-3 text-left hover:${getSuccessGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 border-t border-gray-100`}

@@ -23,9 +23,12 @@ extern "C" {
     fn screen_recorder_is_video_ready(path: *const c_char) -> bool;
     fn screen_recorder_generate_thumbnail(path: *const c_char, time: f64) -> *const c_char;
 
-    // Enumeration functions (wrapped by recording/ module)
+    // Enumeration functions (wrapped by recording/ module, not called directly)
+    #[allow(dead_code)]
     fn screen_recorder_enumerate_displays() -> *const c_char;
+    #[allow(dead_code)]
     fn screen_recorder_enumerate_windows() -> *const c_char;
+    #[allow(dead_code)]
     fn screen_recorder_enumerate_webcams() -> *const c_char;
 }
 
@@ -55,100 +58,7 @@ impl Default for VideoQuality {
 // ============================================================================
 // Enumeration Functions
 // ============================================================================
-// Note: These internal functions are currently not used as the Swift bridge
-// implementation is pending. The Tauri commands below return empty lists
-// as a temporary workaround.
-
-// /// Enumerate all available displays (internal function)
-// fn enumerate_displays_internal() -> Result<Vec<crate::types::DisplayInfo>, String> {
-//     #[cfg(target_os = "macos")]
-//     {
-//         use std::ffi::CStr;
-//
-//         let json_ptr = unsafe { screen_recorder_enumerate_displays() };
-//
-//         if json_ptr.is_null() {
-//             return Err("Failed to enumerate displays".to_string());
-//         }
-//
-//         let json_str = unsafe {
-//             CStr::from_ptr(json_ptr)
-//                 .to_string_lossy()
-//                 .into_owned()
-//         };
-//
-//         unsafe { libc::free(json_ptr as *mut libc::c_void) };
-//
-//         serde_json::from_str(&json_str)
-//             .map_err(|e| format!("Failed to parse display info: {}", e))
-//     }
-//
-//     #[cfg(not(target_os = "macos"))]
-//     {
-//         Err("Display enumeration only supported on macOS".to_string())
-//     }
-// }
-//
-// /// Enumerate all capturable windows (internal function)
-// fn enumerate_windows_internal() -> Result<Vec<crate::types::WindowInfo>, String> {
-//     #[cfg(target_os = "macos")]
-//     {
-//         use std::ffi::CStr;
-//
-//         let json_ptr = unsafe { screen_recorder_enumerate_windows() };
-//
-//         if json_ptr.is_null() {
-//             return Err("Failed to enumerate windows".to_string());
-//         }
-//
-//         let json_str = unsafe {
-//             CStr::from_ptr(json_ptr)
-//                 .to_string_lossy()
-//                 .into_owned()
-//         };
-//
-//         unsafe { libc::free(json_ptr as *mut libc::c_void) };
-//
-//         serde_json::from_str(&json_str)
-//             .map_err(|e| format!("Failed to parse window info: {}", e))
-//     }
-//
-//     #[cfg(not(target_os = "macos"))]
-//     {
-//         Err("Window enumeration only supported on macOS".to_string())
-//     }
-// }
-//
-// /// Enumerate all available webcams (internal function)
-// fn enumerate_webcams_internal() -> Result<Vec<crate::types::WebcamInfo>, String> {
-//     #[cfg(target_os = "macos")]
-//     {
-//         use std::ffi::CStr;
-//
-//         let json_ptr = unsafe { screen_recorder_enumerate_webcams() };
-//
-//         if json_ptr.is_null() {
-//             return Err("Failed to enumerate webcams".to_string());
-//         }
-//
-//         let json_str = unsafe {
-//             CStr::from_ptr(json_ptr)
-//                 .to_string_lossy()
-//                 .into_owned()
-//         };
-//
-//         unsafe { libc::free(json_ptr as *mut libc::c_void) };
-//
-//         serde_json::from_str(&json_str)
-//             .map_err(|e| format!("Failed to parse webcam info: {}", e))
-//     }
-//
-//     #[cfg(not(target_os = "macos"))]
-//     {
-//         Err("Webcam enumeration only supported on macOS".to_string())
-//     }
-// }
-
+// Enumeration is handled by recording::ffi module
 // ============================================================================
 // Tauri Commands
 // ============================================================================

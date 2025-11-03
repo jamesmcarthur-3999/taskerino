@@ -266,7 +266,11 @@ export class AICanvasGenerator {
    * BEST PRACTICE #2: Handle prefilled response (starts with '{')
    */
   private parseCanvasSpec(response: ClaudeChatResponse): CanvasSpec {
-    let jsonText = response.content[0].text.trim();
+    const firstContent = response.content[0];
+    if (firstContent.type !== 'text') {
+      throw new Error('Expected text response from Claude');
+    }
+    let jsonText = firstContent.text.trim();
 
     // Remove markdown code fences if present (though prefilling should prevent this)
     const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);

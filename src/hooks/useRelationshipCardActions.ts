@@ -18,6 +18,7 @@ import { useSessionList } from '@/context/SessionListContext';
 import { useUI } from '@/context/UIContext';
 import { useRelationships } from '@/context/RelationshipContext';
 import { EntityType as EntityTypeEnum } from '@/types/relationships';
+import { getBackgroundEnrichmentManager } from '@/services/enrichment/BackgroundEnrichmentManager';
 
 /**
  * Hook options
@@ -291,6 +292,9 @@ export function useRelationshipCardActions(
 
   /**
    * Session-specific: Trigger enrichment
+   *
+   * Enqueues the session for background enrichment using BackgroundEnrichmentManager.
+   * Shows notification to user and handles errors gracefully.
    */
   const enrich = useCallback(
     async (sessionId: string) => {
@@ -305,16 +309,26 @@ export function useRelationshipCardActions(
           throw new Error('Enrichment already in progress for this session');
         }
 
-        // TODO: Trigger enrichment via EnrichmentContext or service
-        // For now, just log - actual implementation will be in enrichment context
-        console.log(`[useRelationshipCardActions] Enrichment triggered for session: ${sessionId}`);
+        // Trigger enrichment via BackgroundEnrichmentManager
+        const manager = await getBackgroundEnrichmentManager();
+        const jobId = await manager.enqueueSession({
+          sessionId: session.id,
+          sessionName: session.name || 'Untitled Session',
+          priority: 'normal',
+          options: {
+            skipAudio: false,
+            skipVideo: false,
+          },
+        });
+
+        console.log(`[useRelationshipCardActions] Enrichment job created: ${jobId} for session: ${sessionId}`);
 
         uiContext.dispatch({
           type: 'ADD_NOTIFICATION',
           payload: {
-            type: 'info',
-            title: 'Enrichment Started',
-            message: 'Session enrichment is in progress...',
+            type: 'success',
+            title: 'Enrichment Queued',
+            message: `Session "${session.name || 'Untitled'}" has been queued for enrichment`,
           },
         });
 

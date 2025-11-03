@@ -27,6 +27,7 @@ import { Loader2 } from 'lucide-react';
 import { getBackgroundEnrichmentManager } from '@/services/enrichment/BackgroundEnrichmentManager';
 import type { QueueStatus } from '@/services/enrichment/PersistentEnrichmentQueue';
 import { EnrichmentPanel } from '@/components/enrichment/EnrichmentPanel';
+import { debug } from '@/utils/debug';
 
 // ============================================================================
 // Types
@@ -74,7 +75,7 @@ export function EnrichmentStatusIndicator({
   // caused by unstable useCallback dependencies
 
   useEffect(() => {
-    console.log('[EnrichmentStatusIndicator] Starting status polling');
+    debug.log('[EnrichmentStatusIndicator] Starting status polling');
 
     // Define fetch function inside effect (no external dependencies)
     const fetchStatus = async () => {
@@ -94,7 +95,7 @@ export function EnrichmentStatusIndicator({
         setError(null);
         setIsLoading(false);
 
-        console.log('[EnrichmentStatusIndicator] Status updated:', {
+        debug.log('[EnrichmentStatusIndicator] Status updated:', {
           pending: queueStatus.pending,
           processing: queueStatus.processing,
           completed: queueStatus.completed,
@@ -116,7 +117,7 @@ export function EnrichmentStatusIndicator({
 
     // Cleanup on unmount - CRITICAL: prevents interval accumulation
     return () => {
-      console.log('[EnrichmentStatusIndicator] Stopping status polling');
+      debug.log('[EnrichmentStatusIndicator] Stopping status polling');
       clearInterval(interval);
     };
   }, [pollingInterval]); // Only depend on pollingInterval (stable prop)
@@ -129,7 +130,7 @@ export function EnrichmentStatusIndicator({
    * Toggle expanded state (open/close panel)
    */
   const handleClick = useCallback(() => {
-    console.log('[EnrichmentStatusIndicator] Toggling panel:', !expanded);
+    debug.log('[EnrichmentStatusIndicator] Toggling panel:', !expanded);
     setExpanded((prev) => !prev);
   }, [expanded]);
 
@@ -137,7 +138,7 @@ export function EnrichmentStatusIndicator({
    * Close panel (called by EnrichmentPanel)
    */
   const handleClose = useCallback(() => {
-    console.log('[EnrichmentStatusIndicator] Closing panel');
+    debug.log('[EnrichmentStatusIndicator] Closing panel');
     setExpanded(false);
   }, []);
 

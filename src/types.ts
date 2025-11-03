@@ -4,18 +4,12 @@
 // UNIFIED RELATIONSHIP SYSTEM (Phase 2.0)
 // ============================================================================
 //
-// Replaces legacy fields (topicId, noteId, sourceSessionId, etc.) with a
-// flexible relationship array that can represent any entity-to-entity connection.
+// All entities use a flexible relationships[] array for entity-to-entity connections.
 //
 // EXAMPLES:
 // - Task → Note: { fromId: taskId, fromType: 'task', toId: noteId, toType: 'note', type: 'TASK_NOTE' }
 // - Session → Task: { fromId: sessionId, fromType: 'session', toId: taskId, toType: 'task', type: 'SESSION_TASK' }
 // - Note → Company: { fromId: noteId, fromType: 'note', toId: companyId, toType: 'company', type: 'NOTE_COMPANY' }
-//
-// MIGRATION:
-// - Legacy fields are marked @deprecated throughout this file
-// - Migration tracked via relationshipVersion field (0 = legacy, 1 = migrated)
-// - All entities will be migrated to relationshipVersion: 1
 //
 // SEE: /src/types/relationships.ts for Relationship interface and helpers
 //
@@ -25,25 +19,17 @@ import type { Relationship } from './types/relationships';
 export type { EnrichmentProgress } from './services/sessionEnrichmentService';
 
 // ============================================================================
-// MIGRATION STATUS (as of October 2025)
+// ACTIVE MIGRATIONS (as of November 2025)
 // ============================================================================
 //
-// ACTIVE MIGRATIONS:
-//
-// 1. Unified Relationships (Phase 2.0)
-//    Status: In progress, check relationshipVersion field
-//    Old: topicId, noteId, sourceSessionId, sourceNoteId, extractedTaskIds, extractedNoteIds
-//    New: relationships[] array
-//    Search: grep "@deprecated.*Use relationships" src/types.ts
-//
-// 2. Content-Addressable Storage (Phase 4)
+// 1. Content-Addressable Storage (Phase 4)
 //    Status: Complete for new data, migrating old screenshots
 //    Old: SessionScreenshot.path
 //    New: SessionScreenshot.attachmentId
 //    Search: grep "@deprecated.*path" src/types.ts
 //    Migration: Screenshot path migration script (runs on startup)
 //
-// 3. Flexible Summaries (Phase 2)
+// 2. Flexible Summaries (Phase 2)
 //    Status: Both formats supported
 //    Old: SessionSummary (fixed template)
 //    New: FlexibleSessionSummary (AI-chosen sections)
@@ -565,28 +551,10 @@ export interface NoteUpdate {
 export interface Note {
   id: string;
 
-  // Multiple relationship support
-  companyIds?: string[]; // Links to Company entities
-  contactIds?: string[]; // Links to Contact (person) entities
-  topicIds?: string[]; // Links to Topic entities (for "other" category)
-
   /**
    * Unified relationship system
-   * @since 2.0.0
    */
-  relationships?: Relationship[];
-
-  /**
-   * Migration tracking: 0 = legacy, 1 = migrated to unified relationships
-   * @since 2.0.0
-   */
-  relationshipVersion?: number;
-
-  /**
-   * @deprecated Use relationships array instead
-   * Legacy field for migration (will be removed after migration)
-   */
-  topicId?: string;
+  relationships: Relationship[];
 
   content: string; // The actual note content (markdown) - most recent or combined
   summary: string; // AI-generated summary
@@ -604,11 +572,6 @@ export interface Note {
   status?: 'draft' | 'pending_review' | 'approved';
   tags: string[]; // Auto-extracted by AI
   parentNoteId?: string; // For threading/nesting
-  /**
-   * @deprecated Use relationships array instead
-   * Link back to originating session
-   */
-  sourceSessionId?: string;
   updates?: NoteUpdate[]; // History of additions/updates (newest first)
   attachments?: Attachment[]; // Multi-modal attachments
   metadata?: {
@@ -616,6 +579,31 @@ export interface Note {
     sentiment?: 'positive' | 'neutral' | 'negative';
     keyPoints?: string[];
     relatedTopics?: string[];
+
+    // AI enrichment metadata
+    aiEnrichment?: {
+      enrichedAt: string;           // ISO timestamp of enrichment
+      model: string;                // Model used (e.g., 'claude-sonnet-4-5')
+      autoEnriched: boolean;        // Was it auto-triggered on navigation away?
+
+      // Suggested metadata (user can review/edit before applying)
+      suggestedTitle?: string;      // Better title than "Untitled Note"
+      suggestedTags?: string[];     // Auto-extracted tags
+      suggestedSummary?: string;    // 2-3 sentence summary
+      keyTopics?: string[];         // Main topics discussed
+      sentiment?: 'positive' | 'neutral' | 'negative';
+
+      // Suggested relationships to existing entities
+      relatedNoteIds?: string[];           // Similar notes found
+      suggestedCompanyIds?: string[];      // Companies mentioned (existing)
+      suggestedContactIds?: string[];      // Contacts mentioned (existing)
+      suggestedTopicIds?: string[];        // Topics to link (existing)
+
+      // Suggested NEW entities to create
+      newCompanies?: Array<{ name: string; description?: string }>;
+      newContacts?: Array<{ name: string; email?: string; role?: string }>;
+      newTopics?: Array<{ name: string; description?: string }>;
+    };
   };
 }
 
@@ -634,14 +622,6 @@ export interface Task {
   priority: TaskPriority;
   dueDate?: string;
   dueTime?: string; // NEW: Specific time in 24h format (e.g., "18:00")
-  topicId?: string; // Optional link to topic
-  companyIds?: string[]; // Links to Company entities
-  contactIds?: string[]; // Links to Contact entities
-  /**
-   * @deprecated Use relationships array instead
-   * Which note created this task
-   */
-  noteId?: string;
   createdAt: string;
   completedAt?: string;
 
@@ -655,27 +635,10 @@ export interface Task {
 
   /**
    * Unified relationship system
-   * @since 2.0.0
    */
-  relationships?: Relationship[];
-
-  /**
-   * Migration tracking: 0 = legacy, 1 = migrated to unified relationships
-   * @since 2.0.0
-   */
-  relationshipVersion?: number;
+  relationships: Relationship[];
 
   // Source tracking (for agent capabilities)
-  /**
-   * @deprecated Use relationships array instead
-   * Link back to originating note
-   */
-  sourceNoteId?: string;
-  /**
-   * @deprecated Use relationships array instead
-   * Link back to originating session
-   */
-  sourceSessionId?: string;
   sourceExcerpt?: string; // NEW: Exact text that triggered this task
   contextForAgent?: string; // NEW: AI-generated context for future agents
 
@@ -690,35 +653,55 @@ export interface Task {
 
 // AI Processing Types
 
+/**
+ * AI Process Result - Structured output from Claude AI processing
+ *
+ * IMPORTANT: As of Phase 3, notes and tasks include 'action' fields that
+ * determine whether the AI wants to:
+ * - create: New entity (default behavior)
+ * - update: Modify existing entity (targetId required)
+ * - merge: Combine multiple entities (targetId + mergeWith required)
+ * - skip: Don't create (duplicate detected)
+ *
+ * The 'reasoning' field explains the AI's decision to the user.
+ *
+ * All action fields are optional for backward compatibility.
+ * Existing code that doesn't specify 'action' will default to 'create'.
+ */
 export interface AIProcessResult {
   // AI guidance
   aiSummary?: string; // Conversational AI summary of what was created and why
 
-  // What the AI detected
-  detectedTopics: {
-    name: string;
-    type: 'company' | 'person' | 'other';
-    confidence: number; // 0-1
-    existingTopicId?: string; // If matched to existing
-  }[];
-
-  // What was created/updated
+  // Notes with temp IDs and action directives (Phase 3)
   notes: {
-    topicId: string;
-    topicName: string;
+    id: string; // Temp ID assigned by AI (note-1, note-2, etc.)
+
+    // Phase 3: Action-based system
+    action?: 'create' | 'update' | 'merge' | 'skip'; // What AI wants to do
+    targetId?: string; // Existing note ID (required if action is 'update' or 'merge')
+    mergeWith?: string[]; // Additional note IDs to merge (if action is 'merge')
+    mergeStrategy?: 'append' | 'replace'; // How to merge content
+    reasoning?: string; // Explanation of AI's decision
+
+    // Existing fields
     content: string;
     summary: string;
-    sourceText: string; // Original input text
-    isNew: boolean; // true if new note, false if merged
-    mergedWith?: string; // Note ID if merged
     tags?: string[]; // Auto-extracted tags
     source?: 'call' | 'email' | 'thought' | 'other'; // Input type
     sentiment?: 'positive' | 'neutral' | 'negative';
     keyPoints?: string[]; // Bullet points of key info
-    relatedTopics?: string[]; // Related topic names
   }[];
 
+  // Tasks with temp IDs and action directives (Phase 3)
   tasks: {
+    id: string; // Temp ID assigned by AI (task-1, task-2, etc.)
+
+    // Phase 3: Action-based system
+    action?: 'create' | 'update' | 'complete' | 'skip'; // What AI wants to do
+    targetId?: string; // Existing task ID (required if action is 'update' or 'complete')
+    reasoning?: string; // Explanation of AI's decision
+
+    // Existing fields
     title: string;
     priority: Task['priority'];
     dueDate?: string; // AI-inferred due date
@@ -727,29 +710,63 @@ export interface AIProcessResult {
     description?: string; // Task context from note
     tags?: string[]; // Relevant tags
     suggestedSubtasks?: string[]; // Multi-step breakdown
-    topicId?: string;
-    noteId?: string; // Link to the note that generated this task
     sourceExcerpt?: string; // Exact text from input that triggered this task
-    contextForAgent?: string; // Context for future agent execution
   }[];
+
+  // Explicit relationships (AI decides what links to what)
+  relationships: {
+    from: {
+      type: 'note' | 'task';
+      id: string; // Temp ID from notes/tasks array
+    };
+    to: {
+      type: 'topic' | 'company' | 'contact' | 'note' | 'task';
+      id?: string; // Existing entity ID
+      name?: string; // New entity name (if creating)
+    };
+    relationType: string; // 'note-topic', 'task-note', etc.
+    metadata?: {
+      confidence?: number; // 0-1
+      reasoning?: string; // Why this relationship exists
+    };
+  }[];
+
+  // New entities to create
+  newEntities: {
+    topics: {
+      name: string;
+      type: 'company' | 'person' | 'subject' | 'project';
+      confidence: number; // 0-1
+    }[];
+    companies: {
+      name: string;
+      confidence: number;
+    }[];
+    contacts: {
+      name: string;
+      confidence: number;
+    }[];
+  };
 
   // Duplicate/skipped tasks
   skippedTasks?: {
     title: string;
-    reason: 'duplicate' | 'already_exists';
+    reason: 'duplicate' | 'unclear' | 'not-actionable';
     existingTaskTitle?: string; // Title of the existing task
     sourceExcerpt?: string; // What triggered this detection
   }[];
 
   // Overall analysis
   sentiment?: 'positive' | 'neutral' | 'negative';
-  keyTopics: string[];
-  processingSteps: string[]; // For showing progress
+  tags?: string[];
 
-  // Draft notes created during processing (populated after AI completes)
-  // This array is populated in CaptureZone when draft notes are created in NotesContext
-  // and persisted in the job result so all review code paths can access it
-  createdNoteIds?: string[];
+  // Processing metadata (Phase 3)
+  processingSteps?: string[]; // Log of AI's decision-making process
+
+  // Clarification system (for when AI asks questions or refuses content)
+  requiresClarification?: boolean; // If true, AI is asking for user input
+  clarificationMessage?: string; // The AI's question or refusal message
+
 }
 
 export interface AIQueryResponse {
@@ -1074,9 +1091,6 @@ export interface CaptureDraft {
 
 export interface ManualNoteData {
   content: string;
-  topicId?: string;
-  newTopicName?: string;
-  newTopicType?: 'company' | 'person' | 'other';
   tags?: string[];
   source?: Note['source'];
   processWithAI?: boolean;
@@ -1094,7 +1108,6 @@ export interface ManualTaskData {
   priority?: Task['priority'];
   status?: Task['status'];
   dueDate?: string;
-  topicId?: string;
   tags?: string[];
 }
 
@@ -1232,6 +1245,94 @@ export interface SessionSummary {
     primaryTheme?: string;
     warnings?: string[]; // Any caveats about summary quality
   };
+
+  // ========================================================================
+  // LIVE SESSION INTELLIGENCE FIELDS (Live Session UI System)
+  // ========================================================================
+
+  /**
+   * Real-time task suggestions from AI
+   * Displayed in LiveIntelligencePanel with one-click creation
+   * OPTIONAL - Only present when AI generates suggestions
+   */
+  suggestedTasks?: Array<{
+    title: string;
+    description?: string;
+    priority?: 'urgent' | 'high' | 'medium' | 'low';
+    context: string; // Why AI suggests this task
+    confidence?: number; // 0-1 confidence score
+    relevance?: number; // 0-1 relevance score
+    tags?: string[];
+    topicId?: string;
+    dueDate?: string;
+    dueTime?: string;
+  }>;
+
+  /**
+   * Real-time note suggestions from AI
+   * Displayed in LiveIntelligencePanel with one-click creation
+   * OPTIONAL - Only present when AI generates suggestions
+   */
+  suggestedNotes?: Array<{
+    content: string;
+    context: string; // Why AI suggests this note
+    confidence?: number; // 0-1 confidence score
+    relevance?: number; // 0-1 relevance score
+    tags?: string[];
+    topicIds?: string[];
+    companyIds?: string[];
+    contactIds?: string[];
+  }>;
+
+  /**
+   * Interactive AI question for user clarification
+   * Displayed in AIQuestionBar with countdown timer
+   * OPTIONAL - Only present when AI needs user input
+   */
+  interactivePrompt?: {
+    questionId: string;
+    question: string;
+    context?: string; // Why AI is asking
+    suggestedAnswers?: string[]; // Quick-reply options (2-4)
+    timeoutSeconds: number; // Countdown timer (15-20s typical)
+    timestamp: string; // When question was asked
+  };
+
+  /**
+   * AI's focus recommendation
+   * Suggests focus mode when user is context-switching frequently
+   * OPTIONAL - Only present when AI detects need for focus
+   */
+  focusRecommendation?: {
+    message: string; // "Consider focusing on authentication work"
+    severity: 'info' | 'warning'; // How urgent the recommendation is
+    suggestedFocusMode?: string; // Suggested focus mode to apply
+  };
+
+  /**
+   * Active focus mode (user-selected or AI-suggested)
+   * Filters AI's attention to specific work types
+   * OPTIONAL - Only present when focus mode is active
+   */
+  focusMode?: {
+    type: 'preset' | 'custom';
+    preset?: 'all' | 'coding' | 'debugging' | 'meetings' | 'documentation'; // Preset modes
+    activities?: string[]; // Custom: Specific activities to focus on
+    keywords?: string[]; // Custom: Keywords to filter by
+    minCuriosity?: number; // Custom: Minimum curiosity threshold (0-1)
+  };
+
+  /**
+   * Dismissed suggestions tracking
+   * Prevents re-showing suggestions user explicitly dismissed
+   * OPTIONAL - Tracks user dismissals for better UX
+   */
+  dismissedSuggestions?: Array<{
+    id: string; // Suggestion identifier
+    type: 'task' | 'note'; // What was dismissed
+    timestamp: string; // When dismissed
+    reason?: string; // Optional dismissal reason
+  }>;
 }
 
 // ============================================================================
@@ -2353,26 +2454,8 @@ export interface Session {
   // ========================================
   /**
    * Unified relationship system
-   * @since 2.0.0
    */
-  relationships?: Relationship[];
-
-  /**
-   * Migration tracking: 0 = legacy, 1 = migrated to unified relationships
-   * @since 2.0.0
-   */
-  relationshipVersion?: number;
-
-  /**
-   * @deprecated Use relationships array instead
-   * Task IDs created from this session
-   */
-  extractedTaskIds: string[];
-  /**
-   * @deprecated Use relationships array instead
-   * Note IDs created from this session
-   */
-  extractedNoteIds: string[];
+  relationships: Relationship[];
 
   // ========================================
   // AUDIO ANALYSIS (ONE-TIME, CACHED)
@@ -2400,8 +2483,6 @@ export interface Session {
   subCategory?: string; // AI-assigned sub-category: "API Development", "Client Presentation", etc.
   activityType?: string; // "email-writing", "presentation", "coding", etc.
   totalDuration?: number; // Total minutes (calculated)
-  companyIds?: string[]; // Links to Company entities
-  contactIds?: string[]; // Links to Contact entities
 
   // ========================================
   // VIDEO RECORDING (Phase 1)
@@ -2685,51 +2766,30 @@ export interface VideoChapter {
 export interface SessionVideo {
   id: string;
   sessionId: string;
-  /**
-   * Complete session recording file attachment ID
-   * Optional: For audio-only sessions (no video recording), this will be empty
-   * For sessions with video recording, this references the full video file
-   */
-  fullVideoAttachmentId?: string;
 
   /**
-   * Video file path on disk
-   * Required for video playback and chaptering analysis
-   * Video files are NOT stored in CA storage (too large)
-   * Use this field directly for video playback (via convertFileSrc)
+   * Original video file path on disk (from recording)
+   * Used for sessions that haven't been optimized yet
    */
   path?: string;
 
   /**
-   * TASK 11: Optimized video/audio path (background processed media)
+   * Optimized video/audio path (background processed media)
    * Created by BackgroundMediaProcessor after session ends
    *
    * For sessions with video: Contains merged video + audio in optimized H.264+AAC MP4 format
    * For audio-only sessions: Contains concatenated MP3 audio file
    *
-   * Prefer this over `path` for instant playback (no runtime audio concatenation)
+   * PREFERRED over `path` for instant playback (no runtime audio concatenation needed)
    * @since Task 11 - Background Enrichment
    */
   optimizedPath?: string;
 
-  /**
-   * Video identifier hash (SHA-256 of filePath + sessionId)
-   * NOTE: This is NOT a content hash and NOT used for CAS lookup
-   * Videos are stored on the file system, not in ContentAddressableStorage
-   * Use the `path` field for video playback
-   */
-  hash?: string;
-
-  chunks?: SessionVideoChunk[]; // Topic-aligned video segments
   chapters?: VideoChapter[]; // AI-detected chapter markers
   duration: number; // Total duration in seconds
   chunkingStatus: 'pending' | 'processing' | 'complete' | 'error';
   processedAt?: string; // When chunking completed
   chunkingError?: string; // Error message if chunking failed
-
-  // DEPRECATED: Legacy properties for backward compatibility
-  startTime?: number;
-  endTime?: number;
 }
 
 // Session Video Chunk - Topic-aligned video segment (30s-5min)
@@ -2830,6 +2890,11 @@ export interface SessionScreenshot {
       achievements?: string[]; // Things completed or accomplished
       blockers?: string[]; // Issues or obstacles encountered
       insights?: string[]; // Important learnings or observations
+    };
+    detectedEntities?: {
+      topics: Array<{ name: string; confidence: number }>;
+      companies: Array<{ name: string; confidence: number }>;
+      contacts: Array<{ name: string; confidence: number }>;
     };
   };
 

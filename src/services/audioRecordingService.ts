@@ -18,6 +18,7 @@ import { openAIService } from './openAIService';
 import { audioStorageService } from './audioStorageService';
 import { audioCompressionService } from './audioCompressionService';
 import { ParallelAudioQueue, type AudioProcessorDependencies } from './ParallelAudioQueue';
+import { LiveSessionEventEmitter } from './liveSession/events';
 
 interface AudioSegmentEvent {
   sessionId: string;
@@ -189,6 +190,9 @@ export class AudioRecordingService {
       };
 
       console.log(`✅ [AUDIO SERVICE] Audio segment created: ${segment.id}`);
+
+      // Emit event for Live Session Intelligence
+      LiveSessionEventEmitter.emitAudioProcessed(sessionId, segment);
 
       // 5. Notify caller
       onAudioSegmentProcessed(segment);
@@ -362,6 +366,10 @@ export class AudioRecordingService {
       };
 
       console.log(`✅ [AUDIO SERVICE] Audio segment created: ${segment.id}`);
+
+      // Emit event for Live Session Intelligence
+      LiveSessionEventEmitter.emitAudioProcessed(sessionId, segment);
+
       return segment;
     } catch (error) {
       console.error('❌ [AUDIO SERVICE] Failed to process audio segment:', error);

@@ -10,6 +10,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { AudioMode } from '../types';
 import { getWhisperPool } from './WhisperRequestPool';
+import { debug } from "../utils/debug";
 
 export class OpenAIService {
   private whisperPool = getWhisperPool();
@@ -24,7 +25,7 @@ export class OpenAIService {
   private async loadApiKeyFromStorage() {
     try {
       await invoke('get_openai_api_key');
-      console.log('✅ OpenAIService: Loaded API key from storage');
+      debug.log(debug.log(console.log('✅ OpenAIService: Loaded API key from storage')));
     } catch (error) {
       console.error('❌ OpenAIService: Failed to load API key from storage:', error);
     }
@@ -36,7 +37,7 @@ export class OpenAIService {
   async setApiKey(apiKey: string) {
     try {
       await invoke('set_openai_api_key', { apiKey });
-      console.log('✅ OpenAIService: API key set and saved');
+      debug.log(console.log('✅ OpenAIService: API key set and saved'));
     } catch (error) {
       console.error('❌ OpenAIService: Failed to set API key:', error);
       throw error;

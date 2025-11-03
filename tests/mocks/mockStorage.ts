@@ -57,44 +57,13 @@ export class MockStorageAdapter extends StorageAdapter {
     };
   }
 
-  async createBackup(): Promise<string> {
-    const backupId = nanoid();
-    const backup = {
-      id: backupId,
-      data: JSON.stringify(Array.from(this.data.entries())),
-      timestamp: Date.now(),
-    };
-    this.data.set(`backup:${backupId}`, backup);
-    return backupId;
-  }
 
-  async listBackups(): Promise<BackupInfo[]> {
-    const backups: BackupInfo[] = [];
-    for (const [key, value] of this.data.entries()) {
-      if (key.startsWith('backup:')) {
-        backups.push({
-          id: value.id,
-          timestamp: value.timestamp,
-          size: value.data.length,
-          collections: [],
-        });
-      }
-    }
-    return backups;
-  }
 
-  async restoreBackup(backupId: string): Promise<void> {
-    const backup = this.data.get(`backup:${backupId}`);
-    if (!backup) {
-      throw new Error(`Backup ${backupId} not found`);
-    }
-    const entries = JSON.parse(backup.data);
-    this.data = new Map(entries);
-  }
 
-  async deleteBackup(backupId: string): Promise<void> {
-    this.data.delete(`backup:${backupId}`);
-  }
+
+
+
+
 
   async clear(): Promise<void> {
     this.data.clear();

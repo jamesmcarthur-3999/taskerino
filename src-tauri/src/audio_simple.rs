@@ -11,6 +11,7 @@
  * Replaces the overengineered AudioGraph system with a direct, simple approach.
  */
 
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavSpec, WavWriter};
 use serde::{Deserialize, Serialize};
@@ -249,13 +250,6 @@ impl SimpleAudioRecorder {
         Ok(())
     }
 
-    /// Resume recording
-    pub fn resume_recording(&self) -> Result<(), RecordingError> {
-        println!("▶️  [AUDIO SIMPLE] Resuming recording");
-        *self.state.lock().unwrap() = RecordingState::Recording;
-        Ok(())
-    }
-
     /// Update audio balance
     pub fn update_balance(&self, balance: u8) -> Result<(), RecordingError> {
         println!("🎛️ [AUDIO SIMPLE] Updating balance to: {}", balance);
@@ -445,7 +439,7 @@ impl SimpleAudioRecorder {
             return Ok(());  // Graceful degradation
         }
 
-        let mut capture = SystemAudioCapture::new()?;
+        let capture = SystemAudioCapture::new()?;
         capture.start()?;
 
         *self.system_audio.lock().unwrap() = Some(capture);
@@ -606,7 +600,7 @@ fn process_audio_chunk(
         let wav_data = encode_wav(&chunk, STANDARD_SAMPLE_RATE)?;
 
         // Encode to base64
-        let base64_data = base64::encode(&wav_data);
+        let base64_data = BASE64_STANDARD.encode(&wav_data);
 
         // Check for silence (simple RMS check)
         let is_silent = if cfg.vad_enabled.unwrap_or(false) {
@@ -685,7 +679,7 @@ fn process_audio_chunk_no_system(
         let wav_data = encode_wav(&chunk, STANDARD_SAMPLE_RATE)?;
 
         // Encode to base64
-        let base64_data = base64::encode(&wav_data);
+        let base64_data = BASE64_STANDARD.encode(&wav_data);
 
         // Check for silence (simple RMS check)
         let cfg = config.lock().unwrap().clone();

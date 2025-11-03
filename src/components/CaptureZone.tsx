@@ -8,14 +8,15 @@ import { useEntities } from '../context/EntitiesContext';
 import { useNotes } from '../context/NotesContext';
 import { useTasks } from '../context/TasksContext';
 import { useSessionList } from '../context/SessionListContext';
+import { useRelationships } from '../context/RelationshipContext';
+import { EntityType, RelationshipType } from '../types/relationships';
 import { createTopic, createNote, extractHashtags, combineTags, getTimeBasedGreeting, generateId } from '../utils/helpers';
 import { CheckCircle2, FileText, Plus, Home, Brain, Upload, X, Image as ImageIcon, Paperclip, Loader2, ArrowRight, Clock, AlertCircle, CheckSquare, Eye, EyeOff, Check, ExternalLink, Lock } from 'lucide-react';
 import { RichTextEditor } from './RichTextEditor';
 import { CaptureReview } from './capture/CaptureReview';
 import { QuickTaskConfirmation } from './capture/QuickTaskConfirmation';
-import { PendingReviews } from './capture/PendingReviews';
 import { LearningService } from '../services/learningService';
-import { savePendingReview, deletePendingReview, cleanupOldReviews, loadPendingReviews } from '../services/captureReviewStorage';
+import { savePendingReview, deletePendingReview, cleanupOldReviews, loadPendingReviews, deduplicatePendingReviews, getPendingReview } from '../services/captureReviewStorage';
 import type { PersistedReviewJob } from '../types/captureProcessing';
 import { getStorage } from '../services/storage';
 import { fileStorage } from '../services/fileStorageService';
@@ -447,142 +448,14 @@ function LiveTime() {
   );
 }
 
-// Helper function to create topic ID mapping
-function createTopicIdMap(
-  detectedTopics: AIProcessResult['detectedTopics'],
-  addTopic: (topic: Topic) => void
-): Map<string, string> {
-  const topicIdMap = new Map<string, string>();
-  detectedTopics.forEach(detected => {
-    if (detected.existingTopicId) {
-      topicIdMap.set(detected.name, detected.existingTopicId);
-    } else {
-      const newTopic = createTopic(detected.name);
-      addTopic(newTopic );
-      topicIdMap.set(detected.name, newTopic.id);
-    }
-  });
-  return topicIdMap;
-}
-
-// Helper function to create or merge notes
-function createOrMergeNote(
-  noteResult: AIProcessResult['notes'][0],
-  topicIdMap: Map<string, string>,
-  result: AIProcessResult,
-  notes: Note[],
-  addNote: (note: Note) => void,
-  updateNote: (note: Note) => void
-): ReturnType<typeof createNote> | undefined {
-  const topicId = topicIdMap.get(noteResult.topicName) || noteResult.topicId;
-  const hashtagsFromSource = extractHashtags(noteResult.sourceText || '');
-  const hashtagsFromContent = extractHashtags(noteResult.content);
-  const allTags = combineTags(noteResult.tags || [], result.keyTopics, hashtagsFromSource, hashtagsFromContent);
-
-  if (noteResult.isNew) {
-    const newNote = createNote(
-      topicId,
-      noteResult.content,
-      noteResult.summary,
-      {
-        tags: allTags,
-        sourceText: noteResult.sourceText,
-        metadata: {
-          sentiment: noteResult.sentiment || result.sentiment,
-          keyPoints: noteResult.keyPoints || [noteResult.summary],
-          relatedTopics: noteResult.relatedTopics,
-        },
-      }
-    );
-    if (noteResult.source) {
-      newNote.source = noteResult.source;
-    }
-    addNote(newNote );
-    return newNote;
-  } else if (noteResult.mergedWith) {
-    const existingNote = notes.find(n => n.id === noteResult.mergedWith);
-    if (existingNote) {
-      const now = new Date().toISOString();
-      const mergedTags = combineTags(existingNote.tags, allTags);
-
-      const currentAsUpdate: import('../types').NoteUpdate = {
-        id: generateId(),
-        content: existingNote.content,
-        timestamp: existingNote.lastUpdated || existingNote.timestamp,
-        source: existingNote.source,
-        summary: existingNote.summary,
-        sourceText: existingNote.sourceText,
-        tags: existingNote.tags,
-      };
-
-      const updatedUpdates = [
-        ...(existingNote.updates || []),
-        currentAsUpdate,
-      ];
-
-      const updatedNote = {
-        ...existingNote,
-        content: noteResult.content,
-        summary: noteResult.summary,
-        lastUpdated: now,
-        tags: mergedTags,
-        sourceText: noteResult.sourceText,
-        updates: updatedUpdates,
-        source: noteResult.source || existingNote.source,
-        metadata: {
-          ...existingNote.metadata,
-          sentiment: noteResult.sentiment || result.sentiment,
-          keyPoints: noteResult.keyPoints || [noteResult.summary],
-          relatedTopics: noteResult.relatedTopics,
-        },
-      };
-      updateNote(updatedNote );
-      return updatedNote;
-    }
-  }
-  return undefined;
-}
-
-// Helper function to create task with note link
-function createTaskWithNoteLink(
-  task: AIProcessResult['tasks'][0],
-  primaryNoteId: string | undefined,
-  addTask: (task: Task) => void
-): void {
-  const taskWithNoteLink: Task = {
-    id: generateId(),
-    title: task.title,
-    description: task.description,
-    priority: task.priority,
-    dueDate: task.dueDate,
-    dueTime: task.dueTime,
-    topicId: task.topicId,
-    noteId: primaryNoteId,
-    tags: task.tags || [],
-    done: false,
-    status: 'todo',
-    createdBy: 'ai',
-    createdAt: new Date().toISOString(),
-    sourceNoteId: primaryNoteId,
-    sourceExcerpt: task.sourceExcerpt,
-    contextForAgent: task.contextForAgent,
-    subtasks: task.suggestedSubtasks?.map((title, idx) => ({
-      id: `${generateId()}-${idx}`,
-      title,
-      done: false,
-      createdAt: new Date().toISOString(),
-    })),
-  };
-  addTask(taskWithNoteLink );
-}
-
 export default function CaptureZone() {
-  const { state: settingsState } = useSettings();
+  const { state: settingsState, dispatch: settingsDispatch } = useSettings();
   const { state: uiState, dispatch: uiDispatch, addNotification, addProcessingJob } = useUI();
   const { state: entitiesState, addTopic } = useEntities();
-  const { state: notesState, addNote, updateNote } = useNotes();
+  const { state: notesState, addNote, updateNote, deleteNote } = useNotes();
   const { state: tasksState, addTask } = useTasks();
   const { sessions } = useSessionList();
+  const relationshipsContext = useRelationships();
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -605,6 +478,7 @@ export default function CaptureZone() {
   // Pending reviews state
   const [pendingReviewsCount, setPendingReviewsCount] = useState(0);
   const [showPendingReviews, setShowPendingReviews] = useState(false);
+  const [pendingReviewsList, setPendingReviewsList] = useState<PersistedReviewJob[]>([]);
 
   // Get tooltip trigger helper
   const { markFirstCaptureComplete } = useTooltipTriggers();
@@ -627,22 +501,51 @@ export default function CaptureZone() {
   }, []);
 
   // Load pending reviews on mount and cleanup old ones
+  // ALSO restore most recent review to survive hot reloads
   useEffect(() => {
     const loadPendingReviewsData = async () => {
       try {
+        // Deduplicate reviews (remove duplicates from the bug)
+        const removedCount = await deduplicatePendingReviews();
+        if (removedCount > 0) {
+          console.log(`[CaptureZone] Removed ${removedCount} duplicate pending reviews`);
+        }
+
         // Cleanup old reviews (>7 days)
         await cleanupOldReviews();
 
         // Load pending reviews
         const reviews = await loadPendingReviews();
-        const activeCount = reviews.filter(
+        const activeReviews = reviews.filter(
           (r) => r.status === 'pending_review' || r.status === 'in_review'
-        ).length;
-        setPendingReviewsCount(activeCount);
+        );
+        setPendingReviewsCount(activeReviews.length);
+        setPendingReviewsList(activeReviews);
 
         // Auto-expand if there are pending reviews
-        if (activeCount > 0) {
+        if (activeReviews.length > 0) {
           setShowPendingReviews(true);
+
+          // Verify draft notes still exist for each review
+          // Clean up any stale reviews where notes were deleted
+          for (const review of activeReviews) {
+            const notesExist = (review.draftNoteIds || []).every(
+              id => notesState.notes.find(n => n.id === id)
+            );
+
+            if (!notesExist) {
+              console.warn('[CaptureZone] Draft notes missing for review, cleaning up:', review.id);
+              await deletePendingReview(review.id);
+            }
+          }
+
+          // Reload pending reviews after cleanup
+          const updatedReviews = await loadPendingReviews();
+          const validReviews = updatedReviews.filter(
+            (r) => r.status === 'pending_review' || r.status === 'in_review'
+          );
+          setPendingReviewsList(validReviews);
+          setPendingReviewsCount(validReviews.length);
         }
       } catch (error) {
         console.error('Failed to load pending reviews:', error);
@@ -799,21 +702,24 @@ export default function CaptureZone() {
   useEffect(() => {
     const pendingJobId = uiState.pendingReviewJobId;
     if (pendingJobId && uiState.activeTab === 'capture') {
-      // Find the job in completed queue
-      const job = uiState.backgroundProcessing.completed.find(j => j.id === pendingJobId);
-      if (job && job.result) {
-        // Open review for this job
-        const wrappedResult = wrapInCaptureResult(job.result, job.input, []);
-        // Ensure createdNoteIds from job result are included in wrapped result
-        if (job.result.createdNoteIds) {
-          wrappedResult.createdNoteIds = job.result.createdNoteIds;
+      const openReview = async () => {
+        // Find the job in completed queue
+        const job = uiState.backgroundProcessing.completed.find(j => j.id === pendingJobId);
+        if (job && job.result) {
+          // Fetch createdNoteIds from persisted review
+          const persistedReview = await getPendingReview(pendingJobId);
+          const noteIds = persistedReview?.draftNoteIds || [];
+
+          // Open review for this job
+          const wrappedResult = wrapInCaptureResult(job.result, job.input, [], noteIds);
+          setResults(wrappedResult);
+          setCurrentJobId(job.id);
+          setCaptureState('review');
+          // Clear the pending review job ID
+          uiDispatch({ type: 'SET_PENDING_REVIEW_JOB', payload: undefined });
         }
-        setResults(wrappedResult);
-        setCurrentJobId(job.id);
-        setCaptureState('review');
-        // Clear the pending review job ID
-        uiDispatch({ type: 'SET_PENDING_REVIEW_JOB', payload: undefined });
-      }
+      };
+      openReview();
     }
   }, [uiState.pendingReviewJobId, uiState.activeTab, uiState.backgroundProcessing.completed,  uiDispatch]);
 
@@ -896,12 +802,13 @@ export default function CaptureZone() {
     return `Hey ${userName}, I've processed your capture.`;
   };
 
-  const wrapInCaptureResult = (aiResult: AIProcessResult, plainText: string, attachments: Attachment[]): CaptureResult => {
+  const wrapInCaptureResult = (aiResult: AIProcessResult, plainText: string, attachments: Attachment[], createdNoteIds: string[] = []): CaptureResult => {
     return {
       ...aiResult,
       aiSummary: (aiResult as any).aiSummary || generateDefaultSummary(aiResult),
       modelUsed: 'claude-haiku-4.5',
       processingTimeMs: 0, // backgroundProcessor doesn't track timing yet
+      createdNoteIds,
       conversationContext: {
         modelUsed: 'claude-haiku-4.5',
         messages: [
@@ -945,10 +852,10 @@ export default function CaptureZone() {
         job.result.notes.forEach(noteResult => {
           const newNote: Note = {
             id: generateId(),
-            topicIds: [noteResult.topicId],
+            relationships: [], // Empty for now - relationships created when user clicks Save
             content: noteResult.content,
             summary: noteResult.summary,
-            sourceText: noteResult.sourceText,
+            sourceText: '', // AIProcessResult notes don't include sourceText
             timestamp: new Date().toISOString(),
             lastUpdated: new Date().toISOString(),
             source: noteResult.source || 'thought',
@@ -957,7 +864,6 @@ export default function CaptureZone() {
             metadata: {
               sentiment: noteResult.sentiment,
               keyPoints: noteResult.keyPoints,
-              relatedTopics: noteResult.relatedTopics,
             },
           };
           addNote(newNote);
@@ -965,18 +871,12 @@ export default function CaptureZone() {
         });
       }
 
-      // Store createdNoteIds in the job result so all review code paths can access it
-      const enrichedResult: AIProcessResult = {
-        ...job.result!,
-        createdNoteIds,
-      };
-
-      // Complete the job with the enriched result
+      // Complete the job
       uiDispatch({
         type: 'COMPLETE_PROCESSING_JOB',
         payload: {
           id: job.id,
-          result: enrichedResult,
+          result: job.result!,
         }
       });
 
@@ -985,10 +885,7 @@ export default function CaptureZone() {
       // - Everything else → Full review modal
 
       // Wrap result in CaptureResult for review UI
-      const wrappedResult = wrapInCaptureResult(enrichedResult, job.input, []);
-
-      // Attach created note IDs to the wrapped result (for backward compatibility with existing handlers)
-      wrappedResult.createdNoteIds = createdNoteIds;
+      const wrappedResult = wrapInCaptureResult(job.result!, job.input, [], createdNoteIds);
 
       // Save pending review for persistence across app restarts
       const persistedReview: PersistedReviewJob = {
@@ -1021,14 +918,15 @@ export default function CaptureZone() {
       } else {
         // Show completion notification for manual review
         const taskCount = job.result?.tasks.length || 0;
-        const topicCount = job.result?.detectedTopics.length || 0;
+        const topicCount = job.result?.newEntities?.topics?.length || 0;
+        const noteCount = createdNoteIds.length;
 
         uiDispatch({
           type: 'ADD_NOTIFICATION',
           payload: {
             type: 'success',
             title: 'Processing Complete!',
-            message: `Found ${taskCount} tasks and ${topicCount} topics.`,
+            message: `Found ${noteCount} notes, ${taskCount} tasks and ${topicCount} topics.`,
             action: {
               label: 'Review Now',
               onClick: () => {
@@ -1134,55 +1032,68 @@ export default function CaptureZone() {
       });
   };
 
-  const handleSaveFromReview = (editedNotes: AIProcessResult['notes'], editedTasks: Task[], removedTaskIndexes: number[]) => {
+  const handleSaveFromReview = async (editedNotes: AIProcessResult['notes'], editedTasks: Task[], removedTaskIndexes: number[]) => {
     if (!results) return;
 
-    // Save notes and topics as before
+    // Create topics from AI detections
     const topicIdMap = new Map<string, string>();
-
-    results.detectedTopics.forEach(detected => {
-      if (detected.existingTopicId) {
-        topicIdMap.set(detected.name, detected.existingTopicId);
-      } else {
-        const newTopic = createTopic(detected.name);
-        addTopic(newTopic );
-        topicIdMap.set(detected.name, newTopic.id);
+    if (results.newEntities?.topics) {
+      for (const topicData of results.newEntities.topics) {
+        const existing = entitiesState.topics.find(t => t.name.toLowerCase() === topicData.name.toLowerCase());
+        if (existing) {
+          topicIdMap.set(topicData.name, existing.id);
+        } else {
+          const newTopic = createTopic(topicData.name);
+          addTopic(newTopic);
+          topicIdMap.set(topicData.name, newTopic.id);
+        }
       }
-    });
+    }
+
+    // If no topics detected, create "General Notes" topic
+    if (topicIdMap.size === 0 && editedNotes.length > 0) {
+      let generalTopicId: string;
+      const existing = entitiesState.topics.find(t => t.name === 'General Notes');
+      if (existing) {
+        generalTopicId = existing.id;
+      } else {
+        const generalTopic = createTopic('General Notes');
+        addTopic(generalTopic);
+        generalTopicId = generalTopic.id;
+      }
+      topicIdMap.set('General Notes', generalTopicId);
+    }
 
     // Create/merge notes (using edited notes from review)
     const createdNotes: typeof notesState.notes = [];
-    editedNotes.forEach(noteResult => {
-      const topicId = topicIdMap.get(noteResult.topicName) || noteResult.topicId;
-      const hashtagsFromSource = extractHashtags(noteResult.sourceText || '');
-      const hashtagsFromContent = extractHashtags(noteResult.content);
-      // Use edited tags from noteResult, combined with extracted hashtags
-      const allTags = combineTags(noteResult.tags || [], results.keyTopics, hashtagsFromSource, hashtagsFromContent);
+    const noteIds: string[] = [];
 
-      if (noteResult.isNew) {
+    editedNotes.forEach(noteResult => {
+      const hashtagsFromContent = extractHashtags(noteResult.content);
+      const allTags = combineTags(noteResult.tags || [], hashtagsFromContent);
+
+      if (noteResult.action === 'create') {
         const newNote = createNote(
-          topicId,
           noteResult.content,
           noteResult.summary,
           {
             tags: allTags,
-            sourceText: noteResult.sourceText,
+            sourceText: '', // AIProcessResult notes don't include sourceText
             metadata: {
               sentiment: noteResult.sentiment || results.sentiment,
               keyPoints: noteResult.keyPoints || [noteResult.summary],
-              relatedTopics: noteResult.relatedTopics,
             },
           }
         );
-        // Set source from noteResult
         if (noteResult.source) {
           newNote.source = noteResult.source;
         }
-        addNote(newNote );
+        addNote(newNote);
         uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'noteCount' });
         createdNotes.push(newNote);
-      } else if (noteResult.mergedWith) {
-        const existingNote = notesState.notes.find(n => n.id === noteResult.mergedWith);
+        noteIds.push(newNote.id);
+      } else if (noteResult.mergeWith && noteResult.mergeWith.length > 0) {
+        const existingNote = notesState.notes.find(n => n.id === noteResult.mergeWith![0]);
         if (existingNote) {
           const now = new Date().toISOString();
           const mergedTags = combineTags(existingNote.tags, allTags);
@@ -1197,36 +1108,65 @@ export default function CaptureZone() {
             tags: existingNote.tags,
           };
 
-          const updatedUpdates = [
-            ...(existingNote.updates || []),
-            currentAsUpdate,
-          ];
-
           const updatedNote = {
             ...existingNote,
             content: noteResult.content,
             summary: noteResult.summary,
             lastUpdated: now,
             tags: mergedTags,
-            sourceText: noteResult.sourceText,
-            updates: updatedUpdates,
+            sourceText: existingNote.sourceText, // Keep existing sourceText (AIProcessResult notes don't include it)
+            updates: [...(existingNote.updates || []), currentAsUpdate],
             source: noteResult.source || existingNote.source,
             metadata: {
               ...existingNote.metadata,
               sentiment: noteResult.sentiment || results.sentiment,
               keyPoints: noteResult.keyPoints || [noteResult.summary],
-              relatedTopics: noteResult.relatedTopics,
             },
           };
-          updateNote(updatedNote );
+          updateNote(updatedNote);
           uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'noteCount' });
           createdNotes.push(updatedNote);
+          noteIds.push(updatedNote.id);
         }
       }
     });
 
-    // Link tasks to the created/updated note
-    const primaryNoteId = createdNotes.length > 0 ? createdNotes[0].id : undefined;
+    // Create note→topic relationships
+    if (results.relationships && noteIds.length > 0) {
+      for (const rel of results.relationships) {
+        if (rel.from.type === 'note' && rel.to.type === 'topic' && rel.to.id) {
+          const tempNoteIndex = results.notes.findIndex(n => n.id === rel.from.id);
+          if (tempNoteIndex >= 0 && tempNoteIndex < noteIds.length) {
+            const realNoteId = noteIds[tempNoteIndex];
+            const topicId = topicIdMap.get(rel.to.id);
+
+            if (topicId) {
+              await relationshipsContext.addRelationship({
+                sourceType: EntityType.NOTE,
+                sourceId: realNoteId,
+                targetType: EntityType.TOPIC,
+                targetId: topicId,
+                type: RelationshipType.NOTE_TOPIC,
+                metadata: { source: 'ai', createdAt: new Date().toISOString() },
+              });
+            }
+          }
+        }
+      }
+    } else if (topicIdMap.size > 0 && noteIds.length > 0) {
+      // Fallback: link all notes to first topic
+      const firstTopicId = Array.from(topicIdMap.values())[0];
+      for (const noteId of noteIds) {
+        await relationshipsContext.addRelationship({
+          sourceType: EntityType.NOTE,
+          sourceId: noteId,
+          targetType: EntityType.TOPIC,
+          targetId: firstTopicId,
+          type: RelationshipType.NOTE_TOPIC,
+          metadata: { source: 'ai', createdAt: new Date().toISOString() },
+        });
+      }
+    }
 
     // Process learnings from edited tasks
     const learningService = new LearningService(settingsState.learnings, settingsState.learningSettings);
@@ -1240,14 +1180,8 @@ export default function CaptureZone() {
         learningService.analyzeTaskEdit(originalTaskResult, editedTask);
       }
 
-      // Link task to the note BEFORE saving
-      const taskWithNoteLink: Task = {
-        ...editedTask,
-        noteId: primaryNoteId,
-      };
-
-      // Save the task with note link
-      addTask(taskWithNoteLink );
+      // Save the task (relationships will be in editedTask already)
+      addTask(editedTask);
       uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'taskCount' });
     });
 
@@ -1266,13 +1200,13 @@ export default function CaptureZone() {
       }
     });
 
-    // TODO: Update learnings in SettingsContext
-    // For now, learnings are updated in-memory but not persisted to SettingsContext
-    // This will need to be fixed when we add a proper learnings update method to SettingsContext
-    // uiDispatch({
-    //   type: 'LOAD_STATE',
-    //   payload: { learnings: learningService.getLearnings() }
-    // });
+    // Persist updated learnings to SettingsContext
+    settingsDispatch({
+      type: 'LOAD_SETTINGS',
+      payload: {
+        learnings: learningService.getLearnings()
+      }
+    });
 
     // Remove the job from completed queue
     if (currentJobId) {
@@ -1300,6 +1234,7 @@ export default function CaptureZone() {
       createdBy: 'ai',
       createdAt: new Date().toISOString(),
       sourceExcerpt: task.sourceExcerpt,
+      relationships: [],
       subtasks: task.suggestedSubtasks?.map((title, idx) => ({
         id: `${generateId()}-${idx}`,
         title,
@@ -1353,52 +1288,15 @@ export default function CaptureZone() {
       handleReviewsChanged(); // Update count
     }
 
-    // Before saving, ensure General Notes topic exists if any note has topicId='new'
-    // This happens when Claude doesn't detect a topic
-    let generalNotesTopicId: string | undefined;
-    for (const noteId of noteIds) {
-      const note = notesState.notes.find(n => n.id === noteId);
-      if (note && note.topicIds && note.topicIds.includes('new')) {
-        // Create General Notes topic if not already created
-        if (!generalNotesTopicId) {
-          // Check if General Notes already exists
-          const existingGeneralTopic = entitiesState.topics.find(t => t.name === 'General Notes');
-          if (existingGeneralTopic) {
-            generalNotesTopicId = existingGeneralTopic.id;
-          } else {
-            const generalTopic = createTopic('General Notes');
-            addTopic(generalTopic);
-            generalNotesTopicId = generalTopic.id;
-          }
-        }
-        // Update note with real topic ID (replace 'new' with actual ID)
-        await updateNote({
-          ...note,
-          topicIds: [generalNotesTopicId],
-        });
-      }
-    }
-
     // Notes were created as drafts and CaptureReview already updated them to status='approved'
     // Just need to update onboarding stats
     noteIds.forEach(() => {
       uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'noteCount' });
     });
 
-    // Save tasks (if any)
-    const primaryNoteId = noteIds.length > 0 ? noteIds[0] : undefined;
+    // Save tasks (if any) - they already have relationships set by CaptureReview
     editedTasks.forEach(task => {
-      const taskWithMeta: Task = {
-        ...task,
-        id: task.id || generateId(),
-        noteId: primaryNoteId,
-        done: false,
-        status: 'todo',
-        createdBy: 'ai',
-        createdAt: task.createdAt || new Date().toISOString(),
-        sourceNoteId: primaryNoteId,
-      };
-      addTask(taskWithMeta);
+      addTask(task);
       uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'taskCount' });
     });
 
@@ -1428,7 +1326,10 @@ export default function CaptureZone() {
 
   const handleRefineCapture = async (request: RefinementRequest): Promise<RefinementResponse> => {
     try {
-      return await claudeService.refineCapture(request);
+      return await claudeService.refineCapture(request, {
+        updateNote,
+        state: notesState,
+      });
     } catch (error) {
       console.error('Failed to refine capture:', error);
       return {
@@ -1459,20 +1360,26 @@ export default function CaptureZone() {
 
   // Pending reviews handlers
   const handleResumeReview = (review: PersistedReviewJob) => {
-    setResults(review.result);
+    // Transfer draftNoteIds to result.createdNoteIds (fixes notes not showing in review)
+    const resultWithNoteIds = {
+      ...review.result,
+      createdNoteIds: review.draftNoteIds || [],
+    };
+    setResults(resultWithNoteIds);
     setCurrentJobId(review.id);
     setCaptureState('review');
     setShowPendingReviews(false);
   };
 
   const handleReviewsChanged = async () => {
-    // Reload count after reviews change
+    // Reload count AND list after reviews change
     try {
       const reviews = await loadPendingReviews();
-      const activeCount = reviews.filter(
+      const activeReviews = reviews.filter(
         (r) => r.status === 'pending_review' || r.status === 'in_review'
-      ).length;
-      setPendingReviewsCount(activeCount);
+      );
+      setPendingReviewsCount(activeReviews.length);
+      setPendingReviewsList(activeReviews); // THIS WAS MISSING! 🔥
     } catch (error) {
       console.error('Failed to reload pending reviews count:', error);
     }
@@ -1604,15 +1511,11 @@ export default function CaptureZone() {
         <div className="relative z-10 h-full w-full">
           <CaptureReview
             result={results}
+            jobId={currentJobId || undefined}  // Pass jobId to prevent duplicate reviews
             onSave={handleSaveFromNewReview}
             onCancel={() => {
-              // Delete the persisted review when cancelled
-              if (currentJobId) {
-                deletePendingReview(currentJobId).catch((error) => {
-                  console.error('Failed to delete pending review:', error);
-                });
-                handleReviewsChanged(); // Update count
-              }
+              // Just close the modal - don't delete anything
+              // This allows users to close and reopen pending reviews
               setCaptureState('idle');
               setResults(null);
             }}
@@ -1639,16 +1542,6 @@ export default function CaptureZone() {
 
             {/* AI-Generated Sarcastic Quote */}
             {settingsState.userProfile.name && <SarcasticQuote />}
-
-            {/* Pending Reviews */}
-            {!isCheckingKeys && hasApiKeys && pendingReviewsCount > 0 && (
-              <div className="mb-6">
-                <PendingReviews
-                  onResumeReview={handleResumeReview}
-                  onReviewsChanged={handleReviewsChanged}
-                />
-              </div>
-            )}
 
             {/* Loading State */}
             {isCheckingKeys && (
@@ -1873,12 +1766,41 @@ export default function CaptureZone() {
             )}
 
             {/* Recent Activity Section */}
-            {(uiState.backgroundProcessing.queue.length > 0 || uiState.backgroundProcessing.completed.length > 0) && (
+            {(uiState.backgroundProcessing.queue.length > 0 || uiState.backgroundProcessing.completed.length > 0 || pendingReviewsList.length > 0) && (
               <div className="mt-8 space-y-4 relative">
-                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                  <Clock size={ICON_SIZES.md} className="text-cyan-600" />
-                  Recent Activity
-                </h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                    <Clock size={ICON_SIZES.md} className="text-cyan-600" />
+                    Recent Activity
+                  </h2>
+
+                  {/* Clear All Button */}
+                  {(pendingReviewsList.length > 0 || uiState.backgroundProcessing.completed.length > 0) && (
+                    <Button
+                      onClick={async () => {
+                        // Delete all persisted reviews and their draft notes
+                        for (const review of pendingReviewsList) {
+                          (review.draftNoteIds || []).forEach(noteId => {
+                            deleteNote(noteId);
+                          });
+                          await deletePendingReview(review.id);
+                        }
+
+                        // Clear all completed jobs from UIContext
+                        uiState.backgroundProcessing.completed.forEach(job => {
+                          uiDispatch({ type: 'REMOVE_PROCESSING_JOB', payload: job.id });
+                        });
+
+                        // Reload list
+                        await handleReviewsChanged();
+                      }}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      Clear All Completed
+                    </Button>
+                  )}
+                </div>
 
                 {/* Background Processing Tooltip */}
                 <FeatureTooltip
@@ -1920,7 +1842,83 @@ export default function CaptureZone() {
                   </div>
                 ))}
 
-                {/* Completed Jobs */}
+                {/* Persisted Reviews (from storage - survive hot reload) */}
+                {pendingReviewsList.map(review => {
+                  const taskCount = review.result.tasks?.length || 0;
+                  const noteCount = review.draftNoteIds?.length || 0;
+
+                  return (
+                    <div key={review.id} className={`${getGlassClasses('strong')} ${getRadiusClass('card')} p-6 hover:border-cyan-300 transition-all duration-300`}>
+                      <div className="flex items-start gap-4">
+                        <CheckCircle2 size={ICON_SIZES.md} className="text-green-600 flex-shrink-0 mt-1" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="font-semibold text-gray-900">Processing Complete!</p>
+                            <span className="text-xs text-gray-500">
+                              {new Date(review.createdAt).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-3 line-clamp-2">
+                            {review.result.aiSummary || 'Review pending'}
+                          </p>
+                          <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
+                            <span className="flex items-center gap-1">
+                              <FileText size={ICON_SIZES.sm} />
+                              {noteCount} {noteCount === 1 ? 'note' : 'notes'}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 size={ICON_SIZES.sm} />
+                              {taskCount} {taskCount === 1 ? 'task' : 'tasks'}
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => {
+                                // Transfer draftNoteIds to result.createdNoteIds (fixes notes not showing)
+                                const resultWithNoteIds = {
+                                  ...review.result,
+                                  createdNoteIds: review.draftNoteIds || [],
+                                };
+                                setResults(resultWithNoteIds);
+                                setCurrentJobId(review.id);
+                                setCaptureState('review');
+                              }}
+                              variant="primary"
+                              size="sm"
+                              icon={<ArrowRight size={ICON_SIZES.sm} />}
+                              iconPosition="right"
+                            >
+                              Review
+                            </Button>
+                            <Button
+                              onClick={async () => {
+                                // Delete from storage
+                                await deletePendingReview(review.id);
+
+                                // Delete draft notes associated with this review
+                                (review.draftNoteIds || []).forEach(noteId => {
+                                  deleteNote(noteId);
+                                });
+
+                                // Also remove from UIContext if it exists there
+                                uiDispatch({ type: 'REMOVE_PROCESSING_JOB', payload: review.id });
+
+                                // Reload list
+                                await handleReviewsChanged();
+                              }}
+                              variant="secondary"
+                              size="sm"
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Completed Jobs (in-memory - lost on hot reload) */}
                 {uiState.backgroundProcessing.completed
                   .slice() // Create a copy to avoid mutating the original array
                   .reverse() // Newest first
@@ -1930,6 +1928,13 @@ export default function CaptureZone() {
                     if (showQuickConfirm && currentJobId === job.id) {
                       return false;
                     }
+
+                    // DEDUPE: Hide if this job already exists in persisted reviews
+                    const existsInPersisted = pendingReviewsList.some(review => review.id === job.id);
+                    if (existsInPersisted) {
+                      return false;
+                    }
+
                     return true;
                   })
                   .map(job => {
@@ -1962,12 +1967,11 @@ export default function CaptureZone() {
                             </div>
                             <div className="flex gap-2">
                               <Button
-                                onClick={() => {
-                                  const wrappedResult = wrapInCaptureResult(job.result!, job.input, []);
-                                  // Ensure createdNoteIds from job result are included in wrapped result
-                                  if (job.result?.createdNoteIds) {
-                                    wrappedResult.createdNoteIds = job.result.createdNoteIds;
-                                  }
+                                onClick={async () => {
+                                  // Fetch createdNoteIds from persisted review
+                                  const persistedReview = await getPendingReview(job.id);
+                                  const noteIds = persistedReview?.draftNoteIds || [];
+                                  const wrappedResult = wrapInCaptureResult(job.result!, job.input, [], noteIds);
                                   setResults(wrappedResult);
                                   setCurrentJobId(job.id);
                                   setCaptureState('review');

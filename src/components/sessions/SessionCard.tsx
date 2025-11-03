@@ -8,6 +8,8 @@ import { InlineTagManager } from '../InlineTagManager';
 import { tagUtils } from '../../utils/tagUtils';
 import { getSuccessGradient, getInfoGradient, getGlassClasses, getWarningGradient, getDangerGradient } from '../../design-system/theme';
 import { useEnrichmentContext } from '../../context/EnrichmentContext';
+import { EntityType, RelationshipType } from '../../types/relationships';
+import { generateId } from '../../utils/helpers';
 
 interface SessionCardProps {
   session: Session;
@@ -57,18 +59,30 @@ export function SessionCard({
     }
 
     // Create tasks from all recommendations
-    const extractedTaskIds: string[] = [];
+    const now = new Date().toISOString();
 
     session.summary.recommendedTasks.forEach(taskRec => {
+      const taskId = generateId();
       const newTask = {
-        id: `task-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        id: taskId,
+        relationships: [
+          {
+            id: generateId(),
+            sourceType: EntityType.TASK,
+            sourceId: taskId,
+            targetType: EntityType.SESSION,
+            targetId: session.id,
+            type: RelationshipType.TASK_SESSION,
+            canonical: true,
+            metadata: { source: 'ai' as const, createdAt: now },
+          },
+        ],
         title: taskRec.title,
         done: false,
         priority: taskRec.priority,
         status: 'todo' as const,
         createdBy: 'ai' as const,
-        createdAt: new Date().toISOString(),
-        sourceSessionId: session.id,
+        createdAt: now,
         sourceExcerpt: taskRec.title,
         description: taskRec.context || `Extracted from session: ${session.name}`,
         contextForAgent: taskRec.context
@@ -78,13 +92,9 @@ export function SessionCard({
       };
 
       tasksDispatch({ type: 'ADD_TASK', payload: newTask });
-      extractedTaskIds.push(newTask.id);
     });
 
-    // Update session with all extracted task IDs
-    updateSession(session.id, {
-      extractedTaskIds: [...session.extractedTaskIds, ...extractedTaskIds]
-    });
+    // No need to update session - relationships track the link
 
     addNotification({
       type: 'success',

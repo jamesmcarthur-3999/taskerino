@@ -1,4 +1,4 @@
-import { useState, useRef, type KeyboardEvent } from 'react';
+import { useState, useRef, type KeyboardEvent, useEffect } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 
 export interface CaptureRefinementInputProps {
@@ -9,10 +9,11 @@ export interface CaptureRefinementInputProps {
 /**
  * Inline message input for requesting changes to capture results
  * Simple, minimal design - NOT chat-like
+ * Expands as user types, starts compact
  */
 export function CaptureRefinementInput({ onSubmit, isLoading }: CaptureRefinementInputProps) {
   const [message, setMessage] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = async () => {
     if (!message.trim() || isLoading) return;
@@ -28,67 +29,89 @@ export function CaptureRefinementInput({ onSubmit, isLoading }: CaptureRefinemen
     }
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
     }
   };
 
+  // Auto-resize textarea as user types
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [message]);
+
   return (
-    <div className="w-full space-y-2">
-      <div className="relative flex items-center gap-2">
-        <input
-          ref={inputRef}
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask me to adjust the results..."
-          disabled={isLoading}
-          className="
-            flex-1 px-4 py-2.5
-            bg-white/50 dark:bg-zinc-800/50
-            border border-zinc-300 dark:border-zinc-600
-            rounded-lg
-            text-sm text-zinc-900 dark:text-zinc-100
-            placeholder:text-zinc-500 dark:placeholder:text-zinc-400
-            focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400
-            disabled:opacity-50 disabled:cursor-not-allowed
-            transition-colors
-          "
-          aria-label="Request changes"
-        />
+    <div className="inline-flex items-center gap-2">
+      <textarea
+        ref={textareaRef}
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="Ask me to adjust the results..."
+        disabled={isLoading}
+        autoFocus
+        rows={1}
+        className="
+          px-4 py-2.5
+          bg-white/40 backdrop-blur-sm
+          border-2 border-white/60
+          rounded-full
+          text-sm text-gray-900 font-medium
+          placeholder:text-gray-500/70
+          focus:outline-none focus:ring-2 focus:ring-purple-400/30 focus:border-purple-300/60
+          disabled:opacity-50 disabled:cursor-not-allowed
+          transition-all
+          shadow-md
+          resize-none
+          overflow-hidden
+          min-w-[300px]
+          max-w-[500px]
+          min-h-[40px]
+          max-h-[120px]
+          leading-relaxed
+        "
+        style={{
+          lineHeight: '1.5',
+        }}
+        aria-label="Request changes"
+      />
 
-        <button
-          onClick={handleSubmit}
-          disabled={!message.trim() || isLoading}
-          className="
-            p-2.5
-            bg-blue-500 dark:bg-blue-600
-            hover:bg-blue-600 dark:hover:bg-blue-500
-            disabled:bg-zinc-300 dark:disabled:bg-zinc-700
-            disabled:cursor-not-allowed
-            rounded-lg
-            text-white
-            transition-colors
-            focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-2
-          "
-          aria-label={isLoading ? 'Processing...' : 'Send request'}
-        >
-          {isLoading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <Send className="w-5 h-5" />
-          )}
-        </button>
-      </div>
-
-      {isLoading && (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 pl-4">
-          Processing your request...
-        </p>
-      )}
+      <button
+        onClick={handleSubmit}
+        disabled={!message.trim() || isLoading}
+        className="
+          px-4 py-2.5
+          bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500
+          hover:from-purple-600 hover:via-pink-600 hover:to-purple-600
+          disabled:from-gray-300 disabled:to-gray-400
+          disabled:cursor-not-allowed
+          rounded-full
+          text-white font-semibold text-sm
+          transition-all
+          shadow-md hover:shadow-lg
+          focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2
+          flex items-center gap-2
+          flex-shrink-0
+          h-[40px]
+        "
+        aria-label={isLoading ? 'Processing...' : 'Send request'}
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Processing...</span>
+          </>
+        ) : (
+          <>
+            <Send className="w-4 h-4" />
+            <span>Send</span>
+          </>
+        )}
+      </button>
     </div>
   );
 }

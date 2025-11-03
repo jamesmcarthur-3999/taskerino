@@ -42,11 +42,6 @@ class MockStorageAdapter implements StorageAdapter {
     return { used: 0, available: 1000000, type: 'mock' };
   }
 
-  async createBackup(): Promise<string> {
-    return 'mock-backup';
-  }
-
-  async restoreBackup(): Promise<void> {}
   async clear(): Promise<void> {
     this.storage.clear();
   }
@@ -56,9 +51,6 @@ class MockStorageAdapter implements StorageAdapter {
   async importData(): Promise<void> {}
   async isAvailable(): Promise<boolean> {
     return true;
-  }
-  async beginTransaction(): Promise<any> {
-    return {} as any;
   }
   async listBackups(): Promise<any[]> {
     return [];

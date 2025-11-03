@@ -58,8 +58,9 @@ import type {
   QueueStatus,
   JobPriority,
 } from './PersistentEnrichmentQueue';
-import type { EnrichmentOptions } from '../sessionEnrichmentService';
+import type { EnrichmentOptions } from './strategies/EnrichmentStrategy';
 import { getChunkedStorage } from '../storage/ChunkedSessionStorage';
+import { debug } from "../../utils/debug";
 
 // ============================================================================
 // Types & Interfaces
@@ -287,6 +288,27 @@ export class BackgroundEnrichmentManager {
           },
         }),
       });
+
+      // CRITICAL FIX: Update session in storage with optimizedPath
+      // This ensures the VideoPlayer can find the optimized video file
+      if (optimizedVideoPath) {
+        console.log('[BackgroundEnrichmentManager] Updating session with optimizedPath');
+
+        const storage = await getChunkedStorage();
+        const metadata = await storage.loadMetadata(sessionId);
+
+        if (metadata && metadata.video) {
+          // Update video.optimizedPath field
+          metadata.video.optimizedPath = optimizedVideoPath;
+
+          // Save back to storage
+          await storage.saveMetadata(metadata);
+
+          console.log('[BackgroundEnrichmentManager] ✓ Session updated with optimizedPath:', optimizedVideoPath);
+        } else {
+          console.warn('[BackgroundEnrichmentManager] ⚠️ Session or video not found, cannot update optimizedPath');
+        }
+      }
 
       console.log('[BackgroundEnrichmentManager] ✓ Media processing marked complete');
     } catch (error) {

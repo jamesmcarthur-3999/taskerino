@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useSettings } from '../context/SettingsContext';
+import { useSettings, useEnrichmentSettings } from '../context/SettingsContext';
 import { useUI } from '../context/UIContext';
 import { useEntities } from '../context/EntitiesContext';
 import { useNotes } from '../context/NotesContext';
 import { useTasks } from '../context/TasksContext';
-import { useApp } from '../context/AppContext'; // Keep for LOAD_STATE and notifications in backups
+// AppContext removed - notifications now via UIContext
 import { claudeService } from '../services/claudeService';
 import { sessionsAgentService } from '../services/sessionsAgentService';
 import { openAIService } from '../services/openAIService';
 import { audioCompressionService, type AudioQualityPreset } from '../services/audioCompressionService';
 import { Key, Brain, Download, Upload, Trash2, Settings, Clock, Globe, Calendar, ChevronDown, RefreshCw, Bot, Mic, Video, HardDrive, RotateCcw } from 'lucide-react';
 import type { AppState, Session, Note, Task, Topic, Company, Contact, AISettings, UserPreferences } from '../types';
-import { getStorage, type BackupInfo } from '../services/storage';
+import { getStorage } from '../services/storage';
 import { LearningDashboard } from './LearningDashboard';
 import { NedSettings } from './ned/NedSettings';
 import { Input } from './Input';
@@ -23,8 +23,9 @@ import { BACKGROUND_GRADIENT, getGlassClasses, getRadiusClass, getTabClasses, ge
 type SettingsTab = 'general' | 'ai' | 'ned' | 'sessions' | 'time' | 'data';
 
 export default function ProfileZone() {
-  const { dispatch: appDispatch } = useApp(); // Only for LOAD_STATE and notifications in backups
+  // Removed useApp() - notifications now via useUI().addNotification
   const { state: settingsState, dispatch: settingsDispatch } = useSettings();
+  const { enrichmentSettings, switchStrategy } = useEnrichmentSettings();
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { state: entitiesState } = useEntities();
   const { state: notesState } = useNotes();
@@ -221,11 +222,6 @@ export default function ProfileZone() {
       // Import to storage
       const storage = await getStorage();
 
-      // Create backup before import (CRITICAL - uses Phase 1.1 mandatory backup)
-      console.log('[Import] Creating pre-import backup...');
-      await storage.createBackup();
-      console.log('[Import] ✓ Pre-import backup created');
-
       // Import each collection
       if (data.topics) await storage.save('topics', data.topics);
       if (data.companies) await storage.save('companies', data.companies);
@@ -308,8 +304,8 @@ export default function ProfileZone() {
     if (confirm('This will permanently delete all your topics, notes, and tasks. Are you sure?')) {
       if (confirm('This action cannot be undone. Really delete everything?')) {
         localStorage.removeItem('taskerino-v2-state');
-        appDispatch({ type: 'LOAD_STATE', payload: { topics: [], notes: [], tasks: [] } });
-        alert('All data cleared.');
+        // TODO: Update to use new storage system (IndexedDB/Tauri FS) instead of localStorage
+        alert('All data cleared. Please refresh the page.');
       }
     }
   };
@@ -634,6 +630,85 @@ export default function ProfileZone() {
                   </div>
 
                   <Button onClick={handleSaveAudioQuality}>Save Audio Settings</Button>
+
+                  <Divider />
+
+                  <Section title="Enrichment Strategy">
+                    <p className="text-sm text-gray-600 mb-4">
+                      Choose how sessions are enriched after recording. The AI agent is experimental and uses chain-of-thought reasoning.
+                    </p>
+
+                    <div className="space-y-4">
+                      {/* Legacy Strategy */}
+                      <label className={getRadioCardClasses(enrichmentSettings.strategy === 'legacy')}>
+                        <input
+                          type="radio"
+                          name="enrichmentStrategy"
+                          value="legacy"
+                          checked={enrichmentSettings.strategy === 'legacy'}
+                          onChange={(e) => switchStrategy('legacy')}
+                          className="mt-1 w-4 h-4 text-cyan-600 focus:ring-cyan-500"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-gray-900">Legacy Pipeline</h4>
+                            <span className="text-xs px-2 py-1 bg-green-500 text-white rounded-full font-semibold">
+                              Production
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2">
+                            Hardcoded 10-stage enrichment pipeline. Reliable and tested.
+                          </p>
+                          <div className="text-xs text-gray-600">
+                            <div>• Audio review → Video chaptering → Summary → Canvas</div>
+                            <div>• Cost: $0.50-2.00 per session</div>
+                            <div>• Duration: ~30-60 seconds</div>
+                          </div>
+                        </div>
+                      </label>
+
+                      {/* AI Agent Strategy */}
+                      <label className={getRadioCardClasses(enrichmentSettings.strategy === 'ai-agent')}>
+                        <input
+                          type="radio"
+                          name="enrichmentStrategy"
+                          value="ai-agent"
+                          checked={enrichmentSettings.strategy === 'ai-agent'}
+                          onChange={(e) => switchStrategy('ai-agent')}
+                          className="mt-1 w-4 h-4 text-cyan-600 focus:ring-cyan-500"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-gray-900">AI Agent</h4>
+                            <span className="text-xs px-2 py-1 bg-yellow-500 text-white rounded-full font-semibold">
+                              Experimental
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2">
+                            AI-driven enrichment with chain-of-thought reasoning and tool use.
+                          </p>
+                          <div className="text-xs text-gray-600">
+                            <div>• Adaptive analysis based on session content</div>
+                            <div>• Target cost: &lt;$0.50 per session (via caching)</div>
+                            <div>• Duration: ~40-80 seconds</div>
+                            <div className="text-yellow-600 font-semibold mt-1">⚠️ Not yet implemented - will throw error if selected</div>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </Section>
+
+                  <Divider />
+
+                  <div className={`p-4 ${getInfoGradient('light').container} ${getRadiusClass('field')}`}>
+                    <h4 className={`font-semibold mb-2 ${getInfoGradient('light').textPrimary}`}>About Enrichment Strategies</h4>
+                    <ul className={`text-sm space-y-1 ${getInfoGradient('light').textSecondary}`}>
+                      <li>• Strategy applies to all new enrichments</li>
+                      <li>• Existing sessions remain unchanged</li>
+                      <li>• You can switch between strategies at any time</li>
+                      <li>• AI agent is experimental - use legacy for production</li>
+                    </ul>
+                  </div>
                 </>
               )}
 
@@ -748,57 +823,6 @@ export default function ProfileZone() {
 
                   <Divider />
 
-                  <Section title="System Backups">
-                    <div className="space-y-4">
-                      {/* Manual Backup Button */}
-                      <Button
-                        onClick={async () => {
-                          try {
-                            const storage = await getStorage();
-                            const backupId = await storage.createBackup();
-                            appDispatch({
-                              type: 'ADD_NOTIFICATION',
-                              payload: {
-                                type: 'success',
-                                title: 'Backup Created',
-                                message: `Backup ${backupId} created successfully`,
-                                autoDismiss: true,
-                                dismissAfter: 3000,
-                              },
-                            });
-                          } catch (error) {
-                            appDispatch({
-                              type: 'ADD_NOTIFICATION',
-                              payload: {
-                                type: 'error',
-                                title: 'Backup Failed',
-                                message: error instanceof Error ? error.message : 'Unknown error',
-                                autoDismiss: false,
-                              },
-                            });
-                          }
-                        }}
-                        variant="secondary"
-                        fullWidth
-                        icon={<HardDrive className="w-5 h-5" />}
-                      >
-                        Create Backup Now
-                      </Button>
-
-                      {/* Backup List */}
-                      <div className={`p-4 ${getGlassClasses('subtle')} ${getRadiusClass('field')}`}>
-                        <h4 className="font-semibold text-gray-900 mb-3">Available Backups</h4>
-                        <BackupList />
-                      </div>
-
-                      <p className="text-sm text-gray-600">
-                        System backups are created automatically and stored locally. Use these to recover from data corruption or accidental changes.
-                      </p>
-                    </div>
-                  </Section>
-
-                  <Divider />
-
                   <Section title="Danger Zone">
                     <Button
                       onClick={handleClearAllData}
@@ -821,114 +845,6 @@ export default function ProfileZone() {
 
       {/* Learning Dashboard Overlay */}
       {showLearningDashboard && <LearningDashboard onClose={() => setShowLearningDashboard(false)} />}
-    </div>
-  );
-}
-
-// Backup List Component
-function BackupList() {
-  const [backups, setBackups] = useState<BackupInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { dispatch } = useApp();
-
-  useEffect(() => {
-    const loadBackups = async () => {
-      try {
-        const storage = await getStorage();
-        const backupList = await storage.listBackups();
-        setBackups(backupList);
-      } catch (error) {
-        console.error('Failed to load backups:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadBackups();
-  }, []);
-
-  const handleRestore = async (backupId: string) => {
-    if (!confirm(`Are you sure you want to restore from backup ${backupId}? Current data will be overwritten.`)) {
-      return;
-    }
-
-    try {
-      const storage = await getStorage();
-      await storage.restoreBackup(backupId);
-
-      dispatch({
-        type: 'ADD_NOTIFICATION',
-        payload: {
-          type: 'success',
-          title: 'Backup Restored',
-          message: 'Please restart the app to see restored data',
-          autoDismiss: false,
-        },
-      });
-    } catch (error) {
-      dispatch({
-        type: 'ADD_NOTIFICATION',
-        payload: {
-          type: 'error',
-          title: 'Restore Failed',
-          message: error instanceof Error ? error.message : 'Unknown error',
-          autoDismiss: false,
-        },
-      });
-    }
-  };
-
-  const formatBackupAge = (timestamp: number): string => {
-    const now = Date.now();
-    const diff = now - timestamp;
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
-    if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-    return 'Just now';
-  };
-
-  if (loading) {
-    return <div className="text-gray-500 text-sm py-2">Loading backups...</div>;
-  }
-
-  if (backups.length === 0) {
-    return <div className="text-gray-500 text-sm py-2">No backups available</div>;
-  }
-
-  return (
-    <div className="space-y-2">
-      {backups.map((backup) => (
-        <div
-          key={backup.id}
-          className={`flex items-center justify-between p-3 ${getGlassClasses('subtle')} ${getRadiusClass('field')} hover:bg-white/60 transition-colors`}
-        >
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <div className="font-medium text-gray-900 text-sm">
-                {new Date(backup.timestamp).toLocaleString()}
-              </div>
-              <span className="text-xs text-gray-500">
-                ({formatBackupAge(backup.timestamp)})
-              </span>
-            </div>
-            <div className="text-xs text-gray-600 mt-1">
-              {(backup.size / 1024 / 1024).toFixed(2)} MB
-            </div>
-          </div>
-          <Button
-            onClick={() => handleRestore(backup.id)}
-            variant="secondary"
-            icon={<RotateCcw className="w-4 h-4" />}
-          >
-            Restore
-          </Button>
-        </div>
-      ))}
     </div>
   );
 }

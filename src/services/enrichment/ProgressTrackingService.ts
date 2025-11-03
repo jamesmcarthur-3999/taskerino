@@ -377,7 +377,7 @@ export class ProgressTrackingService extends SimpleEventEmitter {
     if (success) {
       this.emit('completed', sessionId, progress);
     } else {
-      this.emit('failed', sessionId, progress);
+      this.emit('error', sessionId, progress);
     }
 
     console.log(`[ProgressTrackingService] ${success ? 'Completed' : 'Failed'} ${sessionId} (${duration}ms)`);

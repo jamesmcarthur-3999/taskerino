@@ -10,6 +10,7 @@ import { AudioLevelMeter } from './AudioLevelMeter';
 import type { WebcamMode } from './WebcamModeSelector';
 import { audioRecordingService } from '../../services/audioRecordingService';
 import { videoRecordingService } from '../../services/videoRecordingService';
+import { useUI } from '../../context/UIContext';
 
 interface ActiveSessionMediaControlsProps {
   session: Session;
@@ -39,6 +40,7 @@ export function ActiveSessionMediaControls({
   onAudioConfigChange,
   onVideoConfigChange,
 }: ActiveSessionMediaControlsProps) {
+  const { dispatch: uiDispatch } = useUI();
   const [isExpanded, setIsExpanded] = useState(false);
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
@@ -128,7 +130,15 @@ export function ActiveSessionMediaControls({
 
       if (!webcamDeviceId) {
         console.warn('⚠️ [Media Controls] Cannot switch to webcam mode: no webcam devices available');
-        // TODO: Show error toast to user
+
+        uiDispatch({
+          type: 'ADD_NOTIFICATION',
+          payload: {
+            type: 'warning',
+            title: 'No Webcam Available',
+            message: 'No webcam devices detected. Please connect a webcam to use standalone mode.',
+          },
+        });
         return;
       }
 
@@ -144,7 +154,15 @@ export function ActiveSessionMediaControls({
 
       if (!webcamDeviceId) {
         console.warn('⚠️ [Media Controls] Cannot switch to PiP mode: no webcam devices available');
-        // TODO: Show error toast to user
+
+        uiDispatch({
+          type: 'ADD_NOTIFICATION',
+          payload: {
+            type: 'warning',
+            title: 'No Webcam Available',
+            message: 'No webcam devices detected. Please connect a webcam to use picture-in-picture mode.',
+          },
+        });
         return;
       }
 

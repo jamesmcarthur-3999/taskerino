@@ -47,7 +47,7 @@
  *
  * - File: `ScreenRecorder/VideoAudioMerger.swift`
  * - Header: `ScreenRecorder/VideoAudioMerger.h`
- * - FFI Functions: `merge_video_and_audio`, `cancel_merge`, `free_merge_string`
+ * - FFI Functions: `merge_video_and_audio`, `free_merge_string`
  */
 
 use std::ffi::{CString, CStr};
@@ -59,7 +59,7 @@ use super::error::FFIError;
 
 // MARK: - FFI Declarations
 
-/// External Swift FFI functions for video/audio merging
+// External Swift FFI functions for video/audio merging
 extern "C" {
     /// Merge video and audio files into single MP4
     ///
@@ -83,11 +83,6 @@ extern "C" {
         progress_callback: extern "C" fn(f64),
         completion_callback: extern "C" fn(*const c_char, bool),
     );
-
-    /// Cancel ongoing merge operation
-    ///
-    /// Cancels the current merge and invokes completion callback with error.
-    fn cancel_merge();
 
     /// Free string allocated by Swift
     ///
@@ -533,25 +528,6 @@ impl VideoAudioMerger {
                 ))
             }
         }
-    }
-
-    /// Cancel ongoing merge operation
-    ///
-    /// Cancels the current merge operation. The completion callback will
-    /// be invoked with a cancellation error.
-    ///
-    /// # Notes
-    /// - Safe to call even if no merge is in progress (no-op)
-    /// - Original `merge()` future will return `MergeError::Cancelled`
-    pub fn cancel() -> Result<(), MergeError> {
-        println!("⚠️  [MERGE FFI] Cancelling merge operation");
-
-        // SAFETY: cancel_merge is a safe Swift function
-        unsafe {
-            cancel_merge();
-        }
-
-        Ok(())
     }
 }
 

@@ -11,6 +11,8 @@ interface PrimaryAction {
   icon?: ReactNode;
   onClick: () => void;
   gradient?: 'cyan' | 'purple' | 'green';
+  disabled?: boolean;
+  className?: string;
 }
 
 interface ViewControl {
@@ -165,12 +167,15 @@ export function SpaceMenuBar({
             <>
               <button
                 onClick={primaryAction.onClick}
+                disabled={primaryAction.disabled}
                 className={`
                   flex items-center gap-2 px-4 py-2 rounded-full
                   shadow-md font-semibold text-sm transition-all
                   hover:shadow-lg hover:scale-[1.02] active:scale-95
                   border-2 border-transparent text-white whitespace-nowrap
+                  disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100
                   ${getGradientClass(primaryAction.gradient || 'cyan')}
+                  ${primaryAction.className || ''}
                 `.trim()}
               >
                 {primaryAction.icon}

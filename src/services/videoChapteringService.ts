@@ -41,7 +41,7 @@ class VideoChapteringService {
     console.log(`📖 [CHAPTERING] Analyzing session ${session.id} for chapters`);
 
     // Check if we have video OR screenshots
-    const hasVideo = !!session.video?.fullVideoAttachmentId;
+    const hasVideo = !!(session.video?.path || session.video?.optimizedPath);
     const hasScreenshots = session.screenshots && session.screenshots.length > 0;
 
     if (!hasVideo && !hasScreenshots) {

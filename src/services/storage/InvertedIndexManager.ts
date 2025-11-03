@@ -16,6 +16,7 @@
 import type { StorageAdapter } from './StorageAdapter';
 import type { SessionMetadata } from './ChunkedSessionStorage';
 import type { Session } from '../../types';
+import { debug } from "../../utils/debug";
 
 // ============================================================================
 // Types
@@ -218,7 +219,7 @@ interface Indexes {
 // ============================================================================
 
 export class InvertedIndexManager {
-  private storage: StorageAdapter;
+  protected storage: StorageAdapter;
   private indexes: Indexes | null = null;
   private readonly INDEX_VERSION = 1;
   private readonly INDEX_PREFIX = 'session-indexes';
@@ -837,7 +838,7 @@ export class InvertedIndexManager {
   /**
    * Get date key for indexing (YYYY-MM format)
    */
-  private getDateKey(timestamp: string | number): string {
+  protected getDateKey(timestamp: string | number): string {
     const date = new Date(timestamp);
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -874,7 +875,7 @@ export class InvertedIndexManager {
    * Tokenize text for full-text search
    * Simple whitespace + punctuation splitting
    */
-  private tokenize(text: string): string[] {
+  protected tokenize(text: string): string[] {
     // Remove punctuation and split by whitespace
     const cleaned = text.replace(/[^\w\s]/g, ' ');
     const words = cleaned.split(/\s+/).filter(w => w.length > 0);

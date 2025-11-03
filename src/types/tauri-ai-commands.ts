@@ -197,15 +197,24 @@ export interface ClaudeChatRequest {
   system?: string | ClaudeSystemBlock[];
   /** Optional temperature for response randomness (0.0-1.0) */
   temperature?: number;
+  /** Optional array of tools the model can use */
+  tools?: ClaudeTool[];
 }
 
 /**
  * Content block in Claude's response.
  */
-export interface ClaudeResponseContent {
-  type: "text";
-  text: string;
-}
+export type ClaudeResponseContent =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "tool_use";
+      id: string;
+      name: string;
+      input: Record<string, any>;
+    };
 
 /**
  * Token usage information from Claude API.

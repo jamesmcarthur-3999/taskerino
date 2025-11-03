@@ -54,3 +54,4 @@ src-tauri/WixTools
 # Backup files
 *.backup
 *.bak
+coverage/

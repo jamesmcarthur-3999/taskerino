@@ -41,7 +41,7 @@ export function SessionReview({
   const hasScreenshots = session.screenshots && session.screenshots.length > 0;
   const hasAudio = session.audioSegments && session.audioSegments.length > 0;
   // hasVideo is true if there's either a video recording OR an optimized media file (audio or video+audio)
-  const hasVideo = session.video && (session.video.fullVideoAttachmentId || session.video.optimizedPath);
+  const hasVideo = session.video && (session.video.path || session.video.optimizedPath);
 
   console.log('📺 [SESSION REVIEW] Media detection:', {
     sessionId: session.id,

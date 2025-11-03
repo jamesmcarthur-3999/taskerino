@@ -27,11 +27,14 @@ export async function savePendingReview(review: PersistedReviewJob): Promise<voi
     const storage = await getStorage();
     const existing = await loadPendingReviews();
 
-    // Add new review to the list
-    const updated = [...existing, review];
+    // Update existing review or add new one (prevents duplicates)
+    const existingIndex = existing.findIndex(r => r.id === review.id);
+    const updated = existingIndex >= 0
+      ? existing.map((r, i) => i === existingIndex ? review : r)
+      : [...existing, review];
 
     await storage.save(STORAGE_KEY, updated);
-    console.log(`[CaptureReviewStorage] Saved pending review: ${review.id}`);
+    console.log(`[CaptureReviewStorage] ${existingIndex >= 0 ? 'Updated' : 'Saved'} pending review: ${review.id}`);
   } catch (error) {
     console.error('[CaptureReviewStorage] Failed to save pending review:', error);
     throw error;
@@ -184,5 +187,38 @@ export async function clearAllPendingReviews(): Promise<void> {
   } catch (error) {
     console.error('[CaptureReviewStorage] Failed to clear all reviews:', error);
     throw error;
+  }
+}
+
+/**
+ * Remove duplicate reviews (keeps the most recent version)
+ * Called on app startup to clean up any duplicates from the bug
+ */
+export async function deduplicatePendingReviews(): Promise<number> {
+  try {
+    const storage = await getStorage();
+    const reviews = await loadPendingReviews();
+
+    // Group by ID and keep only the most recent
+    const uniqueReviews = new Map<string, PersistedReviewJob>();
+    for (const review of reviews) {
+      const existing = uniqueReviews.get(review.id);
+      if (!existing || new Date(review.lastModified) > new Date(existing.lastModified)) {
+        uniqueReviews.set(review.id, review);
+      }
+    }
+
+    const deduplicated = Array.from(uniqueReviews.values());
+    const removedCount = reviews.length - deduplicated.length;
+
+    if (removedCount > 0) {
+      await storage.save(STORAGE_KEY, deduplicated);
+      console.log(`[CaptureReviewStorage] Removed ${removedCount} duplicate reviews`);
+    }
+
+    return removedCount;
+  } catch (error) {
+    console.error('[CaptureReviewStorage] Failed to deduplicate reviews:', error);
+    return 0;
   }
 }

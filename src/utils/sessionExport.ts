@@ -50,7 +50,7 @@ export function exportSessionMarkdown(session: Session): void {
   markdown += `- **Date:** ${startDate.toLocaleDateString()} at ${startDate.toLocaleTimeString()}\n`;
   markdown += `- **Duration:** ${formatDuration(duration)}\n`;
   markdown += `- **Screenshots:** ${session.screenshots?.length || 0}\n`;
-  markdown += `- **Tasks Extracted:** ${session.extractedTaskIds?.length || 0}\n`;
+  // Tasks Extracted removed - now tracked via task.relationships
   markdown += `- **Audio Mode:** ${session.audioMode || 'off'}\n`;
 
   if (session.tags && session.tags.length > 0) {

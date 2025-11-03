@@ -128,7 +128,7 @@ export function useSessionStarting() {
     async (
       sessionData: Omit<
         Session,
-        'id' | 'startTime' | 'screenshots' | 'extractedTaskIds' | 'extractedNoteIds'
+        'id' | 'startTime' | 'screenshots'
       >,
       onScreenshotCaptured?: (screenshot: SessionScreenshot) => void | Promise<void>
     ): Promise<string> => {

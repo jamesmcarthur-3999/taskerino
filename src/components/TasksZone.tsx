@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { GlassSelect } from './GlassSelect';
 import type { Task } from '../types';
+import { EntityType, RelationshipType } from '../types/relationships';
 import {
   formatRelativeTime,
   isTaskOverdue,
@@ -111,8 +112,11 @@ export default function TasksZone() {
 
       // Company filter
       if (selectedCompanyIds.length > 0) {
-        if (!task.companyIds || task.companyIds.length === 0) return false;
-        const hasMatchingCompany = task.companyIds.some(companyId =>
+        const taskCompanyIds = task.relationships
+          .filter(r => r.targetType === EntityType.COMPANY)
+          .map(r => r.targetId);
+        if (taskCompanyIds.length === 0) return false;
+        const hasMatchingCompany = taskCompanyIds.some(companyId =>
           selectedCompanyIds.includes(companyId)
         );
         if (!hasMatchingCompany) return false;
@@ -120,8 +124,11 @@ export default function TasksZone() {
 
       // Contact filter
       if (selectedContactIds.length > 0) {
-        if (!task.contactIds || task.contactIds.length === 0) return false;
-        const hasMatchingContact = task.contactIds.some(contactId =>
+        const taskContactIds = task.relationships
+          .filter(r => r.targetType === EntityType.CONTACT)
+          .map(r => r.targetId);
+        if (taskContactIds.length === 0) return false;
+        const hasMatchingContact = taskContactIds.some(contactId =>
           selectedContactIds.includes(contactId)
         );
         if (!hasMatchingContact) return false;
@@ -261,6 +268,7 @@ export default function TasksZone() {
   const handleCreateNewTask = (initialStatus?: Task['status']) => {
     const newTask: Task = {
       id: generateId(),
+      relationships: [],
       title: 'New Task',
       done: false,
       priority: 'medium',
@@ -331,7 +339,10 @@ export default function TasksZone() {
     const [isDragOver, setIsDragOver] = useState(false);
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState('');
-    const topic = (task: Task) => entitiesState.topics.find(t => t.id === task.topicId);
+    const topic = (task: Task) => {
+      const topicRel = task.relationships.find(r => r.targetType === EntityType.TOPIC);
+      return topicRel ? entitiesState.topics.find(t => t.id === topicRel.targetId) : undefined;
+    };
 
     const handleDragOver = (e: React.DragEvent) => {
       e.preventDefault();

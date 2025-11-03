@@ -21,6 +21,7 @@ import {
   ArrowDown,
 } from 'lucide-react';
 import type { Task } from '../types';
+import { EntityType, RelationshipType } from '../types/relationships';
 import { formatRelativeTime, isTaskOverdue, isTaskDueToday, isTaskDueSoon, generateId } from '../utils/helpers';
 import { TaskDetailInline } from './TaskDetailInline';
 import { InlineTagManager } from './InlineTagManager';
@@ -123,8 +124,10 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
           break;
 
         case 'topic':
-          const topic = entitiesState.topics.find(t => t.id === task.topicId);
-          groupKey = task.topicId || 'no-topic';
+          const topicRel = task.relationships.find(r => r.targetType === EntityType.TOPIC);
+          const taskTopicId = topicRel?.targetId;
+          const topic = taskTopicId ? entitiesState.topics.find(t => t.id === taskTopicId) : undefined;
+          groupKey = taskTopicId || 'no-topic';
           groupLabel = topic ? `📌 ${topic.name}` : 'No Topic';
           groupOrder = topic ? 0 : 999;
           break;
@@ -299,6 +302,7 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
 
     const newTask: Task = {
       id: generateId(),
+      relationships: [],
       title: newTaskTitle.trim(),
       done: false,
       priority: 'medium',
@@ -544,12 +548,38 @@ export function TaskTableView({ tasks, onTaskClick, selectedTaskId, groupBy, scr
         );
 
       case 'topic':
+        const topicRel = task.relationships.find(r => r.targetType === EntityType.TOPIC);
+        const currentTopicId = topicRel?.targetId || '';
         return (
           <select
-            value={task.topicId || ''}
+            value={currentTopicId}
             onChange={(e) => {
               e.stopPropagation();
-              updateTask({ topicId: e.target.value || undefined });
+              const newTopicId = e.target.value || undefined;
+
+              // Remove existing topic relationships
+              const nonTopicRelationships = task.relationships.filter(
+                r => r.targetType !== EntityType.TOPIC
+              );
+
+              // Add new topic relationship if topicId is provided
+              const newRelationships = newTopicId
+                ? [
+                    ...nonTopicRelationships,
+                    {
+                      id: generateId(),
+                      sourceType: EntityType.TASK,
+                      sourceId: task.id,
+                      targetType: EntityType.TOPIC,
+                      targetId: newTopicId,
+                      type: RelationshipType.TASK_TOPIC,
+                      canonical: true,
+                      metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+                    },
+                  ]
+                : nonTopicRelationships;
+
+              updateTask({ relationships: newRelationships });
             }}
             onClick={(e) => e.stopPropagation()}
             className="w-full text-xs text-gray-600 bg-transparent border-0 cursor-pointer rounded pl-1 pr-6 py-0.5 hover:bg-white/30"

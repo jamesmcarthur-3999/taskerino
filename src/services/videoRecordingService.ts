@@ -312,9 +312,7 @@ export class VideoRecordingService {
       const sessionVideo: SessionVideo = {
         id: videoId,
         sessionId: sessionId,
-        fullVideoAttachmentId: attachment.id, // Store attachment ID (not path!)
         path: attachment.path, // Store video file path for playback and chaptering
-        hash: attachment.hash, // Copy hash for ContentAddressableStorage lookup
         duration: attachment.duration || 0,
         chunkingStatus: 'pending'
       };

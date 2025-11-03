@@ -142,16 +142,21 @@ class BackgroundProcessor {
         data.extractTasks
       );
 
-      // Update with processing steps
-      job.processingSteps = result.processingSteps;
+      // Update with processing steps (with defensive check)
+      job.processingSteps = result.processingSteps || [];
 
       // Simulate showing each step with progress
-      const stepIncrement = 50 / result.processingSteps.length;
-      for (let i = 0; i < result.processingSteps.length; i++) {
-        job.currentStep = result.processingSteps[i];
-        job.progress = 30 + (i + 1) * stepIncrement;
-        this.notifyProgress(job);
-        await this.delay(400);
+      if (job.processingSteps.length > 0) {
+        const stepIncrement = 50 / job.processingSteps.length;
+        for (let i = 0; i < job.processingSteps.length; i++) {
+          job.currentStep = job.processingSteps[i];
+          job.progress = 30 + (i + 1) * stepIncrement;
+          this.notifyProgress(job);
+          await this.delay(400);
+        }
+      } else {
+        // No processing steps - skip to completion
+        job.progress = 80;
       }
 
       // Complete

@@ -19,7 +19,9 @@ import { SessionNotes } from './sessions/SessionNotes';
 import { adaptiveScreenshotScheduler } from '../services/adaptiveScreenshotScheduler';
 import { RecordingStats } from './sessions/RecordingStats';
 import { useActiveSession } from '../context/ActiveSessionContext';
+import { useTasks } from '../context/TasksContext';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
+import { EntityType } from '../types/relationships';
 import {
   BACKGROUND_GRADIENT,
   getGlassClasses,
@@ -28,6 +30,7 @@ import {
   getActivityGradient,
   TRANSITIONS,
 } from '../design-system/theme';
+import { LiveIntelligencePanel } from './liveSession/LiveIntelligencePanel';
 
 interface ActiveSessionViewProps {
   session: Session;
@@ -43,8 +46,18 @@ export function ActiveSessionView({ session }: ActiveSessionViewProps) {
     endSession,
   } = useActiveSession();
 
+  const { state: tasksState } = useTasks();
   const { scrollY, isScrolled, registerScrollContainer, unregisterScrollContainer } = useScrollAnimation();
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // Count tasks linked to this session
+  const sessionTaskCount = useMemo(() => {
+    return tasksState.tasks.filter(task =>
+      task.relationships.some(rel =>
+        rel.targetType === EntityType.SESSION && rel.targetId === session.id
+      )
+    ).length;
+  }, [tasksState.tasks, session.id]);
 
   // Tab state
   const [activeView, setActiveView] = useState<'monitor' | 'summary' | 'timeline'>('monitor');
@@ -271,7 +284,7 @@ export function ActiveSessionView({ session }: ActiveSessionViewProps) {
               {/* Tasks Count */}
               <div className={`px-4 py-2 ${getGlassClasses('medium')} ${getRadiusClass('field')} flex items-center gap-2`}>
                 <CheckSquare size={16} className="text-purple-600" />
-                <span className="text-sm font-bold text-gray-900">{session.extractedTaskIds?.length || 0}</span>
+                <span className="text-sm font-bold text-gray-900">{sessionTaskCount}</span>
               </div>
             </div>
 
@@ -434,6 +447,13 @@ export function ActiveSessionView({ session }: ActiveSessionViewProps) {
           </div>
         ) : activeView === 'summary' ? (
           <div className="max-w-7xl mx-auto space-y-4">
+            {/* Live Intelligence Panel - AI-powered insights */}
+            <LiveIntelligencePanel
+              sessionId={session.id}
+              isActive={session.status === 'active'}
+              position="inline"
+            />
+
             {session.summary ? (
               <>
                 {/* Live Snapshot (Current Focus) */}

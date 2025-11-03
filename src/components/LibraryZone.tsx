@@ -4,6 +4,7 @@ import { useEntities } from '../context/EntitiesContext';
 import { useTasks } from '../context/TasksContext';
 import { useUI } from '../context/UIContext';
 import { useScrollAnimation } from '../contexts/ScrollAnimationContext';
+import { EntityType } from '../types/relationships';
 import { clamp, easeOutQuart } from '../utils/easing';
 import { sortTopics, formatRelativeTime, truncateText, generateNoteTitle, generateId } from '../utils/helpers';
 import { Clock, FileText, Search, X, SlidersHorizontal, CheckSquare, Plus, TrendingDown, TrendingUp, SortAsc, CheckCheck } from 'lucide-react';
@@ -233,24 +234,27 @@ export default function LibraryZone() {
     // Filter by companies (multi-select)
     if (selectedCompanyIds.length > 0) {
       notes = notes.filter(note =>
-        note.companyIds?.some(id => selectedCompanyIds.includes(id)) ||
-        (note.topicId && selectedCompanyIds.includes(note.topicId)) // Legacy support
+        note.relationships.some(rel =>
+          rel.targetType === EntityType.COMPANY && selectedCompanyIds.includes(rel.targetId)
+        )
       );
     }
 
     // Filter by contacts (multi-select)
     if (selectedContactIds.length > 0) {
       notes = notes.filter(note =>
-        note.contactIds?.some(id => selectedContactIds.includes(id)) ||
-        (note.topicId && selectedContactIds.includes(note.topicId)) // Legacy support
+        note.relationships.some(rel =>
+          rel.targetType === EntityType.CONTACT && selectedContactIds.includes(rel.targetId)
+        )
       );
     }
 
     // Filter by topics (multi-select)
     if (selectedTopicIds.length > 0) {
       notes = notes.filter(note =>
-        note.topicIds?.some(id => selectedTopicIds.includes(id)) ||
-        (note.topicId && selectedTopicIds.includes(note.topicId)) // Legacy support
+        note.relationships.some(rel =>
+          rel.targetType === EntityType.TOPIC && selectedTopicIds.includes(rel.targetId)
+        )
       );
     }
 
@@ -360,6 +364,7 @@ export default function LibraryZone() {
     const now = new Date().toISOString();
     const newNote: Note = {
       id: generateId(),
+      relationships: [],
       content: '',
       summary: 'New Note',
       timestamp: now,
@@ -719,23 +724,21 @@ export default function LibraryZone() {
             {displayedNotes.length > 0 ? (
               <div className="space-y-2 p-4">
                 {displayedNotes.map((note) => {
-                  // Get all related entities
-                  const relatedCompanies = entitiesState.companies.filter(c => note.companyIds?.includes(c.id));
-                  const relatedContacts = entitiesState.contacts.filter(c => note.contactIds?.includes(c.id));
-                  const relatedTopics = entitiesState.topics.filter(t => note.topicIds?.includes(t.id));
-
-                  // Legacy support
-                  if (note.topicId) {
-                    const legacyCompany = entitiesState.companies.find(c => c.id === note.topicId);
-                    const legacyContact = entitiesState.contacts.find(c => c.id === note.topicId);
-                    const legacyTopic = entitiesState.topics.find(t => t.id === note.topicId);
-                    if (legacyCompany && !relatedCompanies.some(c => c.id === legacyCompany.id)) relatedCompanies.push(legacyCompany);
-                    if (legacyContact && !relatedContacts.some(c => c.id === legacyContact.id)) relatedContacts.push(legacyContact);
-                    if (legacyTopic && !relatedTopics.some(t => t.id === legacyTopic.id)) relatedTopics.push(legacyTopic);
-                  }
+                  // Get all related entities from relationships
+                  const relatedCompanies = entitiesState.companies.filter(c =>
+                    note.relationships.some(rel => rel.targetType === EntityType.COMPANY && rel.targetId === c.id)
+                  );
+                  const relatedContacts = entitiesState.contacts.filter(c =>
+                    note.relationships.some(rel => rel.targetType === EntityType.CONTACT && rel.targetId === c.id)
+                  );
+                  const relatedTopics = entitiesState.topics.filter(t =>
+                    note.relationships.some(rel => rel.targetType === EntityType.TOPIC && rel.targetId === t.id)
+                  );
 
                   const sentiment = note.metadata?.sentiment;
-                  const noteTasks = tasksState.tasks.filter(t => t.noteId === note.id);
+                  const noteTasks = tasksState.tasks.filter(t =>
+                    t.relationships.some(rel => rel.targetType === EntityType.NOTE && rel.targetId === note.id)
+                  );
                   const isSelected = note.id === selectedNoteIdForInline;
                   const isChecked = selectedNoteIds.has(note.id);
 

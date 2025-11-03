@@ -47,6 +47,8 @@ export function RichTextEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
+        // Disable Link in StarterKit to avoid duplicates (we configure it explicitly below)
+        link: false,
         bulletList: {
           HTMLAttributes: {
             class: EDITOR_STYLES.prose.bulletList,
@@ -116,18 +118,21 @@ export function RichTextEditor({
 
   // Update editor content when prop changes (for controlled component)
   useEffect(() => {
-    if (editor && editor.view && content !== editor.getHTML()) {
-      try {
+    if (!editor) return;
+
+    try {
+      // Only update if view is ready and content has changed
+      if (editor.view && content !== editor.getHTML()) {
         editor.commands.setContent(content);
-      } catch (error) {
-        console.warn('Failed to set editor content:', error);
       }
+    } catch (error) {
+      // Editor view not ready yet - silently skip, will retry on next render
     }
   }, [content, editor]);
 
   // Handle Cmd+Enter to submit
   useEffect(() => {
-    if (!editor || !editor.view || !onSubmit) return;
+    if (!editor || !onSubmit) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -138,34 +143,25 @@ export function RichTextEditor({
       }
     };
 
-    // Wait for editor to be fully initialized
-    const checkAndAttach = () => {
-      try {
-        const editorElement = editor.view?.dom;
-        if (editorElement) {
-          editorElement.addEventListener('keydown', handleKeyDown, true); // Use capture phase
-          return () => {
-            editorElement.removeEventListener('keydown', handleKeyDown, true);
-          };
-        }
-      } catch (error) {
-        console.warn('Failed to attach keyboard handler:', error);
+    // Wait for editor view to be available (accessing .view can throw)
+    let cleanup: (() => void) | undefined;
+
+    try {
+      // Check if view is available without triggering error
+      if (editor.view && editor.view.dom) {
+        const editorElement = editor.view.dom;
+        editorElement.addEventListener('keydown', handleKeyDown, true);
+
+        cleanup = () => {
+          editorElement.removeEventListener('keydown', handleKeyDown, true);
+        };
       }
-      return undefined;
-    };
+    } catch (error) {
+      // Editor view not ready yet - silently skip, will retry on next render
+      cleanup = undefined;
+    }
 
-    // Attach immediately if ready, otherwise wait a tick
-    const cleanup = checkAndAttach();
-    if (cleanup) return cleanup;
-
-    const timeoutId = setTimeout(() => {
-      const cleanup = checkAndAttach();
-      if (cleanup) return cleanup;
-    }, 100);
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
+    return cleanup;
   }, [editor, onSubmit]);
 
   if (!editor) {
