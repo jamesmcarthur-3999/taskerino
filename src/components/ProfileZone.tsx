@@ -304,8 +304,8 @@ export default function ProfileZone() {
     if (confirm('This will permanently delete all your topics, notes, and tasks. Are you sure?')) {
       if (confirm('This action cannot be undone. Really delete everything?')) {
         localStorage.removeItem('taskerino-v2-state');
-        appDispatch({ type: 'LOAD_STATE', payload: { topics: [], notes: [], tasks: [] } });
-        alert('All data cleared.');
+        // TODO: Update to use new storage system (IndexedDB/Tauri FS) instead of localStorage
+        alert('All data cleared. Please refresh the page.');
       }
     }
   };

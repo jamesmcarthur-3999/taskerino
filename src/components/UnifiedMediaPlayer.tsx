@@ -98,7 +98,7 @@ export const UnifiedMediaPlayer = forwardRef<UnifiedMediaPlayerRef, UnifiedMedia
     const hasScreenshots = screenshots.length > 0;
     const hasAudio = audioSegments.length > 0;
     // hasVideo is true if there's either a video recording OR an optimized media file (for audio-only sessions)
-    const hasVideo = !!(video?.fullVideoAttachmentId || video?.optimizedPath);
+    const hasVideo = !!(video?.path || video?.optimizedPath);
     const mediaMode = detectMediaMode(hasScreenshots, hasAudio, hasVideo);
 
     // TASK 13: Log which path we're using
@@ -254,11 +254,11 @@ export const UnifiedMediaPlayer = forwardRef<UnifiedMediaPlayerRef, UnifiedMedia
             videoPath = video.path;
           }
           // Fallback: Try CAS for legacy videos (oldest sessions)
-          else if (video?.hash) {
+          else if ((video as any)?.hash) {
             console.log('[UNIFIED PLAYER] Fallback: Trying CAS lookup for legacy video');
             try {
               const caStorage = await getCAStorage();
-              const attachment = await caStorage.loadAttachment(video.hash);
+              const attachment = await caStorage.loadAttachment((video as any).hash);
 
               if (attachment?.path) {
                 console.log('[UNIFIED PLAYER] Legacy video found in CAS');

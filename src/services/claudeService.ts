@@ -95,8 +95,8 @@ export class ClaudeService {
               tags: tags || undefined,
             },
             timeRange: dateRange ? {
-              start: new Date(dateRange.start).getTime(),
-              end: new Date(dateRange.end).getTime()
+              start: dateRange.start, // Already ISO string from tool input
+              end: dateRange.end
             } : undefined,
             limit: limit
           });
@@ -104,7 +104,7 @@ export class ClaudeService {
           const searchTimeMs = performance.now() - startTime;
 
           // Map results to note format expected by AI
-          const notes = result.results.map((r: any) => {
+          const notes = result.results.notes.map((r: any) => {
             // Find full note object from existingNotes
             const fullNote = existingNotes.find((n: any) => n.id === r.id);
             return {
@@ -112,15 +112,15 @@ export class ClaudeService {
               summary: fullNote?.summary || r.snippet,
               content: fullNote?.content?.substring(0, 200),
               tags: fullNote?.tags,
-              createdAt: fullNote?.createdAt,
-              status: fullNote?.status, // Include status so AI can see drafts
+              createdAt: fullNote?.createdAt || r.metadata?.createdAt,
+              status: fullNote?.status || r.metadata?.status, // Include status so AI can see drafts
               relevanceScore: r.score
             };
           });
 
           return {
             notes,
-            total: result.totalResults,
+            total: result.counts.notes,
             searchTimeMs: Math.round(searchTimeMs)
           };
         } catch (error) {
@@ -144,8 +144,8 @@ export class ClaudeService {
               priority: priority ? (Array.isArray(priority) ? priority : [priority]) : undefined,
             },
             timeRange: dateRange ? {
-              start: new Date(dateRange.start).getTime(),
-              end: new Date(dateRange.end).getTime()
+              start: dateRange.start, // Already ISO string from tool input
+              end: dateRange.end
             } : undefined,
             sortBy: 'date',
             sortOrder: 'desc',
@@ -155,22 +155,22 @@ export class ClaudeService {
           const searchTimeMs = performance.now() - startTime;
 
           // Map results to task format expected by AI
-          const tasks = result.results.map((r: any) => {
+          const tasks = result.results.tasks.map((r: any) => {
             const fullTask = existingTasks.find((t: any) => t.id === r.id);
             return {
               id: r.id,
-              title: fullTask?.title,
-              description: fullTask?.description,
-              status: fullTask?.status,
-              priority: fullTask?.priority,
-              dueDate: fullTask?.dueDate,
+              title: fullTask?.title || r.metadata?.title,
+              description: fullTask?.description || r.metadata?.description,
+              status: fullTask?.status || r.metadata?.status,
+              priority: fullTask?.priority || r.metadata?.priority,
+              dueDate: fullTask?.dueDate || r.metadata?.dueDate,
               relevanceScore: r.score
             };
           });
 
           return {
             tasks,
-            total: result.totalResults,
+            total: result.counts.tasks,
             searchTimeMs: Math.round(searchTimeMs)
           };
         } catch (error) {
@@ -201,17 +201,17 @@ export class ClaudeService {
           const searchTimeMs = performance.now() - startTime;
 
           // Filter by minimum similarity (UnifiedIndexManager score)
-          const matches = result.results
+          const matches = result.results.notes
             .filter((r: any) => r.score >= minSimilarity)
             .map((r: any) => {
               const fullNote = existingNotes.find((n: any) => n.id === r.id);
               return {
                 note: {
                   id: r.id,
-                  summary: fullNote?.summary,
-                  content: fullNote?.content?.substring(0, 200),
-                  tags: fullNote?.tags,
-                  status: fullNote?.status, // Include status to prioritize drafts
+                  summary: fullNote?.summary || r.metadata?.summary,
+                  content: fullNote?.content?.substring(0, 200) || r.snippet,
+                  tags: fullNote?.tags || r.metadata?.tags,
+                  status: fullNote?.status || r.metadata?.status, // Include status to prioritize drafts
                 },
                 similarity: r.score
               };
@@ -241,7 +241,7 @@ export class ClaudeService {
             entityTypes: ['tasks'],
             query: searchQuery,
             relatedTo: contextNoteId ? {
-              entityType: 'note',
+              entityType: 'notes', // Plural form for entityType
               entityId: contextNoteId
             } : undefined,
             limit: 10
@@ -250,17 +250,17 @@ export class ClaudeService {
           const searchTimeMs = performance.now() - startTime;
 
           // Filter by minimum similarity
-          const matches = result.results
+          const matches = result.results.tasks
             .filter((r: any) => r.score >= minSimilarity)
             .map((r: any) => {
               const fullTask = existingTasks.find((t: any) => t.id === r.id);
               return {
                 task: {
                   id: r.id,
-                  title: fullTask?.title,
-                  description: fullTask?.description,
-                  status: fullTask?.status,
-                  priority: fullTask?.priority
+                  title: fullTask?.title || r.metadata?.title,
+                  description: fullTask?.description || r.metadata?.description,
+                  status: fullTask?.status || r.metadata?.status,
+                  priority: fullTask?.priority || r.metadata?.priority
                 },
                 similarity: r.score
               };

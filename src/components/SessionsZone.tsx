@@ -793,7 +793,6 @@ export default function SessionsZone() {
                 noteCount: 0,
                 createdAt: new Date().toISOString(),
                 lastUpdated: new Date().toISOString(),
-                relationships: [],
               });
             }
           });
@@ -811,7 +810,6 @@ export default function SessionsZone() {
                 noteCount: 0,
                 createdAt: new Date().toISOString(),
                 lastUpdated: new Date().toISOString(),
-                relationships: [],
               });
             }
           });
@@ -829,7 +827,6 @@ export default function SessionsZone() {
                 noteCount: 0,
                 createdAt: new Date().toISOString(),
                 lastUpdated: new Date().toISOString(),
-                relationships: [],
               });
             }
           });
