@@ -29,6 +29,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { LRUCache } from '../storage/LRUCache';
 import { getCAStorage } from '../storage/ContentAddressableStorage';
 import type { ContentAddressableStorage } from '../storage/ContentAddressableStorage';
+import { debug } from "../../utils/debug";
 
 // ============================================================================
 // Types & Interfaces

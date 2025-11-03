@@ -24,7 +24,7 @@
  *     - SessionListProvider (session CRUD, filtering)
  *     - ActiveSessionProvider (active session lifecycle)
  *     - RecordingProvider (recording services)
- * 13. AppProvider - DEPRECATED - Migrating to specialized contexts
+ * 13. [REMOVED] AppProvider - Migrated to specialized contexts (Phase 10 - notifications moved to UIContext)
  *
  * @zones
  * The application uses a **six-zone navigation model** with lazy-loaded zone components:
@@ -123,9 +123,10 @@
  */
 
 import { useEffect, useState, lazy, Suspense } from 'react';
+import { debug } from './utils/debug';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, emit } from '@tauri-apps/api/event';
-import { AppProvider, useApp } from './context/AppContext';
+// AppContext removed - migrated to specialized contexts (UIContext for notifications)
 import { SettingsProvider } from './context/SettingsContext';
 import { UIProvider, useUI } from './context/UIContext';
 import { RelationshipProvider } from './context/RelationshipContext';
@@ -183,7 +184,6 @@ function MainApp({ orphanedSession, setOrphanedSession }: {
   orphanedSession: Session | null;
   setOrphanedSession: (session: Session | null) => void;
 }) {
-  const { state, dispatch } = useApp();
   const { state: uiState, dispatch: uiDispatch } = useUI();
 
   // Enable global keyboard shortcuts
@@ -391,7 +391,6 @@ function MainApp({ orphanedSession, setOrphanedSession }: {
 }
 
 function AppContent() {
-  const { state, dispatch } = useApp();
   const { state: uiState, dispatch: uiDispatch } = useUI();
   const { activeSession } = useActiveSession();
   const [isReady, setIsReady] = useState(false);
@@ -414,12 +413,12 @@ function AppContent() {
         }
 
         // Recover from WAL if app crashed
-        console.log('[APP] Checking for WAL recovery...');
+        debug.log('[APP] Checking for WAL recovery...');
         const storage = await getStorage();
         if ('recoverFromWAL' in storage) {
           try {
             await (storage as any).recoverFromWAL();
-            console.log('[APP] WAL recovery complete');
+            debug.log('[APP] WAL recovery complete');
           } catch (error) {
             console.error('[APP] WAL recovery failed:', error);
             // Continue anyway - recovery failure shouldn't block app startup
@@ -439,7 +438,7 @@ function AppContent() {
         };
 
         if (await shouldRebuildIndexes()) {
-          console.log('[APP] Building indexes...');
+          debug.log('[APP] Building indexes...');
           try {
             const { IndexingEngine } = await import('./services/storage/IndexingEngine');
             const indexingEngine = new IndexingEngine(storage);
@@ -448,7 +447,7 @@ function AppContent() {
             await indexingEngine.rebuildAllIndexes('notes');
             await indexingEngine.rebuildAllIndexes('tasks');
 
-            console.log('[APP] Indexes built successfully');
+            debug.log('[APP] Indexes built successfully');
           } catch (error) {
             console.error('[APP] Index building failed:', error);
             // Continue anyway - indexes are for performance optimization
@@ -479,7 +478,7 @@ function AppContent() {
 
         // Check for orphaned active session (from hot reload, crash, or improper shutdown)
         try {
-          console.log('[APP] Checking for orphaned active session...');
+          debug.log('[APP] Checking for orphaned active session...');
           const storage = await getStorage();
           let foundHMRSession = false;
 
@@ -521,7 +520,7 @@ function AppContent() {
               await storage.save('settings', { ...settings, activeSessionId: undefined });
             }
           } else {
-            console.log('[APP] No active session found in settings');
+            debug.log('[APP] No active session found in settings');
           }
         } catch (error) {
           console.error('[APP] Failed to check for orphaned session:', error);
@@ -530,12 +529,12 @@ function AppContent() {
 
         // Initialize BackgroundEnrichmentManager and resume pending jobs
         try {
-          console.log('[APP] Initializing BackgroundEnrichmentManager...');
+          debug.log('[APP] Initializing BackgroundEnrichmentManager...');
           const manager = await getBackgroundEnrichmentManager();
 
           // Initialize the manager (opens IndexedDB, sets up event listeners)
           await manager.initialize();
-          console.log('[APP] ✓ BackgroundEnrichmentManager initialized');
+          debug.log('[APP] ✓ BackgroundEnrichmentManager initialized');
 
           // Get all jobs from the queue
           const queue = manager.getQueue();
@@ -571,7 +570,7 @@ function AppContent() {
             console.warn('[APP] Queue not available (manager not properly initialized)');
           }
 
-          console.log('[APP] ✓ BackgroundEnrichmentManager ready');
+          debug.log('[APP] ✓ BackgroundEnrichmentManager ready');
         } catch (error) {
           console.error('[APP] Failed to initialize BackgroundEnrichmentManager:', error);
           // Non-fatal error - app should still work, just enrichment won't auto-resume
@@ -581,7 +580,7 @@ function AppContent() {
         setIsReady(true);
 
         // Note: app-ready event removed (no splash screen)
-        console.log('[APP] ✅ Initialization complete');
+        debug.log('[APP] ✅ Initialization complete');
       } catch (error) {
         console.error('Initialization failed:', error);
         setIsReady(true); // ALWAYS set ready
@@ -614,32 +613,6 @@ function AppContent() {
   }, [activeSession]);
 
   // Automatic backup on startup
-  useEffect(() => {
-    const createStartupBackup = async () => {
-      try {
-        console.log('[APP] Creating startup backup...');
-        const storage = await getStorage();
-        const backupId = await storage.createBackup();
-        console.log(`[APP] ✓ Startup backup created: ${backupId}`);
-      } catch (error) {
-        console.error('[APP] Failed to create startup backup:', error);
-        // Show user notification about backup failure
-        dispatch({
-          type: 'ADD_NOTIFICATION',
-          payload: {
-            type: 'warning',
-            title: 'Backup Warning',
-            message: 'Failed to create startup backup. Your data may be at risk.',
-            autoDismiss: false,
-          },
-        });
-      }
-    };
-
-    createStartupBackup();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty deps = run once on mount (dispatch is stable)
-
   // Graceful shutdown: flush queue, create backup, and flush pending writes on app close
   // CRITICAL: Tauri handles this via WindowEvent::CloseRequested (src-tauri/src/lib.rs lines 1077-1140)
   // The Rust backend intercepts window close, emits 'shutdown-requested', waits for 'shutdown-complete'
@@ -653,21 +626,16 @@ function AppContent() {
 
         try {
           // Step 1: Flush persistence queue first (ensures all enqueued saves complete)
-          console.log('[APP] Flushing persistence queue...');
+          debug.log('[APP] Flushing persistence queue...');
           const queue = getPersistenceQueue();
           await queue.shutdown();
-          console.log('[APP] ✓ Persistence queue flushed');
-
-          // Step 2: Create shutdown backup
-          console.log('[APP] Creating shutdown backup...');
-          const storage = await getStorage();
-          await storage.createBackup();
-          console.log('[APP] ✓ Shutdown backup created');
+          debug.log('[APP] ✓ Persistence queue flushed');
 
           // Step 3: Flush any remaining pending writes
-          console.log('[APP] Flushing pending writes before shutdown...');
+          debug.log('[APP] Flushing pending writes before shutdown...');
+          const storage = await getStorage();
           await storage.shutdown();
-          console.log('[APP] ✓ Graceful shutdown complete');
+          debug.log('[APP] ✓ Graceful shutdown complete');
 
           // Notify Tauri we're done (backend will unblock and close window)
           await emit('shutdown-complete');
@@ -694,26 +662,6 @@ function AppContent() {
       console.log('[APP] Running in browser - shutdown flush not supported (use Tauri app for guaranteed persistence)');
       // No cleanup needed for browser mode
     }
-  }, []);
-
-  // Hourly automatic backups
-  useEffect(() => {
-    const createHourlyBackup = async () => {
-      try {
-        console.log('[APP] Creating hourly backup...');
-        const storage = await getStorage();
-        const backupId = await storage.createBackup();
-        console.log(`[APP] ✓ Hourly backup created: ${backupId}`);
-      } catch (error) {
-        console.error('[APP] Failed to create hourly backup:', error);
-      }
-    };
-
-    // Create backup immediately, then every hour
-    createHourlyBackup();
-    const interval = setInterval(createHourlyBackup, 60 * 60 * 1000); // 1 hour
-
-    return () => clearInterval(interval);
   }, []);
 
   // Loading state
@@ -746,10 +694,8 @@ export default function App() {
                     <SessionListProvider>
                       <RecordingProvider>
                         <ActiveSessionProvider>
-                          {/* OLD AppProvider - TODO: Remove once all components are migrated (13 remaining) */}
-                          <AppProvider>
-                            <AppContent />
-                          </AppProvider>
+                          {/* AppProvider removed - migrated to specialized contexts (Phase 10) */}
+                          <AppContent />
                         </ActiveSessionProvider>
                       </RecordingProvider>
                     </SessionListProvider>

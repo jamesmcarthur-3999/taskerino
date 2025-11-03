@@ -3,9 +3,11 @@ import type { ReactNode } from 'react';
 import type { Task, ManualTaskData } from '../types';
 import { getStorage } from '../services/storage';
 import { generateId } from '../utils/helpers';
-import { QueryEngine, type QueryFilter, type QuerySort } from '../services/storage/QueryEngine';
+// QueryEngine removed - use UnifiedIndexManager for search operations
 import { useRelationships } from './RelationshipContext';
 import { EntityType, RelationshipType } from '../types/relationships';
+import { normalizeTasks } from '../utils/entityMigration';
+import { debug } from "../utils/debug";
 
 // Tasks State
 interface TasksState {
@@ -92,11 +94,11 @@ function tasksReducer(state: TasksState, action: TasksAction): TasksState {
         status: taskData.status || 'todo',
         done: taskData.status === 'done',
         dueDate: taskData.dueDate,
-        topicId: taskData.topicId,
-        tags: taskData.tags,
+        tags: taskData.tags || [],
         createdBy: 'manual',
         createdAt: new Date().toISOString(),
         completedAt: taskData.status === 'done' ? new Date().toISOString() : undefined,
+        relationships: [], // Empty for manual tasks
       };
       return { ...state, tasks: [...state.tasks, newTask] };
     }
@@ -115,13 +117,16 @@ const TasksContext = createContext<{
   dispatch: React.Dispatch<TasksAction>;
 
   // Query Engine Methods (Phase 3.3)
-  queryTasks: (filters: QueryFilter[], sort?: QuerySort, limit?: number) => Promise<Task[]>;
+  // queryTasks removed - use UnifiedIndexManager directly for search operations
 
   // Relationship helper methods (Phase C2)
   linkTaskToNote: (taskId: string, noteId: string) => Promise<void>;
   unlinkTaskFromNote: (taskId: string, noteId: string) => Promise<void>;
   linkTaskToSession: (taskId: string, sessionId: string) => Promise<void>;
   unlinkTaskFromSession: (taskId: string, sessionId: string) => Promise<void>;
+
+  // Phase 5 method: Batch update
+  batchUpdateTasks: (taskIds: string[], updates: Partial<Task>) => Promise<void>;
 } | null>(null);
 
 // Provider
@@ -147,7 +152,9 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         const tasks = await storage.load<Task[]>('tasks');
 
         if (Array.isArray(tasks)) {
-          dispatch({ type: 'LOAD_TASKS', payload: tasks });
+          // Normalize tasks to ensure relationships array exists (backward compatibility)
+          const normalizedTasks = normalizeTasks(tasks);
+          dispatch({ type: 'LOAD_TASKS', payload: normalizedTasks });
         }
 
         setHasLoaded(true);
@@ -171,7 +178,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       try {
         const storage = await getStorage();
         await storage.save('tasks', state.tasks);
-        console.log('Tasks saved to storage');
+        debug.log("Tasks saved to storage");
       } catch (error) {
         console.error('Failed to save tasks:', error);
       }
@@ -184,22 +191,19 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     };
   }, [hasLoaded, state.tasks]);
 
-  // Query Engine Methods (Phase 3.3)
-  const queryTasks = React.useCallback(async (filters: QueryFilter[], sort?: QuerySort, limit?: number) => {
-    const storage = await getStorage();
-    const queryEngine = new QueryEngine(storage);
-
-    const result = await queryEngine.execute<Task>({
-      collection: 'tasks',
-      filters,
-      sort,
-      limit,
-    });
-
-    console.log(`[Tasks] Query returned ${result.entitiesReturned} tasks in ${result.executionTime}ms`);
-
-    return result.entities;
-  }, []);
+  // REMOVED: queryTasks method (QueryEngine deprecated)
+  // Use UnifiedIndexManager instead:
+  //
+  // import { getUnifiedIndexManager } from '../services/storage/UnifiedIndexManager';
+  // const unifiedIndex = await getUnifiedIndexManager();
+  // const result = await unifiedIndex.search({
+  //   entityTypes: ['tasks'],
+  //   query: 'search text',
+  //   filters: { status: 'in_progress', priority: 'high' },
+  //   limit: 20
+  // });
+  //
+  // See: /docs/UNIFIED_INDEX_MANAGER_IMPLEMENTATION_SUMMARY.md
 
   // Relationship helper methods (Phase C2)
   const linkTaskToNote = React.useCallback(async (taskId: string, noteId: string) => {
@@ -280,15 +284,27 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     }
   }, [relationshipsContext]);
 
+  // Phase 5: Batch update tasks
+  const batchUpdateTasks = React.useCallback(async (
+    taskIds: string[],
+    updates: Partial<Task>
+  ): Promise<void> => {
+    dispatch({
+      type: 'BATCH_UPDATE_TASKS',
+      payload: { ids: taskIds, updates }
+    });
+  }, []);
+
   return (
     <TasksContext.Provider value={{
       state,
       dispatch,
-      queryTasks,
+      // queryTasks removed - use UnifiedIndexManager
       linkTaskToNote,
       unlinkTaskFromNote,
       linkTaskToSession,
       unlinkTaskFromSession,
+      batchUpdateTasks,
     }}>
       {children}
     </TasksContext.Provider>
@@ -312,48 +328,7 @@ export function useTasks() {
 
   // Helper methods
   const addTask = async (task: Task) => {
-    // Add task to state
     context.dispatch({ type: 'ADD_TASK', payload: task });
-
-    // Create relationships if specified and RelationshipContext is available
-    if (relationshipsContext) {
-      try {
-        // Link to note if specified
-        if (task.noteId) {
-          await relationshipsContext.addRelationship({
-            sourceType: EntityType.TASK,
-            sourceId: task.id,
-            targetType: EntityType.NOTE,
-            targetId: task.noteId,
-            type: RelationshipType.TASK_NOTE,
-            metadata: { source: 'manual', createdAt: new Date().toISOString() },
-          });
-        }
-
-        // Link to session if specified
-        if (task.sourceSessionId) {
-          await relationshipsContext.addRelationship({
-            sourceType: EntityType.TASK,
-            sourceId: task.id,
-            targetType: EntityType.SESSION,
-            targetId: task.sourceSessionId,
-            type: RelationshipType.TASK_SESSION,
-            metadata: {
-              source: task.createdBy === 'ai' ? 'ai' : 'manual',
-              createdAt: new Date().toISOString()
-            },
-          });
-        }
-
-        // Mark task as using relationship system
-        if (!task.relationshipVersion) {
-          const updatedTask = { ...task, relationshipVersion: 1 };
-          context.dispatch({ type: 'UPDATE_TASK', payload: updatedTask });
-        }
-      } catch (error) {
-        console.error('[TasksContext] Failed to create task relationships:', error);
-      }
-    }
   };
 
   const updateTask = (task: Task) => {
@@ -381,11 +356,22 @@ export function useTasks() {
     context.dispatch({ type: 'CREATE_MANUAL_TASK', payload: data });
   };
 
+  const batchUpdateTasks = React.useCallback(async (
+    taskIds: string[],
+    updates: Partial<Task>
+  ): Promise<void> => {
+    context.dispatch({
+      type: 'BATCH_UPDATE_TASKS',
+      payload: { ids: taskIds, updates }
+    });
+  }, [context]);
+
   return {
     ...context,
     addTask,
     updateTask,
     deleteTask,
     createManualTask,
+    batchUpdateTasks,
   };
 }

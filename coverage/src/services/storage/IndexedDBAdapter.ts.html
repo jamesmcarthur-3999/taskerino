@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0.79% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>7/881</span>
+                <span class='fraction'>0/881</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/3</span>
+                <span class='fraction'>1/1</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>1/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
-                <span class="quiet">Functions</span>
-                <span class='fraction'>0/3</span>
-            </div>
-        
-            
-            <div class='fl pad1y space-right2'>
-                <span class="strong">0.79% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>7/881</span>
+                <span class='fraction'>0/881</span>
             </div>
         
             
@@ -1370,12 +1370,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1393,7 +1393,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1450,8 +1450,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1707,7 +1707,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -2670,12 +2670,12 @@
  * Much better than localStorage's 5-10MB limit.
  */
 &nbsp;
-import { StorageAdapter, validateJSON } from './StorageAdapter';
+<span class="cstat-no" title="statement not covered" >import { StorageAdapter, validateJSON } from './StorageAdapter';</span>
 import type { StorageInfo, BackupInfo } from './StorageAdapter';
 import type { StorageTransaction } from './types';
-import JSZip from 'jszip';
-import { compressData, decompressData, isCompressed } from './compressionUtils';
-import { safeStringify, deepSanitize, diagnoseJSONIssues } from '../../utils/serializationUtils';
+<span class="cstat-no" title="statement not covered" >import JSZip from 'jszip';</span>
+<span class="cstat-no" title="statement not covered" >import { compressData, decompressData, isCompressed } from './compressionUtils';</span>
+<span class="cstat-no" title="statement not covered" >import { safeStringify, deepSanitize, diagnoseJSONIssues } from '../../utils/serializationUtils';</span>
 &nbsp;
 interface StoredCollection {
   name: string;
@@ -2693,7 +2693,7 @@ interface StoredBackup {
 /**
  * Write queue with mutex to prevent concurrent storage writes
  */
-class WriteQueue <span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >{</span></span>
+<span class="cstat-no" title="statement not covered" >class WriteQueue {</span>
 <span class="cstat-no" title="statement not covered" >  private queue: Array&lt;() =&gt; Promise&lt;void&gt;&gt; = [];</span>
 <span class="cstat-no" title="statement not covered" >  private isProcessing = false;</span>
 &nbsp;
@@ -2750,7 +2750,7 @@ class WriteQueue <span class="fstat-no" title="function not covered" ><span clas
  * Uses native IDBTransaction for atomicity - all operations succeed or all fail.
  * Operations are queued and executed only on commit().
  */
-class IndexedDBTransaction implements StorageTransaction <span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >{</span></span>
+<span class="cstat-no" title="statement not covered" >class IndexedDBTransaction implements StorageTransaction {</span>
 <span class="cstat-no" title="statement not covered" >  private operations: Array&lt;{</span>
     type: 'save' | 'delete';
     key: string;
@@ -3007,7 +3007,7 @@ class IndexedDBTransaction implements StorageTransaction <span class="fstat-no" 
 <span class="cstat-no" title="statement not covered" >  }</span>
 <span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
-export class IndexedDBAdapter extends StorageAdapter <span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >{</span></span>
+<span class="cstat-no" title="statement not covered" >export class IndexedDBAdapter extends StorageAdapter {</span>
 <span class="cstat-no" title="statement not covered" >  private readonly DB_NAME = 'taskerino-db';</span>
 <span class="cstat-no" title="statement not covered" >  private readonly DB_VERSION = 1;</span>
 <span class="cstat-no" title="statement not covered" >  private readonly COLLECTIONS_STORE = 'collections';</span>
@@ -3970,7 +3970,7 @@ export class IndexedDBAdapter extends StorageAdapter <span class="fstat-no" titl
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-29T05:05:48.357Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

@@ -7,6 +7,7 @@
  */
 
 import type { Topic, Note, Task } from '../types';
+import { EntityType } from '../types/relationships';
 import DOMPurify from 'dompurify';
 
 /**
@@ -58,16 +59,14 @@ export function createTopic(
 /**
  * Creates a new Note entity
  *
- * @param topicId - ID of the associated topic
  * @param content - Full note content (can be HTML or markdown)
  * @param summary - Brief summary of the note (1-2 sentences)
- * @param options - Optional fields (sourceText, timestamp, tags, etc.)
+ * @param options - Optional fields (timestamp, tags, relationships, etc.)
  * @returns A fully initialized Note object
  *
  * @example
  * ```typescript
  * const note = createNote(
- *   topicId,
  *   "Met with Sarah about the Q4 roadmap...",
  *   "Q4 Roadmap Discussion",
  *   { tags: ["meeting", "roadmap"], source: "capture" }
@@ -75,25 +74,21 @@ export function createTopic(
  * ```
  */
 export function createNote(
-  topicId: string,
   content: string,
   summary: string,
-  options?: Partial<Omit<Note, 'id' | 'topicId' | 'content' | 'summary'>>
+  options?: Partial<Omit<Note, 'id' | 'content' | 'summary'>>
 ): Note {
   const now = new Date().toISOString();
   return {
     id: generateId(),
-    topicId,
+    relationships: options?.relationships || [],
     content,
     summary,
-    sourceText: options?.sourceText, // Original input text for validation
     timestamp: options?.timestamp || now,
     lastUpdated: options?.lastUpdated || now,
     source: options?.source || 'thought',
     tags: options?.tags || [],
-    parentNoteId: options?.parentNoteId,
     updates: options?.updates || [],
-    metadata: options?.metadata,
   };
 }
 
@@ -101,7 +96,7 @@ export function createNote(
  * Creates a new Task entity
  *
  * @param title - Task title/description
- * @param options - Optional fields (priority, dueDate, subtasks, tags, etc.)
+ * @param options - Optional fields (priority, dueDate, subtasks, tags, relationships, etc.)
  * @returns A fully initialized Task object
  *
  * @example
@@ -114,7 +109,7 @@ export function createNote(
  * ```
  *
  * @implementation
- * - Auto-determines createdBy: 'ai' if noteId provided, otherwise 'manual'
+ * - Defaults createdBy to 'manual'
  * - Sets default priority to 'medium'
  * - Defaults status based on done flag
  */
@@ -127,26 +122,20 @@ export function createTask(
   // Determine default status based on done flag or explicit status
   const status = options?.status || (options?.done ? 'done' : 'todo');
 
-  // Determine creation source
-  const createdBy = options?.noteId ? 'ai' : 'manual';
-
   return {
     id: generateId(),
     title,
+    relationships: options?.relationships || [],
     done: options?.done || false,
     priority: options?.priority || 'medium',
-    topicId: options?.topicId,
-    noteId: options?.noteId,
     dueDate: options?.dueDate,
     createdAt: now,
     completedAt: options?.completedAt,
-
-    // Phase 1 fields
     description: options?.description,
     status,
     subtasks: options?.subtasks || [],
     tags: options?.tags || [],
-    createdBy,
+    createdBy: 'manual',
     aiContext: options?.aiContext,
   };
 }
@@ -271,7 +260,9 @@ export function findSimilarNotes(
 
   const topicNotes = existingNotes.filter(
     note =>
-      note.topicId === topicId &&
+      note.relationships.some(rel =>
+        rel.targetType === EntityType.TOPIC && rel.targetId === topicId
+      ) &&
       now - new Date(note.timestamp).getTime() < threshold
   );
 
@@ -334,11 +325,19 @@ export function sortNotes(
 }
 
 export function filterNotesByTopic(notes: Note[], topicId: string): Note[] {
-  return notes.filter(note => note.topicId === topicId);
+  return notes.filter(note =>
+    note.relationships.some(rel =>
+      rel.targetType === EntityType.TOPIC && rel.targetId === topicId
+    )
+  );
 }
 
 export function filterTasksByTopic(tasks: Task[], topicId: string): Task[] {
-  return tasks.filter(task => task.topicId === topicId);
+  return tasks.filter(task =>
+    task.relationships.some(rel =>
+      rel.targetType === EntityType.TOPIC && rel.targetId === topicId
+    )
+  );
 }
 
 // Formatting helpers
@@ -771,8 +770,10 @@ export function deduplicateTasks(newTasks: Task[], existingTasks: Task[]): Task[
         : !newTask.dueDate && !existing.dueDate;
 
       // Same topic (if both have one)
-      const topicMatch = newTask.topicId && existing.topicId
-        ? existing.topicId === newTask.topicId
+      const newTaskTopicRel = newTask.relationships.find(r => r.targetType === EntityType.TOPIC);
+      const existingTopicRel = existing.relationships.find(r => r.targetType === EntityType.TOPIC);
+      const topicMatch = newTaskTopicRel && existingTopicRel
+        ? existingTopicRel.targetId === newTaskTopicRel.targetId
         : true;
 
       // Same priority

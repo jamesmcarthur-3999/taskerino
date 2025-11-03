@@ -16,10 +16,13 @@ mod video_recording;
 mod attachment_loader;
 mod session_models;
 mod session_storage;
+// Session Query API for external tools (Live Session Intelligence - Phase 1)
+mod session_query_api;
 
 use activity_monitor::{ActivityMetrics, ActivityMonitor};
 use audio_simple::SimpleAudioRecorder;
 use macos_events::MacOSEventMonitor;
+use session_query_api::ActiveSessionState;
 use screenshots::{
     image::{imageops, DynamicImage, ImageFormat, RgbaImage},
     Screen,
@@ -959,6 +962,7 @@ pub fn run() {
         .manage(activity_monitor.clone())
         .manage(macos_event_monitor.clone())
         .manage(SessionManager::new())  // Recording session manager (Phase 2 complete)
+        .manage(ActiveSessionState::new())  // Active session tracking for query API (Live Session Intelligence)
         .invoke_handler(tauri::generate_handler![
             capture_primary_screen,
             capture_all_screens,
@@ -1048,7 +1052,12 @@ pub fn run() {
             // Storage utilities - Disk space checking (Fix #4C)
             storage_utils::check_storage_space,
             storage_utils::get_storage_info,
-            storage_utils::open_storage_location
+            storage_utils::open_storage_location,
+            // Session Query API for external tools (Live Session Intelligence - Phase 1)
+            session_query_api::query_active_session,
+            session_query_api::query_sessions,
+            session_query_api::get_session_by_id,
+            session_query_api::set_active_session_id
         ])
         .setup(move |app| {
             // Audio recorder initialized on first use (no separate init needed)

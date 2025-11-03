@@ -38,7 +38,7 @@ interface ActiveSessionContextValue {
 
   // Session lifecycle
   startSession: (
-    config: Omit<Session, 'id' | 'startTime' | 'screenshots' | 'extractedTaskIds' | 'extractedNoteIds'>,
+    config: Omit<Session, 'id' | 'startTime' | 'screenshots' | 'relationships'>,
     onScreenshotCaptured?: (screenshot: SessionScreenshot) => void | Promise<void>
   ) => Promise<void>;
   pauseSession: () => void;
@@ -153,7 +153,7 @@ export function ActiveSessionProvider({ children }: ActiveSessionProviderProps) 
 
   // Start a new session
   const startSession = useCallback(async (
-    config: Omit<Session, 'id' | 'startTime' | 'screenshots' | 'extractedTaskIds' | 'extractedNoteIds'>,
+    config: Omit<Session, 'id' | 'startTime' | 'screenshots' | 'relationships'>,
     onScreenshotCaptured?: (screenshot: SessionScreenshot) => void | Promise<void>
   ) => {
     console.log('[ActiveSessionContext] Starting session via XState machine');
@@ -229,10 +229,8 @@ export function ActiveSessionProvider({ children }: ActiveSessionProviderProps) 
       id: generateId(),
       startTime: new Date().toISOString(),
       screenshots: [],
-      extractedTaskIds: [],
-      extractedNoteIds: [],
       status: 'active',
-      relationshipVersion: 1,
+      relationships: [],
       enrichmentConfig: {
         autoEnrichOnComplete: true,
         includeAudioReview: true,
@@ -927,38 +925,24 @@ export function ActiveSessionProvider({ children }: ActiveSessionProviderProps) 
   }, []);
 
   // Add extracted task
-  // Note: This maintains backward compatibility with extractedTaskIds array
-  // The actual relationship creation should happen in SessionListContext.linkSessionToTask()
+  // Note: Relationship creation happens via RelationshipContext
   const addExtractedTask = useCallback((taskId: string) => {
-    setActiveSession(prev => {
-      if (!prev) {
-        console.warn('[ActiveSessionContext] Cannot add task: no active session');
-        return prev;
-      }
-
-      return {
-        ...prev,
-        extractedTaskIds: [...prev.extractedTaskIds, taskId],
-      };
-    });
-  }, []);
+    if (!activeSession) {
+      console.warn('[ActiveSessionContext] Cannot add task: no active session');
+      return;
+    }
+    // Relationship should be created via SessionListContext.linkSessionToTask()
+  }, [activeSession]);
 
   // Add extracted note
-  // Note: This maintains backward compatibility with extractedNoteIds array
-  // The actual relationship creation should happen in SessionListContext.linkSessionToNote()
+  // Note: Relationship creation happens via RelationshipContext
   const addExtractedNote = useCallback((noteId: string) => {
-    setActiveSession(prev => {
-      if (!prev) {
-        console.warn('[ActiveSessionContext] Cannot add note: no active session');
-        return prev;
-      }
-
-      return {
-        ...prev,
-        extractedNoteIds: [...prev.extractedNoteIds, noteId],
-      };
-    });
-  }, []);
+    if (!activeSession) {
+      console.warn('[ActiveSessionContext] Cannot add note: no active session');
+      return;
+    }
+    // Relationship should be created via SessionListContext.linkSessionToNote()
+  }, [activeSession]);
 
   // Add context item
   const addContextItem = useCallback((item: SessionContextItem) => {

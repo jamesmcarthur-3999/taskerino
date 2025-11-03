@@ -473,14 +473,20 @@ export const InlineRelationshipSearch: React.FC<InlineRelationshipSearchProps> =
       if (targetEntityType === EntityType.NOTE) {
         const note = entity as Note;
 
-        // Get linked companies and contacts
-        const companies = (note.companyIds || [])
-          .map(id => entitiesState.companies.find(c => c.id === id))
+        // Get linked companies and contacts from relationships
+        const companyIds = note.relationships
+          .filter(r => r.targetType === EntityType.COMPANY)
+          .map(r => r.targetId);
+        const companies = companyIds
+          .map((id: string) => entitiesState.companies.find(c => c.id === id))
           .filter(Boolean)
           .slice(0, 2);
 
-        const contacts = (note.contactIds || [])
-          .map(id => entitiesState.contacts.find(c => c.id === id))
+        const contactIds = note.relationships
+          .filter(r => r.targetType === EntityType.CONTACT)
+          .map(r => r.targetId);
+        const contacts = contactIds
+          .map((id: string) => entitiesState.contacts.find(c => c.id === id))
           .filter(Boolean)
           .slice(0, 2);
 

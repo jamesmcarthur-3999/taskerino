@@ -5,6 +5,7 @@ import { useActiveSession } from '../context/ActiveSessionContext';
 import { useUI } from '../context/UIContext';
 import { X, FileText, Sparkles } from 'lucide-react';
 import type { Note } from '../types';
+import { EntityType, RelationshipType } from '../types/relationships';
 import { generateId } from '../utils/helpers';
 import { getGlassClasses, getRadiusClass, MODAL_SECTIONS } from '../design-system/theme';
 import {
@@ -48,21 +49,27 @@ export function QuickNoteFromSession({
     if (!content.trim()) return;
 
     const now = new Date().toISOString();
+    const noteId = generateId();
     const newNote: Note = {
-      id: generateId(),
+      id: noteId,
+      relationships: [
+        {
+          id: generateId(),
+          sourceType: EntityType.NOTE,
+          sourceId: noteId,
+          targetType: EntityType.SESSION,
+          targetId: sessionId,
+          type: RelationshipType.NOTE_SESSION,
+          canonical: true,
+          metadata: { source: 'ai' as const, createdAt: now },
+        },
+      ],
       content: content.trim(),
       summary: summary.trim() || content.trim().split('\n')[0].substring(0, 100),
       timestamp: now,
       lastUpdated: now,
       source: 'thought',
       tags: [],
-      sourceSessionId: sessionId,
-
-      // Rich metadata following capture box pattern
-      metadata: {
-        keyPoints: [summary.trim() || content.trim().split('\n')[0].substring(0, 100)],
-        relatedTopics: [sessionName],
-      },
     };
 
     addNote(newNote);

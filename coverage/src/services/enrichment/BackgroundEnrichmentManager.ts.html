@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/256</span>
+                <span class='fraction'>0/268</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/256</span>
+                <span class='fraction'>0/268</span>
             </div>
         
             
@@ -645,7 +645,28 @@
 <a name='L580'></a><a href='#L580'>580</a>
 <a name='L581'></a><a href='#L581'>581</a>
 <a name='L582'></a><a href='#L582'>582</a>
-<a name='L583'></a><a href='#L583'>583</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L583'></a><a href='#L583'>583</a>
+<a name='L584'></a><a href='#L584'>584</a>
+<a name='L585'></a><a href='#L585'>585</a>
+<a name='L586'></a><a href='#L586'>586</a>
+<a name='L587'></a><a href='#L587'>587</a>
+<a name='L588'></a><a href='#L588'>588</a>
+<a name='L589'></a><a href='#L589'>589</a>
+<a name='L590'></a><a href='#L590'>590</a>
+<a name='L591'></a><a href='#L591'>591</a>
+<a name='L592'></a><a href='#L592'>592</a>
+<a name='L593'></a><a href='#L593'>593</a>
+<a name='L594'></a><a href='#L594'>594</a>
+<a name='L595'></a><a href='#L595'>595</a>
+<a name='L596'></a><a href='#L596'>596</a>
+<a name='L597'></a><a href='#L597'>597</a>
+<a name='L598'></a><a href='#L598'>598</a>
+<a name='L599'></a><a href='#L599'>599</a>
+<a name='L600'></a><a href='#L600'>600</a>
+<a name='L601'></a><a href='#L601'>601</a>
+<a name='L602'></a><a href='#L602'>602</a>
+<a name='L603'></a><a href='#L603'>603</a>
+<a name='L604'></a><a href='#L604'>604</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -929,6 +950,27 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1285,9 +1327,9 @@ import type {
   PersistentEnrichmentQueue,
   EnrichmentJob,
   QueueStatus,
-  EnrichmentOptions,
   JobPriority,
 } from './PersistentEnrichmentQueue';
+import type { EnrichmentOptions } from '../sessionEnrichmentService';
 <span class="cstat-no" title="statement not covered" >import { getChunkedStorage } from '../storage/ChunkedSessionStorage';</span>
 &nbsp;
 // ============================================================================
@@ -1516,6 +1558,27 @@ export interface ManagerOptions {
 <span class="cstat-no" title="statement not covered" >          },</span>
 <span class="cstat-no" title="statement not covered" >        }),</span>
 <span class="cstat-no" title="statement not covered" >      });</span>
+&nbsp;
+      // CRITICAL FIX: Update session in storage with optimizedPath
+      // This ensures the VideoPlayer can find the optimized video file
+<span class="cstat-no" title="statement not covered" >      if (optimizedVideoPath) {</span>
+<span class="cstat-no" title="statement not covered" >        console.log('[BackgroundEnrichmentManager] Updating session with optimizedPath');</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        const storage = await getChunkedStorage();</span>
+<span class="cstat-no" title="statement not covered" >        const session = await storage.loadFullSession(sessionId);</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        if (session &amp;&amp; session.video) {</span>
+          // Update video.optimizedPath field
+<span class="cstat-no" title="statement not covered" >          session.video.optimizedPath = optimizedVideoPath;</span>
+&nbsp;
+          // Save back to storage
+<span class="cstat-no" title="statement not covered" >          await storage.saveSession(session);</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >          console.log('[BackgroundEnrichmentManager] ✓ Session updated with optimizedPath:', optimizedVideoPath);</span>
+<span class="cstat-no" title="statement not covered" >        } else {</span>
+<span class="cstat-no" title="statement not covered" >          console.warn('[BackgroundEnrichmentManager] ⚠️ Session or video not found, cannot update optimizedPath');</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >      }</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      console.log('[BackgroundEnrichmentManager] ✓ Media processing marked complete');</span>
 <span class="cstat-no" title="statement not covered" >    } catch (error) {</span>
@@ -1816,7 +1879,7 @@ export interface ManagerOptions {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-29T05:05:48.357Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

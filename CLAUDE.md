@@ -387,6 +387,158 @@ Task
 └── sourceSessionId? → Session
 ```
 
+### Unified Search System (November 2025)
+
+**Status**: Production-ready
+**Documentation**: `/docs/UNIFIED_INDEX_MANAGER_IMPLEMENTATION_SUMMARY.md`
+
+Taskerino consolidates all search operations into a **unified, relationship-aware search system** that eliminates fragmentation and delivers O(log n) performance.
+
+#### Search System Architecture
+
+**When to use which search API**:
+
+1. **UnifiedIndexManager** - Cross-entity search (sessions, notes, tasks)
+   - Use for: Searching across multiple entity types, relationship-based queries, AI tool integration
+   - Performance: <100ms for 1000+ entities (O(log n))
+   - Location: `src/services/storage/UnifiedIndexManager.ts`
+   - Extends: `InvertedIndexManager` for backward compatibility
+
+2. **InvertedIndexManager** - Session-only search (legacy)
+   - Use for: Session-specific search operations (will be deprecated)
+   - Performance: <100ms for 1000+ sessions (O(log n))
+   - Location: `src/services/storage/InvertedIndexManager.ts`
+   - Status: Still used but recommend migrating to UnifiedIndexManager
+
+3. **SessionQueryEngine** - Active session AI Q&A
+   - Use for: Querying WITHIN active session (screenshots, audio, AI questions)
+   - Performance: Real-time (<1s)
+   - Location: `src/services/SessionQueryEngine.ts`
+   - Scope: Different from cross-entity search
+
+4. **LiveSessionContextProvider** - In-memory active session filtering
+   - Use for: Real-time filtering of active session data (screenshots, audio segments)
+   - Performance: <1ms (in-memory)
+   - Location: `src/services/LiveSessionContextProvider.ts`
+   - Scope: Active session only, not for historical search
+
+#### UnifiedIndexManager API
+
+**Search across entity types**:
+```typescript
+import { getUnifiedIndexManager } from '@/services/storage/UnifiedIndexManager';
+
+const unifiedIndex = await getUnifiedIndexManager();
+
+// Example 1: Search notes by topic
+const result = await unifiedIndex.search({
+  entityTypes: ['notes'],
+  relatedTo: {
+    entityType: 'topic',
+    entityId: 'topic-auth'
+  },
+  limit: 20
+});
+
+// Example 2: Search tasks with filters
+const result = await unifiedIndex.search({
+  entityTypes: ['tasks'],
+  filters: {
+    status: 'in_progress',
+    priority: 'high'
+  },
+  sortBy: 'date',
+  sortOrder: 'desc'
+});
+
+// Example 3: Cross-entity search
+const result = await unifiedIndex.search({
+  query: 'authentication bug',
+  entityTypes: ['sessions', 'notes', 'tasks'],
+  relatedTo: {
+    entityType: 'company',
+    entityId: 'company-acme'
+  },
+  limit: 50
+});
+```
+
+**Indexing capabilities**:
+- **Notes**: 7 indexes (full-text, topic, date, source, company, contact, session)
+- **Tasks**: 8 indexes (full-text, status, priority, date, topic, note, session, completed)
+- **Sessions**: Inherited from InvertedIndexManager (7 indexes)
+- **Relationships**: O(1) lookups via RelationshipIndex integration
+
+**Performance**:
+- Search 1000 notes: 12ms (was 2-3s with O(n) filtering)
+- Search 1000 tasks: 14ms (was 2-3s with O(n) filtering)
+- 200x faster than linear filtering
+
+**Integration with AI Tools**:
+The UnifiedIndexManager is used by `nedToolExecutor.ts` for all search operations:
+- `search_notes` tool: Uses UnifiedIndexManager for O(log n) performance
+- `search_tasks` tool: Uses UnifiedIndexManager for O(log n) performance
+- Performance metrics included in tool results for monitoring
+
+#### Topics, Companies, and Contacts as Metadata
+
+**Important**: Topics, Companies, and Contacts are **NOT** directly searchable entities. They function as **relationship anchors** and **filter dimensions** in other entity indexes.
+
+**Rationale**:
+- Small datasets (~100 entities, ~100 bytes each)
+- Simple CRUD via EntitiesContext
+- Used to filter notes/tasks/sessions, not searched independently
+- Reduces index complexity without sacrificing functionality
+
+**Usage**:
+```typescript
+// ✅ Search notes BY topic (correct)
+const result = await unifiedIndex.search({
+  entityTypes: ['notes'],
+  relatedTo: { entityType: 'topic', entityId: 'topic-123' }
+});
+
+// ❌ Search topics directly (not supported, not needed)
+// Use EntitiesContext for CRUD operations:
+const { topics } = useEntities();
+const topic = topics.find(t => t.name === 'Authentication');
+```
+
+#### Deprecated: QueryEngine
+
+**Status**: Removed (November 2025)
+
+The `QueryEngine` service has been removed and replaced by `UnifiedIndexManager`:
+- **Old**: `QueryEngine` with SQL-like queries (O(n) linear filtering)
+- **New**: `UnifiedIndexManager` with inverted indexes (O(log n))
+
+**Migration**:
+```typescript
+// ❌ OLD (removed):
+import { QueryEngine } from '@/services/storage/QueryEngine';
+const results = await queryEngine.query(
+  'notes',
+  [{ field: 'status', operator: '=', value: 'active' }],
+  { field: 'createdAt', direction: 'desc' },
+  20
+);
+
+// ✅ NEW:
+import { getUnifiedIndexManager } from '@/services/storage/UnifiedIndexManager';
+const unifiedIndex = await getUnifiedIndexManager();
+const result = await unifiedIndex.search({
+  entityTypes: ['notes'],
+  filters: { status: 'active' },
+  sortBy: 'date',
+  sortOrder: 'desc',
+  limit: 20
+});
+```
+
+**Context Changes**:
+- `NotesContext.queryNotes()` - REMOVED (use UnifiedIndexManager directly)
+- `TasksContext.queryTasks()` - REMOVED (use UnifiedIndexManager directly)
+
 ### Storage Architecture (Phase 4 - Complete)
 
 **Status**: Production-ready, Phase 4 complete (October 2025)
@@ -1478,7 +1630,7 @@ Taskerino has comprehensive documentation organized for easy navigation by AI ag
 
 **For Code Examples**:
 - AI Canvas: `/docs/examples/ai/aiCanvasGenerator.md`
-- Storage Queries: `/docs/examples/storage/QueryEngine.md`
+- Unified Search: `/docs/UNIFIED_INDEX_MANAGER_IMPLEMENTATION_SUMMARY.md`
 - Session Machine: `/docs/examples/sessionMachine.md`
 - Component Examples: `/docs/examples/{Input,TopicPillManager,etc.}.md`
 - Morphing Canvas: `/docs/examples/morphing-canvas/`
@@ -1535,6 +1687,9 @@ Look for `@deprecated` JSDoc tags in the codebase. These indicate legacy code be
 - ❌ `AppContext` → Being split into specialized contexts (in progress)
 - ❌ `SessionScreenshot.path` field → Use `attachmentId` with ContentAddressableStorage
 - ❌ `MorphingMenuButton` component → Use `MenuMorphPill` instead (see `src/components/MorphingMenuButton.tsx:1-7`)
+- ❌ `QueryEngine` service → REMOVED (November 2025) - Use `UnifiedIndexManager` instead
+- ❌ `NotesContext.queryNotes()` → REMOVED (November 2025) - Use `UnifiedIndexManager` directly
+- ❌ `TasksContext.queryTasks()` → REMOVED (November 2025) - Use `UnifiedIndexManager` directly
 
 ## File Organization
 
@@ -1628,6 +1783,8 @@ src-tauri/
 10. **State Refs**: Never use refs for state management - use proper context/state with dependencies (causes stale closures)
 11. **Persistence Queue**: Use queue for background saves - don't debounce manually (causes UI blocking)
 12. **XState Machine**: Check machine state with `state.matches()`, not string equality
+13. **Search API**: Use `UnifiedIndexManager` for all cross-entity search (QueryEngine removed, context.queryNotes/queryTasks removed)
+14. **Metadata Entities**: Don't try to search Topics/Companies/Contacts directly - use them as filters in UnifiedIndexManager queries
 
 ## Performance Considerations
 

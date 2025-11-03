@@ -345,7 +345,6 @@ export function ActionCard({
           description: data.description,
           priority: data.priority,
           tags: data.tags,
-          topicId: data.topicId,
           dueDate: data.dueDate,
         });
         execution.showNotification({

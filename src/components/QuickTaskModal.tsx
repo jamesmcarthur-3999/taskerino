@@ -93,12 +93,12 @@ export function QuickTaskModal() {
 
     addTask({
       id: generateId(),
+      relationships: [],
       title: parsedTask.title,
       done: false,
       priority: parsedTask.priority || 'medium',
       dueDate: parsedTask.dueDate,
       tags: parsedTask.tags,
-      topicId: parsedTask.topicId,
       description: parsedTask.description,
       status: 'todo',
       createdBy: 'manual',
@@ -255,25 +255,7 @@ export function QuickTaskModal() {
               </div>
             </div>
 
-            {/* Topic */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                <Folder className="w-4 h-4" />
-                Topic (optional)
-              </label>
-              <select
-                value={parsedTask.topicId || ''}
-                onChange={(e) => setParsedTask({ ...parsedTask, topicId: e.target.value || undefined })}
-                className="w-full px-3 py-2 bg-white/70 backdrop-blur-xl border border-white/60 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-400 transition-all shadow-sm"
-              >
-                <option value="">No Topic</option>
-                {entitiesState.topics.map(topic => (
-                  <option key={topic.id} value={topic.id}>
-                    {topic.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Topic field removed - relationships managed separately */}
 
             {/* Tags */}
             {parsedTask.tags && parsedTask.tags.length > 0 && (

@@ -6,7 +6,7 @@
  */
 
 import { StorageAdapter, validateJSON } from './StorageAdapter';
-import type { StorageInfo, BackupInfo } from './StorageAdapter';
+import type { StorageInfo } from './StorageAdapter';
 import type { StorageTransaction } from './types';
 import JSZip from 'jszip';
 import { compressData, decompressData, isCompressed } from './compressionUtils';
@@ -502,7 +502,8 @@ export class IndexedDBAdapter extends StorageAdapter {
         try {
           // Preserve optional fields for session/attachment data (critical for hash, attachmentId, path, etc.)
           const isSessionOrAttachment = collection.includes('sessions/') || collection.includes('session-') ||
-                                       collection.includes('attachments-ca/') || collection.includes('attachment');
+                                       collection.includes('attachments-ca/') || collection.includes('attachment') ||
+                                       collection === 'capture-review-jobs';
           jsonString = safeStringify(data, {
             maxDepth: 50,
             removeUndefined: !isSessionOrAttachment, // Keep undefined fields in sessions/attachments
@@ -714,160 +715,22 @@ export class IndexedDBAdapter extends StorageAdapter {
   /**
    * Create a backup of all data
    */
-  async createBackup(): Promise<string> {
-    await this.ensureInitialized();
 
-    const backupId = `backup-${Date.now()}`;
-
-    try {
-      // Get all collections
-      const collections = await this.getAllCollections();
-
-      const backup = {
-        version: 1,
-        timestamp: Date.now(),
-        collections
-      };
-
-      // Store in backups object store
-      return new Promise((resolve, reject) => {
-        const transaction = this.db!.transaction([this.BACKUPS_STORE], 'readwrite');
-        const store = transaction.objectStore(this.BACKUPS_STORE);
-
-        const record: StoredBackup = {
-          id: backupId,
-          timestamp: Date.now(),
-          data: JSON.stringify(backup)
-        };
-
-        const request = store.put(record);
-
-        request.onsuccess = () => {
-          console.log(`📦 Created backup: ${backupId}`);
-
-          // Cleanup old backups (keep last 7)
-          this.cleanupOldBackups(7).catch(err => {
-            console.warn('Failed to cleanup old backups:', err);
-          });
-
-          resolve(backupId);
-        };
-
-        request.onerror = () => {
-          console.error('Failed to create backup:', request.error);
-          reject(new Error(`Failed to create backup: ${request.error}`));
-        };
-      });
-    } catch (error) {
-      console.error('Failed to create backup:', error);
-      throw error;
-    }
-  }
 
   /**
    * List all available backups
    */
-  async listBackups(): Promise<BackupInfo[]> {
-    await this.ensureInitialized();
 
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.BACKUPS_STORE], 'readonly');
-      const store = transaction.objectStore(this.BACKUPS_STORE);
-      const request = store.getAll();
-
-      request.onsuccess = () => {
-        const backups: BackupInfo[] = (request.result as StoredBackup[]).map(b => {
-          const data = JSON.parse(b.data);
-          return {
-            id: b.id,
-            timestamp: b.timestamp,
-            size: b.data.length,
-            collections: Object.keys(data.collections || {})
-          };
-        });
-
-        // Sort by timestamp (newest first)
-        backups.sort((a, b) => b.timestamp - a.timestamp);
-
-        resolve(backups);
-      };
-
-      request.onerror = () => {
-        console.error('Failed to list backups:', request.error);
-        reject(request.error);
-      };
-    });
-  }
 
   /**
    * Restore data from a backup
    */
-  async restoreBackup(backupId: string): Promise<void> {
-    await this.ensureInitialized();
 
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.BACKUPS_STORE], 'readonly');
-      const store = transaction.objectStore(this.BACKUPS_STORE);
-      const request = store.get(backupId);
-
-      request.onsuccess = async () => {
-        const backup = request.result as StoredBackup | undefined;
-
-        if (!backup) {
-          reject(new Error(`Backup ${backupId} not found`));
-          return;
-        }
-
-        try {
-          const data = JSON.parse(backup.data);
-
-          if (!data.collections) {
-            reject(new Error('Invalid backup format'));
-            return;
-          }
-
-          // Restore each collection
-          for (const [collection, collectionData] of Object.entries(data.collections)) {
-            await this.save(collection, collectionData);
-          }
-
-          console.log(`✅ Restored from backup: ${backupId}`);
-          resolve();
-        } catch (error) {
-          console.error('Failed to restore backup:', error);
-          reject(error);
-        }
-      };
-
-      request.onerror = () => {
-        console.error('Failed to restore backup:', request.error);
-        reject(request.error);
-      };
-    });
-  }
 
   /**
    * Delete a backup
    */
-  async deleteBackup(backupId: string): Promise<void> {
-    await this.ensureInitialized();
 
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.BACKUPS_STORE], 'readwrite');
-      const store = transaction.objectStore(this.BACKUPS_STORE);
-      const request = store.delete(backupId);
-
-      request.onsuccess = () => {
-        console.log(`🗑️  Deleted backup: ${backupId}`);
-        resolve();
-      };
-
-      request.onerror = () => {
-        console.error('Failed to delete backup:', request.error);
-        reject(request.error);
-      };
-    });
-  }
 
   /**
    * Clear all data (dangerous!)
@@ -876,9 +739,6 @@ export class IndexedDBAdapter extends StorageAdapter {
     await this.ensureInitialized();
 
     try {
-      // Create a final backup before clearing
-      await this.createBackup();
-
       // Clear collections store
       await new Promise<void>((resolve, reject) => {
         const transaction = this.db!.transaction([this.COLLECTIONS_STORE], 'readwrite');
@@ -936,9 +796,6 @@ export class IndexedDBAdapter extends StorageAdapter {
     await this.ensureInitialized();
 
     try {
-      // Create backup before import
-      await this.createBackup();
-
       // Load ZIP
       const zip = await JSZip.loadAsync(data);
 
@@ -1025,31 +882,6 @@ export class IndexedDBAdapter extends StorageAdapter {
         reject(request.error);
       };
     });
-  }
-
-  /**
-   * Cleanup old backups, keeping only the specified number
-   */
-  private async cleanupOldBackups(keepCount: number): Promise<void> {
-    try {
-      const backups = await this.listBackups();
-
-      if (backups.length <= keepCount) {
-        return;
-      }
-
-      // Delete oldest backups
-      const toDelete = backups.slice(keepCount);
-
-      for (const backup of toDelete) {
-        await this.deleteBackup(backup.id);
-      }
-
-      console.log(`🧹 Cleaned up ${toDelete.length} old backups from IndexedDB`);
-    } catch (error) {
-      console.warn('Failed to cleanup old backups:', error);
-      // Non-critical, continue
-    }
   }
 
   /**
@@ -1158,7 +990,7 @@ export class IndexedDBAdapter extends StorageAdapter {
         const request = store.put(record);
 
         request.onsuccess = () => {
-          console.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
+          debug.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
           resolve();
         };
 
@@ -1184,7 +1016,7 @@ export class IndexedDBAdapter extends StorageAdapter {
         const request = store.put(record);
 
         request.onsuccess = () => {
-          console.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
+          debug.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
           resolve();
         };
 
@@ -1223,7 +1055,7 @@ export class IndexedDBAdapter extends StorageAdapter {
           if (result && result.data) {
             resolve({ index: result.data.index as T, metadata: result.data.metadata });
           } else {
-            console.log(`[Index] No ${indexType} index found for ${collection}`);
+            debug.log(`[Index] No ${indexType} index found for ${collection}`);
             resolve(null);
           }
         };
@@ -1245,7 +1077,7 @@ export class IndexedDBAdapter extends StorageAdapter {
           if (result) {
             resolve({ index: result.index as T, metadata: result.metadata });
           } else {
-            console.log(`[Index] No ${indexType} index found for ${collection}`);
+            debug.log(`[Index] No ${indexType} index found for ${collection}`);
             resolve(null);
           }
         };

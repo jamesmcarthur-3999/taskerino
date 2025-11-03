@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTasks } from '../context/TasksContext';
 import { useNotes } from '../context/NotesContext';
 import { useUI } from '../context/UIContext';
@@ -26,6 +26,29 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
   const { dispatch: uiDispatch } = useUI();
   const { state: entitiesState, addCompany, addContact, addTopic } = useEntities();
   const task = tasksState.tasks.find(t => t.id === taskId);
+
+  // Compute topicId from relationships
+  const taskTopicId = useMemo(() => {
+    if (!task) return undefined;
+    const topicRel = task.relationships.find(r => r.targetType === EntityType.TOPIC);
+    return topicRel?.targetId;
+  }, [task?.relationships]);
+
+  // Compute companyIds from relationships
+  const taskCompanyIds = useMemo(() => {
+    if (!task) return [];
+    return task.relationships
+      .filter(r => r.targetType === EntityType.COMPANY)
+      .map(r => r.targetId);
+  }, [task?.relationships]);
+
+  // Compute contactIds from relationships
+  const taskContactIds = useMemo(() => {
+    if (!task) return [];
+    return task.relationships
+      .filter(r => r.targetType === EntityType.CONTACT)
+      .map(r => r.targetId);
+  }, [task?.relationships]);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -135,41 +158,91 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
   const handleTopicChange = (topicId: string | undefined) => {
     if (!task) return;
 
-    // Update task with new topic
+    // Remove existing topic relationships
+    const nonTopicRelationships = task.relationships.filter(
+      r => r.targetType !== EntityType.TOPIC
+    );
+
+    // Add new topic relationship if topicId is provided
+    const newRelationships = topicId
+      ? [
+          ...nonTopicRelationships,
+          {
+            id: generateId(),
+            sourceType: EntityType.TASK,
+            sourceId: task.id,
+            targetType: EntityType.TOPIC,
+            targetId: topicId,
+            type: RelationshipType.TASK_TOPIC,
+            canonical: true,
+            metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+          },
+        ]
+      : nonTopicRelationships;
+
     tasksDispatch({
       type: 'UPDATE_TASK',
       payload: {
         ...task,
-        topicId,
+        relationships: newRelationships,
       }
     });
-
-    // TODO: Also create/remove TASK_TOPIC relationship
-    // This will be handled by migration service or context integration
   };
 
   const handleCompaniesChange = (companyIds: string[]) => {
     if (!task) return;
 
+    // Remove existing company relationships
+    const nonCompanyRelationships = task.relationships.filter(
+      r => r.targetType !== EntityType.COMPANY
+    );
+
+    // Add new company relationships
+    const newCompanyRelationships = companyIds.map(companyId => ({
+      id: generateId(),
+      sourceType: EntityType.TASK,
+      sourceId: task.id,
+      targetType: EntityType.COMPANY,
+      targetId: companyId,
+      type: RelationshipType.TASK_COMPANY,
+      canonical: true,
+      metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+    }));
+
     tasksDispatch({
       type: 'UPDATE_TASK',
       payload: {
         ...task,
-        companyIds,
+        relationships: [...nonCompanyRelationships, ...newCompanyRelationships],
       }
     });
-
-    // TODO: Also create/remove TASK_COMPANY relationships
   };
 
   const handleContactsChange = (contactIds: string[]) => {
     if (!task) return;
 
+    // Remove existing contact relationships
+    const nonContactRelationships = task.relationships.filter(
+      r => r.targetType !== EntityType.CONTACT
+    );
+
+    // Add new contact relationships
+    const newContactRelationships = contactIds.map(contactId => ({
+      id: generateId(),
+      sourceType: EntityType.TASK,
+      sourceId: task.id,
+      targetType: EntityType.CONTACT,
+      targetId: contactId,
+      type: RelationshipType.TASK_CONTACT,
+      canonical: true,
+      metadata: { source: 'manual' as const, createdAt: new Date().toISOString() },
+    }));
+
     tasksDispatch({
       type: 'UPDATE_TASK',
       payload: {
         ...task,
-        contactIds,
+        relationships: [...nonContactRelationships, ...newContactRelationships],
       }
     });
 
@@ -511,7 +584,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
             Topic
           </label>
           <TopicPillManager
-            topicId={task.topicId}
+            topicId={taskTopicId}
             onTopicChange={handleTopicChange}
             allTopics={entitiesState.topics}
             editable={true}
@@ -525,7 +598,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
             Companies
           </label>
           <CompanyPillManager
-            companyIds={task.companyIds || []}
+            companyIds={taskCompanyIds}
             onCompaniesChange={handleCompaniesChange}
             allCompanies={entitiesState.companies}
             editable={true}
@@ -539,7 +612,7 @@ export function TaskDetailInline({ taskId, onClose }: TaskDetailInlineProps) {
             Contacts
           </label>
           <ContactPillManager
-            contactIds={task.contactIds || []}
+            contactIds={taskContactIds}
             onContactsChange={handleContactsChange}
             allContacts={entitiesState.contacts}
             editable={true}

@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/1282</span>
+                <span class='fraction'>0/1293</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/1282</span>
+                <span class='fraction'>0/1293</span>
             </div>
         
             
@@ -1557,7 +1557,18 @@
 <a name='L1492'></a><a href='#L1492'>1492</a>
 <a name='L1493'></a><a href='#L1493'>1493</a>
 <a name='L1494'></a><a href='#L1494'>1494</a>
-<a name='L1495'></a><a href='#L1495'>1495</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L1495'></a><a href='#L1495'>1495</a>
+<a name='L1496'></a><a href='#L1496'>1496</a>
+<a name='L1497'></a><a href='#L1497'>1497</a>
+<a name='L1498'></a><a href='#L1498'>1498</a>
+<a name='L1499'></a><a href='#L1499'>1499</a>
+<a name='L1500'></a><a href='#L1500'>1500</a>
+<a name='L1501'></a><a href='#L1501'>1501</a>
+<a name='L1502'></a><a href='#L1502'>1502</a>
+<a name='L1503'></a><a href='#L1503'>1503</a>
+<a name='L1504'></a><a href='#L1504'>1504</a>
+<a name='L1505'></a><a href='#L1505'>1505</a>
+<a name='L1506'></a><a href='#L1506'>1506</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1584,6 +1595,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1669,6 +1681,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1676,8 +1689,11 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1685,6 +1701,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1817,6 +1835,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1886,6 +1905,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -3077,6 +3099,7 @@
 } from 'lucide-react';
 <span class="cstat-no" title="statement not covered" >import { GlassSelect } from './GlassSelect';</span>
 import type { Task } from '../types';
+<span class="cstat-no" title="statement not covered" >import { EntityType, RelationshipType } from '../types/relationships';</span>
 <span class="cstat-no" title="statement not covered" >import {</span>
   formatRelativeTime,
   isTaskOverdue,
@@ -3164,8 +3187,11 @@ import type { Task } from '../types';
 &nbsp;
       // Company filter
 <span class="cstat-no" title="statement not covered" >      if (selectedCompanyIds.length &gt; 0) {</span>
-<span class="cstat-no" title="statement not covered" >        if (!task.companyIds || task.companyIds.length === 0) return false;</span>
-<span class="cstat-no" title="statement not covered" >        const hasMatchingCompany = task.companyIds.some(companyId =&gt;</span>
+<span class="cstat-no" title="statement not covered" >        const taskCompanyIds = task.relationships</span>
+<span class="cstat-no" title="statement not covered" >          .filter(r =&gt; r.targetType === EntityType.COMPANY)</span>
+<span class="cstat-no" title="statement not covered" >          .map(r =&gt; r.targetId);</span>
+<span class="cstat-no" title="statement not covered" >        if (taskCompanyIds.length === 0) return false;</span>
+<span class="cstat-no" title="statement not covered" >        const hasMatchingCompany = taskCompanyIds.some(companyId =&gt;</span>
 <span class="cstat-no" title="statement not covered" >          selectedCompanyIds.includes(companyId)</span>
 <span class="cstat-no" title="statement not covered" >        );</span>
 <span class="cstat-no" title="statement not covered" >        if (!hasMatchingCompany) return false;</span>
@@ -3173,8 +3199,11 @@ import type { Task } from '../types';
 &nbsp;
       // Contact filter
 <span class="cstat-no" title="statement not covered" >      if (selectedContactIds.length &gt; 0) {</span>
-<span class="cstat-no" title="statement not covered" >        if (!task.contactIds || task.contactIds.length === 0) return false;</span>
-<span class="cstat-no" title="statement not covered" >        const hasMatchingContact = task.contactIds.some(contactId =&gt;</span>
+<span class="cstat-no" title="statement not covered" >        const taskContactIds = task.relationships</span>
+<span class="cstat-no" title="statement not covered" >          .filter(r =&gt; r.targetType === EntityType.CONTACT)</span>
+<span class="cstat-no" title="statement not covered" >          .map(r =&gt; r.targetId);</span>
+<span class="cstat-no" title="statement not covered" >        if (taskContactIds.length === 0) return false;</span>
+<span class="cstat-no" title="statement not covered" >        const hasMatchingContact = taskContactIds.some(contactId =&gt;</span>
 <span class="cstat-no" title="statement not covered" >          selectedContactIds.includes(contactId)</span>
 <span class="cstat-no" title="statement not covered" >        );</span>
 <span class="cstat-no" title="statement not covered" >        if (!hasMatchingContact) return false;</span>
@@ -3314,6 +3343,7 @@ import type { Task } from '../types';
 <span class="cstat-no" title="statement not covered" >  const handleCreateNewTask = (initialStatus?: Task['status']) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    const newTask: Task = {</span>
 <span class="cstat-no" title="statement not covered" >      id: generateId(),</span>
+<span class="cstat-no" title="statement not covered" >      relationships: [],</span>
 <span class="cstat-no" title="statement not covered" >      title: 'New Task',</span>
 <span class="cstat-no" title="statement not covered" >      done: false,</span>
 <span class="cstat-no" title="statement not covered" >      priority: 'medium',</span>
@@ -3384,7 +3414,10 @@ import type { Task } from '../types';
 <span class="cstat-no" title="statement not covered" >    const [isDragOver, setIsDragOver] = useState(false);</span>
 <span class="cstat-no" title="statement not covered" >    const [editingTaskId, setEditingTaskId] = useState&lt;string | null&gt;(null);</span>
 <span class="cstat-no" title="statement not covered" >    const [editingTitle, setEditingTitle] = useState('');</span>
-<span class="cstat-no" title="statement not covered" >    const topic = (task: Task) =&gt; entitiesState.topics.find(t =&gt; t.id === task.topicId);</span>
+<span class="cstat-no" title="statement not covered" >    const topic = (task: Task) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      const topicRel = task.relationships.find(r =&gt; r.targetType === EntityType.TOPIC);</span>
+<span class="cstat-no" title="statement not covered" >      return topicRel ? entitiesState.topics.find(t =&gt; t.id === topicRel.targetId) : undefined;</span>
+<span class="cstat-no" title="statement not covered" >    };</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    const handleDragOver = (e: React.DragEvent) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >      e.preventDefault();</span>
@@ -4552,7 +4585,7 @@ import type { Task } from '../types';
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-29T05:05:48.357Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

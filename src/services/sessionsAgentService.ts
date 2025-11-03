@@ -7,6 +7,7 @@ import type {
   ClaudeImageSource,
 } from '../types/tauri-ai-commands';
 import { stripHtmlTags } from '../utils/helpers';
+import { debug } from "../utils/debug";
 
 
 /**
@@ -40,7 +41,7 @@ export class SessionsAgentService {
 
       if (savedKey && savedKey.trim()) {
         this.hasApiKey = true;
-        console.log('✅ SessionsAgent: Loaded API key from storage');
+        debug.log(debug.log(console.log('✅ SessionsAgent: Loaded API key from storage')));
       } else {
         console.warn('⚠️  SessionsAgent: No API key found in storage');
       }
@@ -64,7 +65,7 @@ export class SessionsAgentService {
     try {
       await invoke('set_claude_api_key', { apiKey: apiKey.trim() });
       this.hasApiKey = true;
-      console.log('✅ SessionsAgent: API key set successfully');
+      debug.log(console.log('✅ SessionsAgent: API key set successfully'));
     } catch (error) {
       console.error('❌ SessionsAgent: Failed to set API key:', error);
       throw error;
@@ -656,6 +657,11 @@ Return ONLY valid JSON (no markdown):
     "achievements": ["Achievement 1", "Achievement 2"],
     "blockers": ["Blocker 1", "Blocker 2"],
     "insights": ["Insight 1", "Insight 2"]
+  },
+  "detectedEntities": {
+    "topics": [{ "name": "API Development", "confidence": 0.9 }],
+    "companies": [{ "name": "Acme Corp", "confidence": 0.8 }],
+    "contacts": [{ "name": "Sarah", "confidence": 0.7 }]
   }
 }
 </output_format>
@@ -672,6 +678,19 @@ Return ONLY valid JSON (no markdown):
   - 0.4-0.6: Normal work progress. Moderate interest in next screenshot.
   - 0.7-1.0: High uncertainty, error messages, blockers, or context changes detected. Would greatly benefit from seeing next screenshot sooner to understand resolution or progression.
 - curiosityReason: Brief explanation (1 sentence) for the curiosity score
+
+**Entity Extraction (detectedEntities):**
+- **Topics**: Extract subjects/projects/concepts visible in the screenshot (e.g., "API Development", "Database Migration", "UI Design")
+  - Look for project names, feature names, technical concepts
+  - confidence: 0.9 if clearly visible, 0.5-0.8 if inferred from context
+- **Companies**: Extract organization names mentioned or visible (e.g., "Acme Corp", "AWS", "Stripe")
+  - Look for company logos, URLs, app names, service names
+  - confidence: 0.9 if logo/name visible, 0.5-0.7 if inferred
+- **Contacts**: Extract people's names mentioned or visible (e.g., "Sarah", "John Smith")
+  - Look for names in emails, Slack messages, calendar events, code comments
+  - confidence: 0.8 if name clearly visible, 0.5-0.7 if partial match
+- Keep detectedEntities arrays EMPTY if nothing clearly identifiable
+- Only extract entities with confidence >= 0.5
 </guidelines>`;
   }
 

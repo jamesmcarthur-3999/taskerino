@@ -46,6 +46,7 @@ export const RelationshipType = {
   TASK_CONTACT: 'task-contact',
   SESSION_COMPANY: 'session-company',
   SESSION_CONTACT: 'session-contact',
+  SESSION_TOPIC: 'session-topic',
 
   // Future types - Phase 2+
   TASK_FILE: 'task-file',
@@ -472,6 +473,17 @@ export const RELATIONSHIP_CONFIGS: Record<RelationshipType, RelationshipTypeConf
     displayName: 'Contact',
     icon: 'User',
     color: '#EC4899', // pink-600
+  },
+
+  [RelationshipType.SESSION_TOPIC]: {
+    type: RelationshipType.SESSION_TOPIC,
+    sourceTypes: [EntityType.SESSION, EntityType.TOPIC],
+    targetTypes: [EntityType.TOPIC, EntityType.SESSION],
+    bidirectional: true,
+    cascadeDelete: false,
+    displayName: 'Topic',
+    icon: 'Tag',
+    color: '#10B981', // green-600
   },
 
   // Future types (not implemented yet, but defined for extensibility)

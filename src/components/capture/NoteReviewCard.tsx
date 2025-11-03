@@ -17,6 +17,8 @@ interface NoteReviewCardProps {
   noteId: string;
   onDelete: () => void;
   isDeleted: boolean;
+  isRefining?: boolean;
+  defaultExpanded?: boolean;
 }
 
 /**
@@ -25,9 +27,9 @@ interface NoteReviewCardProps {
  * - Expanded: Full TipTap editor + editable metadata
  * - Auto-saves to NotesContext with 500ms debounce
  */
-export function NoteReviewCard({ noteId, onDelete, isDeleted }: NoteReviewCardProps) {
+export function NoteReviewCard({ noteId, onDelete, isDeleted, isRefining = false, defaultExpanded = true }: NoteReviewCardProps) {
   const { state: notesState, updateNote } = useNotes();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [editedContent, setEditedContent] = useState('');
   const [editedSummary, setEditedSummary] = useState('');
   const [editedTags, setEditedTags] = useState<string[]>([]);
@@ -37,16 +39,25 @@ export function NoteReviewCard({ noteId, onDelete, isDeleted }: NoteReviewCardPr
   // Find the note from state
   const note = notesState.notes.find(n => n.id === noteId);
 
-  // Initialize edited values when note changes
+  // Debug: Log if note not found
+  useEffect(() => {
+    if (!note) {
+      console.warn('[NoteReviewCard] Note not found in state:', noteId);
+      console.log('[NoteReviewCard] Available note IDs:', notesState.notes.map(n => n.id));
+    }
+  }, [note, noteId, notesState.notes]);
+
+  // Initialize edited values when note changes (including content updates from refinement)
   useEffect(() => {
     if (note) {
+      console.log('📝 NoteReviewCard: Refreshing note state for', note.id, 'content length:', note.content?.length);
       setEditedContent(note.content);
       setEditedSummary(note.summary);
       setEditedTags(note.tags || []);
       setEditedSentiment(note.metadata?.sentiment);
       isInitialMount.current = true; // Reset on note change
     }
-  }, [note?.id]);
+  }, [note?.id, note?.content, note?.summary, note?.lastUpdated]);
 
   // Auto-save with debounce (500ms)
   useEffect(() => {
@@ -217,12 +228,21 @@ export function NoteReviewCard({ noteId, onDelete, isDeleted }: NoteReviewCardPr
               <label className={`block ${TYPOGRAPHY.label.default} ${TEXT_COLORS.secondary} mb-1`}>
                 Content
               </label>
-              <div className={`${getGlassClasses('subtle')} ${getRadiusClass('field')} overflow-hidden border-2 border-white/60`}>
+              <div className={`relative ${getGlassClasses('subtle')} ${getRadiusClass('field')} overflow-hidden border-2 border-white/60`}>
                 <RichTextEditor
                   content={editedContent}
                   onChange={setEditedContent}
-                  editable={true}
+                  editable={!isRefining}
                 />
+                {/* Shimmer overlay - only affects visual layer, not content */}
+                {isRefining && (
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit]">
+                    {/* Base tint */}
+                    <div className="absolute inset-0 bg-purple-50/30" />
+                    {/* Animated shimmer */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/70 to-transparent animate-shimmer-slide" />
+                  </div>
+                )}
               </div>
             </div>
 

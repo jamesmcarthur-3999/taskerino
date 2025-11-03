@@ -444,8 +444,21 @@ export function SessionDetailView({
 
   const handleExtractTask = (title: string, priority: 'low' | 'medium' | 'high' | 'urgent', context?: string) => {
     const now = new Date().toISOString();
+    const taskId = generateId();
     const newTask: Task = {
-      id: generateId(),
+      id: taskId,
+      relationships: [
+        {
+          id: generateId(),
+          sourceType: EntityType.TASK,
+          sourceId: taskId,
+          targetType: EntityType.SESSION,
+          targetId: session.id,
+          type: RelationshipType.TASK_SESSION,
+          canonical: true,
+          metadata: { source: 'ai' as const, createdAt: now },
+        },
+      ],
       title: title.trim(),
       done: false,
       priority,
@@ -454,7 +467,6 @@ export function SessionDetailView({
       createdAt: now,
 
       // Session linkage
-      sourceSessionId: session.id,
       sourceExcerpt: title,
 
       // Rich context for AI agents
@@ -499,15 +511,27 @@ export function SessionDetailView({
     const cleanContent = stripHtmlTags(content.trim());
 
     const now = new Date().toISOString();
+    const noteId = generateId();
     const newNote: Note = {
-      id: generateId(),
+      id: noteId,
+      relationships: [
+        {
+          id: generateId(),
+          sourceType: EntityType.NOTE,
+          sourceId: noteId,
+          targetType: EntityType.SESSION,
+          targetId: session.id,
+          type: RelationshipType.NOTE_SESSION,
+          canonical: true,
+          metadata: { source: 'manual' as const, createdAt: now },
+        },
+      ],
       content: cleanContent,
       summary: cleanContent.split('\n')[0].substring(0, 100),
       timestamp: now,
       lastUpdated: now,
       source: 'thought',
       tags: [],
-      sourceSessionId: session.id,
 
       // Rich metadata following capture box pattern
       metadata: {
@@ -547,17 +571,19 @@ export function SessionDetailView({
   const handleCompaniesChange = (companyIds: string[]) => {
     if (!currentSession) return;
 
-    updateSessionInContext(currentSession.id, {
-      companyIds,
-    });
+    // TODO: Update to use relationships array
+    // Sessions don't directly store company/contact IDs
+    // They are inferred from notes/tasks linked to the session
+    console.log('Company IDs update requested:', companyIds);
   };
 
   const handleContactsChange = (contactIds: string[]) => {
     if (!currentSession) return;
 
-    updateSessionInContext(currentSession.id, {
-      contactIds,
-    });
+    // TODO: Update to use relationships array
+    // Sessions don't directly store company/contact IDs
+    // They are inferred from notes/tasks linked to the session
+    console.log('Contact IDs update requested:', contactIds);
   };
 
   const handleSessionUpdate = (updatedSession: Session) => {
@@ -773,7 +799,7 @@ export function SessionDetailView({
               {/* Companies Section */}
               <div className="flex-shrink-0 min-w-0">
                 <CompanyPillManager
-                  companyIds={currentSession.companyIds || []}
+                  companyIds={[]} // TODO: Derive from related notes/tasks
                   onCompaniesChange={handleCompaniesChange}
                   allCompanies={entitiesState.companies}
                   editable={currentSession.status === 'completed'}
@@ -783,7 +809,7 @@ export function SessionDetailView({
               {/* Contacts Section */}
               <div className="flex-shrink-0 min-w-0">
                 <ContactPillManager
-                  contactIds={currentSession.contactIds || []}
+                  contactIds={[]} // TODO: Derive from related notes/tasks
                   onContactsChange={handleContactsChange}
                   allContacts={entitiesState.contacts}
                   editable={currentSession.status === 'completed'}

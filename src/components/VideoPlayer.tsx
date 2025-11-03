@@ -8,9 +8,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, Camera } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import type { Session, Attachment, SessionScreenshot, VideoChapter } from '../types';
-import { videoStorageService } from '../services/videoStorageService';
-import { getCAStorage } from '../services/storage/ContentAddressableStorage';
+import type { Session, SessionScreenshot, VideoChapter } from '../types';
 import { getGlassClasses, RADIUS, SCALE, TRANSITIONS, SHADOWS } from '../design-system/theme';
 
 interface VideoPlayerProps {
@@ -95,12 +93,13 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
   useEffect(() => {
     console.log('🎥 [VIDEO PLAYER] useEffect triggered', {
       hasVideo: !!session.video,
-      fullVideoAttachmentId: session.video?.fullVideoAttachmentId,
+      hasOptimizedPath: !!session.video?.optimizedPath,
+      hasPath: !!session.video?.path,
     });
 
     const loadVideo = async () => {
-      if (!session.video?.fullVideoAttachmentId) {
-        setError('No video attachment found');
+      if (!session.video) {
+        setError('No video found for this session');
         setIsLoading(false);
         return;
       }
@@ -108,46 +107,26 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
       try {
         console.log('🎥 [VIDEO PLAYER] Loading video from file system');
 
-        // Videos are stored on file system (NOT in CAS - too large)
-        // Primary: Use direct file path (current architecture)
-        // Fallback: Try CAS for legacy videos (backwards compatibility)
+        // Modern architecture: Two paths
+        // 1. optimizedPath (preferred): Background-processed MP4 with merged audio (instant playback)
+        // 2. path (fallback): Original video file (requires runtime audio sync)
 
         let videoPath: string | null = null;
 
-        // Try direct file path first (modern videos)
-        if (session.video.path) {
-          console.log('🎥 [VIDEO PLAYER] Using direct file path:', session.video.path);
-          videoPath = session.video.path;
+        // PREFERRED: Use optimized path (background-processed)
+        if (session.video.optimizedPath) {
+          console.log('🎥 [VIDEO PLAYER] ✨ Using optimized video (instant playback)');
+          videoPath = session.video.optimizedPath;
         }
-        // Fallback: Try CAS for legacy videos
-        else if (session.video.hash) {
-          console.log('🎥 [VIDEO PLAYER] Fallback: Trying CAS lookup for legacy video');
-          try {
-            const caStorage = await getCAStorage();
-            const attachment = await caStorage.loadAttachment(session.video.hash);
-
-            if (attachment?.path) {
-              console.log('🎥 [VIDEO PLAYER] Legacy video found in CAS');
-              videoPath = attachment.path;
-            }
-          } catch (casError) {
-            console.warn('⚠️ [VIDEO PLAYER] CAS lookup failed:', casError);
-          }
+        // FALLBACK: Use original video path
+        else if (session.video.path) {
+          console.log('🎥 [VIDEO PLAYER] Using original video (may need audio sync)');
+          videoPath = session.video.path;
         }
 
         if (!videoPath) {
-          const errorMsg = `Video file path not found.\n\nThis session's video may have been recorded with an older version or the file may have been deleted.\n\nSession ID: ${session.id}`;
+          const errorMsg = `Video file path not found.\n\nThe session may still be processing, or the video file may have been deleted.\n\nSession ID: ${session.id}`;
           console.error('❌ [VIDEO PLAYER]', errorMsg);
-          setError(errorMsg);
-          setIsLoading(false);
-          return;
-        }
-
-        // CRITICAL: Detect path corruption bug (attachment ID stored as path)
-        if (videoPath.startsWith('video-') && !videoPath.includes('/')) {
-          const errorMsg = `VIDEO PATH CORRUPTION DETECTED!\n\nThe video path contains an attachment ID instead of a file path.\n\nCorrupted path: ${videoPath}\n\nThis is a known bug. Please restart the app to trigger automatic repair.`;
-          console.error('❌ [VIDEO PLAYER] CRITICAL BUG:', errorMsg);
-          console.error('❌ [VIDEO PLAYER] Corrupted path:', videoPath);
           setError(errorMsg);
           setIsLoading(false);
           return;
@@ -185,7 +164,7 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
     };
 
     loadVideo();
-  }, [session.video?.fullVideoAttachmentId]);
+  }, [session.video?.optimizedPath, session.video?.path]);
 
   // Apply mute state when video loads
   useEffect(() => {

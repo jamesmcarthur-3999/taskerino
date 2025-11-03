@@ -10,6 +10,7 @@ import { useTasks } from '../context/TasksContext';
 import { useNotes } from '../context/NotesContext';
 import { generateId } from '../utils/helpers';
 import { RADIUS, getGlassClasses, getRadiusClass, TRANSITIONS, SCALE } from '../design-system/theme';
+import { EntityType, RelationshipType } from '../types/relationships';
 
 interface SessionTimelineProps {
   session: Session;
@@ -154,15 +155,27 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
   // Direct task creation with sidebar opening
   const handleExtractTask = (action: string, screenshotId: string) => {
     const now = new Date().toISOString();
+    const taskId = generateId();
     const newTask: Task = {
-      id: generateId(),
+      id: taskId,
+      relationships: [
+        {
+          id: generateId(),
+          sourceType: EntityType.TASK,
+          sourceId: taskId,
+          targetType: EntityType.SESSION,
+          targetId: session.id,
+          type: RelationshipType.TASK_SESSION,
+          canonical: true,
+          metadata: { source: 'manual' as const, createdAt: now },
+        },
+      ],
       title: action.trim(),
       done: false,
       priority: 'medium',
       status: 'todo',
       createdBy: 'ai',
       createdAt: now,
-      sourceSessionId: session.id,
       sourceExcerpt: action,
       description: `Extracted from session: ${session.name}`,
       contextForAgent: `This task was identified during the session "${session.name}".`,
@@ -170,7 +183,6 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
     };
 
     addTask(newTask);
-    // Task-session linking handled automatically
     addNotification({
       type: 'success',
       title: 'Task Created',
@@ -191,15 +203,27 @@ export function SessionTimeline({ session, onAddComment, onToggleFlag, onAddCont
   // Direct note creation with sidebar opening
   const handleExtractNote = (summary: string, screenshotId: string) => {
     const now = new Date().toISOString();
+    const noteId = generateId();
     const newNote: Note = {
-      id: generateId(),
+      id: noteId,
+      relationships: [
+        {
+          id: generateId(),
+          sourceType: EntityType.NOTE,
+          sourceId: noteId,
+          targetType: EntityType.SESSION,
+          targetId: session.id,
+          type: RelationshipType.NOTE_SESSION,
+          canonical: true,
+          metadata: { source: 'manual' as const, createdAt: now },
+        },
+      ],
       content: summary.trim(),
       summary: summary.trim().split('\n')[0].substring(0, 100),
       timestamp: now,
       lastUpdated: now,
       source: 'thought',
       tags: [],
-      sourceSessionId: session.id,
       metadata: {
         keyPoints: [summary.trim().split('\n')[0].substring(0, 100)],
         relatedTopics: [session.name],

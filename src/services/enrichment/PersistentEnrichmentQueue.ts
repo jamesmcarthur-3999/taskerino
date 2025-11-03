@@ -18,7 +18,7 @@
  * 1. Initialize: Open IndexedDB, load pending jobs, reset crashed jobs
  * 2. Enqueue: Add job to persistent storage with priority
  * 3. Process: Background loop processes highest priority pending job
- * 4. Execute: Call sessionEnrichmentService.enrichSession() with progress tracking
+ * 4. Execute: Call enrichmentOrchestrator.enrichSession() with progress tracking
  * 5. Complete/Fail: Update job status, emit event, retry if needed
  * 6. Recovery: On restart, resume all pending jobs from where they left off
  *
@@ -63,13 +63,16 @@
  */
 
 import { generateId } from '../../utils/helpers';
-import { sessionEnrichmentService } from '../sessionEnrichmentService';
+import { getEnrichmentOrchestrator } from './EnrichmentOrchestrator';
+import type { StrategyConfig } from './EnrichmentOrchestrator';
+import { getStorage } from '../storage';
 import type { Session } from '../../types';
 import type {
   EnrichmentOptions,
   EnrichmentResult,
   EnrichmentProgress as ServiceEnrichmentProgress,
-} from '../sessionEnrichmentService';
+} from './strategies/EnrichmentStrategy';
+import { debug } from '../../utils/debug';
 
 // ============================================================================
 // Types & Interfaces
@@ -921,8 +924,29 @@ export class PersistentEnrichmentQueue extends SimpleEventEmitter {
         throw new Error(`Session ${job.sessionId} not found`);
       }
 
-      // Execute enrichment with progress tracking
-      const result = await sessionEnrichmentService.enrichSession(session, {
+      // Load settings and configure orchestrator
+      const storage = await getStorage();
+      const settings = await storage.load<any>('settings');
+      const enrichmentSettings = settings?.enrichmentSettings;
+
+      const strategyConfig: StrategyConfig = {
+        strategy: enrichmentSettings?.strategy || 'legacy',
+        legacy: enrichmentSettings?.legacy || {
+          enableIncremental: true,
+          enableCaching: true
+        },
+        aiAgent: enrichmentSettings?.aiAgent || {
+          model: 'claude-3-5-sonnet-20241022',
+          temperature: 0.7,
+          maxTokens: 4096,
+          enableToolUse: true,
+          enableStreaming: true
+        }
+      };
+
+      // Execute enrichment with progress tracking (via orchestrator)
+      const orchestrator = getEnrichmentOrchestrator(strategyConfig);
+      const result = await orchestrator.enrichSession(session, {
         ...job.options,
         onProgress: (progress: ServiceEnrichmentProgress) => {
           // Throttle progress events (max 100ms between emits)

@@ -50,6 +50,10 @@ pub async fn claude_chat_completion(
         request_body["temperature"] = json!(temperature);
     }
 
+    if let Some(tools) = request.tools {
+        request_body["tools"] = json!(tools);
+    }
+
     // Retry logic for transient errors (520, 502, 503, 504)
     let max_retries = 3;
     let mut last_error = String::new();
@@ -172,6 +176,7 @@ pub async fn claude_chat_completion_vision(
     messages: Vec<ClaudeMessage>,
     system: Option<String>,
     temperature: Option<f32>,
+    tools: Option<Vec<ClaudeTool>>,
 ) -> Result<ClaudeChatResponse, String> {
     let request = ClaudeChatRequest {
         model,
@@ -179,6 +184,7 @@ pub async fn claude_chat_completion_vision(
         messages,
         system: system.map(|s| serde_json::Value::String(s)),
         temperature,
+        tools,
     };
 
     claude_chat_completion(app, request).await

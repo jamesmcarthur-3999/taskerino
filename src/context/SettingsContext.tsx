@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { getStorage } from '../services/storage';
+import { debug } from "../utils/debug";
 
 // Types (extracted from AppContext)
 interface AISettings {
@@ -116,6 +117,33 @@ interface SessionRecordingDefaults {
   };
 }
 
+/**
+ * Enrichment Strategy Settings
+ *
+ * Controls which enrichment implementation to use.
+ * - 'legacy': Hardcoded 10-stage pipeline (current production)
+ * - 'ai-agent': AI-driven enrichment with tool use (new, experimental)
+ */
+interface EnrichmentSettings {
+  // Strategy selection
+  strategy: 'legacy' | 'ai-agent';
+
+  // Legacy strategy config
+  legacy: {
+    enableIncremental?: boolean;
+    enableCaching?: boolean;
+  };
+
+  // AI agent strategy config
+  aiAgent: {
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+    enableToolUse?: boolean;
+    enableStreaming?: boolean;
+  };
+}
+
 interface SettingsState {
   aiSettings: AISettings;
   learningSettings: LearningSettings;
@@ -123,6 +151,7 @@ interface SettingsState {
   learnings: UserLearnings;
   nedSettings: NedSettings;
   sessionRecordingDefaults: SessionRecordingDefaults;
+  enrichmentSettings: EnrichmentSettings;
 }
 
 type SettingsAction =
@@ -131,6 +160,7 @@ type SettingsAction =
   | { type: 'UPDATE_USER_PROFILE'; payload: Partial<UserProfile> }
   | { type: 'UPDATE_NED_SETTINGS'; payload: Partial<NedSettings> }
   | { type: 'UPDATE_SESSION_RECORDING_DEFAULTS'; payload: Partial<SessionRecordingDefaults> }
+  | { type: 'UPDATE_ENRICHMENT_SETTINGS'; payload: Partial<EnrichmentSettings> }
   | { type: 'GRANT_NED_PERMISSION'; payload: { toolName: string; level: 'forever' | 'session' | 'always-ask'; sessionOnly?: boolean } }
   | { type: 'REVOKE_NED_PERMISSION'; payload: { toolName: string; sessionOnly?: boolean } }
   | { type: 'CLEAR_SESSION_PERMISSIONS' }
@@ -220,6 +250,20 @@ const defaultState: SettingsState = {
       displayIds: undefined,
     },
   },
+  enrichmentSettings: {
+    strategy: 'legacy', // Default to legacy for backward compatibility
+    legacy: {
+      enableIncremental: true,
+      enableCaching: true,
+    },
+    aiAgent: {
+      model: 'claude-3-5-sonnet-20241022',
+      temperature: 0.7,
+      maxTokens: 4096,
+      enableToolUse: true,
+      enableStreaming: true,
+    },
+  },
 };
 
 // Reducer (copied logic from AppContext reducer)
@@ -250,6 +294,18 @@ function settingsReducer(state: SettingsState, action: SettingsAction): Settings
           pip: action.payload.pip ? { ...state.sessionRecordingDefaults.pip, ...action.payload.pip } : state.sessionRecordingDefaults.pip,
           audioRecording: action.payload.audioRecording ? { ...state.sessionRecordingDefaults.audioRecording, ...action.payload.audioRecording } : state.sessionRecordingDefaults.audioRecording,
           lastUsedDevices: action.payload.lastUsedDevices ? { ...state.sessionRecordingDefaults.lastUsedDevices, ...action.payload.lastUsedDevices } : state.sessionRecordingDefaults.lastUsedDevices,
+        },
+      };
+
+    case 'UPDATE_ENRICHMENT_SETTINGS':
+      return {
+        ...state,
+        enrichmentSettings: {
+          ...state.enrichmentSettings,
+          ...action.payload,
+          // Ensure nested objects are merged properly
+          legacy: action.payload.legacy ? { ...state.enrichmentSettings.legacy, ...action.payload.legacy } : state.enrichmentSettings.legacy,
+          aiAgent: action.payload.aiAgent ? { ...state.enrichmentSettings.aiAgent, ...action.payload.aiAgent } : state.enrichmentSettings.aiAgent,
         },
       };
 
@@ -353,6 +409,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
               learnings: settings.learnings || defaultState.learnings,
               nedSettings: settings.nedSettings || defaultState.nedSettings,
               sessionRecordingDefaults: settings.sessionRecordingDefaults || defaultState.sessionRecordingDefaults,
+              enrichmentSettings: settings.enrichmentSettings || defaultState.enrichmentSettings,
             },
           });
         }
@@ -383,8 +440,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           learnings: state.learnings,
           nedSettings: state.nedSettings,
           sessionRecordingDefaults: state.sessionRecordingDefaults,
+          enrichmentSettings: state.enrichmentSettings,
         });
-        console.log('Settings saved to storage');
+        debug.log("Settings saved to storage");
       } catch (error) {
         console.error('Failed to save settings:', error);
       }
@@ -466,5 +524,53 @@ export function useSessionRecordingDefaults() {
     updateLastUsedDevices,
     updateVideoDefaults,
     updatePipDefaults,
+  };
+}
+
+/**
+ * Hook for managing enrichment strategy settings
+ * Provides convenient methods for switching between legacy and AI agent strategies
+ */
+export function useEnrichmentSettings() {
+  const { state, dispatch } = useSettings();
+
+  const updateEnrichmentSettings = useCallback((updates: Partial<EnrichmentSettings>) => {
+    dispatch({
+      type: 'UPDATE_ENRICHMENT_SETTINGS',
+      payload: updates,
+    });
+  }, [dispatch]);
+
+  const switchStrategy = useCallback((strategy: 'legacy' | 'ai-agent') => {
+    dispatch({
+      type: 'UPDATE_ENRICHMENT_SETTINGS',
+      payload: { strategy },
+    });
+  }, [dispatch]);
+
+  const updateLegacyConfig = useCallback((updates: Partial<EnrichmentSettings['legacy']>) => {
+    dispatch({
+      type: 'UPDATE_ENRICHMENT_SETTINGS',
+      payload: {
+        legacy: updates as EnrichmentSettings['legacy'],
+      },
+    });
+  }, [dispatch]);
+
+  const updateAIAgentConfig = useCallback((updates: Partial<EnrichmentSettings['aiAgent']>) => {
+    dispatch({
+      type: 'UPDATE_ENRICHMENT_SETTINGS',
+      payload: {
+        aiAgent: updates as EnrichmentSettings['aiAgent'],
+      },
+    });
+  }, [dispatch]);
+
+  return {
+    enrichmentSettings: state.enrichmentSettings,
+    updateEnrichmentSettings,
+    switchStrategy,
+    updateLegacyConfig,
+    updateAIAgentConfig,
   };
 }

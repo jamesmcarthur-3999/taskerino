@@ -7,7 +7,7 @@
 
 import { BaseDirectory, exists, readTextFile, writeTextFile, writeFile, readFile, mkdir, remove, readDir } from '@tauri-apps/plugin-fs';
 import { StorageAdapter, formatBytes, validateJSON, calculateChecksum } from './StorageAdapter';
-import type { StorageInfo, BackupInfo } from './StorageAdapter';
+import type { StorageInfo } from './StorageAdapter';
 import type { StorageTransaction } from './types';
 import JSZip from 'jszip';
 import { compressData, decompressData, isCompressed } from './compressionUtils';
@@ -19,6 +19,7 @@ import { StorageFullError } from '@/types/storage';
 import { toast } from 'sonner';
 import { safeStringify } from '../../utils/serializationUtils';
 import { isTauriApp } from './index';
+import { debug } from '../../utils/debug';
 
 /**
  * Write-Ahead Log Entry
@@ -415,7 +416,6 @@ class TauriFileSystemTransaction implements StorageTransaction {
 
 export class TauriFileSystemAdapter extends StorageAdapter {
   private readonly DB_DIR = 'db';
-  private readonly BACKUP_DIR = 'backups';
   private readonly WAL_PATH = 'db/wal.log';
   private readonly CHECKPOINT_PATH = 'db/wal.checkpoint';
   private initialized = false;
@@ -435,12 +435,6 @@ export class TauriFileSystemAdapter extends StorageAdapter {
       if (!await exists(this.DB_DIR, { baseDir: BaseDirectory.AppData })) {
         await mkdir(this.DB_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
         console.log('📁 Created db directory');
-      }
-
-      // Create backups directory
-      if (!await exists(this.BACKUP_DIR, { baseDir: BaseDirectory.AppData })) {
-        await mkdir(this.BACKUP_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-        console.log('📁 Created backups directory');
       }
 
       // Clean up orphaned temp directories from previous sessions
@@ -591,8 +585,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
           console.log(`✓ [IMMEDIATE] Backup created: ${collection}.${timestamp}.backup.json`);
 
-          // Rotate old backups (keep last 10) - non-critical, failures are logged but don't halt
-          await this.rotateBackups(collection, 10);
+          // Note: Backup rotation removed - keeping all backups for safety
         } catch (error) {
           // CRITICAL: Backup failure must halt the save operation
           throw new Error(`CRITICAL: Backup failed for ${collection}: ${error instanceof Error ? error.message : String(error)}`);
@@ -634,7 +627,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
    */
   async save<T>(collection: string, data: T): Promise<void> {
     const startTime = Date.now();
-    console.log(`[TauriFS] SAVE START: ${collection}`);
+    debug.log(`[TauriFS] SAVE START: ${collection}`);
     await this.ensureInitialized();
 
     return this.writeQueue.enqueue(async () => {
@@ -747,10 +740,9 @@ export class TauriFileSystemAdapter extends StorageAdapter {
               throw new Error(`Backup verification failed for ${collection}: content mismatch after write`);
             }
 
-            console.log(`✓ Backup created and verified: ${collection}.${timestamp}.backup.json`);
+            debug.log(`✓ Backup created and verified: ${collection}.${timestamp}.backup.json`);
 
-            // Rotate old backups (keep last 10) - non-critical, failures are logged but don't halt
-            await this.rotateBackups(collection, 10);
+            // Note: Backup rotation removed - keeping all backups for safety
 
           } catch (error) {
             // CRITICAL: Backup failure must halt the save operation
@@ -781,7 +773,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
         }
 
         const duration = Date.now() - startTime;
-        console.log(`✅ [TauriFS] SAVE COMPLETE: ${collection} (${duration}ms, ${formatBytes(writtenContent.length)})`);
+        debug.log(`✅ [TauriFS] SAVE COMPLETE: ${collection} (${duration}ms, ${formatBytes(writtenContent.length)})`);
 
         // 4. Checkpoint periodically (every 100 writes)
         this.writesSinceCheckpoint++;
@@ -813,7 +805,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
     try {
       if (!await exists(path, { baseDir: BaseDirectory.AppData })) {
-        console.log(`ℹ️  Collection ${collection} does not exist`);
+        debug.log(`ℹ️  Collection ${collection} does not exist`);
         return null;
       }
 
@@ -835,7 +827,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
         // Check if data is compressed
         if (typeof actualData === 'string' && isCompressed(actualData)) {
-          console.log(`📦 Decompressing ${collection}...`);
+          debug.log(`📦 Decompressing ${collection}...`);
           try {
             const decompressed = await decompressData(actualData);
             actualData = JSON.parse(decompressed);
@@ -1018,163 +1010,13 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     }
   }
 
-  /**
-   * Create a backup of all data
-   */
-  async createBackup(): Promise<string> {
-    await this.ensureInitialized();
 
-    const backupId = `backup-${Date.now()}`;
-    const backupPath = `${this.BACKUP_DIR}/${backupId}.json`;
 
-    try {
-      // Read all collections
-      const entries = await readDir(this.DB_DIR, {
-        baseDir: BaseDirectory.AppData
-      });
 
-      const backup: any = {
-        version: 1,
-        timestamp: Date.now(),
-        collections: {}
-      };
 
-      for (const entry of entries) {
-        if (entry.name?.endsWith('.json') && !entry.name.includes('.backup') && !entry.name.includes('.tmp')) {
-          const collection = entry.name.replace('.json', '');
-          const data = await this.load(collection);
-          if (data !== null) {
-            backup.collections[collection] = data;
-          }
-        }
-      }
 
-      // Save backup
-      await writeTextFile(backupPath, JSON.stringify(backup, null, 2), {
-        baseDir: BaseDirectory.AppData
-      });
 
-      console.log(`📦 Created backup: ${backupId}`);
 
-      // Cleanup old backups (keep last 7)
-      await this.cleanupOldBackups(7);
-
-      return backupId;
-    } catch (error) {
-      console.error('Failed to create backup:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * List all available backups
-   */
-  async listBackups(): Promise<BackupInfo[]> {
-    await this.ensureInitialized();
-
-    try {
-      const entries = await readDir(this.BACKUP_DIR, {
-        baseDir: BaseDirectory.AppData
-      });
-
-      const backups: BackupInfo[] = [];
-
-      for (const entry of entries) {
-        if (entry.name?.endsWith('.json')) {
-          const path = `${this.BACKUP_DIR}/${entry.name}`;
-          const content = await readTextFile(path, {
-            baseDir: BaseDirectory.AppData
-          });
-
-          const parsed = JSON.parse(content);
-
-          backups.push({
-            id: entry.name.replace('.json', ''),
-            timestamp: parsed.timestamp || 0,
-            size: content.length,
-            collections: Object.keys(parsed.collections || {})
-          });
-        }
-      }
-
-      // Sort by timestamp (newest first)
-      backups.sort((a, b) => b.timestamp - a.timestamp);
-
-      return backups;
-    } catch (error) {
-      console.error('Failed to list backups:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Restore data from a backup
-   */
-  async restoreBackup(backupId: string): Promise<void> {
-    await this.ensureInitialized();
-
-    const backupPath = `${this.BACKUP_DIR}/${backupId}.json`;
-
-    try {
-      if (!await exists(backupPath, { baseDir: BaseDirectory.AppData })) {
-        throw new Error(`Backup ${backupId} not found`);
-      }
-
-      const content = await readTextFile(backupPath, {
-        baseDir: BaseDirectory.AppData
-      });
-
-      const backup = JSON.parse(content);
-
-      if (!backup.collections) {
-        throw new Error('Invalid backup format');
-      }
-
-      // Restore each collection
-      for (const [collection, data] of Object.entries(backup.collections)) {
-        await this.save(collection, data);
-      }
-
-      console.log(`✅ Restored from backup: ${backupId}`);
-    } catch (error) {
-      console.error('Failed to restore backup:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Delete a backup
-   */
-  async deleteBackup(backupId: string): Promise<void> {
-    await this.ensureInitialized();
-
-    const backupPath = `${this.BACKUP_DIR}/${backupId}.json`;
-
-    try {
-      // Try to check if file exists, but don't throw if it doesn't
-      let fileExists = false;
-      try {
-        fileExists = await exists(backupPath, { baseDir: BaseDirectory.AppData });
-      } catch (existsError) {
-        // File doesn't exist or can't check - that's fine, nothing to delete
-        return;
-      }
-
-      if (fileExists) {
-        await remove(backupPath, { baseDir: BaseDirectory.AppData });
-        console.log(`🗑️  Deleted backup: ${backupId}`);
-      }
-    } catch (error) {
-      // Only log as warning if it's a "file not found" error
-      if (error && typeof error === 'object' && 'message' in error &&
-          (error.message as string).includes('No such file or directory')) {
-        console.warn(`⚠️  Backup already deleted: ${backupId}`);
-        return; // Don't throw for missing files
-      }
-      console.error('Failed to delete backup:', error);
-      throw error;
-    }
-  }
 
   /**
    * Clear all data (dangerous!)
@@ -1183,9 +1025,6 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     await this.ensureInitialized();
 
     try {
-      // Create a final backup before clearing
-      await this.createBackup();
-
       // Delete all JSON files in db directory
       const entries = await readDir(this.DB_DIR, {
         baseDir: BaseDirectory.AppData
@@ -1255,7 +1094,6 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
     try {
       // Create backup before import
-      await this.createBackup();
 
       // Load ZIP
       const zip = await JSZip.loadAsync(data);
@@ -1310,83 +1148,9 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     }
   }
 
-  /**
-   * Cleanup old backups, keeping only the specified number
-   */
-  private async cleanupOldBackups(keepCount: number): Promise<void> {
-    try {
-      const backups = await this.listBackups();
 
-      if (backups.length <= keepCount) {
-        return;
-      }
 
-      // Delete oldest backups
-      const toDelete = backups.slice(keepCount);
 
-      for (const backup of toDelete) {
-        await this.deleteBackup(backup.id);
-      }
-
-      console.log(`🧹 Cleaned up ${toDelete.length} old backups`);
-    } catch (error) {
-      console.warn('Failed to cleanup old backups:', error);
-      // Non-critical, continue
-    }
-  }
-
-  /**
-   * Rotate old backups, keeping only the most recent ones
-   * @param collection - Collection name to rotate backups for
-   * @param keepCount - Number of most recent backups to keep (default: 10)
-   */
-  private async rotateBackups(collection: string, keepCount: number = 10): Promise<void> {
-    try {
-      // List all files in the db directory
-      const entries = await readDir(this.DB_DIR, { baseDir: BaseDirectory.AppData });
-
-      // Filter to find backup files for this specific collection
-      // Format: {collection}.{timestamp}.backup.json
-      const backupFiles = entries
-        .filter(e => {
-          const name = e.name || '';
-          return name.startsWith(`${collection}.`) && name.endsWith('.backup.json');
-        })
-        .map(e => {
-          const name = e.name || '';
-          // Extract timestamp from filename: collection.{timestamp}.backup.json
-          const parts = name.split('.');
-          const timestamp = parts.length >= 3 ? parseInt(parts[parts.length - 3]) : 0;
-          return {
-            name,
-            timestamp: isNaN(timestamp) ? 0 : timestamp
-          };
-        })
-        .sort((a, b) => b.timestamp - a.timestamp); // Sort newest first
-
-      // Delete backups beyond the keepCount threshold
-      if (backupFiles.length > keepCount) {
-        const toDelete = backupFiles.slice(keepCount);
-
-        for (const backup of toDelete) {
-          const backupPath = `${this.DB_DIR}/${backup.name}`;
-          try {
-            await remove(backupPath, { baseDir: BaseDirectory.AppData });
-            console.log(`🗑️  Deleted old backup: ${backup.name}`);
-          } catch (deleteError) {
-            console.warn(`Failed to delete old backup ${backup.name}:`, deleteError);
-            // Continue with other deletions even if one fails
-          }
-        }
-
-        console.log(`✓ Backup rotation complete for ${collection}: kept ${keepCount} most recent, deleted ${toDelete.length} old backups`);
-      }
-    } catch (error) {
-      // Rotation is not critical - log warning but don't throw
-      // This allows the save operation to complete even if rotation fails
-      console.warn(`Failed to rotate backups for ${collection}:`, error);
-    }
-  }
 
   /**
    * Append entry to WAL (Write-Ahead Log)
@@ -1416,7 +1180,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
         await writeTextFile(this.WAL_PATH, line, { baseDir: BaseDirectory.AppData });
       }
 
-      console.log(`[WAL] Appended: ${entry.operation} ${entry.collection}`);
+      debug.log(`[WAL] Appended: ${entry.operation} ${entry.collection}`);
     } catch (error) {
       throw new Error(`WAL append failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -1444,7 +1208,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
       const entries = lines.map(line => JSON.parse(line) as WALEntry);
 
-      console.log(`[WAL] Recovering ${entries.length} entries...`);
+      debug.log(`[WAL] Recovering ${entries.length} entries...`);
 
       // Get last checkpoint timestamp
       const checkpointExists = await exists(this.CHECKPOINT_PATH, { baseDir: BaseDirectory.AppData });
@@ -1456,7 +1220,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
 
       // Replay entries after last checkpoint
       const toReplay = entries.filter(e => e.timestamp > lastCheckpoint);
-      console.log(`[WAL] Replaying ${toReplay.length} entries since checkpoint ${lastCheckpoint}`);
+      debug.log(`[WAL] Replaying ${toReplay.length} entries since checkpoint ${lastCheckpoint}`);
 
       // Group by transaction
       const transactions = new Map<string, WALEntry[]>();
@@ -1479,7 +1243,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
         const rolledBack = txEntries.some(e => e.operation === 'transaction-rollback');
 
         if (committed && !rolledBack) {
-          console.log(`[WAL] Replaying transaction ${txId}`);
+          debug.log(`[WAL] Replaying transaction ${txId}`);
           for (const entry of txEntries) {
             if (entry.operation === 'write') {
               await this.replayWrite(entry);
@@ -1488,7 +1252,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
             }
           }
         } else {
-          console.log(`[WAL] Skipping uncommitted/rolled-back transaction ${txId}`);
+          debug.log(`[WAL] Skipping uncommitted/rolled-back transaction ${txId}`);
         }
       }
 
@@ -1528,7 +1292,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     }), {
       baseDir: BaseDirectory.AppData
     });
-    console.log(`[WAL] Replayed write: ${entry.collection}`);
+    debug.log(`[WAL] Replayed write: ${entry.collection}`);
   }
 
   /**
@@ -1539,7 +1303,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     const fileExists = await exists(path, { baseDir: BaseDirectory.AppData });
     if (fileExists) {
       await remove(path, { baseDir: BaseDirectory.AppData });
-      console.log(`[WAL] Replayed delete: ${entry.collection}`);
+      debug.log(`[WAL] Replayed delete: ${entry.collection}`);
     }
   }
 
@@ -1556,7 +1320,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     // Clear WAL
     await writeTextFile(this.WAL_PATH, '', { baseDir: BaseDirectory.AppData });
 
-    console.log(`[WAL] Checkpoint created at ${now}`);
+    debug.log(`[WAL] Checkpoint created at ${now}`);
   }
 
   /**
@@ -2106,7 +1870,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
     await this.ensureDir(`db/${collection}/indexes`);
     await writeTextFile(indexPath, JSON.stringify(indexData), { baseDir: BaseDirectory.AppData });
 
-    console.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
+    debug.log(`[Index] Saved ${indexType} index for ${collection} (${metadata.entityCount} entities)`);
   }
 
   /**
@@ -2126,7 +1890,7 @@ export class TauriFileSystemAdapter extends StorageAdapter {
       const data = JSON.parse(content);
       return { index: data.index as T, metadata: data.metadata };
     } catch (error) {
-      console.log(`[Index] No ${indexType} index found for ${collection}`);
+      debug.log(`[Index] No ${indexType} index found for ${collection}`);
       return null;
     }
   }

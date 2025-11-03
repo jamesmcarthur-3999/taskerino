@@ -9,6 +9,7 @@ import { getChunkedStorage, type SessionMetadata } from '../services/storage/Chu
 import { getInvertedIndexManager } from '../services/storage/InvertedIndexManager';
 import { EntityType, RelationshipType } from '../types/relationships';
 import { useRelationships } from './RelationshipContext';
+import { debug } from "../utils/debug";
 
 /**
  * SessionListContext - Manages the list of completed sessions
@@ -215,10 +216,7 @@ function createMetadataFromSession(session: Session): SessionMetadata {
 
     // References
     trackingNoteId: session.trackingNoteId,
-    extractedTaskIds: session.extractedTaskIds || [],
-    extractedNoteIds: session.extractedNoteIds || [],
-    relationships: session.relationships,
-    relationshipVersion: session.relationshipVersion,
+    relationships: session.relationships || [],
 
     // Chunk manifests
     chunks: {
@@ -360,10 +358,7 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
 
             // References
             trackingNoteId: metadata.trackingNoteId,
-            extractedTaskIds: metadata.extractedTaskIds,
-            extractedNoteIds: metadata.extractedNoteIds,
-            relationships: metadata.relationships,
-            relationshipVersion: metadata.relationshipVersion,
+            relationships: metadata.relationships || [],
 
             // Metadata
             tags: metadata.tags,
@@ -1069,10 +1064,7 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
 
               // References
               trackingNoteId: metadata.trackingNoteId,
-              extractedTaskIds: metadata.extractedTaskIds,
-              extractedNoteIds: metadata.extractedNoteIds,
-              relationships: metadata.relationships,
-              relationshipVersion: metadata.relationshipVersion,
+              relationships: metadata.relationships || [],
 
               // Metadata
               tags: metadata.tags,

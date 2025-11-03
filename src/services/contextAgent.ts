@@ -22,6 +22,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { ClaudeChatResponse, ClaudeMessage } from '../types/tauri-ai-commands';
 import type { Note, Task, Company, Contact, Topic } from '../types';
 import type { ContextAgentResult } from './nedTools';
+import { debug } from "../utils/debug";
 
 interface AgentThread {
   id: string;
@@ -52,7 +53,7 @@ export class ContextAgentService {
       const savedKey = await invoke<string | null>('get_claude_api_key');
       if (savedKey && savedKey.trim()) {
         this.hasApiKey = true;
-        console.log('✅ ContextAgent: Loaded API key from storage');
+        debug.log(debug.log(console.log('✅ ContextAgent: Loaded API key from storage')));
       } else {
         console.warn('⚠️ ContextAgent: No API key found in storage');
       }

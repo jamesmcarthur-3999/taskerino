@@ -15,6 +15,7 @@
  */
 
 import type { StorageAdapter } from './StorageAdapter';
+import { debug } from '../../utils/debug';
 
 // ============================================================================
 // Index Type Definitions
@@ -76,7 +77,7 @@ export class IndexingEngine {
    * Format: { "2025": { "10": { "23": ["session-1", "session-2"] } } }
    */
   async buildDateIndex(collection: 'sessions'): Promise<{ index: DateIndex; metadata: IndexMetadata }> {
-    console.log(`[Index] Building date index for ${collection}...`);
+    debug.log(`[Index] Building date index for ${collection}...`);
     const startTime = Date.now();
 
     const index: DateIndex = {};
@@ -87,7 +88,7 @@ export class IndexingEngine {
       const sessions = await this.storage.load<any[]>(collection);
 
       if (!sessions || !Array.isArray(sessions)) {
-        console.log(`[Index] No entities found in ${collection}`);
+        debug.log(`[Index] No entities found in ${collection}`);
         return {
           index,
           metadata: {
@@ -135,7 +136,7 @@ export class IndexingEngine {
       // Save index to storage
       await this.storage.saveIndex(collection, 'date', index, metadata);
 
-      console.log(`[Index] Built date index for ${collection} (${entityCount} entities, ${duration}ms)`);
+      debug.log(`[Index] Built date index for ${collection} (${entityCount} entities, ${duration}ms)`);
 
       return { index, metadata };
     } catch (error) {
@@ -149,7 +150,7 @@ export class IndexingEngine {
    * Format: { "topic": { "topic-id-1": ["note-1", "task-2"] }, "company": {...} }
    */
   async buildTagIndex(collection: 'notes' | 'tasks' | 'sessions'): Promise<{ index: TagIndex; metadata: IndexMetadata }> {
-    console.log(`[Index] Building tag index for ${collection}...`);
+    debug.log(`[Index] Building tag index for ${collection}...`);
     const startTime = Date.now();
 
     const index: TagIndex = {
@@ -164,7 +165,7 @@ export class IndexingEngine {
       const entities = await this.storage.load<any[]>(collection);
 
       if (!entities || !Array.isArray(entities)) {
-        console.log(`[Index] No entities found in ${collection}`);
+        debug.log(`[Index] No entities found in ${collection}`);
         return {
           index,
           metadata: {
@@ -223,7 +224,7 @@ export class IndexingEngine {
       // Save index to storage
       await this.storage.saveIndex(collection, 'tag', index, metadata);
 
-      console.log(`[Index] Built tag index for ${collection} (${entityCount} entities, ${duration}ms)`);
+      debug.log(`[Index] Built tag index for ${collection} (${entityCount} entities, ${duration}ms)`);
 
       return { index, metadata };
     } catch (error) {
@@ -237,7 +238,7 @@ export class IndexingEngine {
    * Format: { "completed": ["session-1"], "active": ["session-2"] }
    */
   async buildStatusIndex(collection: 'sessions' | 'tasks'): Promise<{ index: StatusIndex; metadata: IndexMetadata }> {
-    console.log(`[Index] Building status index for ${collection}...`);
+    debug.log(`[Index] Building status index for ${collection}...`);
     const startTime = Date.now();
 
     const index: StatusIndex = {};
@@ -248,7 +249,7 @@ export class IndexingEngine {
       const entities = await this.storage.load<any[]>(collection);
 
       if (!entities || !Array.isArray(entities)) {
-        console.log(`[Index] No entities found in ${collection}`);
+        debug.log(`[Index] No entities found in ${collection}`);
         return {
           index,
           metadata: {
@@ -284,7 +285,7 @@ export class IndexingEngine {
       // Save index to storage
       await this.storage.saveIndex(collection, 'status', index, metadata);
 
-      console.log(`[Index] Built status index for ${collection} (${entityCount} entities, ${duration}ms)`);
+      debug.log(`[Index] Built status index for ${collection} (${entityCount} entities, ${duration}ms)`);
 
       return { index, metadata };
     } catch (error) {
@@ -299,7 +300,7 @@ export class IndexingEngine {
    * Format: { "keyword": ["note-1", "note-2"] }
    */
   async buildFullTextIndex(collection: 'notes'): Promise<{ index: FullTextIndex; metadata: IndexMetadata }> {
-    console.log(`[Index] Building full-text index for ${collection}...`);
+    debug.log(`[Index] Building full-text index for ${collection}...`);
     const startTime = Date.now();
 
     const index: FullTextIndex = {};
@@ -311,7 +312,7 @@ export class IndexingEngine {
       const notes = await this.storage.load<any[]>(collection);
 
       if (!notes || !Array.isArray(notes)) {
-        console.log(`[Index] No entities found in ${collection}`);
+        debug.log(`[Index] No entities found in ${collection}`);
         return {
           index,
           metadata: {
@@ -358,7 +359,7 @@ export class IndexingEngine {
       // Save index to storage
       await this.storage.saveIndex(collection, 'fulltext', index, metadata);
 
-      console.log(`[Index] Built full-text index for ${collection} (${entityCount} entities, ${tokenCount} tokens, ${duration}ms)`);
+      debug.log(`[Index] Built full-text index for ${collection} (${entityCount} entities, ${tokenCount} tokens, ${duration}ms)`);
 
       return { index, metadata };
     } catch (error) {
@@ -371,7 +372,7 @@ export class IndexingEngine {
    * Rebuild all indexes for a collection
    */
   async rebuildAllIndexes(collection: string): Promise<void> {
-    console.log(`[Index] Rebuilding all indexes for ${collection}...`);
+    debug.log(`[Index] Rebuilding all indexes for ${collection}...`);
     const startTime = Date.now();
 
     try {
@@ -389,7 +390,7 @@ export class IndexingEngine {
       }
 
       const duration = Date.now() - startTime;
-      console.log(`[Index] Rebuilt all indexes for ${collection} (${duration}ms)`);
+      debug.log(`[Index] Rebuilt all indexes for ${collection} (${duration}ms)`);
     } catch (error) {
       console.error(`[Index] Failed to rebuild all indexes for ${collection}:`, error);
       throw error;
@@ -432,7 +433,7 @@ export class IndexingEngine {
       // Save updated index
       await this.storage.saveIndex(collection, 'date', index, metadata);
 
-      console.log(`[Index] Updated date index for ${collection}/${entityId}`);
+      debug.log(`[Index] Updated date index for ${collection}/${entityId}`);
     } catch (error) {
       console.error(`[Index] Failed to update date index for ${collection}/${entityId}:`, error);
       // Don't throw - index updates are non-critical
@@ -498,7 +499,7 @@ export class IndexingEngine {
       // Save updated index
       await this.storage.saveIndex(collection, 'tag', index, metadata);
 
-      console.log(`[Index] Updated tag index for ${collection}/${entityId}`);
+      debug.log(`[Index] Updated tag index for ${collection}/${entityId}`);
     } catch (error) {
       console.error(`[Index] Failed to update tag index for ${collection}/${entityId}:`, error);
       // Don't throw - index updates are non-critical
@@ -539,7 +540,7 @@ export class IndexingEngine {
       // Save updated index
       await this.storage.saveIndex(collection, 'status', index, metadata);
 
-      console.log(`[Index] Updated status index for ${collection}/${entityId} (${oldStatus} -> ${newStatus})`);
+      debug.log(`[Index] Updated status index for ${collection}/${entityId} (${oldStatus} -> ${newStatus})`);
     } catch (error) {
       console.error(`[Index] Failed to update status index for ${collection}/${entityId}:`, error);
       // Don't throw - index updates are non-critical
@@ -595,7 +596,7 @@ export class IndexingEngine {
       // Save updated index
       await this.storage.saveIndex(collection, 'fulltext', index, metadata);
 
-      console.log(`[Index] Updated full-text index for ${collection}/${entityId}`);
+      debug.log(`[Index] Updated full-text index for ${collection}/${entityId}`);
     } catch (error) {
       console.error(`[Index] Failed to update full-text index for ${collection}/${entityId}:`, error);
       // Don't throw - index updates are non-critical
@@ -608,7 +609,7 @@ export class IndexingEngine {
    * Format: Array<EntityMetadata>
    */
   async buildMetadataIndex(collection: string): Promise<{ index: any[]; metadata: IndexMetadata }> {
-    console.log(`[Index] Building metadata index for ${collection}...`);
+    debug.log(`[Index] Building metadata index for ${collection}...`);
     const startTime = Date.now();
 
     const metadataIndex: any[] = [];
@@ -619,7 +620,7 @@ export class IndexingEngine {
       const entities = await this.storage.load<any[]>(collection);
 
       if (!entities || !Array.isArray(entities)) {
-        console.log(`[Index] No entities found in ${collection}`);
+        debug.log(`[Index] No entities found in ${collection}`);
         return {
           index: metadataIndex,
           metadata: {
@@ -693,7 +694,7 @@ export class IndexingEngine {
       // Save metadata index to storage (using special 'metadata' type)
       await this.storage.saveIndex(collection, 'metadata' as any, metadataIndex, metadata);
 
-      console.log(`[Index] Built metadata index for ${collection} (${entityCount} entities, ${duration}ms)`);
+      debug.log(`[Index] Built metadata index for ${collection} (${entityCount} entities, ${duration}ms)`);
 
       return { index: metadataIndex, metadata };
     } catch (error) {

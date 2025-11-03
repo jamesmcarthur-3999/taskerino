@@ -2355,7 +2355,10 @@
 <a name='L2290'></a><a href='#L2290'>2290</a>
 <a name='L2291'></a><a href='#L2291'>2291</a>
 <a name='L2292'></a><a href='#L2292'>2292</a>
-<a name='L2293'></a><a href='#L2293'>2293</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L2293'></a><a href='#L2293'>2293</a>
+<a name='L2294'></a><a href='#L2294'>2294</a>
+<a name='L2295'></a><a href='#L2295'>2295</a>
+<a name='L2296'></a><a href='#L2296'>2296</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2572,6 +2575,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -2727,6 +2733,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -4049,7 +4056,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -4748,6 +4754,9 @@ export interface EnrichmentOptions {
   /** Resume from existing checkpoint if available */
   resumeFromCheckpoint?: boolean;
 &nbsp;
+  /** Optimized video path from background media processing */
+  optimizedVideoPath?: string;
+&nbsp;
   /** Progress callback for real-time updates */
   onProgress?: (progress: EnrichmentProgress) =&gt; void;
 }
@@ -5008,8 +5017,8 @@ export interface EnrichmentCapability {
 <span class="cstat-no" title="statement not covered" >      });</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
-    // Default options
-<span class="cstat-no" title="statement not covered" >    const opts: Required&lt;EnrichmentOptions&gt; = {</span>
+    // Default options (excluding optional fields like optimizedVideoPath)
+<span class="cstat-no" title="statement not covered" >    const opts: Required&lt;Omit&lt;EnrichmentOptions, 'optimizedVideoPath'&gt;&gt; &amp; Pick&lt;EnrichmentOptions, 'optimizedVideoPath'&gt; = {</span>
 <span class="cstat-no" title="statement not covered" >      includeAudio: options.includeAudio ?? true,</span>
 <span class="cstat-no" title="statement not covered" >      includeVideo: options.includeVideo ?? true,</span>
 <span class="cstat-no" title="statement not covered" >      includeSummary: options.includeSummary ?? true,</span>
@@ -5017,6 +5026,7 @@ export interface EnrichmentCapability {
 <span class="cstat-no" title="statement not covered" >      forceRegenerate: options.forceRegenerate ?? false,</span>
 <span class="cstat-no" title="statement not covered" >      maxCost: options.maxCost ?? this.DEFAULT_MAX_COST,</span>
 <span class="cstat-no" title="statement not covered" >      resumeFromCheckpoint: options.resumeFromCheckpoint ?? true,</span>
+<span class="cstat-no" title="statement not covered" >      optimizedVideoPath: options.optimizedVideoPath,</span>
 <span class="cstat-no" title="statement not covered" >      onProgress: options.onProgress ?? (() =&gt; {}),</span>
 <span class="cstat-no" title="statement not covered" >    };</span>
 &nbsp;
@@ -6342,11 +6352,10 @@ export interface EnrichmentCapability {
 &nbsp;
         // Return partial results instead of throwing
 <span class="cstat-no" title="statement not covered" >        return {</span>
-<span class="cstat-no" title="statement not covered" >          success: false,</span>
-<span class="cstat-no" title="statement not covered" >          sessionId: session.id,</span>
+<span class="cstat-no" title="statement not covered" >          completed: false,</span>
 <span class="cstat-no" title="statement not covered" >          summary: null,</span>
+<span class="cstat-no" title="statement not covered" >          duration: 0,</span>
 <span class="cstat-no" title="statement not covered" >          error: 'Session not found - may have been deleted during enrichment',</span>
-<span class="cstat-no" title="statement not covered" >          partialResults: freshEnrichment,</span>
 <span class="cstat-no" title="statement not covered" >        };</span>
 <span class="cstat-no" title="statement not covered" >      }</span>
 &nbsp;
@@ -6946,7 +6955,7 @@ export interface EnrichmentCapability {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-29T05:05:48.357Z
+                at 2025-11-02T19:20:07.742Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

@@ -17,13 +17,6 @@ export interface StorageInfo {
   };
 }
 
-export interface BackupInfo {
-  id: string;
-  timestamp: number;
-  size: number;
-  collections: string[];
-}
-
 export interface MigrationStatus {
   completed: boolean;
   timestamp?: number;
@@ -92,29 +85,6 @@ export abstract class StorageAdapter {
    * Get storage usage information
    */
   abstract getStorageInfo(): Promise<StorageInfo>;
-
-  /**
-   * Create a backup of all data
-   * @returns Backup ID
-   */
-  abstract createBackup(): Promise<string>;
-
-  /**
-   * List all available backups
-   */
-  abstract listBackups(): Promise<BackupInfo[]>;
-
-  /**
-   * Restore data from a backup
-   * @param backupId - Backup ID to restore
-   */
-  abstract restoreBackup(backupId: string): Promise<void>;
-
-  /**
-   * Delete a backup
-   * @param backupId - Backup ID to delete
-   */
-  abstract deleteBackup(backupId: string): Promise<void>;
 
   /**
    * Clear all data (dangerous!)
