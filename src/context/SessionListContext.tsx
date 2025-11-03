@@ -216,6 +216,13 @@ function createMetadataFromSession(session: Session): SessionMetadata {
 
     // References
     trackingNoteId: session.trackingNoteId,
+    // Extract task and note IDs from relationships for backward compatibility
+    extractedTaskIds: (session.relationships || [])
+      .filter(r => r.targetType === EntityType.TASK && (r.type === RelationshipType.TASK_SESSION))
+      .map(r => r.targetId),
+    extractedNoteIds: (session.relationships || [])
+      .filter(r => r.targetType === EntityType.NOTE && (r.type === RelationshipType.NOTE_SESSION))
+      .map(r => r.targetId),
     relationships: session.relationships || [],
 
     // Chunk manifests
@@ -231,8 +238,8 @@ function createMetadataFromSession(session: Session): SessionMetadata {
         chunkSize: 50,
       },
       videoChunks: {
-        count: session.video?.chunks?.length || 0,
-        chunkCount: session.video?.chunks?.length || 0,
+        count: 0, // SessionVideo no longer has chunks property
+        chunkCount: 0,
         chunkSize: 1,
       },
     },
@@ -663,30 +670,8 @@ export function SessionListProvider({ children }: SessionListProviderProps) {
         }
       }
 
-      // Video - remove reference using hash
-      if (session.video?.fullVideoAttachmentId) {
-        const hash = session.video.hash || session.video.fullVideoAttachmentId;
-        try {
-          await caStorage.removeReference(hash, id);
-          removedReferences++;
-        } catch (error) {
-          console.error('[SessionListContext] Failed to remove video reference:', error);
-        }
-      }
-
-      // Video chunks
-      if (session.video?.chunks) {
-        for (const chunk of session.video.chunks) {
-          if (chunk.attachmentId) {
-            try {
-              await caStorage.removeReference(chunk.attachmentId, id);
-              removedReferences++;
-            } catch (error) {
-              console.error(`[SessionListContext] Failed to remove video chunk reference: ${chunk.attachmentId}`, error);
-            }
-          }
-        }
-      }
+      // Video - no attachments to remove (video uses file paths, not CAS)
+      // SessionVideo only has path and optimizedPath properties
 
       console.log(`[SessionListContext] ✅ Removed ${removedReferences} attachment references (GC will clean up unreferenced data)`);
 

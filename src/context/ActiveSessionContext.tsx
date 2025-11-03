@@ -453,8 +453,8 @@ export function ActiveSessionProvider({ children }: ActiveSessionProviderProps) 
       if (sessionVideo) {
         console.log('[ActiveSessionContext] Video data captured:', {
           id: sessionVideo.id,
-          attachmentId: sessionVideo.fullVideoAttachmentId,
-          hash: sessionVideo.hash,
+          path: sessionVideo.path,
+          optimizedPath: sessionVideo.optimizedPath,
           duration: sessionVideo.duration
         });
       } else if (activeSession.videoRecording) {

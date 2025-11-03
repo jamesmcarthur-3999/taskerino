@@ -153,7 +153,8 @@ export const VideoPlayer = React.forwardRef<VideoPlayerRef, VideoPlayerProps>(
         console.error('❌ [VIDEO PLAYER] Failed to load video:', err);
         console.error('❌ [VIDEO PLAYER] Error stack:', err instanceof Error ? err.stack : 'No stack');
         console.error('❌ [VIDEO PLAYER] Session:', session);
-        console.error('❌ [VIDEO PLAYER] Video attachment ID:', session.video?.fullVideoAttachmentId);
+        console.error('❌ [VIDEO PLAYER] Video path:', session.video?.path);
+        console.error('❌ [VIDEO PLAYER] Optimized path:', session.video?.optimizedPath);
 
         const errorMsg = err instanceof Error
           ? `Error loading video: ${err.message}\n\nSee console for details.`

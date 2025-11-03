@@ -1031,9 +1031,8 @@ export class ChunkedSessionStorage {
       savePromises.push(this.saveAudioSegments(session.id, session.audioSegments));
     }
 
-    if (session.video?.chunks && session.video.chunks.length > 0) {
-      savePromises.push(this.saveVideoChunks(session.id, session.video.chunks));
-    }
+    // SessionVideo no longer has chunks property
+    // Video chunks are handled separately via SessionVideoChunk entities
 
     await Promise.all(savePromises);
   }
@@ -1505,8 +1504,8 @@ export class ChunkedSessionStorage {
           chunkSize: this.AUDIO_SEGMENTS_PER_CHUNK,
         },
         videoChunks: {
-          count: session.video?.chunks?.length || 0,
-          chunkCount: Math.ceil((session.video?.chunks?.length || 0) / this.VIDEO_CHUNKS_PER_CHUNK),
+          count: 0, // SessionVideo no longer has chunks (SessionVideoChunk is separate entity)
+          chunkCount: 0,
           chunkSize: this.VIDEO_CHUNKS_PER_CHUNK,
         },
       },
@@ -1530,13 +1529,12 @@ export class ChunkedSessionStorage {
       video: session.video ? {
         id: session.video.id,
         sessionId: session.video.sessionId,
-        fullVideoAttachmentId: session.video.fullVideoAttachmentId,
+        path: session.video.path,
+        optimizedPath: session.video.optimizedPath,
         duration: session.video.duration,
         chunkingStatus: session.video.chunkingStatus,
         processedAt: session.video.processedAt,
         chunkingError: session.video.chunkingError,
-        startTime: session.video.startTime,
-        endTime: session.video.endTime,
       } : undefined,
 
       // Audio review

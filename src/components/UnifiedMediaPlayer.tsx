@@ -301,7 +301,7 @@ export const UnifiedMediaPlayer = forwardRef<UnifiedMediaPlayerRef, UnifiedMedia
           videoUrlRef.current = null;
         }
       };
-    }, [hasVideo, video?.path, video?.hash]);
+    }, [hasVideo, video?.path, video?.optimizedPath]);
 
     // Load audio URL (Phase 6, Task 6.1: Progressive Audio Loading)
     // TASK 13: Skip audio loading if we have optimized video (audio already merged)

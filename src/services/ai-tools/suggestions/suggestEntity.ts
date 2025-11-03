@@ -43,7 +43,11 @@ import {
   logWarning
 } from '../utils/errorHandling';
 import { getStorage } from '../../storage';
-import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * Generate unique ID
+ */
+const generateId = () => `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 /**
  * Storage key for suggestions
@@ -126,7 +130,7 @@ async function handleTaskMode(input: SuggestEntityInput): Promise<SuggestEntityO
 
   // Create suggestion
   const suggestion: EntitySuggestion = {
-    id: uuidv4(),
+    id: generateId(),
     type: 'task',
     status: 'pending',
     confidence: input.suggestion.confidence,
@@ -179,7 +183,7 @@ async function handleNoteMode(input: SuggestEntityInput): Promise<SuggestEntityO
 
   // Create suggestion
   const suggestion: EntitySuggestion = {
-    id: uuidv4(),
+    id: generateId(),
     type: 'note',
     status: 'pending',
     confidence: input.suggestion.confidence,
@@ -245,7 +249,7 @@ async function handleBatchMode(input: SuggestEntityInput): Promise<SuggestEntity
 
       // Create suggestion
       const suggestion: EntitySuggestion = {
-        id: uuidv4(),
+        id: generateId(),
         type: suggestionInput.type || 'task',
         status: 'pending',
         confidence: suggestionInput.confidence,
@@ -335,7 +339,7 @@ async function validateSourceContext(sourceContext: any): Promise<void> {
  * Store a single suggestion
  */
 async function storeSuggestion(suggestion: EntitySuggestion): Promise<void> {
-  const storage = getStorage();
+  const storage = await getStorage();
   const existing = (await storage.load<EntitySuggestion[]>(SUGGESTIONS_KEY)) || [];
   existing.push(suggestion);
   await storage.save(SUGGESTIONS_KEY, existing);
@@ -345,7 +349,7 @@ async function storeSuggestion(suggestion: EntitySuggestion): Promise<void> {
  * Store multiple suggestions
  */
 async function storeSuggestions(suggestions: EntitySuggestion[]): Promise<void> {
-  const storage = getStorage();
+  const storage = await getStorage();
   const existing = (await storage.load<EntitySuggestion[]>(SUGGESTIONS_KEY)) || [];
   existing.push(...suggestions);
   await storage.save(SUGGESTIONS_KEY, existing);
@@ -360,7 +364,7 @@ export default suggestEntity;
  * Helper: Load all pending suggestions (for UI)
  */
 export async function loadPendingSuggestions(): Promise<EntitySuggestion[]> {
-  const storage = getStorage();
+  const storage = await getStorage();
   const all = (await storage.load<EntitySuggestion[]>(SUGGESTIONS_KEY)) || [];
   return all.filter(s => s.status === 'pending');
 }
@@ -369,7 +373,7 @@ export async function loadPendingSuggestions(): Promise<EntitySuggestion[]> {
  * Helper: Get suggestion by ID
  */
 export async function getSuggestion(suggestionId: string): Promise<EntitySuggestion | null> {
-  const storage = getStorage();
+  const storage = await getStorage();
   const all = (await storage.load<EntitySuggestion[]>(SUGGESTIONS_KEY)) || [];
   return all.find(s => s.id === suggestionId) || null;
 }
@@ -382,7 +386,7 @@ export async function updateSuggestionStatus(
   status: 'pending' | 'approved' | 'rejected',
   entityId?: string
 ): Promise<void> {
-  const storage = getStorage();
+  const storage = await getStorage();
   const all = (await storage.load<EntitySuggestion[]>(SUGGESTIONS_KEY)) || [];
 
   const suggestion = all.find(s => s.id === suggestionId);
@@ -404,7 +408,7 @@ export async function updateSuggestionStatus(
  * Helper: Delete suggestion
  */
 export async function deleteSuggestion(suggestionId: string): Promise<void> {
-  const storage = getStorage();
+  const storage = await getStorage();
   const all = (await storage.load<EntitySuggestion[]>(SUGGESTIONS_KEY)) || [];
   const filtered = all.filter(s => s.id !== suggestionId);
   await storage.save(SUGGESTIONS_KEY, filtered);

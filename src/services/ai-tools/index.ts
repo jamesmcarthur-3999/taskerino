@@ -85,10 +85,7 @@ export type {
   ToolExecutionResult,
   ToolExecutionError,
   SourceContext,
-  TimelineItem,
-  VideoFrame,
-  AudioData,
-  VideoMetadata
+  TimelineItem
 } from './types';
 
 export { ToolExecutionError as ToolError } from './types';

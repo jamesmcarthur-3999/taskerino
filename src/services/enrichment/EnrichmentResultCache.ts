@@ -437,10 +437,10 @@ export class EnrichmentResultCache {
         .join('|');
     }
 
-    // Extract video data (use screenshot hashes or video attachment ID)
+    // Extract video data (use screenshot hashes or video path)
     let videoData = '';
-    if (session.video?.fullVideoAttachmentId) {
-      videoData = session.video.fullVideoAttachmentId;
+    if (session.video?.path || session.video?.optimizedPath) {
+      videoData = session.video.optimizedPath || session.video.path || '';
     } else if (session.screenshots && session.screenshots.length > 0) {
       // Use screenshot attachment IDs as fingerprint
       videoData = session.screenshots

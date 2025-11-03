@@ -108,7 +108,7 @@ export interface EnrichmentOptions {
 
 export interface EnrichmentProgress {
   /** Current stage being processed */
-  stage: 'validating' | 'estimating' | 'locking' | 'checkpointing' | 'audio' | 'video' | 'summary' | 'canvas' | 'complete' | 'error';
+  stage: 'validating' | 'estimating' | 'locking' | 'checkpointing' | 'audio' | 'video' | 'summary' | 'canvas' | 'complete' | 'failed';
 
   /** Human-readable progress message */
   message: string;
@@ -1019,7 +1019,7 @@ export class SessionEnrichmentService {
       logger.error('Enrichment failed', error);
 
       opts.onProgress({
-        stage: 'error',
+        stage: 'failed',
         message: `Enrichment failed: ${error.message}`,
         progress: 0,
       });
@@ -1223,7 +1223,7 @@ export class SessionEnrichmentService {
           screenshotCount: session.screenshots?.length || 0,
         });
       }
-    } else if (!session.video.fullVideoAttachmentId) {
+    } else if (!session.video.path && !session.video.optimizedPath) {
       // Has video structure but no file - check screenshots
       if (session.screenshots && session.screenshots.length >= 5) {
         capability.video = true;
@@ -1234,7 +1234,7 @@ export class SessionEnrichmentService {
         capability.video = false;
         capability.reasons.video = ['No video recording file and insufficient screenshots'];
         logger.info('❌ Video enrichment not possible: No video file and insufficient screenshots', {
-          fullVideoAttachmentId: session.video.fullVideoAttachmentId,
+          videoPath: session.video.path || session.video.optimizedPath,
           screenshotCount: session.screenshots?.length || 0,
         });
       }

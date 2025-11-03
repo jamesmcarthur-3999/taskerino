@@ -887,7 +887,7 @@ export function SessionDetailView({
                         </div>
                       </button>
                     )}
-                    {currentSession.video?.fullVideoAttachmentId && (
+                    {currentSession.video && (
                       <button
                         onClick={() => handleReEnrich({ audio: false, video: true })}
                         className={`w-full px-4 py-3 text-left hover:${getSuccessGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 ${currentSession.audioSegments?.length ? 'border-t border-gray-100' : ''}`}
@@ -899,7 +899,7 @@ export function SessionDetailView({
                         </div>
                       </button>
                     )}
-                    {currentSession.audioSegments?.length && currentSession.video?.fullVideoAttachmentId && (
+                    {currentSession.audioSegments?.length && currentSession.video && (
                       <button
                         onClick={() => handleReEnrich({ audio: true, video: true })}
                         className={`w-full px-4 py-3 text-left hover:${getSuccessGradient('light').container} transition-colors flex items-center gap-3 text-gray-700 hover:text-gray-900 border-t border-gray-100`}

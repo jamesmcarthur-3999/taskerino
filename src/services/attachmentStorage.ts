@@ -639,13 +639,8 @@ class AttachmentStorageService {
         }
       }
 
-      // Video
-      if (session.video?.fullVideoAttachmentId) {
-        const attachment = await this.loadAttachmentMetadata(session.video.fullVideoAttachmentId);
-        if (attachment) {
-          allAttachments.push(attachment);
-        }
-      }
+      // Video - SessionVideo doesn't use attachments, only file paths
+      // Video files are managed separately
     }
 
     // Collect attachments from notes

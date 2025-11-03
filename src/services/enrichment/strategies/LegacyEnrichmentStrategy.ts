@@ -132,7 +132,7 @@ export class LegacyEnrichmentStrategy implements EnrichmentStrategy {
           canvas: { success: false, skipped: false, error: error.message }
         },
         error: {
-          stage: 'error',
+          stage: 'failed',
           message: error.message || 'Enrichment failed',
           recoverable: true
         },

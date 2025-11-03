@@ -302,7 +302,7 @@ export function EnrichmentProgressModal({
         setVideoProgress({ status: 'completed', progress: 100 });
         setSummaryProgress({ status: 'completed', progress: 100 });
         break;
-      case 'error':
+      case 'failed':
         // Mark running stages as failed
         if (audioProgress.status === 'running') {
           setAudioProgress({ ...audioProgress, status: 'failed' });

@@ -178,7 +178,7 @@ export function useSessionMachine() {
         audioMode: config.audioConfig?.enabled ? 'transcription' : 'off',
         audioRecording: config.audioConfig?.enabled || false,
         screenshots: [],
-        // extractedTaskIds and extractedNoteIds removed - now tracked via relationships
+        relationships: [], // Required by Session interface
         audioReviewCompleted: false,
         tags: [],
       };

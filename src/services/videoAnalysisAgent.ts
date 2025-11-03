@@ -56,16 +56,14 @@ class VideoAnalysisAgent {
 
     // 1. Get session data
     const session = await this.getSession(request.sessionId);
-    if (!session.video?.fullVideoAttachmentId) {
+    if (!session.video) {
       throw new Error('Session has no video recording');
     }
 
-    // 2. Get video path (Phase 4: Use hash if available)
-    const caStorage = await getCAStorage();
-    const identifier = session.video.hash || session.video.fullVideoAttachmentId;
-    const videoAttachment = await caStorage.loadAttachment(identifier);
-    if (!videoAttachment?.path) {
-      throw new Error('Video file not found');
+    // 2. Get video path
+    const videoPath = session.video.optimizedPath || session.video.path;
+    if (!videoPath) {
+      throw new Error('Video file path not found');
     }
 
     // 3. Determine sampling strategy

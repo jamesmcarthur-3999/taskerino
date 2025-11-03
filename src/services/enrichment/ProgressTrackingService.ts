@@ -368,8 +368,8 @@ export class ProgressTrackingService extends SimpleEventEmitter {
       }
     }
 
-    // Update progress
-    progress.stage = success ? 'complete' : 'error';
+    // Update progress (use 'failed' not 'error' per EnrichmentProgress type)
+    progress.stage = success ? 'complete' : 'failed';
     progress.progress = success ? 100 : 0;
     progress.message = message || (success ? 'Enrichment complete!' : 'Enrichment failed');
     progress.lastUpdateAt = Date.now();
