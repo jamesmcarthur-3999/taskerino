@@ -100,10 +100,10 @@ export function EnrichmentStatusBanner({
         sessionName: session.name || 'Unnamed Session',
         priority: 'high', // User-initiated = high priority
         options: {
-          includeAudio: hasAudio && !audioCompleted,
-          includeVideo: hasVideo && !videoCompleted,
-          includeSummary: true,
-          includeCanvas: true
+          skipAudio: !hasAudio || audioCompleted,
+          skipVideo: !hasVideo || videoCompleted,
+          skipSummary: false,
+          skipCanvas: false
         }
       });
 

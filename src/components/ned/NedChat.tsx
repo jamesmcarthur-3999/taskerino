@@ -14,6 +14,7 @@ import { useUI } from '../../context/UIContext';
 import { useNotes } from '../../context/NotesContext';
 import { useTasks } from '../../context/TasksContext';
 import { useSessionList } from '../../context/SessionListContext';
+import { useActiveSession } from '../../context/ActiveSessionContext';
 import { useEntities } from '../../context/EntitiesContext';
 import { nedService } from '../../services/nedService';
 import { contextAgent } from '../../services/contextAgent';
@@ -76,6 +77,7 @@ export const NedChat: React.FC = () => {
   const { state: notesState } = useNotes();
   const { state: tasksState, dispatch: tasksDispatch } = useTasks();
   const { sessions } = useSessionList();
+  const { activeSession } = useActiveSession();
   const { state: entitiesState } = useEntities();
 
   const messages = uiState.nedConversation?.messages || [];
@@ -193,7 +195,7 @@ export const NedChat: React.FC = () => {
       userProfile: settingsState.userProfile,
       learnings: settingsState.learnings,
       nedSettings: settingsState.nedSettings,
-      activeSessionId: null, // TODO: get from useActiveSession() hook (Phase 1)
+      activeSessionId: activeSession?.id ?? null,
       nedConversation: uiState.nedConversation,
     } as any;
 

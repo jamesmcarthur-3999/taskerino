@@ -602,10 +602,10 @@ export function ActiveSessionProvider({ children }: ActiveSessionProviderProps) 
             sessionName: completedSession.name,
             priority: 'normal',
             options: {
-              includeAudio: completedSession.enrichmentConfig?.includeAudioReview ?? true,
-              includeVideo: completedSession.enrichmentConfig?.includeVideoChapters ?? true,
-              includeSummary: true,
-              includeCanvas: true,
+              skipAudio: !(completedSession.enrichmentConfig?.includeAudioReview ?? true),
+              skipVideo: !(completedSession.enrichmentConfig?.includeVideoChapters ?? true),
+              skipSummary: false,
+              skipCanvas: false,
             },
           });
 

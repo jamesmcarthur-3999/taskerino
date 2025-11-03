@@ -621,11 +621,11 @@ export function SessionDetailView({
         sessionName: currentSession.name,
         priority: 'high', // User-initiated re-enrichment = high priority
         options: {
-          includeAudio: options.audio ?? false,
-          includeVideo: options.video ?? false,
-          includeSummary: true,
-          includeCanvas: true,
-          forceRegenerate: true
+          skipAudio: !(options.audio ?? false),
+          skipVideo: !(options.video ?? false),
+          skipSummary: false,
+          skipCanvas: false,
+          forceReTranscribe: options.audio ?? false
         }
       });
 

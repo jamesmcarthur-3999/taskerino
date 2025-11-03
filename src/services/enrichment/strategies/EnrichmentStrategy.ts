@@ -133,7 +133,7 @@ export interface EnrichmentResult {
 
   // Metadata
   enrichmentVersion?: string;
-  strategyUsed: 'legacy' | 'ai-agent';
+  strategyUsed: 'ai-agent'; // Legacy removed
 }
 
 /**
@@ -179,7 +179,7 @@ export interface EnrichmentStrategy {
   /**
    * Strategy identifier
    */
-  readonly name: 'legacy' | 'ai-agent';
+  readonly name: 'ai-agent';
 
   /**
    * Strategy version for tracking
@@ -294,13 +294,9 @@ export type EnrichmentFeature =
  * Strategy configuration
  */
 export interface StrategyConfig {
-  strategy: 'legacy' | 'ai-agent';
+  strategy: 'ai-agent'; // Legacy removed
 
-  // Legacy strategy config
-  legacy?: {
-    enableIncremental?: boolean;
-    enableCaching?: boolean;
-  };
+  // Legacy strategy config removed - only AI Agent supported
 
   // AI agent strategy config
   aiAgent?: {

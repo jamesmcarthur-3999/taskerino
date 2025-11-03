@@ -58,7 +58,7 @@ import type {
   QueueStatus,
   JobPriority,
 } from './PersistentEnrichmentQueue';
-import type { EnrichmentOptions } from '../sessionEnrichmentService';
+import type { EnrichmentOptions } from './strategies/EnrichmentStrategy';
 import { getChunkedStorage } from '../storage/ChunkedSessionStorage';
 import { debug } from "../../utils/debug";
 

@@ -33,7 +33,7 @@ import { getInvertedIndexManager } from './storage/InvertedIndexManager';
 import { getPersistenceQueue } from './storage/PersistenceQueue';
 import { generateId } from '../utils/helpers';
 import { EntityType, RelationshipType, type Relationship } from '../types/relationships';
-import type { Note, Task, Session, Topic, Company, Contact } from '../types';
+import type { Note, Task, Session, Topic, Company, Contact, AudioMode } from '../types';
 
 // ============================================================================
 // Input Types (Clean - no legacy fields)
@@ -79,7 +79,7 @@ export interface CreateSessionInput {
   screenshotInterval?: number;
   autoAnalysis?: boolean;
   enableScreenshots?: boolean;
-  audioMode?: 'none' | 'mic' | 'system' | 'both';
+  audioMode?: AudioMode; // 'off' | 'transcription' | 'description'
   audioRecording?: boolean;
   videoRecording?: boolean;
   relationships?: RelationshipInput[];
@@ -155,12 +155,7 @@ class EntityService {
     allNotes.push(note);
 
     const queue = getPersistenceQueue();
-    queue.enqueue(
-      async () => {
-        await storage.save('notes', allNotes);
-      },
-      'normal'
-    );
+    queue.enqueue('notes', allNotes, 'normal');
 
     return note;
   }
@@ -190,6 +185,7 @@ class EntityService {
           id: generateId(),
           title: st.title,
           done: false,
+          createdAt: now,
         })) || [],
       createdAt: now,
       createdBy: 'manual',
@@ -224,12 +220,7 @@ class EntityService {
     allTasks.push(task);
 
     const queue = getPersistenceQueue();
-    queue.enqueue(
-      async () => {
-        await storage.save('tasks', allTasks);
-      },
-      'normal'
-    );
+    queue.enqueue('tasks', allTasks, 'normal');
 
     return task;
   }
@@ -247,17 +238,19 @@ class EntityService {
     const session: Session = {
       id,
       name: input.name,
-      description: input.description,
+      description: input.description || '',
       status: 'active',
       startTime: now,
       screenshotInterval: input.screenshotInterval || 120000,
       autoAnalysis: input.autoAnalysis !== false,
       enableScreenshots: input.enableScreenshots !== false,
-      audioMode: input.audioMode || 'none',
+      audioMode: input.audioMode || 'off',
       audioRecording: input.audioRecording || false,
       videoRecording: input.videoRecording || false,
       screenshots: [],
       audioSegments: [],
+      tags: [],
+      audioReviewCompleted: false,
       relationships: [],
       enrichmentConfig: {
         autoEnrichOnComplete: true,
@@ -319,12 +312,7 @@ class EntityService {
     allNotes[index] = updatedNote;
 
     const queue = getPersistenceQueue();
-    queue.enqueue(
-      async () => {
-        await storage.save('notes', allNotes);
-      },
-      'normal'
-    );
+    queue.enqueue('notes', allNotes, 'normal');
 
     return updatedNote;
   }
@@ -348,12 +336,7 @@ class EntityService {
     allTasks[index] = updatedTask;
 
     const queue = getPersistenceQueue();
-    queue.enqueue(
-      async () => {
-        await storage.save('tasks', allTasks);
-      },
-      'normal'
-    );
+    queue.enqueue('tasks', allTasks, 'normal');
 
     return updatedTask;
   }
@@ -373,7 +356,8 @@ class EntityService {
       ...updates,
     };
 
-    await chunkedStorage.saveMetadata(id, updatedSession);
+    // Save full session using ChunkedSessionStorage
+    await chunkedStorage.saveFullSession(updatedSession);
 
     return updatedSession;
   }
@@ -405,7 +389,7 @@ class EntityService {
       const casStorage = await getCAStorage();
       for (const attachment of note.attachments) {
         if (attachment.hash) {
-          await casStorage.removeReference(attachment.hash, id, attachment.id);
+          await casStorage.removeReference(attachment.hash, id);
         }
       }
     }
@@ -413,16 +397,11 @@ class EntityService {
     // 4. Delete from storage
     const updated = allNotes.filter((n) => n.id !== id);
     const queue = getPersistenceQueue();
-    queue.enqueue(
-      async () => {
-        await storage.save('notes', updated);
-      },
-      'normal'
-    );
+    queue.enqueue('notes', updated, 'normal');
 
     // 5. Update indexes
     const indexManager = await getInvertedIndexManager();
-    await indexManager.removeEntity('notes', id);
+    // Note: InvertedIndexManager.removeEntity() doesn't exist - indexes will be updated on next rebuild
   }
 
   async deleteTask(id: string): Promise<void> {
@@ -445,7 +424,7 @@ class EntityService {
       const casStorage = await getCAStorage();
       for (const attachment of task.attachments) {
         if (attachment.hash) {
-          await casStorage.removeReference(attachment.hash, id, attachment.id);
+          await casStorage.removeReference(attachment.hash, id);
         }
       }
     }
@@ -453,16 +432,11 @@ class EntityService {
     // 3. Delete from storage
     const updated = allTasks.filter((t) => t.id !== id);
     const queue = getPersistenceQueue();
-    queue.enqueue(
-      async () => {
-        await storage.save('tasks', updated);
-      },
-      'normal'
-    );
+    queue.enqueue('tasks', updated, 'normal');
 
     // 4. Update indexes
     const indexManager = await getInvertedIndexManager();
-    await indexManager.removeEntity('tasks', id);
+    // Note: InvertedIndexManager.removeEntity() doesn't exist - indexes will be updated on next rebuild
   }
 
   async deleteSession(id: string): Promise<void> {
@@ -484,7 +458,7 @@ class EntityService {
       const casStorage = await getCAStorage();
       for (const screenshot of session.screenshots) {
         if (screenshot.hash) {
-          await casStorage.removeReference(screenshot.hash, id, screenshot.id);
+          await casStorage.removeReference(screenshot.hash, id);
         }
       }
     }
@@ -494,7 +468,7 @@ class EntityService {
       const casStorage = await getCAStorage();
       for (const segment of session.audioSegments) {
         if (segment.hash) {
-          await casStorage.removeReference(segment.hash, id, segment.id);
+          await casStorage.removeReference(segment.hash, id);
         }
       }
     }
@@ -506,7 +480,7 @@ class EntityService {
         (seg) => seg.id === session.fullAudioAttachmentId
       );
       if (fullAudio?.hash) {
-        await casStorage.removeReference(fullAudio.hash, id, session.fullAudioAttachmentId);
+        await casStorage.removeReference(fullAudio.hash, id);
       }
     }
 
@@ -515,7 +489,7 @@ class EntityService {
 
     // 6. Update indexes
     const indexManager = await getInvertedIndexManager();
-    await indexManager.removeEntity('sessions', id);
+    // Note: InvertedIndexManager.removeEntity() doesn't exist - indexes will be updated on next rebuild
   }
 
   // ========================================

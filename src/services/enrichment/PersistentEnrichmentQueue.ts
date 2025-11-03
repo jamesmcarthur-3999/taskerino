@@ -930,11 +930,7 @@ export class PersistentEnrichmentQueue extends SimpleEventEmitter {
       const enrichmentSettings = settings?.enrichmentSettings;
 
       const strategyConfig: StrategyConfig = {
-        strategy: enrichmentSettings?.strategy || 'legacy',
-        legacy: enrichmentSettings?.legacy || {
-          enableIncremental: true,
-          enableCaching: true
-        },
+        strategy: 'ai-agent', // Only ai-agent supported (legacy removed)
         aiAgent: enrichmentSettings?.aiAgent || {
           model: 'claude-3-5-sonnet-20241022',
           temperature: 0.7,

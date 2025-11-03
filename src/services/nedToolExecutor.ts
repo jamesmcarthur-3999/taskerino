@@ -20,16 +20,23 @@ import {
   getTranscript,
   getSessionTimeline
 } from './ai-tools';
+import { AIDeduplicationService } from './aiDeduplication';
+import { getStorage } from './storage';
 
 type DispatchFunction = (action: any) => void;
 
 export class NedToolExecutor {
   private appState: AppState;
   private dispatch: DispatchFunction;
+  private deduplicationService: AIDeduplicationService;
 
   constructor(appState: AppState, dispatch: DispatchFunction) {
     this.appState = appState;
     this.dispatch = dispatch;
+
+    // Initialize deduplication service with storage adapter
+    // Note: Storage will be initialized asynchronously on first use
+    this.deduplicationService = new AIDeduplicationService(getStorage() as any);
   }
 
   /**
@@ -888,42 +895,31 @@ export class NedToolExecutor {
 
   /**
    * Find notes similar to given content (for duplicate detection)
+   *
+   * Uses AIDeduplicationService for semantic similarity detection with
+   * Levenshtein distance and context-aware matching.
    */
   private async findSimilarNotes(tool: ToolCall): Promise<ToolResult> {
     const { summary, content, topicId, minSimilarity = 0.7 } = tool.input;
 
     try {
-      // TODO: Use AIDeduplicationService once integrated
-      // For now, use basic text matching
-      let candidates = this.appState.notes;
+      // Use AIDeduplicationService for proper semantic similarity
+      const similarResults = await this.deduplicationService.findSimilarNotes({
+        summary,
+        content,
+        topicId,
+        minSimilarity,
+        maxResults: 10,
+      });
 
-      if (topicId) {
-        candidates = candidates.filter((n: any) =>
-          n.relationships?.some((r: any) =>
-            r.targetType === EntityType.TOPIC && r.targetId === topicId
-          )
-        );
-      }
-
-      // Calculate simple similarity scores
-      const similar = candidates
-        .map((note: any) => {
-          const summaryMatch = this.calculateSimpleSimilarity(summary, note.summary);
-          const contentMatch = content ? this.calculateSimpleSimilarity(content, note.content) : 0;
-          const similarity = Math.max(summaryMatch, contentMatch);
-
-          return {
-            note,
-            similarity,
-            shouldMerge: similarity >= minSimilarity,
-            reason: similarity >= 0.9 ? 'Very similar content' :
-                   similarity >= 0.7 ? 'Similar content' :
-                   'Potentially related',
-          };
-        })
-        .filter(item => item.similarity >= minSimilarity)
-        .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, 10);
+      // Transform results to match expected tool output format
+      const similar = similarResults.map(result => ({
+        note: result.entity,
+        similarity: result.similarity,
+        confidence: result.confidence,
+        shouldMerge: result.shouldMerge,
+        reason: result.reason,
+      }));
 
       return {
         tool_use_id: tool.id,
@@ -936,6 +932,7 @@ export class NedToolExecutor {
               timestamp: s.note.timestamp,
             },
             similarity: s.similarity,
+            confidence: s.confidence,
             shouldMerge: s.shouldMerge,
             reason: s.reason,
           })),
@@ -955,41 +952,31 @@ export class NedToolExecutor {
 
   /**
    * Find tasks similar to given title (for duplicate detection)
+   *
+   * Uses AIDeduplicationService for semantic similarity detection with
+   * Levenshtein distance and context-aware matching.
    */
   private async findSimilarTasks(tool: ToolCall): Promise<ToolResult> {
     const { title, description, contextNoteId, minSimilarity = 0.8 } = tool.input;
 
     try {
-      let candidates = this.appState.tasks;
+      // Use AIDeduplicationService for proper semantic similarity
+      const similarResults = await this.deduplicationService.findSimilarTasks({
+        title,
+        description,
+        contextNoteId,
+        minSimilarity,
+        maxResults: 10,
+      });
 
-      if (contextNoteId) {
-        candidates = candidates.filter((t: any) =>
-          t.relationships?.some((r: any) =>
-            r.targetType === EntityType.NOTE && r.targetId === contextNoteId
-          )
-        );
-      }
-
-      // Calculate simple similarity scores
-      const similar = candidates
-        .map((task: any) => {
-          const titleMatch = this.calculateSimpleSimilarity(title, task.title);
-          const descMatch = description && task.description ?
-            this.calculateSimpleSimilarity(description, task.description) : 0;
-          const similarity = Math.max(titleMatch, descMatch);
-
-          return {
-            task,
-            similarity,
-            shouldMerge: similarity >= minSimilarity,
-            reason: similarity >= 0.95 ? 'Duplicate task' :
-                   similarity >= 0.8 ? 'Very similar task' :
-                   'Potentially related',
-          };
-        })
-        .filter(item => item.similarity >= minSimilarity)
-        .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, 10);
+      // Transform results to match expected tool output format
+      const similar = similarResults.map(result => ({
+        task: result.entity,
+        similarity: result.similarity,
+        confidence: result.confidence,
+        shouldMerge: result.shouldMerge,
+        reason: result.reason,
+      }));
 
       return {
         tool_use_id: tool.id,
@@ -1003,6 +990,7 @@ export class NedToolExecutor {
               done: s.task.done,
             },
             similarity: s.similarity,
+            confidence: s.confidence,
             shouldMerge: s.shouldMerge,
             reason: s.reason,
           })),
@@ -1398,28 +1386,6 @@ export class NedToolExecutor {
     return Math.floor(activeMs / (1000 * 60));
   }
 
-  /**
-   * Helper: Calculate simple text similarity (0-1) using word overlap
-   * TODO: Replace with proper Levenshtein distance from AIDeduplicationService
-   */
-  private calculateSimpleSimilarity(text1: string, text2: string): number {
-    if (!text1 || !text2) return 0;
-
-    const words1 = text1.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    const words2 = text2.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-
-    if (words1.length === 0 || words2.length === 0) return 0;
-
-    const set1 = new Set(words1);
-    const set2 = new Set(words2);
-
-    let overlap = 0;
-    for (const word of set1) {
-      if (set2.has(word)) overlap++;
-    }
-
-    return overlap / Math.max(set1.size, set2.size);
-  }
 
   // ==================== DATA GATHERING TOOL HANDLERS ====================
 
@@ -1427,7 +1393,7 @@ export class NedToolExecutor {
    * Get audio data from a session
    */
   private async getAudioData(tool: ToolCall): Promise<ToolResult> {
-    const result = await getAudioData(tool.input);
+    const result = await getAudioData(tool.input as any);
 
     if (!result.success) {
       return {
@@ -1447,7 +1413,7 @@ export class NedToolExecutor {
    * Get video data from a session
    */
   private async getVideoData(tool: ToolCall): Promise<ToolResult> {
-    const result = await getVideoData(tool.input);
+    const result = await getVideoData(tool.input as any);
 
     if (!result.success) {
       return {
@@ -1467,7 +1433,7 @@ export class NedToolExecutor {
    * Get transcript from a session
    */
   private async getTranscript(tool: ToolCall): Promise<ToolResult> {
-    const result = await getTranscript(tool.input);
+    const result = await getTranscript(tool.input as any);
 
     if (!result.success) {
       return {
@@ -1487,7 +1453,7 @@ export class NedToolExecutor {
    * Get session timeline
    */
   private async getSessionTimeline(tool: ToolCall): Promise<ToolResult> {
-    const result = await getSessionTimeline(tool.input);
+    const result = await getSessionTimeline(tool.input as any);
 
     if (!result.success) {
       return {

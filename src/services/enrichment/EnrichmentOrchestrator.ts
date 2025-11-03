@@ -154,12 +154,11 @@ export function getEnrichmentOrchestrator(
   config?: StrategyConfig
 ): EnrichmentOrchestrator {
   if (!globalOrchestrator) {
-    // Default to legacy strategy for backward compatibility
+    // Default to ai-agent strategy (legacy removed)
     const defaultConfig: StrategyConfig = config || {
-      strategy: 'legacy',
-      legacy: {
-        enableIncremental: true,
-        enableCaching: true
+      strategy: 'ai-agent',
+      aiAgent: {
+        enableStreaming: true
       }
     };
     globalOrchestrator = new EnrichmentOrchestrator(defaultConfig);
