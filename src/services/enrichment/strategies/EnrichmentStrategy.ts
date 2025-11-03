@@ -91,6 +91,9 @@ export interface EnrichmentOptions {
   // Feature flags
   useIncrementalEnrichment?: boolean;
   useCaching?: boolean;
+
+  // Background media processing (Task 11-15)
+  optimizedVideoPath?: string; // Path to pre-processed optimized video/audio file
 }
 
 /**

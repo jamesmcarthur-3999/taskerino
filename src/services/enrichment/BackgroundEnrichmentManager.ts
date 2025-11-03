@@ -295,14 +295,14 @@ export class BackgroundEnrichmentManager {
         console.log('[BackgroundEnrichmentManager] Updating session with optimizedPath');
 
         const storage = await getChunkedStorage();
-        const session = await storage.loadFullSession(sessionId);
+        const metadata = await storage.loadMetadata(sessionId);
 
-        if (session && session.video) {
+        if (metadata && metadata.video) {
           // Update video.optimizedPath field
-          session.video.optimizedPath = optimizedVideoPath;
+          metadata.video.optimizedPath = optimizedVideoPath;
 
           // Save back to storage
-          await storage.saveSession(session);
+          await storage.saveMetadata(metadata);
 
           console.log('[BackgroundEnrichmentManager] ✓ Session updated with optimizedPath:', optimizedVideoPath);
         } else {

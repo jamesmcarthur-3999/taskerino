@@ -203,7 +203,7 @@ export class AIAgentEnrichmentStrategy implements EnrichmentStrategy {
 
     // Check if session has enrichable data
     const hasAudio = session.audioSegments && session.audioSegments.length > 0;
-    const hasVideo = session.video?.fullVideoAttachmentId;
+    const hasVideo = !!(session.video?.path || session.video?.optimizedPath);
     const hasScreenshots = session.screenshots && session.screenshots.length > 0;
 
     if (!hasAudio && !hasVideo && !hasScreenshots) {

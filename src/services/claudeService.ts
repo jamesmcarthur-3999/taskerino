@@ -112,7 +112,7 @@ export class ClaudeService {
               summary: fullNote?.summary || r.snippet,
               content: fullNote?.content?.substring(0, 200),
               tags: fullNote?.tags,
-              createdAt: fullNote?.createdAt || r.metadata?.createdAt,
+              createdAt: fullNote?.timestamp || r.metadata?.createdAt,
               status: fullNote?.status || r.metadata?.status, // Include status so AI can see drafts
               relevanceScore: r.score
             };
@@ -311,11 +311,20 @@ export class ClaudeService {
 
     const topicList = existingTopics.map(t => t.name).join(', ') || 'None yet';
 
+    // Helper to get topic ID from note relationships
+    const getTopicId = (entity: Note | Task): string | undefined => {
+      const topicRel = entity.relationships.find(r =>
+        r.type === 'note-topic' || r.type === 'task-topic'
+      );
+      return topicRel?.targetId;
+    };
+
     // Get recent notes for context (last 50 notes for better duplicate detection)
     const recentNotes = existingNotes
       .slice(-50)
       .map(n => {
-        const topic = existingTopics.find(t => t.id === n.topicId);
+        const topicId = getTopicId(n);
+        const topic = existingTopics.find(t => t.id === topicId);
         return `[${topic?.name || 'Unknown'}] ${n.summary}`;
       })
       .join('\n');
@@ -1973,10 +1982,17 @@ Returns tasks with relevance scores (0-1). Threshold default: 0.8 (stricter than
       throw new Error('API key not set. Please configure your Claude API key in Settings.');
     }
 
+    // Helper to check if entity has relationship with topic
+    const hasTopicRelationship = (entity: Note | Task, topicId: string): boolean => {
+      return entity.relationships.some(r =>
+        (r.type === 'note-topic' || r.type === 'task-topic') && r.targetId === topicId
+      );
+    };
+
     // Build context from all data
     const context = topics.map(topic => {
-      const topicNotes = notes.filter(n => n.topicId === topic.id).slice(0, 5);
-      const topicTasks = tasks.filter(t => t.topicId === topic.id);
+      const topicNotes = notes.filter(n => hasTopicRelationship(n, topic.id)).slice(0, 5);
+      const topicTasks = tasks.filter(t => hasTopicRelationship(t, topic.id));
 
       return `
 **${topic.name}** (${topic.noteCount} notes)
@@ -2246,7 +2262,6 @@ ${JSON.stringify({
   aiSummary: currentResult.aiSummary,
   notes: currentResult.notes,
   tasks: currentResult.tasks,
-  detectedTopics: currentResult.detectedTopics,
 }, null, 2)}
 
 Conversation History:

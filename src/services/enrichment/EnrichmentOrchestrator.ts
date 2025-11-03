@@ -13,6 +13,9 @@ import type {
   EnrichmentResult
 } from './strategies/EnrichmentStrategy';
 
+// Re-export StrategyConfig for external use
+export type { StrategyConfig } from './strategies/EnrichmentStrategy';
+
 // =============================================================================
 // ORCHESTRATOR
 // =============================================================================
