@@ -116,8 +116,10 @@ class EntityService {
       lastUpdated: now,
       source: input.source || 'thought',
       tags: input.tags || [],
-      sentiment: input.sentiment,
-      keyPoints: input.keyPoints || [],
+      metadata: {
+        sentiment: input.sentiment,
+        keyPoints: input.keyPoints || [],
+      },
       attachments: input.attachments || [],
       relationships: [],
     };

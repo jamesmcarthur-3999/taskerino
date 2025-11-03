@@ -838,7 +838,7 @@ export class InvertedIndexManager {
   /**
    * Get date key for indexing (YYYY-MM format)
    */
-  private getDateKey(timestamp: string | number): string {
+  protected getDateKey(timestamp: string | number): string {
     const date = new Date(timestamp);
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -875,7 +875,7 @@ export class InvertedIndexManager {
    * Tokenize text for full-text search
    * Simple whitespace + punctuation splitting
    */
-  private tokenize(text: string): string[] {
+  protected tokenize(text: string): string[] {
     // Remove punctuation and split by whitespace
     const cleaned = text.replace(/[^\w\s]/g, ' ');
     const words = cleaned.split(/\s+/).filter(w => w.length > 0);

@@ -294,7 +294,11 @@ export function subscribeToLiveSessionEvents<T extends LiveSessionEvent['type']>
   let unsubscribe: (() => void) | null = null;
 
   import('@/services/eventBus').then(({ eventBus }) => {
-    const subscriptionId = eventBus.on(eventType, handler);
+    // Wrap handler to extract data from EventData
+    const wrappedHandler = (eventData: any) => {
+      handler(eventData.data as Extract<LiveSessionEvent, { type: T }>);
+    };
+    const subscriptionId = eventBus.on(eventType, wrappedHandler);
     unsubscribe = () => eventBus.off(subscriptionId);
   });
 

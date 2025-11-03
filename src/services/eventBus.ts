@@ -81,6 +81,22 @@ export type RelationshipEvent =
   | 'ENTITY_DELETED';
 
 /**
+ * Supported live session event types
+ */
+export type LiveSessionEvent =
+  | 'screenshot-analyzed'
+  | 'audio-processed'
+  | 'context-changed'
+  | 'summary-requested'
+  | 'user-question-answered'
+  | 'summary-updated';
+
+/**
+ * All supported event types
+ */
+export type SupportedEvent = RelationshipEvent | LiveSessionEvent;
+
+/**
  * Event data payload structure
  */
 export interface EventData {
@@ -131,12 +147,12 @@ export class EventBus {
    * Map of event types to their subscriptions
    * Using Map<string, Map<string, EventHandler>> for O(1) lookups
    */
-  private listeners: Map<RelationshipEvent, Map<string, Subscription>>;
+  private listeners: Map<SupportedEvent, Map<string, Subscription>>;
 
   /**
    * Map of subscription IDs to event types for O(1) unsubscribe
    */
-  private subscriptionIndex: Map<string, RelationshipEvent>;
+  private subscriptionIndex: Map<string, SupportedEvent>;
 
   constructor() {
     this.listeners = new Map();
@@ -160,7 +176,7 @@ export class EventBus {
    * });
    * ```
    */
-  on(event: RelationshipEvent, handler: EventHandler): string {
+  on(event: SupportedEvent, handler: EventHandler): string {
     // Generate unique subscription ID
     const subscriptionId = nanoid();
 
@@ -246,7 +262,7 @@ export class EventBus {
    * ```
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  emit(event: RelationshipEvent, data: any, source: string = 'unknown'): void {
+  emit(event: SupportedEvent, data: any, source: string = 'unknown'): void {
     const eventSubscriptions = this.listeners.get(event);
 
     // No subscribers - early return
@@ -313,7 +329,7 @@ export class EventBus {
    * console.log(`${count} subscribers listening for RELATIONSHIP_ADDED`);
    * ```
    */
-  getSubscriberCount(event: RelationshipEvent): number {
+  getSubscriberCount(event: SupportedEvent): number {
     const eventSubscriptions = this.listeners.get(event);
     return eventSubscriptions ? eventSubscriptions.size : 0;
   }
@@ -349,7 +365,7 @@ export class EventBus {
    * }
    * ```
    */
-  hasSubscribers(event: RelationshipEvent): boolean {
+  hasSubscribers(event: SupportedEvent): boolean {
     return this.getSubscriberCount(event) > 0;
   }
 }

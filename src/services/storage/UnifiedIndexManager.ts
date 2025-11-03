@@ -1010,24 +1010,13 @@ export class UnifiedIndexManager extends InvertedIndexManager {
 
   /**
    * Tokenize text into searchable words
+   * (Inherited from InvertedIndexManager)
    */
-  private tokenize(text: string): string[] {
-    return text
-      .toLowerCase()
-      .replace(/[^\w\s]/g, ' ')
-      .split(/\s+/)
-      .filter(word => word.length > 2); // Ignore short words
-  }
 
   /**
    * Get date key in YYYY-MM format
+   * (Inherited from InvertedIndexManager)
    */
-  private getDateKey(dateString: string): string {
-    const date = new Date(dateString);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
-  }
 
   /**
    * Add entity ID to index

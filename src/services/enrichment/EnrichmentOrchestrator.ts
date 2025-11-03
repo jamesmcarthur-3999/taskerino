@@ -49,20 +49,9 @@ export class EnrichmentOrchestrator {
    * Create enrichment strategy based on configuration
    */
   private createStrategy(config: StrategyConfig): EnrichmentStrategy {
-    switch (config.strategy) {
-      case 'legacy':
-        // Lazy load to avoid circular dependencies
-        const { LegacyEnrichmentStrategy } = require('./strategies/LegacyEnrichmentStrategy');
-        return new LegacyEnrichmentStrategy(config.legacy);
-
-      case 'ai-agent':
-        // Lazy load to avoid circular dependencies
-        const { AIAgentEnrichmentStrategy } = require('./strategies/AIAgentEnrichmentStrategy');
-        return new AIAgentEnrichmentStrategy(config.aiAgent);
-
-      default:
-        throw new Error(`Unknown enrichment strategy: ${config.strategy}`);
-    }
+    // Only AI Agent strategy supported (legacy removed)
+    const { AIAgentEnrichmentStrategy } = require('./strategies/AIAgentEnrichmentStrategy');
+    return new AIAgentEnrichmentStrategy(config.aiAgent);
   }
 
   /**
@@ -78,7 +67,7 @@ export class EnrichmentOrchestrator {
   /**
    * Get current strategy name
    */
-  getStrategyName(): 'legacy' | 'ai-agent' {
+  getStrategyName(): 'ai-agent' {
     return this.strategy.name;
   }
 

@@ -347,19 +347,49 @@ export class LiveSessionToolExecutor {
     const { EntityService } = await import('../EntityService');
     const entityService = new EntityService();
 
-    // Add session ID if active session exists
+    // Build relationships array
+    const relationships: any[] = [];
+
+    // Link to session if available
+    const sessionId = input.sessionId || this.session?.id;
+    if (sessionId) {
+      relationships.push({
+        sourceType: 'task',
+        targetType: 'sessions',
+        targetId: sessionId,
+        type: 'TASK_SESSION'
+      });
+    }
+
+    // Link to topic if provided
+    if (input.topicId) {
+      relationships.push({
+        sourceType: 'task',
+        targetType: 'topic',
+        targetId: input.topicId,
+        type: 'TASK_TOPIC'
+      });
+    }
+
+    // Link to note if provided
+    if (input.noteId) {
+      relationships.push({
+        sourceType: 'task',
+        targetType: 'note',
+        targetId: input.noteId,
+        type: 'TASK_NOTE'
+      });
+    }
+
     const taskInput = {
       title: input.title,
       description: input.description || '',
       priority: input.priority || 'medium',
-      status: 'todo',
-      completed: false,
+      status: (input.status as any) || 'todo',
       dueDate: input.dueDate,
       dueTime: input.dueTime,
       tags: input.tags || [],
-      topicId: input.topicId,
-      noteId: input.noteId,
-      sourceSessionId: input.sessionId || this.session?.id
+      relationships
     };
 
     const task = await entityService.createTask(taskInput);
@@ -380,14 +410,65 @@ export class LiveSessionToolExecutor {
     const { EntityService } = await import('../EntityService');
     const entityService = new EntityService();
 
-    // Add session ID if active session exists
+    // Build relationships array
+    const relationships: any[] = [];
+
+    // Link to session if available
+    const sessionId = input.sessionId || this.session?.id;
+    if (sessionId) {
+      relationships.push({
+        sourceType: 'note',
+        targetType: 'sessions',
+        targetId: sessionId,
+        type: 'NOTE_SESSION'
+      });
+    }
+
+    // Link to topic if provided
+    if (input.topicId) {
+      relationships.push({
+        sourceType: 'note',
+        targetType: 'topic',
+        targetId: input.topicId,
+        type: 'NOTE_TOPIC'
+      });
+    }
+
+    // Link to companies if provided
+    if (input.companyIds && Array.isArray(input.companyIds)) {
+      input.companyIds.forEach((companyId: string) => {
+        relationships.push({
+          sourceType: 'note',
+          targetType: 'company',
+          targetId: companyId,
+          type: 'NOTE_COMPANY'
+        });
+      });
+    }
+
+    // Link to contacts if provided
+    if (input.contactIds && Array.isArray(input.contactIds)) {
+      input.contactIds.forEach((contactId: string) => {
+        relationships.push({
+          sourceType: 'note',
+          targetType: 'contact',
+          targetId: contactId,
+          type: 'NOTE_CONTACT'
+        });
+      });
+    }
+
+    // Generate summary (required field)
+    const summary = input.content.length > 100
+      ? input.content.substring(0, 100) + '...'
+      : input.content;
+
     const noteInput = {
       content: input.content,
-      topicId: input.topicId,
+      summary,
+      source: (input.source as any) || 'thought',
       tags: input.tags || [],
-      companyIds: input.companyIds || [],
-      contactIds: input.contactIds || [],
-      sourceSessionId: input.sessionId || this.session?.id
+      relationships
     };
 
     const note = await entityService.createNote(noteInput);

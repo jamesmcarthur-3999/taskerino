@@ -182,12 +182,17 @@ export async function appendProgressIndicators(
     throw new Error(`Session or summary not found: ${sessionId}`);
   }
 
-  // Get existing array
-  const existingArray = type === 'insights'
-    ? (session.summary.keyInsights || [])
-    : (session.summary[type] || []);
+  // Handle different types - achievements/blockers are strings, insights would be objects
+  // For now, only support string-based achievements and blockers
+  if (type === 'insights') {
+    // keyInsights has different structure - not supported by this function
+    throw new Error('Use updateLiveSessionSummary for insights - different data structure');
+  }
 
-  // Add new items (deduplication)
+  // Get existing array (achievements or blockers)
+  const existingArray = session.summary[type] || [];
+
+  // Add new items (deduplication for strings)
   const existing = new Set(existingArray);
   const newItems = items.filter(item => !existing.has(item));
 
@@ -196,8 +201,6 @@ export async function appendProgressIndicators(
     session.summary.achievements = [...existingArray, ...newItems];
   } else if (type === 'blockers') {
     session.summary.blockers = [...existingArray, ...newItems];
-  } else if (type === 'insights') {
-    session.summary.keyInsights = [...existingArray, ...newItems];
   }
 
   // Update timestamp
@@ -243,18 +246,48 @@ export async function createTaskFromSuggestion(
   const { EntityService } = await import('../EntityService');
   const entityService = new EntityService();
 
+  // Build relationships array
+  const relationships: any[] = [];
+
+  // Link to session if provided
+  if (sessionId) {
+    relationships.push({
+      sourceType: 'task',
+      targetType: 'sessions',
+      targetId: sessionId,
+      type: 'TASK_SESSION'
+    });
+  }
+
+  // Link to topic if provided
+  if (suggestion.topicId) {
+    relationships.push({
+      sourceType: 'task',
+      targetType: 'topic',
+      targetId: suggestion.topicId,
+      type: 'TASK_TOPIC'
+    });
+  }
+
+  // Link to note if provided
+  if (suggestion.noteId) {
+    relationships.push({
+      sourceType: 'task',
+      targetType: 'note',
+      targetId: suggestion.noteId,
+      type: 'TASK_NOTE'
+    });
+  }
+
   const taskInput = {
     title: suggestion.title,
     description: suggestion.description || suggestion.context || '',
     priority: suggestion.priority || 'medium',
-    status: 'todo',
-    completed: false,
+    status: 'todo' as any,
     dueDate: suggestion.dueDate,
     dueTime: suggestion.dueTime,
     tags: suggestion.tags || [],
-    topicId: suggestion.topicId,
-    noteId: suggestion.noteId,
-    sourceSessionId: sessionId
+    relationships
   };
 
   const task = await entityService.createTask(taskInput);
@@ -292,13 +325,64 @@ export async function createNoteFromSuggestion(
   const { EntityService } = await import('../EntityService');
   const entityService = new EntityService();
 
+  // Build relationships array
+  const relationships: any[] = [];
+
+  // Link to session if provided
+  if (sessionId) {
+    relationships.push({
+      sourceType: 'note',
+      targetType: 'sessions',
+      targetId: sessionId,
+      type: 'NOTE_SESSION'
+    });
+  }
+
+  // Link to topic if provided
+  if (suggestion.topicId) {
+    relationships.push({
+      sourceType: 'note',
+      targetType: 'topic',
+      targetId: suggestion.topicId,
+      type: 'NOTE_TOPIC'
+    });
+  }
+
+  // Link to companies if provided
+  if (suggestion.companyIds && Array.isArray(suggestion.companyIds)) {
+    suggestion.companyIds.forEach(companyId => {
+      relationships.push({
+        sourceType: 'note',
+        targetType: 'company',
+        targetId: companyId,
+        type: 'NOTE_COMPANY'
+      });
+    });
+  }
+
+  // Link to contacts if provided
+  if (suggestion.contactIds && Array.isArray(suggestion.contactIds)) {
+    suggestion.contactIds.forEach(contactId => {
+      relationships.push({
+        sourceType: 'note',
+        targetType: 'contact',
+        targetId: contactId,
+        type: 'NOTE_CONTACT'
+      });
+    });
+  }
+
+  // Generate summary (required field)
+  const summary = suggestion.content.length > 100
+    ? suggestion.content.substring(0, 100) + '...'
+    : suggestion.content;
+
   const noteInput = {
     content: suggestion.content,
-    topicId: suggestion.topicId,
+    summary,
+    source: 'thought' as any,
     tags: suggestion.tags || [],
-    companyIds: suggestion.companyIds || [],
-    contactIds: suggestion.contactIds || [],
-    sourceSessionId: sessionId
+    relationships
   };
 
   const note = await entityService.createNote(noteInput);

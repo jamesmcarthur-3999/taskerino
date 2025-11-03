@@ -215,7 +215,7 @@ export class LiveSessionContextBuilder {
     const relatedNotesResult = await indexManager.unifiedSearch({
       entityTypes: ['notes'],
       relatedTo: {
-        entityType: 'session',
+        entityType: 'sessions',
         entityId: sessionId
       },
       limit: 100
@@ -224,19 +224,29 @@ export class LiveSessionContextBuilder {
     const relatedTasksResult = await indexManager.unifiedSearch({
       entityTypes: ['tasks'],
       relatedTo: {
-        entityType: 'session',
+        entityType: 'sessions',
         entityId: sessionId
       },
       limit: 100
     });
 
-    // Get stats
-    const stats = provider.getStats();
+    // Calculate stats manually
+    const screenshots = session.screenshots || [];
+    const audioSegments = session.audioSegments || [];
+    const stats = {
+      totalScreenshots: screenshots.length,
+      totalAudio: audioSegments.length,
+      analyzedScreenshots: screenshots.filter(s => s.aiAnalysis).length,
+      timeRange: {
+        start: session.startTime,
+        end: session.endTime || new Date().toISOString()
+      }
+    };
 
     return {
       session,
-      screenshots: session.screenshots || [],
-      audioSegments: session.audioSegments || [],
+      screenshots,
+      audioSegments,
       relatedNotes: relatedNotesResult.results.notes || [],
       relatedTasks: relatedTasksResult.results.tasks || [],
       stats

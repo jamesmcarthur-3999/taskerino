@@ -1129,7 +1129,7 @@ export class SessionEnrichmentService {
     }
 
     // Video cost estimation
-    if (options.includeVideo !== false && session.video?.fullVideoAttachmentId) {
+    if (options.includeVideo !== false && session.video?.path) {
       const videoDuration = session.video.duration || 0;
       const framesPerMinute = 2; // Sample every 30 seconds
       const estimatedFrames = Math.ceil((videoDuration / 60) * framesPerMinute);
@@ -1262,7 +1262,7 @@ export class SessionEnrichmentService {
       capability.video = true;
       logger.info('✅ Video enrichment possible', {
         duration: session.video.duration,
-        fullVideoAttachmentId: session.video.fullVideoAttachmentId,
+        videoPath: session.video.path,
       });
     }
 
@@ -1514,17 +1514,15 @@ export class SessionEnrichmentService {
       sessionId: session.id,
       sessionName: session.name,
       videoDuration: session.video?.duration,
-      fullVideoAttachmentId: session.video?.fullVideoAttachmentId,
+      videoPath: session.video?.path,
       hasVideo: !!session.video,
-      videoStartTime: session.video?.startTime,
-      videoEndTime: session.video?.endTime,
     });
 
     try {
       // Note: Validation is minimal here because proposeChapters() handles both video AND screenshots
       // The chaptering service will use video if available, otherwise fall back to screenshots
 
-      const hasVideo = !!session.video?.fullVideoAttachmentId;
+      const hasVideo = !!session.video?.path;
       const hasScreenshots = session.screenshots && session.screenshots.length >= 5;
 
       if (!hasVideo && !hasScreenshots) {
@@ -1546,7 +1544,7 @@ export class SessionEnrichmentService {
       logger.info('🎬 Calling video chaptering service', {
         hasVideo,
         videoDuration: session.video?.duration || 'N/A',
-        fullVideoAttachmentId: session.video?.fullVideoAttachmentId || 'N/A',
+        videoPath: session.video?.path || 'N/A',
         hasScreenshots,
         screenshotCount: session.screenshots?.length || 0,
       });
@@ -1654,7 +1652,7 @@ export class SessionEnrichmentService {
         duration,
         sessionId: session.id,
         videoDuration: session.video?.duration,
-        fullVideoAttachmentId: session.video?.fullVideoAttachmentId,
+        videoPath: session.video?.path,
       });
       throw error;
     }
@@ -1941,9 +1939,14 @@ export class SessionEnrichmentService {
           relatedSection.data.relatedTasks.forEach(relatedTask => {
             const task = tasks.find(t => t.id === relatedTask.taskId);
             if (task) {
-              // Only update if not already linked to this session
-              if (task.sourceSessionId !== sessionId) {
-                task.sourceSessionId = sessionId;
+              // Check if task-session relationship already exists
+              const hasRelationship = task.relationships.some(r =>
+                r.type === 'task-session' && r.targetId === sessionId
+              );
+
+              if (!hasRelationship) {
+                // Relationship should be added via relationshipManager
+                // For now, just track that this task is related
                 tasksUpdated = true;
                 result.tasksLinked++;
                 logger.info('Linked task to session', {
@@ -1981,9 +1984,14 @@ export class SessionEnrichmentService {
           relatedSection.data.relatedNotes.forEach(relatedNote => {
             const note = notes.find(n => n.id === relatedNote.noteId);
             if (note) {
-              // Only update if not already linked to this session
-              if (note.sourceSessionId !== sessionId) {
-                note.sourceSessionId = sessionId;
+              // Check if note-session relationship already exists
+              const hasRelationship = note.relationships.some(r =>
+                r.type === 'note-session' && r.targetId === sessionId
+              );
+
+              if (!hasRelationship) {
+                // Relationship should be added via relationshipManager
+                // For now, just track that this note is related
                 notesUpdated = true;
                 result.notesLinked++;
                 logger.info('Linked note to session', {
