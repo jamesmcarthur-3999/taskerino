@@ -602,12 +602,20 @@ export const NedChat: React.FC = () => {
     }
   };
 
-  // Session actions - Navigate to sessions tab
-  // Note: Session selection is now managed locally in SessionsZone
-  // User will need to click the session after navigating to the tab
+  // Session actions - Navigate to sessions tab and select session
   const handleSessionView = (sessionId: string) => {
+    // First, dispatch an action to set the selected session
+    // SessionsZone can listen for this and open the session detail view
+    uiDispatch({
+      type: 'SET_UI_STATE',
+      payload: {
+        selectedSessionId: sessionId,
+      },
+    });
+
+    // Then navigate to sessions tab
     uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'sessions' });
-    // TODO: Add mechanism to pass selectedSessionId to SessionsZone via URL params or UI context
+
     console.log('[NedChat] Navigating to sessions tab for session:', sessionId);
   };
 

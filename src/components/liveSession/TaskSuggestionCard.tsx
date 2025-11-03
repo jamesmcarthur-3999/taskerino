@@ -27,6 +27,7 @@ import { CheckSquare, Plus, X, CheckCircle2, Loader2, Calendar } from 'lucide-re
 import { getGlassClasses, getRadiusClass, getInfoGradient } from '@/design-system/theme';
 import { createTaskFromSuggestion } from '@/services/liveSession/updateApi';
 import type { TaskSuggestion } from '@/services/liveSession/toolExecutor';
+import { useUI } from '@/context/UIContext';
 
 interface TaskSuggestionCardProps {
   suggestion: TaskSuggestion;
@@ -41,6 +42,7 @@ export const TaskSuggestionCard: React.FC<TaskSuggestionCardProps> = ({
   onTaskCreated,
   onDismiss
 }) => {
+  const { dispatch: uiDispatch } = useUI();
   const [isCreating, setIsCreating] = useState(false);
   const [isCreated, setIsCreated] = useState(false);
   const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
@@ -180,8 +182,16 @@ export const TaskSuggestionCard: React.FC<TaskSuggestionCardProps> = ({
             {createdTaskId && (
               <button
                 onClick={() => {
-                  // TODO: Open task sidebar with createdTaskId
-                  console.log('View task:', createdTaskId);
+                  // Navigate to Tasks zone and open task in sidebar
+                  uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'tasks' });
+                  uiDispatch({
+                    type: 'OPEN_SIDEBAR',
+                    payload: {
+                      type: 'task',
+                      taskId: createdTaskId,
+                      mode: 'view',
+                    },
+                  });
                 }}
                 className={`py-2 px-4 ${getGlassClasses(
                   'medium'

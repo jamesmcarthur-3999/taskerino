@@ -449,7 +449,7 @@ function LiveTime() {
 }
 
 export default function CaptureZone() {
-  const { state: settingsState } = useSettings();
+  const { state: settingsState, dispatch: settingsDispatch } = useSettings();
   const { state: uiState, dispatch: uiDispatch, addNotification, addProcessingJob } = useUI();
   const { state: entitiesState, addTopic } = useEntities();
   const { state: notesState, addNote, updateNote, deleteNote } = useNotes();
@@ -1200,13 +1200,13 @@ export default function CaptureZone() {
       }
     });
 
-    // TODO: Update learnings in SettingsContext
-    // For now, learnings are updated in-memory but not persisted to SettingsContext
-    // This will need to be fixed when we add a proper learnings update method to SettingsContext
-    // uiDispatch({
-    //   type: 'LOAD_STATE',
-    //   payload: { learnings: learningService.getLearnings() }
-    // });
+    // Persist updated learnings to SettingsContext
+    settingsDispatch({
+      type: 'LOAD_SETTINGS',
+      payload: {
+        learnings: learningService.getLearnings()
+      }
+    });
 
     // Remove the job from completed queue
     if (currentJobId) {

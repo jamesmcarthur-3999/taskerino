@@ -1,6 +1,7 @@
 # Taskerino Documentation Index
 
-**Last Updated**: October 26, 2025
+**Last Updated**: November 2, 2025
+**Project Status**: v0.85 (approaching v1.0)
 
 Welcome to Taskerino's comprehensive documentation. This index will help you find what you need quickly.
 
@@ -8,67 +9,123 @@ Welcome to Taskerino's comprehensive documentation. This index will help you fin
 
 ## Quick Navigation
 
-### For End Users
+### 🚀 New Developers - Start Here!
+1. **[Developer Quick-Start](DEVELOPER_QUICKSTART.md)** (30 min) - Zero to productive
+2. **[CLAUDE.md](../CLAUDE.md)** (60 min) - Comprehensive codebase guide
+3. **[Architecture Guide](ARCHITECTURE_GUIDE.md)** (30 min) - Context architecture
+
+### 📖 System Guides (Pick Your Topic)
+- **[Relationship System](RELATIONSHIP_SYSTEM_GUIDE.md)** - Bidirectional links, type-safe API
+- **[Enrichment System](ENRICHMENT_SYSTEM_GUIDE.md)** - AI processing, cost optimization
+- **[Storage System](STORAGE_SYSTEM_GUIDE.md)** - Fast loading, deduplication, search
+
+### 👥 For End Users
 - [User Guide](user-guides/USER_GUIDE.md) - Complete user documentation
 - [Quick Start](user-guides/QUICK_START.md) - Get started in 5 minutes
 - [Keyboard Shortcuts](../KEYBOARD_SHORTCUTS.md) - Productivity shortcuts
 
-### For Developers
-- **[CLAUDE.md](../CLAUDE.md)** - **START HERE** - Primary developer/AI agent guide
-- [API Reference](developer/API_REFERENCE_GUIDE.md) - API documentation
+### 🔧 For Developers
+- **[Developer Quick-Start](DEVELOPER_QUICKSTART.md)** - **NEW!** 30-minute onboarding
+- **[CLAUDE.md](../CLAUDE.md)** - Primary developer guide (20,000+ lines)
+- [API Reference](developer/API_REFERENCE_GUIDE.md) - Complete API docs
 - [File Reference](developer/FILE_REFERENCE.md) - Codebase file map
-- [Capture Flow Guide](developer/CAPTURE_FLOW_GUIDE.md) - Capture system architecture
-- [AI Architecture](developer/AI_ARCHITECTURE.md) - AI systems overview
+- [TODO Tracker](developer/TODO_TRACKER.md) - Known issues & planned work
 
-### For Project Managers
+### 📊 For Project Managers
+- [7-Phase Final Audit](7_PHASE_FINAL_AUDIT.md) - Comprehensive Phase 1-7 verification
 - [Deployment Guide](../DEPLOYMENT.md) - Production deployment
 - [Changelog](../CHANGELOG.md) - Version history
 - [Contributing Guide](../CONTRIBUTING.md) - How to contribute
 
 ---
 
-## Active Projects
+## Project Status (v0.85 → v1.0)
 
-### Sessions System Rewrite (Phase 4 Complete)
-**Status**: Storage layer complete, future phases planned
+### Phase 1-6: Complete ✅
+- ✅ **Phase 1**: Contexts - Specialized contexts (Oct 23-24)
+- ✅ **Phase 2**: Recording - Swift ScreenCaptureKit (Oct 23-24)
+- ✅ **Phase 3**: Audio - Deferred (not required for v1.0)
+- ✅ **Phase 4**: Storage - Chunked, CA, indexes (Oct 2025)
+- ✅ **Phase 5**: Enrichment - Cost optimization (Oct 2025)
+- ✅ **Phase 6**: Background - Persistent queue (Oct 28)
+
+### Phase 7: In Progress (90% Complete)
+**Status**: Relationship system rebuild
 **Directory**: [sessions-rewrite/](sessions-rewrite/)
 
 **Key Documents**:
+- [7-Phase Final Audit](7_PHASE_FINAL_AUDIT.md) - Comprehensive verification
 - [Master Plan](sessions-rewrite/MASTER_PLAN.md) - Complete rewrite plan
-- [README](sessions-rewrite/README.md) - Project overview
-- [Progress](sessions-rewrite/PROGRESS.md) - Detailed progress tracking
+- [README](sessions-rewrite/README.md) - Project status overview
 - [Architecture](sessions-rewrite/ARCHITECTURE.md) - Technical specifications
-- [Implementation Review](sessions-rewrite/IMPLEMENTATION_REVIEW.md) - Recent review
 
-### Relationship System Rebuild (Phase 0 - Planning)
-**Status**: Documentation complete, awaiting approval
-**Directory**: Root of `/docs/` folder
-
-**Key Documents**:
-- [Relationship System README](README.md) - Project overview
-- [Master Plan](RELATIONSHIP_SYSTEM_MASTER_PLAN.md) - Complete plan
-- [Progress Dashboard](progress/dashboard.md) - Current status
-- [Architecture Docs](architecture/) - Technical design
+### v1.0 Preparation
+**Status**: Documentation cleanup complete ✅
+**Reports**:
+- [v1.0 Documentation Audit](V1_0_DOCUMENTATION_AUDIT.md) - Comprehensive audit (625 lines)
+- [v1.0 Cleanup Complete](V1_0_CLEANUP_COMPLETE.md) - Cleanup report (280 lines)
 
 ---
 
-## Documentation Structure
+## Documentation Structure (Consolidated & Organized)
 
 ```
 docs/
-├── INDEX.md (this file)           # Main documentation index
-├── README.md                       # Relationship System project docs
-├── user-guides/                   # End-user documentation
-├── developer/                     # Developer resources
-├── sessions-rewrite/              # Sessions rewrite project
-│   ├── archive/                   # Historical verification reports
-│   └── ...                        # Active project documentation
-├── [Relationship System files]    # Architecture, agent tasks, etc.
-└── archive/                       # Historical documentation
-    ├── features/                  # Feature implementation docs
-    ├── reports/                   # Test/review/audit reports
-    └── option-c-navigation-refactor/  # Navigation refactor history
+├── INDEX.md (this file)                # Main navigation
+│
+├── 🚀 NEW! Developer Onboarding
+│   ├── DEVELOPER_QUICKSTART.md        # 30-minute quick-start
+│   ├── CLAUDE.md (in root)            # Comprehensive guide (20K+ lines)
+│   └── ARCHITECTURE_GUIDE.md          # Context architecture
+│
+├── 📖 System Guides (NEW! Consolidated)
+│   ├── RELATIONSHIP_SYSTEM_GUIDE.md   # Bidirectional links (1 guide)
+│   ├── ENRICHMENT_SYSTEM_GUIDE.md     # AI processing (1 guide)
+│   └── STORAGE_SYSTEM_GUIDE.md        # Fast storage (1 guide)
+│
+├── 📋 Implementation Reports
+│   ├── 7_PHASE_FINAL_AUDIT.md         # Phases 1-7 verification
+│   ├── CRITICAL_FIXES_IMPLEMENTATION_COMPLETE.md
+│   ├── UNIFIED_INDEX_MANAGER_IMPLEMENTATION_SUMMARY.md
+│   ├── ENRICHMENT_ADAPTER_IMPLEMENTATION_SUMMARY.md
+│   └── V1_0_CLEANUP_COMPLETE.md
+│
+├── 🔧 Developer Resources
+│   ├── developer/
+│   │   ├── API_REFERENCE_GUIDE.md
+│   │   ├── FILE_REFERENCE.md
+│   │   ├── AI_ARCHITECTURE.md
+│   │   ├── BACKGROUND_ENRICHMENT_API.md
+│   │   └── TODO_TRACKER.md
+│   │
+│   ├── sessions-rewrite/
+│   │   ├── MASTER_PLAN.md
+│   │   ├── ARCHITECTURE.md
+│   │   ├── STORAGE_ARCHITECTURE.md
+│   │   ├── BACKGROUND_ENRICHMENT_IMPLEMENTATION_SUMMARY.md
+│   │   └── ENRICHMENT_OPTIMIZATION_GUIDE.md
+│   │
+│   └── examples/                      # Code examples
+│
+├── 👥 User Documentation
+│   └── user-guides/
+│       ├── USER_GUIDE.md
+│       └── QUICK_START.md
+│
+└── 📦 Archive (147+ Historical Docs)
+    ├── phases/                        # NEW! Phase verification reports (14)
+    ├── plans/                         # NEW! Planning docs (5)
+    ├── reports/                       # Test/review reports (expanded)
+    ├── features/                      # Feature implementations
+    └── option-c-navigation-refactor/  # Navigation evolution
 ```
+
+**Changes from Previous Structure**:
+- ✅ 3 new consolidated system guides (Relationship, Enrichment, Storage)
+- ✅ 1 new developer quick-start guide
+- ✅ 27 redundant files archived (phases/, plans/, reports/)
+- ✅ Clear separation: Active docs vs Archive
+- ✅ Total reduction: 66 → 39 active docs (41% smaller)
 
 ---
 

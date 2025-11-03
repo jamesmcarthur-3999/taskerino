@@ -25,6 +25,7 @@ import { FileText, Plus, X, CheckCircle2, Loader2 } from 'lucide-react';
 import { getGlassClasses, getRadiusClass } from '@/design-system/theme';
 import { createNoteFromSuggestion } from '@/services/liveSession/updateApi';
 import type { NoteSuggestion } from '@/services/liveSession/toolExecutor';
+import { useUI } from '@/context/UIContext';
 
 interface NoteSuggestionCardProps {
   suggestion: NoteSuggestion;
@@ -39,6 +40,7 @@ export const NoteSuggestionCard: React.FC<NoteSuggestionCardProps> = ({
   onNoteCreated,
   onDismiss
 }) => {
+  const { dispatch: uiDispatch } = useUI();
   const [isCreating, setIsCreating] = useState(false);
   const [isCreated, setIsCreated] = useState(false);
   const [createdNoteId, setCreatedNoteId] = useState<string | null>(null);
@@ -173,8 +175,16 @@ export const NoteSuggestionCard: React.FC<NoteSuggestionCardProps> = ({
             {createdNoteId && (
               <button
                 onClick={() => {
-                  // TODO: Open note sidebar with createdNoteId
-                  console.log('View note:', createdNoteId);
+                  // Navigate to Library zone and open note in sidebar
+                  uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'library' });
+                  uiDispatch({
+                    type: 'OPEN_SIDEBAR',
+                    payload: {
+                      type: 'note',
+                      noteId: createdNoteId,
+                      mode: 'view',
+                    },
+                  });
                 }}
                 className={`py-2 px-4 ${getGlassClasses(
                   'medium'

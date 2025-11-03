@@ -17,7 +17,6 @@ import { InlineTagManager } from './InlineTagManager';
 import { CompanyPillManager } from './CompanyPillManager';
 import { ContactPillManager } from './ContactPillManager';
 import { RainbowBorderProgressIndicator } from './RainbowBorderProgressIndicator';
-import { EnrichmentProgressModal } from './EnrichmentProgressModal';
 import { getBackgroundEnrichmentManager } from '../services/enrichment/BackgroundEnrichmentManager';
 import { getStorage } from '../services/storage';
 import { getChunkedStorage } from '../services/storage/ChunkedSessionStorage';

@@ -1,5 +1,9 @@
 # Context Migration Summary
 
+**⚠️ ARCHIVED**: November 2, 2025 - This report is superseded by RELATIONSHIP_SYSTEM_MASTER_PLAN.md (October 24)
+
+**See**: `/docs/RELATIONSHIP_SYSTEM_MASTER_PLAN.md` for current Relationship System status
+
 ## At a Glance
 
 ```

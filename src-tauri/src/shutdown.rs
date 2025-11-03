@@ -157,7 +157,7 @@ impl ShutdownHandler {
                 for session_id in session_ids {
                     if let Some(session_arc) = sessions.remove(&session_id) {
                         match Arc::try_unwrap(session_arc) {
-                            Ok(mut session) => {
+                            Ok(session) => {
                                 // We have exclusive ownership - explicitly stop
                                 info!("[SHUTDOWN] Stopping recording session: {}", session_id);
                                 // Note: stop() is async, but we can't await in Drop

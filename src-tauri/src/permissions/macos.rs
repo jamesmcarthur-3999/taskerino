@@ -193,8 +193,6 @@ pub fn request_microphone_permission() -> Result<bool, RecordingError> {
     use cocoa::base::{id, nil};
     use cocoa::foundation::NSString;
     use objc::{class, msg_send, sel, sel_impl};
-    use std::sync::{Arc, Mutex};
-    use std::time::Duration;
 
     unsafe {
         let av_capture_device_class = class!(AVCaptureDevice);
@@ -406,7 +404,7 @@ pub fn check_system_audio_permission() -> Result<bool, RecordingError> {
         Ok(true)
     } else {
         // Retrieve detailed error from Swift
-        let error_code = unsafe { screen_recorder_get_last_error_code() };
+        let _error_code = unsafe { screen_recorder_get_last_error_code() };
         let message_ptr = unsafe { screen_recorder_get_last_error_message() };
         let can_retry = unsafe { screen_recorder_get_last_error_can_retry() };
 

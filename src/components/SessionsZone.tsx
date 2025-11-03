@@ -24,7 +24,6 @@ import { useTheme } from '../context/ThemeContext';
 const SessionDetailView = lazy(() => import('./SessionDetailView').then(module => ({ default: module.SessionDetailView })));
 const ActiveSessionView = lazy(() => import('./ActiveSessionView').then(module => ({ default: module.ActiveSessionView })));
 const SessionProcessingScreen = lazy(() => import('./sessions/SessionProcessingScreen').then(module => ({ default: module.SessionProcessingScreen })));
-import { EnrichmentProgressModal } from './EnrichmentProgressModal';
 import { listen } from '@tauri-apps/api/event';
 import { getTemplates, saveTemplate, type SessionTemplate } from '../utils/sessionTemplates';
 import { loadLastSessionSettings, saveLastSessionSettings, getSettingsSummary, type LastSessionSettings } from '../utils/lastSessionSettings';

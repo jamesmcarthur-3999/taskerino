@@ -6,15 +6,13 @@
  * This module provides:
  * - Memory-safe wrappers around Swift pointers
  * - Type-safe error handling
- * - High-level session management API
+ * - Multi-source recording session management
  * - Timeout protection for all FFI calls
  *
  * # Architecture
  *
  * ```text
- * RecordingSession (high-level API)
- *     ↓
- * SwiftRecorderHandle (RAII wrapper)
+ * SwiftRecordingSession (modern multi-source API)
  *     ↓
  * FFI functions (unsafe Swift calls)
  * ```
@@ -23,33 +21,27 @@
  *
  * ```no_run
  * # async fn example() -> Result<(), Box<dyn std::error::Error>> {
- * use recording::{RecordingSession, RecordingConfig, VideoQuality};
- * use std::path::PathBuf;
+ * use recording::SwiftRecordingSession;
  *
- * let config = RecordingConfig {
- *     session_id: "my-session".to_string(),
- *     output_path: PathBuf::from("/tmp/recording.mp4"),
- *     quality: VideoQuality::MEDIUM,
- * };
+ * let mut session = SwiftRecordingSession::new(
+ *     "/tmp/recording.mp4",
+ *     1920, 1080, 30
+ * ).await?;
  *
- * let session = RecordingSession::start(config).await?;
+ * session.add_display(0).await?;
+ * session.start().await?;
  *
  * // Record...
  * tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
  *
- * let output = session.stop().await?;
- * println!("Saved to: {:?}", output);
+ * session.stop().await?;
  * # Ok(())
  * # }
  * ```
  */
 mod error;
 mod ffi;
-mod session;
 mod video_audio_merger;
-
-#[cfg(test)]
-mod tests;
 
 // Public exports
 #[allow(unused_imports)] // Will be used by video_recording.rs
@@ -57,10 +49,8 @@ pub use error::FFIError;
 #[allow(unused_imports)] // Will be used by video_recording.rs
 pub use ffi::{
     enumerate_displays, enumerate_webcams, enumerate_windows,
-    CompositorType, RecordingStats, RecordingSessionError, SourceType, SwiftRecorderHandle,
+    CompositorType, RecordingStats, RecordingSessionError, SourceType,
     SwiftRecordingSession,
 };
-#[allow(unused_imports)] // Will be used by video_recording.rs
-pub use session::{RecordingConfig, RecordingSession, VideoQuality};
 #[allow(unused_imports)] // Will be used by video_recording.rs
 pub use video_audio_merger::{ExportQuality, MergeError, MergeResult, VideoAudioMerger};
