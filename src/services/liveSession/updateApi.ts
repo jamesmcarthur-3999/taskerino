@@ -144,7 +144,7 @@ export async function updateLiveSessionSummary(
   session.summary.lastUpdated = new Date().toISOString();
 
   // Save summary (via PersistenceQueue - zero blocking)
-  await storage.updateSummary(sessionId, session.summary);
+  await storage.saveSummary(sessionId, session.summary);
 
   // Emit event for UI updates
   LiveSessionEventEmitter.emitSummaryUpdated(sessionId, session.summary, updatedBy);
@@ -182,25 +182,29 @@ export async function appendProgressIndicators(
     throw new Error(`Session or summary not found: ${sessionId}`);
   }
 
-  // Initialize array if doesn't exist
-  if (!session.summary[type]) {
-    session.summary[type] = [];
-  }
+  // Get existing array
+  const existingArray = type === 'insights'
+    ? (session.summary.keyInsights || [])
+    : (session.summary[type] || []);
 
   // Add new items (deduplication)
-  const existing = new Set(session.summary[type]);
-  for (const item of items) {
-    if (!existing.has(item)) {
-      session.summary[type]!.push(item);
-      existing.add(item);
-    }
+  const existing = new Set(existingArray);
+  const newItems = items.filter(item => !existing.has(item));
+
+  // Update the appropriate field
+  if (type === 'achievements') {
+    session.summary.achievements = [...existingArray, ...newItems];
+  } else if (type === 'blockers') {
+    session.summary.blockers = [...existingArray, ...newItems];
+  } else if (type === 'insights') {
+    session.summary.keyInsights = [...existingArray, ...newItems];
   }
 
   // Update timestamp
   session.summary.lastUpdated = new Date().toISOString();
 
   // Save
-  await storage.updateSummary(sessionId, session.summary);
+  await storage.saveSummary(sessionId, session.summary);
 
   console.log(`[LiveSession] Appended ${items.length} ${type} to session ${sessionId}`);
 }

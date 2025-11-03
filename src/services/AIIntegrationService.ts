@@ -162,8 +162,10 @@ class AIIntegrationService {
         lastUpdated: now,
         source: noteData.source || 'thought',
         tags: noteData.tags || [],
-        sentiment: noteData.sentiment,
-        keyPoints: noteData.keyPoints || [],
+        metadata: {
+          sentiment: noteData.sentiment,
+          keyPoints: noteData.keyPoints || [],
+        },
         relationships: [], // Will be populated in step 6
       };
 
@@ -191,6 +193,7 @@ class AIIntegrationService {
           id: generateId(),
           title,
           done: false,
+          createdAt: now,
         })) || [],
         createdAt: now,
         createdBy: 'ai',

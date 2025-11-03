@@ -904,10 +904,7 @@ export class ChunkedSessionStorage {
       contextItems: contextItems || undefined,
       screenshots,
       audioSegments: audioSegments.length > 0 ? audioSegments : undefined,
-      video: metadata.video && videoChunks.length > 0 ? {
-        ...metadata.video,
-        chunks: videoChunks,
-      } : undefined,
+      video: metadata.video ? metadata.video : undefined,
     };
 
     return session;
@@ -983,10 +980,7 @@ export class ChunkedSessionStorage {
       contextItems: contextItems || undefined,
       screenshots,
       audioSegments: audioSegments.length > 0 ? audioSegments : undefined,
-      video: metadata.video && videoChunks.length > 0 ? {
-        ...metadata.video,
-        chunks: videoChunks,
-      } : undefined,
+      video: metadata.video ? metadata.video : undefined,
     };
 
     return session;

@@ -148,9 +148,9 @@ export class LiveSessionEventEmitter {
       changeType: 'new-screenshot'
     };
 
-    // Use existing EventBus
-    import('@/services/eventBus').then(({ EventBus }) => {
-      EventBus.emit('screenshot-analyzed', event);
+    // Use existing EventBus instance
+    import('@/services/eventBus').then(({ eventBus }) => {
+      eventBus.emit('screenshot-analyzed', event);
     });
   }
 
@@ -169,8 +169,8 @@ export class LiveSessionEventEmitter {
       changeType: 'new-audio'
     };
 
-    import('@/services/eventBus').then(({ EventBus }) => {
-      EventBus.emit('audio-processed', event);
+    import('@/services/eventBus').then(({ eventBus }) => {
+      eventBus.emit('audio-processed', event);
     });
   }
 
@@ -194,8 +194,8 @@ export class LiveSessionEventEmitter {
       metadata
     };
 
-    import('@/services/eventBus').then(({ EventBus }) => {
-      EventBus.emit('context-changed', event);
+    import('@/services/eventBus').then(({ eventBus }) => {
+      eventBus.emit('context-changed', event);
     });
   }
 
@@ -213,8 +213,8 @@ export class LiveSessionEventEmitter {
       timestamp: new Date().toISOString()
     };
 
-    import('@/services/eventBus').then(({ EventBus }) => {
-      EventBus.emit('summary-requested', event);
+    import('@/services/eventBus').then(({ eventBus }) => {
+      eventBus.emit('summary-requested', event);
     });
   }
 
@@ -236,8 +236,8 @@ export class LiveSessionEventEmitter {
       timestamp: new Date().toISOString()
     };
 
-    import('@/services/eventBus').then(({ EventBus }) => {
-      EventBus.emit('user-question-answered', event);
+    import('@/services/eventBus').then(({ eventBus }) => {
+      eventBus.emit('user-question-answered', event);
     });
   }
 
@@ -257,8 +257,8 @@ export class LiveSessionEventEmitter {
       timestamp: new Date().toISOString()
     };
 
-    import('@/services/eventBus').then(({ EventBus }) => {
-      EventBus.emit('summary-updated', event);
+    import('@/services/eventBus').then(({ eventBus }) => {
+      eventBus.emit('summary-updated', event);
     });
   }
 }
@@ -293,9 +293,9 @@ export function subscribeToLiveSessionEvents<T extends LiveSessionEvent['type']>
   // Import EventBus dynamically to avoid circular dependencies
   let unsubscribe: (() => void) | null = null;
 
-  import('@/services/eventBus').then(({ EventBus }) => {
-    EventBus.on(eventType, handler);
-    unsubscribe = () => EventBus.off(eventType, handler);
+  import('@/services/eventBus').then(({ eventBus }) => {
+    const subscriptionId = eventBus.on(eventType, handler);
+    unsubscribe = () => eventBus.off(subscriptionId);
   });
 
   return () => {

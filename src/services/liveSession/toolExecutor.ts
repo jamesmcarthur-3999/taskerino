@@ -197,7 +197,7 @@ export class LiveSessionToolExecutor {
   private async executeUniversalSearch(input: any) {
     const indexManager = await getUnifiedIndexManager();
 
-    const result = await indexManager.search({
+    const result = await indexManager.unifiedSearch({
       query: input.query,
       entityTypes: input.entityTypes,
       relatedTo: input.relatedTo,
@@ -212,6 +212,7 @@ export class LiveSessionToolExecutor {
 
     return {
       results: result.results,
+      count: result.counts.total,
       counts: result.counts,
       took: result.took,
       indexesUsed: result.indexesUsed
@@ -310,7 +311,26 @@ export class LiveSessionToolExecutor {
     const limit = input.limit || 20;
     const timeline = this.contextProvider.getRecentActivity(limit);
 
-    return timeline;
+    // Map LiveSessionContextProvider.TimelineItem to toolExecutor.TimelineItem (adds id property)
+    return timeline.map(item => {
+      if (item.type === 'screenshot') {
+        const screenshot = item.data as any;
+        return {
+          id: screenshot.id || `screenshot-${item.timestamp}`,
+          type: 'screenshot' as const,
+          timestamp: item.timestamp,
+          data: item.data
+        };
+      } else {
+        const audio = item.data as any;
+        return {
+          id: audio.id || `audio-${item.timestamp}`,
+          type: 'audio' as const,
+          timestamp: item.timestamp,
+          data: item.data
+        };
+      }
+    });
   }
 
   // ==========================================================================

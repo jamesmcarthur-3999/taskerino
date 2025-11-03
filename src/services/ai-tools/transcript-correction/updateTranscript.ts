@@ -162,13 +162,6 @@ async function handleSingleSegmentMode(
     transcription: input.corrected_transcription,
     transcriptionQuality: 'final',
     draftTranscription,
-    metadata: {
-      ...segment.metadata,
-      correctionReason: input.correction_reason,
-      correctionConfidence: input.confidence,
-      correctedAt: new Date().toISOString(),
-      correctedBy: 'ai'
-    }
   };
 
   // Update in session
@@ -248,13 +241,6 @@ async function handleBatchSegmentsMode(
           transcription: update.corrected_transcription,
           transcriptionQuality: 'final' as const,
           draftTranscription,
-          metadata: {
-            ...segment.metadata,
-            correctionReason: update.correction_reason,
-            correctionConfidence: update.confidence,
-            correctedAt: new Date().toISOString(),
-            correctedBy: 'ai'
-          }
         };
       });
 
@@ -330,7 +316,7 @@ async function handleReTranscribeSegmentMode(
     // Re-transcribe with Whisper
     const result = await openAIService.transcribeAudio(audioData.audioBase64);
 
-    const newTranscription = result.text;
+    const newTranscription = result; // result is already the transcription text
 
     logInfo('updateTranscript', `Re-transcription complete`, {
       originalLength: segment.transcription?.length || 0,
@@ -343,13 +329,6 @@ async function handleReTranscribeSegmentMode(
       transcription: newTranscription,
       transcriptionQuality: 'final',
       draftTranscription: segment.transcription, // Store old as draft
-      metadata: {
-        ...segment.metadata,
-        reTranscribed: true,
-        reTranscriptionReason: input.reason,
-        reTranscribedAt: new Date().toISOString(),
-        reTranscribedBy: 'ai'
-      }
     };
 
     // Save session
@@ -445,14 +424,6 @@ async function handleReTranscribeRangeMode(
         transcription: newTranscription || segment.transcription,
         transcriptionQuality: 'final' as const,
         draftTranscription: segment.transcription,
-        metadata: {
-          ...segment.metadata,
-          reTranscribed: true,
-          reTranscriptionReason: input.reason,
-          reTranscribedAt: new Date().toISOString(),
-          reTranscribedBy: 'ai',
-          wordCount: wordsInSegment.length
-        }
       };
     });
 

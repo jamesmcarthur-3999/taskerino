@@ -178,11 +178,6 @@ async function handleAudioSegmentMode(
   const updatedSegment: SessionAudioSegment = {
     ...segment,
     ...input.segment_metadata,
-    metadata: {
-      ...segment.metadata,
-      lastUpdated: new Date().toISOString(),
-      updatedBy: 'ai'
-    }
   };
 
   // Update in session

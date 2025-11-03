@@ -123,6 +123,10 @@ export class LiveSessionContextBuilder {
     const storage = await getChunkedStorage();
     const session = await storage.loadFullSession(sessionId);
 
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
     const provider = new LiveSessionContextProvider(session);
 
     // Get recent screenshots (last 10)
@@ -198,13 +202,17 @@ export class LiveSessionContextBuilder {
     const storage = await getChunkedStorage();
     const session = await storage.loadFullSession(sessionId);
 
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
     const provider = new LiveSessionContextProvider(session);
 
     // Get related entities (notes, tasks) using UnifiedIndexManager
     const { getUnifiedIndexManager } = await import('../storage/UnifiedIndexManager');
     const indexManager = await getUnifiedIndexManager();
 
-    const relatedNotesResult = await indexManager.search({
+    const relatedNotesResult = await indexManager.unifiedSearch({
       entityTypes: ['notes'],
       relatedTo: {
         entityType: 'session',
@@ -213,7 +221,7 @@ export class LiveSessionContextBuilder {
       limit: 100
     });
 
-    const relatedTasksResult = await indexManager.search({
+    const relatedTasksResult = await indexManager.unifiedSearch({
       entityTypes: ['tasks'],
       relatedTo: {
         entityType: 'session',
@@ -248,6 +256,10 @@ export class LiveSessionContextBuilder {
   async buildDeltaContext(sessionId: string, since: string): Promise<DeltaContext> {
     const storage = await getChunkedStorage();
     const session = await storage.loadFullSession(sessionId);
+
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
 
     const provider = new LiveSessionContextProvider(session);
 

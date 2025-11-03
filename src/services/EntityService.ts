@@ -611,4 +611,6 @@ class EntityService {
   }
 }
 
+// Export both the class (for instantiation) and singleton instance
+export { EntityService };
 export const entityService = new EntityService();
