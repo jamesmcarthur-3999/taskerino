@@ -20,7 +20,7 @@ export {
   throwIfInvalid
 } from './validation';
 
-export type { ValidationResult } from './validation';
+export type { ValidationResult } from '../types';
 
 // Error Handling
 export {

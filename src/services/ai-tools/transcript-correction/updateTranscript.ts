@@ -527,7 +527,7 @@ async function findSessionForSegment(segmentId: string): Promise<Session> {
   // In the future, could maintain a segment_id -> session_id index
 
   const chunkedStorage = await getChunkedStorage();
-  const metadata = await chunkedStorage.loadAllMetadata();
+  const metadata = await chunkedStorage.listAllMetadata();
 
   for (const sessionMeta of metadata) {
     const session = await loadSession(sessionMeta.id);
@@ -579,7 +579,11 @@ async function saveSessionUpdates(session: Session): Promise<void> {
 
   // Update metadata if transcriptUpgradeCompleted flag changed
   if (session.transcriptUpgradeCompleted !== undefined) {
-    await chunkedStorage.saveMetadata(session.id, session);
+    const metadata = await chunkedStorage.loadMetadata(session.id);
+    if (metadata) {
+      metadata.transcriptUpgradeCompleted = session.transcriptUpgradeCompleted;
+      await chunkedStorage.saveMetadata(metadata);
+    }
   }
 
   logInfo('updateTranscript', `Saved session updates: ${session.id}`);

@@ -177,10 +177,10 @@ export async function getVideoMetadata(session: Session): Promise<VideoMetadata>
     const fs = await import('@tauri-apps/plugin-fs');
     const fileInfo = await fs.stat(videoPath);
 
-    // Get video resolution and codec (if available)
-    // For now, use defaults - can extend with ffprobe if needed
-    const width = session.video?.width || 1920;
-    const height = session.video?.height || 1080;
+    // Get video resolution (use defaults - SessionVideo no longer stores resolution)
+    // Can extend with ffprobe if precise resolution needed
+    const width = 1920; // Default resolution
+    const height = 1080;
 
     return {
       duration,

@@ -71,7 +71,8 @@ export async function loadSessionMetadata(sessionId: string): Promise<Session> {
     }
 
     // Return metadata as session (has most fields)
-    return metadata as Session;
+    // NOTE: This is a lightweight conversion - some fields may be missing
+    return metadata as unknown as Session;
   } catch (error) {
     if (error instanceof Error && error.message.includes('not found')) {
       throw sessionNotFoundError(sessionId);

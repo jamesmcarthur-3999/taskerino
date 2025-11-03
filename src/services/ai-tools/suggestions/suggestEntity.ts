@@ -115,10 +115,10 @@ async function handleTaskMode(input: SuggestEntityInput): Promise<SuggestEntityO
     throw missingRequiredFieldError('suggestion', 'task');
   }
 
-  const validation = combineValidationResults([
+  const validation = combineValidationResults(
     validateNonEmptyString(input.suggestion.title, 'suggestion.title'),
     validateConfidence(input.suggestion.confidence)
-  ]);
+  );
   throwIfInvalid(validation, 'task suggestion');
 
   logInfo('suggestEntity', `Creating task suggestion: "${input.suggestion.title}"`);
@@ -168,10 +168,10 @@ async function handleNoteMode(input: SuggestEntityInput): Promise<SuggestEntityO
     throw missingRequiredFieldError('suggestion', 'note');
   }
 
-  const validation = combineValidationResults([
+  const validation = combineValidationResults(
     validateNonEmptyString(input.suggestion.title, 'suggestion.title'),
     validateConfidence(input.suggestion.confidence)
-  ]);
+  );
   throwIfInvalid(validation, 'note suggestion');
 
   logInfo('suggestEntity', `Creating note suggestion: "${input.suggestion.title}"`);
@@ -236,10 +236,10 @@ async function handleBatchMode(input: SuggestEntityInput): Promise<SuggestEntity
 
     try {
       // Validate
-      const validation = combineValidationResults([
+      const validation = combineValidationResults(
         validateNonEmptyString(suggestionInput.title, `suggestions[${i}].title`),
         validateConfidence(suggestionInput.confidence)
-      ]);
+      );
       throwIfInvalid(validation, `suggestion ${i}`);
 
       // Validate source context if provided

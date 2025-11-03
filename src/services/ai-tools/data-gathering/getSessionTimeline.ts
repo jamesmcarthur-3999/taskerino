@@ -196,7 +196,7 @@ function extractAchievements(
             type: 'achievement',
             timestamp: absoluteTimestamp,
             relative_time: moment.timestamp,
-            data: { description: moment.label }
+            data: { description: moment.description }
           });
         }
       }
@@ -267,7 +267,7 @@ function extractBlockers(
             type: 'blocker',
             timestamp: absoluteTimestamp,
             relative_time: moment.timestamp,
-            data: { description: moment.label }
+            data: { description: moment.description }
           });
         }
       }

@@ -30,9 +30,17 @@ export interface ToolExecutionResult<T = any> {
  * Structured error for tool execution failures
  */
 export class ToolExecutionError extends Error {
+  userMessage: string;
+  backendDetails: {
+    error: string;
+    code?: string;
+    stack?: string;
+    context?: Record<string, any>;
+  };
+
   constructor(
-    public userMessage: string,
-    public backendDetails: {
+    userMessage: string,
+    backendDetails: {
       error: string;
       code?: string;
       stack?: string;
@@ -41,6 +49,8 @@ export class ToolExecutionError extends Error {
   ) {
     super(userMessage);
     this.name = 'ToolExecutionError';
+    this.userMessage = userMessage;
+    this.backendDetails = backendDetails;
   }
 }
 
@@ -438,8 +448,8 @@ export interface CreateFromSuggestionInput {
   approved: boolean;
 
   // Optional modifications to suggestion data
-  task_modifications?: Partial<TaskSuggestionData>;
-  note_modifications?: Partial<NoteSuggestionData>;
+  task_modifications?: Record<string, any>; // TODO: Define TaskSuggestionData type
+  note_modifications?: Record<string, any>; // TODO: Define NoteSuggestionData type
 }
 
 /**
