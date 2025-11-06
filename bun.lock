@@ -4,10 +4,10 @@
     "": {
       "name": "taskerino",
       "dependencies": {
-        "@baleybots/chat": "0.0.1-alpha.30",
-        "@baleybots/core": "0.0.1-alpha.30",
-        "@baleybots/proxy-server": "0.0.1-alpha.30",
-        "@baleybots/react": "0.0.1-alpha.30",
+        "@baleybots/chat": "^0.0.1-alpha.35",
+        "@baleybots/core": "^0.0.1-alpha.35",
+        "@baleybots/proxy-server": "^0.0.1-alpha.35",
+        "@baleybots/react": "^0.0.1-alpha.35",
         "@breezystack/lamejs": "^1.2.0",
         "@noble/hashes": "^2.0.1",
         "@radix-ui/react-accordion": "^1.2.12",
@@ -138,13 +138,13 @@
 
     "@babel/types": ["@babel/types@7.28.4", "", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.27.1" } }, "sha512-bkFqkLhh3pMBUQQkpVgWDWq/lqzc2678eUyDlTBhRqhCHFguYYGM0Efga7tYk4TogG/3x0EEl66/OQ+WGbWB/Q=="],
 
-    "@baleybots/chat": ["@baleybots/chat@0.0.1-alpha.30", "https://npm.pkg.github.com/download/@baleybots/chat/0.0.1-alpha.30/91e486ff6aa8ea69a7925b86f744448d17cec004", { "dependencies": { "zod": "^4.1.12" }, "peerDependencies": { "@baleybots/core": "0.0.1-alpha.30" } }, "sha512-QgS6DeVKCHN9m9XWIpREh7itF+EYdJdqeHN6UtGcKqMfVjiKOoPSzps3/eN5rDyKJHZwiei/eh93lKugnSTlqQ=="],
+    "@baleybots/chat": ["@baleybots/chat@0.0.1-alpha.37", "https://npm.pkg.github.com/download/@baleybots/chat/0.0.1-alpha.37/5023010081ff2ce9ecc09c8f5e9e71ed46200c31", { "dependencies": { "zod": "^4.1.12" }, "peerDependencies": { "@baleybots/core": "0.0.1-alpha.37" } }, "sha512-Ymdmlr4xS6IvSFAPEBY2So5PrLZvgqKI43xAxXhZ0baQ+rTvqxx8YL+mTebG41bjZd1XCZ20dS34r4RLoqDLKg=="],
 
-    "@baleybots/core": ["@baleybots/core@0.0.1-alpha.30", "https://npm.pkg.github.com/download/@baleybots/core/0.0.1-alpha.30/d90606716974f922a1199fe43d11c57568c17606", { "dependencies": { "@cfworker/json-schema": "^4.0.2", "ws": "^8.18.0", "zod": "^4.1.12" } }, "sha512-XwVxQfbzfXTV7bhntO/6RLdc7zZR3E8IMug01Cd00vVlsPHqaQWbFze9wOBsxrp432fJscKyYc7FPdSakFrTzQ=="],
+    "@baleybots/core": ["@baleybots/core@0.0.1-alpha.37", "https://npm.pkg.github.com/download/@baleybots/core/0.0.1-alpha.37/e7a125a2b597d0dd9d1f2c8e471e079c10aac917", { "dependencies": { "@cfworker/json-schema": "^4.0.2", "ws": "^8.18.0", "zod": "^4.1.12" } }, "sha512-LxwrLU41u3dt5CZqL1MSUdgHBK7LiZPUIBTuoN/3PoDEZfp3vFO0ofnEfUSrDx5M4utdUAzKVrivYtfpRba4eQ=="],
 
-    "@baleybots/proxy-server": ["@baleybots/proxy-server@0.0.1-alpha.30", "https://npm.pkg.github.com/download/@baleybots/proxy-server/0.0.1-alpha.30/225690901e315ac1149eed2568210e67bc6d2247", { "dependencies": { "@anthropic-ai/sdk": "^0.24.0", "@google/generative-ai": "^0.7.0", "openai": "^4.20.0" }, "peerDependencies": { "@baleybots/core": "0.0.1-alpha.30" } }, "sha512-o6zvvVlIVDDEYxARdjXDr8YQlOqT790kqZVhELQ008st4hhuBzKS0I/bt1xitBE0ee0ST5gajHi+xH9Avc2Slg=="],
+    "@baleybots/proxy-server": ["@baleybots/proxy-server@0.0.1-alpha.37", "https://npm.pkg.github.com/download/@baleybots/proxy-server/0.0.1-alpha.37/e9ff4df0e73f18f7507a2ab224f5a501449597cf", { "dependencies": { "@anthropic-ai/sdk": "^0.24.0", "@google/generative-ai": "^0.7.0", "openai": "^4.20.0" }, "peerDependencies": { "@baleybots/core": "0.0.1-alpha.37" } }, "sha512-mn8z+4VERmKDNmBG7o3D1AvuVfxCPsbPKHXnuYeY0GGU15If1fTqm41PoBAGmStRpUnVoW2/XmmGBtqyJnQJlQ=="],
 
-    "@baleybots/react": ["@baleybots/react@0.0.1-alpha.30", "https://npm.pkg.github.com/download/@baleybots/react/0.0.1-alpha.30/1f28221249c3d1a50db185f926bf92c99bfa69b9", { "peerDependencies": { "@baleybots/chat": "0.0.1-alpha.30", "@baleybots/core": "0.0.1-alpha.30", "react": ">=18 <20" } }, "sha512-S/2F0rmIFQ5UUQ9F8npfrYGL8OaNOCWbRd4yx4f/POoXTiy2aDYbvuEa9p39FGFjxWRAu/vxLo0TuN4CUmaKwQ=="],
+    "@baleybots/react": ["@baleybots/react@0.0.1-alpha.37", "https://npm.pkg.github.com/download/@baleybots/react/0.0.1-alpha.37/33ea456a26d481e059460c8db298c269fc6e93a2", { "peerDependencies": { "@baleybots/chat": "0.0.1-alpha.37", "@baleybots/core": "0.0.1-alpha.37", "react": ">=18 <20", "react-dom": ">=18 <20" } }, "sha512-4TqLvn+IQer0aibEBLfud82tqw2IP2emwnzPvXVryfcfxs4u9ENrMawfoVWGtVw7j0lFkXfiICgEtBeFXSo+gQ=="],
 
     "@bcoe/v8-coverage": ["@bcoe/v8-coverage@1.0.2", "", {}, "sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA=="],
 

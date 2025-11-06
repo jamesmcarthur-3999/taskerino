@@ -2,11 +2,12 @@ mod activity_monitor;
 mod ai_types;
 mod api_keys;
 mod audio_simple; // Simple audio recording implementation (replaces AudioGraph)
-mod baleybot_api;
+// mod baleybot_api; // Commented out - using baleybots directly from TypeScript
 mod claude_api;
 mod macos_audio;
 mod macos_events;
 mod openai_api;
+mod tauri_ai_provider; // Tauri provider for baleybots with streaming support
 pub mod permissions; // Permissions error handling and detection (Phase 1)
 mod recording; // Safe FFI wrappers for video recording
 mod shutdown; // Graceful shutdown handler (Fix #13)
@@ -1039,8 +1040,12 @@ pub fn run() {
             // Claude API
             claude_api::claude_chat_completion,
             claude_api::claude_chat_completion_vision,
-            // BaleyBots API
-            baleybot_api::baleybot_invoke,
+            claude_api::proxy_http_request,
+            // Tauri Provider for Baleybots (with streaming support)
+            tauri_ai_provider::tauri_ai_chat_completion,
+            tauri_ai_provider::tauri_ai_chat_completion_stream_start,
+            // BaleyBots API - commented out, using baleybots directly from TypeScript
+            // baleybot_api::baleybot_invoke,
             // Performance optimization - Session storage (Task 3A)
             session_storage::load_session_summaries,
             session_storage::load_session_detail,
@@ -1260,6 +1265,10 @@ pub fn run() {
             let countdown_state_clone = countdown_state.clone();
             let tray_handle_for_thread = tray_icon_handle.clone();
             std::thread::spawn(move || {
+                // Track previous state to only log on changes
+                let mut last_logged_active = true; // Start with true to log initial state
+                let mut last_logged_empty = false;
+                
                 loop {
                     std::thread::sleep(Duration::from_secs(1));
 
@@ -1273,7 +1282,12 @@ pub fn run() {
                     let last_time = state.last_screenshot_time.clone();
 
                     if !is_active || last_time.is_empty() {
-                        println!("⚫ Idle state: active={}, last_time_empty={}", is_active, last_time.is_empty());
+                        // Only log if state changed
+                        if is_active != last_logged_active || last_time.is_empty() != last_logged_empty {
+                            println!("⚫ Idle state: active={}, last_time_empty={}", is_active, last_time.is_empty());
+                            last_logged_active = is_active;
+                            last_logged_empty = last_time.is_empty();
+                        }
                         // Update tray icon title to show idle state
                         if let Ok(tray_guard) = tray_handle_for_thread.lock() {
                             if let Some(tray) = tray_guard.as_ref() {

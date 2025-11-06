@@ -129,8 +129,23 @@ class BackgroundProcessor {
       job.progress = 30;
       this.notifyProgress(job);
 
-      // Call Claude API
-      const result = await claudeService.processInput(
+      // Call Claude API - use baleybot implementation if available
+      // TODO: Add feature flag or settings to toggle between implementations
+      const useBaleybots = true; // Feature flag - set to false to use legacy implementation
+      
+      const result = useBaleybots
+        ? await claudeService.processInputBaleybots(
+            job.input,
+            data.topics,
+            data.notes,
+            data.aiSettings,
+            data.learnings,
+            data.learningSettings,
+            data.tasks,
+            data.attachments,
+            data.extractTasks
+          )
+        : await claudeService.processInput(
         job.input,
         data.topics,
         data.notes,

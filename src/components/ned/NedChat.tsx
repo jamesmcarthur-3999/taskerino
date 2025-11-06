@@ -5,7 +5,8 @@
  * Handles conversation flow, streaming, tool execution, and permissions.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useChat } from '@baleybots/react';
 import { invoke } from '@tauri-apps/api/core';
 import { motion } from 'framer-motion';
 import { Send, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
@@ -55,6 +56,8 @@ interface MessageContent {
   // Tool use
   toolName?: string;
   toolStatus?: 'pending' | 'success' | 'error';
+  toolArguments?: Record<string, unknown>;
+  toolResult?: string; // Tool result content when combined with tool-use
 }
 
 interface NedMessageData {
@@ -80,7 +83,6 @@ export const NedChat: React.FC = () => {
   const { activeSession } = useActiveSession();
   const { state: entitiesState } = useEntities();
 
-  const messages = uiState.nedConversation?.messages || [];
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('Thinking...');
@@ -105,11 +107,6 @@ export const NedChat: React.FC = () => {
     };
     checkApiKey();
   }, []);
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -217,303 +214,291 @@ export const NedChat: React.FC = () => {
     };
 
     return new NedToolExecutor(reconstructedState, combinedDispatch);
-  }, [tasksState, notesState, sessions, entitiesState, uiState, settingsState, tasksDispatch, uiDispatch, settingsDispatch]);
+  }, [tasksState, notesState, sessions, entitiesState, uiState, settingsState, tasksDispatch, uiDispatch, settingsDispatch, activeSession]);
 
-  // Send message
+  // Create bot instance for useChat
+  const chatBot = useMemo(() => {
+    if (!hasApiKey) return null;
+    
+    const toolExecutor = createToolExecutor();
+    const reconstructedState = {
+      tasks: tasksState.tasks,
+      notes: notesState.notes,
+      sessions: sessions,
+      companies: entitiesState.companies,
+      contacts: entitiesState.contacts,
+      topics: entitiesState.topics,
+      ui: uiState,
+      sidebar: uiState.sidebar,
+      aiSettings: settingsState.aiSettings,
+      learningSettings: settingsState.learningSettings,
+      userProfile: settingsState.userProfile,
+      learnings: settingsState.learnings,
+      nedSettings: settingsState.nedSettings,
+      activeSessionId: activeSession?.id ?? null,
+      nedConversation: uiState.nedConversation,
+    } as any;
+
+    return nedService.createBot(
+      CONVERSATION_ID,
+      reconstructedState,
+      async (toolCall) => {
+        console.log('[NedChat] Executing tool:', toolCall.name, toolCall.input);
+        const result = await toolExecutor.execute(toolCall);
+        console.log('[NedChat] Tool result:', result);
+        return result;
+      },
+      checkPermission
+    );
+  }, [hasApiKey, tasksState, notesState, sessions, entitiesState, uiState, settingsState, activeSession, createToolExecutor, checkPermission]);
+
+  // Use useChat hook - must be declared after chatBot is defined
+  const { messages: chatMessages, sendStreaming, isStreaming, error: chatError } = useChat({
+    chatBot: chatBot || undefined,
+    onToolCall: async (toolName: string, args: Record<string, unknown>, result: unknown) => {
+      // Tool execution is handled by the bot's tool definitions
+      // This callback is for UI updates if needed
+      const statusMessages: Record<string, string> = {
+        'query_context_agent': 'Searching your notes...',
+        'get_current_datetime': 'Getting current time...',
+        'create_task': 'Creating task...',
+        'update_task': 'Updating task...',
+        'delete_task': 'Deleting task...',
+        'create_note': 'Creating note...',
+        'update_note': 'Updating note...',
+        'delete_note': 'Deleting note...',
+      };
+      setProcessingStatus(statusMessages[toolName] || 'Working...');
+    },
+  });
+
+  // Convert chatMessages to NedMessageData format for rendering - memoized to prevent re-renders
+  // NOTE: This updates automatically during streaming as useChat receives onToken events
+  const messages = useMemo(() => {
+    console.log('[NedChat] chatMessages from useChat:', chatMessages.length, 'messages');
+    
+    // Log each message structure to debug streaming
+    chatMessages.forEach((msg, idx) => {
+      const contentLength = typeof msg.content === 'string' ? msg.content.length : 0;
+      const contentPreview = typeof msg.content === 'string' ? msg.content.substring(0, 50) : 'no content';
+      console.log(`[NedChat] Message ${idx}:`, {
+        role: msg.role,
+        contentLength,
+        contentPreview: contentLength > 0 ? contentPreview : 'empty',
+        hasToolCalls: !!msg.tool_calls,
+        toolCallCount: Array.isArray(msg.tool_calls) ? msg.tool_calls.length : 0,
+        isStreaming,
+        id: msg.id,
+      });
+    });
+    
+    // First pass: process all messages into a flat structure
+    const processedMessages = chatMessages.map((msg) => {
+      const contents: MessageContent[] = [];
+      
+      // Handle tool result messages (role: "tool")
+      // Baleybots returns tool results as messages with role "tool"
+      if (msg.role === 'tool') {
+        // Tool results come as messages with role "tool" and content
+        if (msg.content && typeof msg.content === 'string') {
+          // Try to parse as JSON to extract structured data
+          let toolResult: Record<string, unknown> | string = msg.content;
+          try {
+            toolResult = JSON.parse(msg.content);
+          } catch (e) {
+            // Not JSON, keep as string
+          }
+          
+          contents.push({
+            type: 'tool-result',
+            content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2),
+            toolName: 'tool_result', // Could extract from content if structured
+          });
+        }
+        // Return tool result message - show as assistant message
+        return {
+          id: msg.id || `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          role: 'assistant' as 'user' | 'assistant', // Tool results are shown as assistant messages
+          contents,
+          timestamp: typeof msg.timestamp === 'string' ? msg.timestamp : (msg.timestamp instanceof Date ? msg.timestamp.toISOString() : new Date().toISOString()),
+        };
+      }
+      
+      // Handle text content - this includes partial content during streaming
+      if (msg.content && typeof msg.content === 'string') {
+        contents.push({ type: 'text', content: msg.content });
+        // Log streaming updates for debugging
+        if (isStreaming && msg.role === 'assistant' && msg.content.length > 0) {
+          console.log('[NedChat] Streaming message update:', msg.content.substring(0, 50) + '...');
+        }
+      }
+      
+      // Handle tool calls - these appear during streaming as tools are called
+      // Baleybots uses OpenAI format: {id, type: "function", function: {name, arguments}}
+      if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
+        console.log('[NedChat] Processing tool_calls:', msg.tool_calls.length, 'tool calls');
+        console.log('[NedChat] Tool calls structure:', JSON.stringify(msg.tool_calls, null, 2));
+        for (const toolCall of msg.tool_calls) {
+          console.log('[NedChat] Processing tool call:', toolCall);
+          
+          // Extract from OpenAI-compatible format used by baleybots
+          let toolName = 'unknown';
+          let toolArguments: Record<string, unknown> = {};
+          
+          if (toolCall && typeof toolCall === 'object') {
+            // Baleybots/OpenAI format: {id, type: "function", function: {name, arguments}}
+            if (toolCall.function && typeof toolCall.function === 'object') {
+              toolName = String(toolCall.function.name || 'unknown');
+              // Arguments come as a JSON string that needs parsing
+              if (toolCall.function.arguments && typeof toolCall.function.arguments === 'string') {
+                try {
+                  toolArguments = JSON.parse(toolCall.function.arguments);
+                } catch (e) {
+                  console.warn('[NedChat] Failed to parse tool arguments:', e);
+                  toolArguments = {};
+                }
+              }
+            }
+          }
+          
+          console.log('[NedChat] Extracted tool:', toolName, toolArguments);
+          contents.push({
+            type: 'tool-use',
+            toolName,
+            toolStatus: 'pending',
+            toolArguments,
+          });
+        }
+      }
+      
+      return {
+        id: msg.id || `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        role: (msg.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        contents,
+        timestamp: typeof msg.timestamp === 'string' ? msg.timestamp : (msg.timestamp instanceof Date ? msg.timestamp.toISOString() : new Date().toISOString()),
+      };
+    });
+    
+    // Second pass: combine tool-use with tool-result
+    // Look for consecutive tool-use and tool-result content items and combine them
+    const combinedMessages: NedMessageData[] = [];
+    const usedToolResults = new Set<string>(); // Track which tool results have been used
+    
+    for (let msgIdx = 0; msgIdx < processedMessages.length; msgIdx++) {
+      const msg = processedMessages[msgIdx];
+      const newContents: MessageContent[] = [];
+      const usedIndices = new Set<number>(); // Track which indices in this message are used
+      
+      for (let contentIdx = 0; contentIdx < msg.contents.length; contentIdx++) {
+        if (usedIndices.has(contentIdx)) continue; // Skip already used items
+        
+        const content = msg.contents[contentIdx];
+        
+        if (content.type === 'tool-use') {
+          // Look for a matching tool-result in the same message or next message
+          let matchedResult: string | null = null;
+          
+          // Check remaining contents in same message
+          for (let i = contentIdx + 1; i < msg.contents.length; i++) {
+            if (msg.contents[i].type === 'tool-result' && !usedIndices.has(i)) {
+              const resultKey = `${msgIdx}-${i}`;
+              if (!usedToolResults.has(resultKey)) {
+                matchedResult = msg.contents[i].content || null;
+                usedToolResults.add(resultKey);
+                usedIndices.add(i);
+                break;
+              }
+            }
+          }
+          
+          // If not found in same message, check next message
+          if (!matchedResult && msgIdx + 1 < processedMessages.length) {
+            const nextMsg = processedMessages[msgIdx + 1];
+            for (let i = 0; i < nextMsg.contents.length; i++) {
+              if (nextMsg.contents[i].type === 'tool-result') {
+                const resultKey = `${msgIdx + 1}-${i}`;
+                if (!usedToolResults.has(resultKey)) {
+                  matchedResult = nextMsg.contents[i].content || null;
+                  usedToolResults.add(resultKey);
+                  break;
+                }
+              }
+            }
+          }
+          
+          // Combine tool-use with tool-result
+          if (matchedResult) {
+            newContents.push({
+              ...content,
+              toolResult: matchedResult,
+              toolStatus: 'success',
+            });
+          } else {
+            // No result yet, keep as-is
+            newContents.push(content);
+          }
+        } else if (content.type === 'tool-result') {
+          // Check if this result was already matched to a tool-use
+          const resultKey = `${msgIdx}-${contentIdx}`;
+          if (!usedToolResults.has(resultKey)) {
+            // This tool result wasn't matched, keep it as fallback
+            newContents.push(content);
+          }
+        } else {
+          // Keep other content types as-is
+          newContents.push(content);
+        }
+      }
+      
+      // Only add message if it has contents
+      if (newContents.length > 0) {
+        combinedMessages.push({
+          ...msg,
+          contents: newContents,
+        });
+      }
+    }
+    
+    return combinedMessages;
+  }, [chatMessages, isStreaming]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Update isProcessing state from useChat
+  useEffect(() => {
+    setIsProcessing(isStreaming);
+    if (isStreaming) {
+      setProcessingStatus('Responding...');
+    }
+  }, [isStreaming]);
+
+  // Handle chat errors
+  useEffect(() => {
+    if (chatError) {
+      setError(chatError instanceof Error ? chatError.message : String(chatError));
+    }
+  }, [chatError]);
+
+  // Send message using useChat
   const handleSendMessage = async () => {
-    if (!input.trim() || isProcessing) return;
+    if (!input.trim() || isProcessing || !chatBot) return;
 
     const userMessage = input.trim();
     setInput('');
     setError(null);
-    setIsProcessing(true);
 
     // Track Ned query stat
     uiDispatch({ type: 'INCREMENT_ONBOARDING_STAT', payload: 'nedQueryCount' });
 
-    // Add user message
-    const userMsg: NedMessageData = {
-      id: `msg_${Date.now()}`,
-      role: 'user',
-      contents: [{ type: 'text', content: userMessage }],
-      timestamp: new Date().toISOString(),
-    };
-    uiDispatch({ type: 'ADD_NED_MESSAGE', payload: userMsg });
-
-    // Prepare assistant message
-    const assistantMsg: NedMessageData = {
-      id: `msg_${Date.now() + 1}`,
-      role: 'assistant',
-      contents: [],
-      timestamp: new Date().toISOString(),
-    };
-    uiDispatch({ type: 'ADD_NED_MESSAGE', payload: assistantMsg });
-
-    // Track contents locally during streaming
-    let streamingContents: MessageContent[] = [];
-
     try {
-      const toolExecutor = createToolExecutor();
-
-      console.log('[NedChat] Sending message:', userMessage);
-
-      // Reconstruct state for nedService (same as createToolExecutor)
-      const reconstructedState = {
-        tasks: tasksState.tasks,
-        notes: notesState.notes,
-        sessions: sessions,
-        companies: entitiesState.companies,
-        contacts: entitiesState.contacts,
-        topics: entitiesState.topics,
-        ui: uiState,
-        sidebar: uiState.sidebar,
-        aiSettings: settingsState.aiSettings,
-        learningSettings: settingsState.learningSettings,
-        userProfile: settingsState.userProfile,
-        learnings: settingsState.learnings,
-        nedSettings: settingsState.nedSettings,
-        activeSessionId: null,
-        nedConversation: uiState.nedConversation,
-      } as any;
-
-      // Stream response
-      for await (const chunk of nedService.sendMessage(
-        CONVERSATION_ID,
-        userMessage,
-        reconstructedState,
-        async (toolCall) => {
-          console.log('[NedChat] Executing tool:', toolCall.name, toolCall.input);
-          // Execute tool
-          const result = await toolExecutor.execute(toolCall);
-          console.log('[NedChat] Tool result:', result);
-
-          // Update token usage
-          // TODO: Track actual token usage from API response
-
-          return result;
-        },
-        async (toolName: string) => {
-          console.log('[NedChat] Checking permission for:', toolName);
-          // Check permission
-          return await checkPermission(toolName);
-        }
-      )) {
-        console.log('[NedChat] Received chunk:', chunk);
-
-        // Update processing status based on chunk type
-        if (chunk.type === 'thinking') {
-          setProcessingStatus('Thinking...');
-        } else if (chunk.type === 'tool-use') {
-          // Map tool names to friendly status messages
-          const statusMessages: Record<string, string> = {
-            'query_context_agent': 'Searching your notes...',
-            'get_current_datetime': 'Getting current time...',
-            'create_task': 'Creating task...',
-            'update_task': 'Updating task...',
-            'delete_task': 'Deleting task...',
-            'create_note': 'Creating note...',
-            'update_note': 'Updating note...',
-            'delete_note': 'Deleting note...',
-          };
-          setProcessingStatus(statusMessages[chunk.toolName || ''] || 'Working...');
-        } else if (chunk.type === 'tool-result') {
-          setProcessingStatus('Analyzing results...');
-        } else if (chunk.type === 'text') {
-          setProcessingStatus('Responding...');
-        }
-
-        // Work with local contents array during streaming
-        const updatedContents = [...streamingContents];
-
-        // Process chunk
-        if (chunk.type === 'text') {
-          // Check if we already have cards (tool results) - if so, this is followup text
-          const hasCards = updatedContents.some(c => c.type === 'task-list' || c.type === 'note-list');
-
-          if (hasCards) {
-            // Followup text after tool execution - check if we already have a followup text block
-            const followupTextIdx = updatedContents.findIndex((c, idx) => {
-              // Find text block that comes after cards
-              if (c.type !== 'text') return false;
-              const hasCardsBefore = updatedContents.slice(0, idx).some(x => x.type === 'task-list' || x.type === 'note-list');
-              return hasCardsBefore;
-            });
-
-            if (followupTextIdx >= 0) {
-              // Append to existing followup text
-              updatedContents[followupTextIdx] = {
-                ...updatedContents[followupTextIdx],
-                content: (updatedContents[followupTextIdx].content || '') + chunk.content,
-              };
-            } else {
-              // Create new followup text block
-              updatedContents.push({ type: 'text', content: chunk.content });
-            }
-          } else {
-            // Initial text - find or create first text block
-            const textContentIdx = updatedContents.findIndex(c => c.type === 'text');
-            if (textContentIdx >= 0) {
-              // Append to existing initial text
-              updatedContents[textContentIdx] = {
-                ...updatedContents[textContentIdx],
-                content: (updatedContents[textContentIdx].content || '') + chunk.content,
-              };
-            } else {
-              // Create new initial text block
-              updatedContents.push({ type: 'text', content: chunk.content });
-            }
-          }
-        } else if (chunk.type === 'tool-use') {
-          updatedContents.push({
-            type: 'tool-use',
-            toolName: chunk.toolName,
-            toolStatus: 'pending',
-          });
-        } else if (chunk.type === 'tool-result') {
-          console.log('[NedChat] Tool result chunk:', chunk);
-          // Update tool status
-          const toolIdx = updatedContents.findIndex(
-            c => c.type === 'tool-use' && c.toolName === chunk.toolName
-          );
-          if (toolIdx >= 0) {
-            updatedContents[toolIdx] = {
-              ...updatedContents[toolIdx],
-              toolStatus: chunk.isError ? 'error' : 'success',
-            };
-          }
-
-          // Check for change tracking metadata
-          if (chunk.result?.operation && chunk.result?.item_type) {
-            const operation = chunk.result.operation;
-            const itemType = chunk.result.item_type;
-            const item = chunk.result.item;
-            const changes = chunk.result.changes || [];
-
-            console.log('[NedChat] Change tracking:', { operation, itemType, item, changes });
-
-            if (operation === 'create') {
-              // Add created card
-              if (itemType === 'task' && item) {
-                updatedContents.push({
-                  type: 'task-created',
-                  task: item,
-                  timestamp: new Date().toISOString(),
-                });
-              } else if (itemType === 'note' && item) {
-                updatedContents.push({
-                  type: 'note-created',
-                  note: item,
-                  timestamp: new Date().toISOString(),
-                });
-              }
-            } else if (operation === 'update' && changes.length > 0) {
-              // Add update card
-              if (itemType === 'task' && item) {
-                updatedContents.push({
-                  type: 'task-update',
-                  taskId: item.id,
-                  taskTitle: item.title,
-                  changes,
-                  timestamp: new Date().toISOString(),
-                });
-              } else if (itemType === 'note' && item) {
-                updatedContents.push({
-                  type: 'note-update',
-                  noteId: item.id,
-                  noteSummary: item.summary,
-                  changes,
-                  timestamp: new Date().toISOString(),
-                });
-              }
-            }
-          }
-
-          // Add task/note/session lists if present in result (for query operations)
-          if (chunk.result?.full_tasks && chunk.result.full_tasks.length > 0) {
-            console.log('[NedChat] Adding task cards:', chunk.result.full_tasks.length);
-            updatedContents.push({
-              type: 'task-list',
-              tasks: chunk.result.full_tasks,
-            });
-          }
-          if (chunk.result?.full_notes && chunk.result.full_notes.length > 0) {
-            console.log('[NedChat] Adding note cards:', chunk.result.full_notes.length);
-            updatedContents.push({
-              type: 'note-list',
-              notes: chunk.result.full_notes,
-            });
-          }
-          if (chunk.result?.full_sessions && chunk.result.full_sessions.length > 0) {
-            console.log('[NedChat] Adding session cards:', chunk.result.full_sessions.length);
-            updatedContents.push({
-              type: 'session-list',
-              sessions: chunk.result.full_sessions,
-            });
-          }
-        } else if (chunk.type === 'thinking' && settingsState.nedSettings.showThinking) {
-          updatedContents.push({
-            type: 'thinking',
-            content: chunk.content,
-          });
-        } else if (chunk.type === 'error') {
-          updatedContents.push({
-            type: 'error',
-            content: chunk.content,
-          });
-        }
-
-        // Update local contents
-        streamingContents = updatedContents;
-
-        // Dispatch the update to trigger UI re-render
-        uiDispatch({
-          type: 'UPDATE_NED_MESSAGE',
-          payload: {
-            id: assistantMsg.id,
-            contents: updatedContents,
-          },
-        });
-      }
-
-      // Safety check: ensure we don't have an empty assistant message
-      const finalMessages = uiState.nedConversation?.messages || [];
-      const lastMsg = finalMessages[finalMessages.length - 1];
-      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === assistantMsg.id && lastMsg.contents.length === 0) {
-        console.warn('[NedChat] Empty assistant message detected, adding fallback');
-        uiDispatch({
-          type: 'UPDATE_NED_MESSAGE',
-          payload: {
-            id: assistantMsg.id,
-            contents: [{
-              type: 'text',
-              content: "I'm sorry, I didn't generate a response. Please try asking again.",
-            }],
-          },
-        });
-      }
-
+      await sendStreaming(userMessage);
     } catch (err) {
       console.error('[NedChat] Error:', err);
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       setError(errorMessage);
-
-      // Also add error to the assistant message so user sees something
-      const finalMessages = uiState.nedConversation?.messages || [];
-      const lastMsg = finalMessages[finalMessages.length - 1];
-      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === assistantMsg.id && lastMsg.contents.length === 0) {
-        uiDispatch({
-          type: 'UPDATE_NED_MESSAGE',
-          payload: {
-            id: assistantMsg.id,
-            contents: [{
-              type: 'error',
-              content: `Sorry, I encountered an error: ${errorMessage}`,
-            }],
-          },
-        });
-      }
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -604,18 +589,9 @@ export const NedChat: React.FC = () => {
 
   // Session actions - Navigate to sessions tab and select session
   const handleSessionView = (sessionId: string) => {
-    // First, dispatch an action to set the selected session
-    // SessionsZone can listen for this and open the session detail view
-    uiDispatch({
-      type: 'SET_UI_STATE',
-      payload: {
-        selectedSessionId: sessionId,
-      },
-    });
-
-    // Then navigate to sessions tab
+    // Navigate to sessions tab
     uiDispatch({ type: 'SET_ACTIVE_TAB', payload: 'sessions' });
-
+    // Note: Session selection is handled by SessionsZone component
     console.log('[NedChat] Navigating to sessions tab for session:', sessionId);
   };
 

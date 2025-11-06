@@ -194,3 +194,48 @@ pub struct ClaudeStreamingRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extended_thinking: Option<bool>,
 }
+
+// ============================================================================
+// Tauri Provider Types
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum TauriProviderType {
+    Anthropic,
+    Openai,
+    Google,
+    Ollama,
+}
+
+// Tauri chat completion request - wraps baleybots ChatCompletionParams
+// The params are sent as JSON from TypeScript, so we use serde_json::Value
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TauriChatCompletionRequest {
+    pub provider_type: TauriProviderType,
+    pub model: String,
+    // ChatCompletionParams from baleybots - sent as JSON
+    pub params: serde_json::Value,
+    // ProviderConfig from baleybots - sent as JSON (API key will be injected from Tauri store)
+    pub config: serde_json::Value,
+}
+
+// Tauri stream event payload - wraps baleybots StreamEvent
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TauriStreamEventPayload {
+    pub stream_id: String,
+    // StreamEvent from baleybots - sent as JSON
+    pub event: serde_json::Value,
+}
+
+// Tauri stream start response
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TauriStreamStartResponse {
+    pub stream_id: String,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
