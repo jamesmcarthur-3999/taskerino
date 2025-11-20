@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/392</span>
+                <span class='fraction'>0/389</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/392</span>
+                <span class='fraction'>0/389</span>
             </div>
         
             
@@ -631,13 +631,7 @@
 <a name='L566'></a><a href='#L566'>566</a>
 <a name='L567'></a><a href='#L567'>567</a>
 <a name='L568'></a><a href='#L568'>568</a>
-<a name='L569'></a><a href='#L569'>569</a>
-<a name='L570'></a><a href='#L570'>570</a>
-<a name='L571'></a><a href='#L571'>571</a>
-<a name='L572'></a><a href='#L572'>572</a>
-<a name='L573'></a><a href='#L573'>573</a>
-<a name='L574'></a><a href='#L574'>574</a>
-<a name='L575'></a><a href='#L575'>575</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L569'></a><a href='#L569'>569</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -920,16 +914,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -951,13 +939,13 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1491,51 +1479,45 @@ interface JobItemProps {
 <span class="cstat-no" title="statement not covered" >  const [error, setError] = useState&lt;string | null&gt;(null);</span>
 &nbsp;
   // ========================================
-  // Data Fetching - MEMORY LEAK FIX
+  // Data Fetching
   // ========================================
-  // FIX: Use refresh counter pattern to avoid fetchData dependency in event listeners
-  // This prevents both interval accumulation AND listener accumulation
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  const [refreshCounter, setRefreshCounter] = useState(0);</span>
+<span class="cstat-no" title="statement not covered" >  const fetchData = useCallback(async () =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >    try {</span>
+<span class="cstat-no" title="statement not covered" >      const manager = getBackgroundEnrichmentManager();</span>
+<span class="cstat-no" title="statement not covered" >      const queue = manager.getQueue();</span>
 &nbsp;
-  // Fetch data when refreshCounter changes
-<span class="cstat-no" title="statement not covered" >  useEffect(() =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    const fetchData = async () =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      try {</span>
-<span class="cstat-no" title="statement not covered" >        const manager = getBackgroundEnrichmentManager();</span>
-<span class="cstat-no" title="statement not covered" >        const queue = manager.getQueue();</span>
-&nbsp;
-<span class="cstat-no" title="statement not covered" >        if (!queue) {</span>
-<span class="cstat-no" title="statement not covered" >          throw new Error('Queue not initialized');</span>
-<span class="cstat-no" title="statement not covered" >        }</span>
-&nbsp;
-        // Get all jobs
-<span class="cstat-no" title="statement not covered" >        const allJobs = await queue.getAllJobs();</span>
-<span class="cstat-no" title="statement not covered" >        setJobs(allJobs);</span>
-&nbsp;
-        // Get queue status
-<span class="cstat-no" title="statement not covered" >        const queueStatus = await manager.getQueueStatus();</span>
-<span class="cstat-no" title="statement not covered" >        setStatus(queueStatus);</span>
-&nbsp;
-<span class="cstat-no" title="statement not covered" >        setError(null);</span>
-<span class="cstat-no" title="statement not covered" >      } catch (err) {</span>
-<span class="cstat-no" title="statement not covered" >        console.error('[EnrichmentPanel] Failed to fetch data:', err);</span>
-<span class="cstat-no" title="statement not covered" >        setError(err instanceof Error ? err.message : 'Failed to load enrichment queue');</span>
-<span class="cstat-no" title="statement not covered" >      } finally {</span>
-<span class="cstat-no" title="statement not covered" >        setLoading(false);</span>
+<span class="cstat-no" title="statement not covered" >      if (!queue) {</span>
+<span class="cstat-no" title="statement not covered" >        throw new Error('Queue not initialized');</span>
 <span class="cstat-no" title="statement not covered" >      }</span>
-<span class="cstat-no" title="statement not covered" >    };</span>
 &nbsp;
+      // Get all jobs
+<span class="cstat-no" title="statement not covered" >      const allJobs = await queue.getAllJobs();</span>
+<span class="cstat-no" title="statement not covered" >      setJobs(allJobs);</span>
+&nbsp;
+      // Get queue status
+<span class="cstat-no" title="statement not covered" >      const queueStatus = await manager.getQueueStatus();</span>
+<span class="cstat-no" title="statement not covered" >      setStatus(queueStatus);</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >      setError(null);</span>
+<span class="cstat-no" title="statement not covered" >    } catch (err) {</span>
+<span class="cstat-no" title="statement not covered" >      console.error('[EnrichmentPanel] Failed to fetch data:', err);</span>
+<span class="cstat-no" title="statement not covered" >      setError(err instanceof Error ? err.message : 'Failed to load enrichment queue');</span>
+<span class="cstat-no" title="statement not covered" >    } finally {</span>
+<span class="cstat-no" title="statement not covered" >      setLoading(false);</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" >  }, []);</span>
+&nbsp;
+  // Initial load
+<span class="cstat-no" title="statement not covered" >  useEffect(() =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    fetchData();</span>
-<span class="cstat-no" title="statement not covered" >  }, [refreshCounter]); // Fetch when counter changes</span>
+<span class="cstat-no" title="statement not covered" >  }, [fetchData]);</span>
 &nbsp;
   // Auto-refresh every 2 seconds
 <span class="cstat-no" title="statement not covered" >  useEffect(() =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    const interval = setInterval(() =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      setRefreshCounter(c =&gt; c + 1);</span>
-<span class="cstat-no" title="statement not covered" >    }, 2000);</span>
+<span class="cstat-no" title="statement not covered" >    const interval = setInterval(fetchData, 2000);</span>
 <span class="cstat-no" title="statement not covered" >    return () =&gt; clearInterval(interval);</span>
-<span class="cstat-no" title="statement not covered" >  }, []); // Stable - no dependencies</span>
+<span class="cstat-no" title="statement not covered" >  }, [fetchData]);</span>
 &nbsp;
   // Subscribe to queue events
 <span class="cstat-no" title="statement not covered" >  useEffect(() =&gt; {</span>
@@ -1546,9 +1528,9 @@ interface JobItemProps {
 <span class="cstat-no" title="statement not covered" >      return;</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
-    // Event handlers that trigger refresh via counter
+    // Event handlers that trigger refresh
 <span class="cstat-no" title="statement not covered" >    const handleJobUpdate = () =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      setRefreshCounter(c =&gt; c + 1); // Trigger refresh without fetchData dependency</span>
+<span class="cstat-no" title="statement not covered" >      fetchData();</span>
 <span class="cstat-no" title="statement not covered" >    };</span>
 &nbsp;
     // Subscribe to all events
@@ -1570,7 +1552,7 @@ interface JobItemProps {
 <span class="cstat-no" title="statement not covered" >      queue.off('job-cancelled', handleJobUpdate);</span>
 <span class="cstat-no" title="statement not covered" >      queue.off('job-retry', handleJobUpdate);</span>
 <span class="cstat-no" title="statement not covered" >    };</span>
-<span class="cstat-no" title="statement not covered" >  }, []); // Stable - no dependencies, prevents listener accumulation</span>
+<span class="cstat-no" title="statement not covered" >  }, [fetchData]);</span>
 &nbsp;
   // ========================================
   // Job Actions
@@ -1581,26 +1563,26 @@ interface JobItemProps {
 <span class="cstat-no" title="statement not covered" >      const manager = getBackgroundEnrichmentManager();</span>
 <span class="cstat-no" title="statement not covered" >      await manager.cancelEnrichment(sessionId);</span>
 &nbsp;
-      // Refresh data via counter (consistent with event handlers)
-<span class="cstat-no" title="statement not covered" >      setRefreshCounter(c =&gt; c + 1);</span>
+      // Refresh data
+<span class="cstat-no" title="statement not covered" >      await fetchData();</span>
 <span class="cstat-no" title="statement not covered" >    } catch (err) {</span>
 <span class="cstat-no" title="statement not covered" >      console.error('[EnrichmentPanel] Failed to cancel job:', err);</span>
 <span class="cstat-no" title="statement not covered" >      alert('Failed to cancel job: ' + (err instanceof Error ? err.message : 'Unknown error'));</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
-<span class="cstat-no" title="statement not covered" >  }, []);</span>
+<span class="cstat-no" title="statement not covered" >  }, [fetchData]);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  const handleRetry = useCallback(async (sessionId: string) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      const manager = getBackgroundEnrichmentManager();</span>
 <span class="cstat-no" title="statement not covered" >      await manager.retryEnrichment(sessionId);</span>
 &nbsp;
-      // Refresh data via counter (consistent with event handlers)
-<span class="cstat-no" title="statement not covered" >      setRefreshCounter(c =&gt; c + 1);</span>
+      // Refresh data
+<span class="cstat-no" title="statement not covered" >      await fetchData();</span>
 <span class="cstat-no" title="statement not covered" >    } catch (err) {</span>
 <span class="cstat-no" title="statement not covered" >      console.error('[EnrichmentPanel] Failed to retry job:', err);</span>
 <span class="cstat-no" title="statement not covered" >      alert('Failed to retry job: ' + (err instanceof Error ? err.message : 'Unknown error'));</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
-<span class="cstat-no" title="statement not covered" >  }, []);</span>
+<span class="cstat-no" title="statement not covered" >  }, [fetchData]);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  const handleView = useCallback((sessionId: string) =&gt; {</span>
     // Navigate to session (implementation depends on routing setup)
@@ -1634,7 +1616,7 @@ interface JobItemProps {
 <span class="cstat-no" title="statement not covered" >      animate={{ opacity: 1, y: 0 }}</span>
 <span class="cstat-no" title="statement not covered" >      exit={{ opacity: 0, y: -20 }}</span>
 <span class="cstat-no" title="statement not covered" >      transition={{ duration: 0.2 }}</span>
-<span class="cstat-no" title="statement not covered" >      className={`absolute top-full right-0 mt-2 w-96 max-h-[600px] overflow-hidden ${getGlassClasses('strong')} ${getRadiusClass('modal')} ${SHADOWS.elevated} border border-white/20 dark:border-gray-700 z-[100]`}</span>
+<span class="cstat-no" title="statement not covered" >      className={`absolute top-full right-0 mt-2 w-96 max-h-[600px] overflow-hidden ${getGlassClasses('strong')} ${getRadiusClass('panel')} ${SHADOWS.elevated} border border-white/20 dark:border-gray-700 z-[100]`}</span>
     &gt;
       {/* Header */}
 <span class="cstat-no" title="statement not covered" >      &lt;div className="sticky top-0 z-10 px-6 py-4 bg-gradient-to-r from-purple-500/10 to-blue-600/10 dark:from-purple-500/20 dark:to-blue-600/20 border-b border-white/10 dark:border-gray-700/50 backdrop-blur-xl"&gt;</span>
@@ -1792,7 +1774,7 @@ interface JobItemProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-11-02T19:20:07.742Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

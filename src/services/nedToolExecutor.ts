@@ -8,7 +8,6 @@
 import type { AppState, Session } from '../types';
 import { EntityType, RelationshipType } from '../types/relationships';
 import type { ToolCall, ToolResult } from './nedTools';
-import { contextAgent } from './contextAgent';
 import { sessionsQueryAgent } from './sessionsQueryAgent';
 import { nedMemory } from './nedMemory';
 import { sessionsAgentService } from './sessionsAgentService';
@@ -47,8 +46,6 @@ export class NedToolExecutor {
       switch (tool.name) {
         // ==================== READ TOOLS ====================
 
-        case 'query_context_agent':
-          return await this.queryContextAgent(tool);
 
         case 'get_current_datetime':
           return this.getCurrentDatetime(tool);
@@ -154,101 +151,6 @@ export class NedToolExecutor {
   /**
    * Query Context Agent for information
    */
-  private async queryContextAgent(tool: ToolCall): Promise<ToolResult> {
-    const { query, agent_thread_id } = tool.input;
-
-    const result = await contextAgent.search(
-      query,
-      this.appState.notes,
-      this.appState.tasks,
-      this.appState.companies,
-      this.appState.contacts,
-      this.appState.topics,
-      agent_thread_id
-    );
-
-    // Return FULL data to Claude - let Claude's big context handle it!
-    // Includes ALL metadata and relationships (task.context, topics, etc.)
-    return {
-      tool_use_id: tool.id,
-      content: {
-        summary: result.summary,
-        tasks: result.tasks.map(t => {
-          // Get topic from relationships
-          const topicRel = t.relationships.find(r => r.targetType === EntityType.TOPIC);
-          const topicId = topicRel?.targetId;
-          const topic = topicId ? this.appState.topics.find(top => top.id === topicId) : null;
-
-          // Get related notes from relationships
-          const noteRelIds = t.relationships
-            .filter(r => r.targetType === EntityType.NOTE)
-            .map(r => r.targetId);
-          const relatedNotes = this.appState.notes.filter(n => noteRelIds.includes(n.id));
-
-          return {
-            id: t.id,
-            title: t.title,
-            description: t.description,
-            priority: t.priority,
-            status: t.status,
-            done: t.done,
-            dueDate: t.dueDate,
-            dueTime: t.dueTime,
-            tags: t.tags,
-            sourceNoteId: noteRelIds[0], // First note for backward compat
-            createdBy: t.createdBy,
-            createdAt: t.createdAt,
-            topic: topic ? {
-              id: topic.id,
-              name: topic.name,
-            } : null,
-            related_notes_summary: relatedNotes.map(n => ({
-              id: n.id,
-              summary: n.summary,
-              timestamp: n.timestamp,
-            })),
-          };
-        }),
-        notes: result.notes.map(n => {
-          // Get topic from relationships
-          const topicRel = n.relationships.find(r => r.targetType === EntityType.TOPIC);
-          const topicId = topicRel?.targetId;
-          const topic = topicId ? this.appState.topics.find(top => top.id === topicId) : null;
-
-          // Get related tasks - tasks that have a relationship to this note
-          const relatedTasks = this.appState.tasks.filter(t =>
-            t.relationships.some(r => r.targetType === EntityType.NOTE && r.targetId === n.id)
-          );
-
-          return {
-            id: n.id,
-            content: n.content,
-            summary: n.summary,
-            timestamp: n.timestamp,
-            lastUpdated: n.lastUpdated,
-            source: n.source,
-            sourceText: n.sourceText,
-            tags: n.tags,
-            metadata: n.metadata,
-            topic: topic ? {
-              id: topic.id,
-              name: topic.name,
-            } : null,
-            related_tasks_count: relatedTasks.length,
-          };
-        }),
-        total_count: {
-          tasks: result.tasks.length,
-          notes: result.notes.length,
-        },
-        suggestions: result.suggestions,
-        thread_id: result.thread_id,
-      },
-      // UI also gets full objects for rendering
-      full_notes: result.notes,
-      full_tasks: result.tasks,
-    };
-  }
 
   /**
    * Get current date and time

@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/141</span>
+                <span class='fraction'>0/139</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/141</span>
+                <span class='fraction'>0/139</span>
             </div>
         
             
@@ -325,10 +325,7 @@
 <a name='L260'></a><a href='#L260'>260</a>
 <a name='L261'></a><a href='#L261'>261</a>
 <a name='L262'></a><a href='#L262'>262</a>
-<a name='L263'></a><a href='#L263'>263</a>
-<a name='L264'></a><a href='#L264'>264</a>
-<a name='L265'></a><a href='#L265'>265</a>
-<a name='L266'></a><a href='#L266'>266</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L263'></a><a href='#L263'>263</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -352,7 +349,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -430,7 +426,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -578,7 +573,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -615,7 +609,6 @@
 <span class="cstat-no" title="statement not covered" >import React, { useState, useEffect, useCallback } from 'react';</span>
 <span class="cstat-no" title="statement not covered" >import { FeatureTooltip } from './FeatureTooltip';</span>
 <span class="cstat-no" title="statement not covered" >import { useUI } from '../context/UIContext';</span>
-import type { OnboardingState } from '../types';
 &nbsp;
 // Tooltip IDs for tracking dismissals
 <span class="cstat-no" title="statement not covered" >const TOOLTIP_IDS = {</span>
@@ -627,7 +620,7 @@ import type { OnboardingState } from '../types';
 // Tooltip configurations
 interface TooltipConfig {
   id: string;
-  featureFlag: keyof OnboardingState['featureIntroductions'];
+  featureFlag: keyof typeof import('../types').OnboardingState['featureIntroductions'];
   position: 'top' | 'bottom' | 'left' | 'right' | 'bottom-right' | 'center';
   title: string;
   message: string | React.ReactNode;
@@ -691,9 +684,8 @@ interface TooltipTriggerProps {
 <span class="cstat-no" title="statement not covered" >  const [localTrigger, setLocalTrigger] = useState(false);</span>
 &nbsp;
   // Check if tooltip should show
-<span class="cstat-no" title="statement not covered" >  const featureFlag = config.featureFlag as keyof OnboardingState['featureIntroductions'];</span>
 <span class="cstat-no" title="statement not covered" >  const shouldShow =</span>
-<span class="cstat-no" title="statement not covered" >    !state.onboarding.featureIntroductions[featureFlag] &amp;&amp;</span>
+<span class="cstat-no" title="statement not covered" >    !state.onboarding.featureIntroductions[config.featureFlag] &amp;&amp;</span>
 <span class="cstat-no" title="statement not covered" >    !state.onboarding.dismissedTooltips.includes(config.id) &amp;&amp;</span>
 <span class="cstat-no" title="statement not covered" >    (triggerCondition || localTrigger);</span>
 &nbsp;
@@ -845,9 +837,8 @@ interface AllTooltipsProps {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  const shouldShowTooltip = useCallback((tooltipKey: keyof typeof TOOLTIP_CONFIGS): boolean =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    const config = TOOLTIP_CONFIGS[tooltipKey];</span>
-<span class="cstat-no" title="statement not covered" >    const featureFlag = config.featureFlag as keyof OnboardingState['featureIntroductions'];</span>
 <span class="cstat-no" title="statement not covered" >    return (</span>
-<span class="cstat-no" title="statement not covered" >      !state.onboarding.featureIntroductions[featureFlag] &amp;&amp;</span>
+<span class="cstat-no" title="statement not covered" >      !state.onboarding.featureIntroductions[config.featureFlag] &amp;&amp;</span>
 <span class="cstat-no" title="statement not covered" >      !state.onboarding.dismissedTooltips.includes(config.id)</span>
     );
 <span class="cstat-no" title="statement not covered" >  }, [state.onboarding.featureIntroductions, state.onboarding.dismissedTooltips]);</span>
@@ -865,7 +856,7 @@ interface AllTooltipsProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-11-02T19:20:07.742Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

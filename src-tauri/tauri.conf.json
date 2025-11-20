@@ -33,7 +33,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' asset:; connect-src 'self' https://api.openai.com https://api.anthropic.com; font-src 'self';",
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' asset:; connect-src 'self' tauri://localhost https://api.openai.com https://api.anthropic.com; font-src 'self';",
       "assetProtocol": {
         "enable": true,
         "scope": ["$APPDATA/**"]

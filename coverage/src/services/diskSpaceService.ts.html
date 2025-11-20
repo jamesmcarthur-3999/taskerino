@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">10.25% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/47</span>
+                <span class='fraction'>4/39</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>1/1</span>
-            </div>
-        
-            
-            <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
-                <span class="quiet">Functions</span>
-                <span class='fraction'>1/1</span>
+                <span class='fraction'>0/0</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>0/6</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">10.25% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/47</span>
+                <span class='fraction'>4/39</span>
             </div>
         
             
@@ -172,16 +172,7 @@
 <a name='L107'></a><a href='#L107'>107</a>
 <a name='L108'></a><a href='#L108'>108</a>
 <a name='L109'></a><a href='#L109'>109</a>
-<a name='L110'></a><a href='#L110'>110</a>
-<a name='L111'></a><a href='#L111'>111</a>
-<a name='L112'></a><a href='#L112'>112</a>
-<a name='L113'></a><a href='#L113'>113</a>
-<a name='L114'></a><a href='#L114'>114</a>
-<a name='L115'></a><a href='#L115'>115</a>
-<a name='L116'></a><a href='#L116'>116</a>
-<a name='L117'></a><a href='#L117'>117</a>
-<a name='L118'></a><a href='#L118'>118</a>
-<a name='L119'></a><a href='#L119'>119</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L110'></a><a href='#L110'>110</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -201,10 +192,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -248,15 +238,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -287,7 +269,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -319,10 +301,9 @@
  * ```
  */
 &nbsp;
-<span class="cstat-no" title="statement not covered" >import { invoke } from '@tauri-apps/api/core';</span>
+import { invoke } from '@tauri-apps/api/core';
 import type { DiskSpaceInfo } from '../types/storage';
-<span class="cstat-no" title="statement not covered" >import { parseStorageError, StorageFullError } from '../types/storage';</span>
-<span class="cstat-no" title="statement not covered" >import { safeStringify } from '../utils/serializationUtils';</span>
+import { parseStorageError, StorageFullError } from '../types/storage';
 &nbsp;
 /**
  * Check if sufficient disk space is available
@@ -331,7 +312,7 @@ import type { DiskSpaceInfo } from '../types/storage';
  * @throws {StorageFullError} If insufficient disk space
  * @throws {Error} For other filesystem errors
  */
-<span class="cstat-no" title="statement not covered" >export async function checkDiskSpace(requiredBytes: number): Promise&lt;void&gt; {</span>
+<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export async function checkDiskSpace(requiredBytes: number): Promise&lt;void&gt; {</span></span>
 <span class="cstat-no" title="statement not covered" >  try {</span>
 <span class="cstat-no" title="statement not covered" >    await invoke('check_storage_space', { requiredBytes });</span>
 <span class="cstat-no" title="statement not covered" >  } catch (error) {</span>
@@ -345,7 +326,7 @@ import type { DiskSpaceInfo } from '../types/storage';
  *
  * @returns Disk space info (total, available, used)
  */
-<span class="cstat-no" title="statement not covered" >export async function getDiskSpaceInfo(): Promise&lt;DiskSpaceInfo&gt; {</span>
+<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export async function getDiskSpaceInfo(): Promise&lt;DiskSpaceInfo&gt; {</span></span>
 <span class="cstat-no" title="statement not covered" >  return await invoke&lt;DiskSpaceInfo&gt;('get_storage_info');</span>
 <span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
@@ -354,7 +335,7 @@ import type { DiskSpaceInfo } from '../types/storage';
  *
  * Opens Finder (macOS), Explorer (Windows), or file manager (Linux)
  */
-<span class="cstat-no" title="statement not covered" >export async function openStorageLocation(): Promise&lt;void&gt; {</span>
+<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export async function openStorageLocation(): Promise&lt;void&gt; {</span></span>
 <span class="cstat-no" title="statement not covered" >  await invoke('open_storage_location');</span>
 <span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
@@ -366,17 +347,9 @@ import type { DiskSpaceInfo } from '../types/storage';
  * @param data Data to estimate
  * @returns Estimated size in bytes
  */
-<span class="cstat-no" title="statement not covered" >export function estimateDataSize(data: unknown): number {</span>
+export <span class="fstat-no" title="function not covered" >function estimateDataSize(data: unknown): number {</span>
 <span class="cstat-no" title="statement not covered" >  try {</span>
-    // Use safeStringify to handle cyclic structures
-<span class="cstat-no" title="statement not covered" >    const json = safeStringify(data, {</span>
-<span class="cstat-no" title="statement not covered" >      maxDepth: 50,</span>
-<span class="cstat-no" title="statement not covered" >      removeUndefined: false,</span>
-<span class="cstat-no" title="statement not covered" >      removeFunctions: true,</span>
-<span class="cstat-no" title="statement not covered" >      removeSymbols: true,</span>
-<span class="cstat-no" title="statement not covered" >      detectCircular: true,</span>
-<span class="cstat-no" title="statement not covered" >      logWarnings: false,</span>
-<span class="cstat-no" title="statement not covered" >    });</span>
+<span class="cstat-no" title="statement not covered" >    const json = JSON.stringify(data);</span>
     // Add 20% overhead for formatting, metadata, compression artifacts
 <span class="cstat-no" title="statement not covered" >    return Math.ceil(json.length * 1.2);</span>
 <span class="cstat-no" title="statement not covered" >  } catch (error) {</span>
@@ -394,7 +367,7 @@ import type { DiskSpaceInfo } from '../types/storage';
  * @param data Data to write
  * @throws {StorageFullError} If insufficient disk space
  */
-<span class="cstat-no" title="statement not covered" >export async function checkDiskSpaceForData(data: unknown): Promise&lt;void&gt; {</span>
+<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export async function checkDiskSpaceForData(data: unknown): Promise&lt;void&gt; {</span></span>
 <span class="cstat-no" title="statement not covered" >  const estimatedSize = estimateDataSize(data);</span>
 <span class="cstat-no" title="statement not covered" >  await checkDiskSpace(estimatedSize);</span>
 <span class="cstat-no" title="statement not covered" >}</span>
@@ -405,7 +378,7 @@ import type { DiskSpaceInfo } from '../types/storage';
  * @param bytes Number of bytes
  * @returns Formatted string (e.g., "1.5 GB")
  */
-<span class="cstat-no" title="statement not covered" >export function formatBytes(bytes: number): string {</span>
+export <span class="fstat-no" title="function not covered" >function formatBytes(bytes: number): string {</span>
 <span class="cstat-no" title="statement not covered" >  const units = ['B', 'KB', 'MB', 'GB', 'TB'];</span>
 <span class="cstat-no" title="statement not covered" >  let size = bytes;</span>
 <span class="cstat-no" title="statement not covered" >  let unitIndex = 0;</span>
@@ -424,7 +397,7 @@ import type { DiskSpaceInfo } from '../types/storage';
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-11-02T19:20:07.742Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

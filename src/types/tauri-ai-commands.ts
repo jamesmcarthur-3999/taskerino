@@ -273,134 +273,34 @@ export interface ClaudeSystemBlock {
   };
 }
 
-/**
- * Request for streaming responses from Claude API.
- */
-export interface ClaudeStreamingRequest {
-  /** Model identifier (e.g., "claude-3-opus-20240229") */
-  model: string;
-  /** Maximum number of tokens to generate */
-  maxTokens: number;
-  /** Conversation history */
-  messages: ClaudeMessage[];
-  /** Optional system prompt - can be string or array of blocks with cache control */
-  system?: string | ClaudeSystemBlock[];
-  /** Optional temperature for response randomness (0.0-1.0) */
-  temperature?: number;
-  /** Optional array of tools the model can use */
-  tools?: ClaudeTool[];
-  /** Whether to stream the response */
-  stream: boolean;
-  /** Enable extended thinking for complex reasoning (Claude Sonnet 4.5+) */
-  extended_thinking?: boolean;
-}
+// ============================================================================
+// BaleyBots Types
+// ============================================================================
 
-/**
- * Message information from streaming start event.
- */
-export interface ClaudeStreamMessage {
-  /** Unique identifier for the message */
-  id: string;
-  /** Model generating the response */
-  model: string;
-  /** Role of the message sender */
-  role: string;
-  /** Initial content (usually empty array) */
-  content: any[];
-}
-
-/**
- * Content block types in streaming responses.
- */
-export type ClaudeStreamContentBlock =
-  | {
-      type: "text";
-      text: string;
-    }
-  | {
-      type: "tool_use";
-      id: string;
-      name: string;
-      input: Record<string, any>;
-    }
-  | {
-      type: "thinking";
-      text: string;
-    };
-
-/**
- * Delta updates in streaming responses.
- */
-export type ClaudeStreamDelta =
-  | {
-      type: "text_delta";
-      text: string;
-    }
-  | {
-      type: "input_json_delta";
-      partialJson: string;
-    }
-  | {
-      type: "thinking_delta";
-      thinking: string;
-    };
-
-/**
- * Message delta information in streaming responses.
- */
-export interface ClaudeStreamMessageDelta {
-  /** Reason the message stopped */
-  stopReason?: string;
-  /** Stop sequence that triggered the end */
-  stopSequence?: string;
-}
-
-/**
- * Error information in streaming responses.
- */
-export interface ClaudeStreamError {
-  /** Type of error */
-  type: string;
-  /** Error message */
+export interface BaleybotRequest {
+  stream_id: string;
   message: string;
+  model: string;
+  system_prompt?: string;
+  tools?: Record<string, any>;
+  agent_mode: boolean;
+  max_tool_iterations?: number;
 }
 
-/**
- * Chunk types received in Claude streaming responses.
- */
-export type ClaudeStreamChunk =
-  | {
-      type: "message_start";
-      message: ClaudeStreamMessage;
-    }
-  | {
-      type: "content_block_start";
-      index: number;
-      contentBlock: ClaudeStreamContentBlock;
-    }
-  | {
-      type: "content_block_delta";
-      index: number;
-      delta: ClaudeStreamDelta;
-    }
-  | {
-      type: "content_block_stop";
-      index: number;
-    }
-  | {
-      type: "message_delta";
-      delta: ClaudeStreamMessageDelta;
-    }
-  | {
-      type: "message_stop";
-    }
-  | {
-      type: "stream_end";
-    }
-  | {
-      type: "ping";
-    }
-  | {
-      type: "error";
-      error: ClaudeStreamError;
-    };
+export interface BaleybotStreamEvent {
+  streamId: string;
+  event?: {
+    type: string;
+    content?: string;
+    id?: string;
+    toolName?: string;
+    arguments?: Record<string, any>;
+    argumentsDelta?: string;
+    result?: any;
+    error?: string;
+  };
+  type?: string;
+  error?: {
+    message: string;
+  };
+}

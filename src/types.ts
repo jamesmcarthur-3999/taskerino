@@ -1011,9 +1011,6 @@ export interface AppState {
   // Ned AI Assistant Settings
   nedSettings: NedSettings;
 
-  // Ned Conversation
-  nedConversation: NedConversation;
-
   // Sidebar State
   sidebar: {
     isOpen: boolean;

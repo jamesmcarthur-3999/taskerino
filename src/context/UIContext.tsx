@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import type { TabType, Notification, ProcessingJob, SearchHistoryItem, UserPreferences, OnboardingState, NedMessage, NedMessageContent } from '../types';
+import type { TabType, Notification, ProcessingJob, SearchHistoryItem, UserPreferences, OnboardingState } from '../types';
 import { getStorage } from '../services/storage';
 import { generateId } from '../utils/helpers';
 import { debug } from "../utils/debug";
@@ -47,10 +47,6 @@ interface UIState {
     isOpen: boolean;
   };
 
-  // Ned Conversation
-  nedConversation: {
-    messages: NedMessage[];
-  };
 
   // Sidebar
   sidebar: {
@@ -143,10 +139,6 @@ type UIAction =
   | { type: 'RESIZE_SIDEBAR'; payload: number }
   | { type: 'POP_SIDEBAR_HISTORY' }
 
-  // Ned Conversation
-  | { type: 'ADD_NED_MESSAGE'; payload: NedMessage }
-  | { type: 'UPDATE_NED_MESSAGE'; payload: { id: string; contents: NedMessageContent[] } }
-  | { type: 'CLEAR_NED_CONVERSATION' }
 
   // Sub-menu Overlay
   | { type: 'TOGGLE_SUBMENU_OVERLAY' }
@@ -233,9 +225,6 @@ const defaultState: UIState = {
   pendingReviewJobId: undefined,
   nedOverlay: {
     isOpen: false,
-  },
-  nedConversation: {
-    messages: [],
   },
   sidebar: {
     isOpen: false,
@@ -663,36 +652,6 @@ function uiReducer(state: UIState, action: UIAction): UIState {
       };
     }
 
-    // Ned Conversation
-    case 'ADD_NED_MESSAGE':
-      return {
-        ...state,
-        nedConversation: {
-          messages: [...state.nedConversation.messages, action.payload],
-        },
-      };
-
-    case 'UPDATE_NED_MESSAGE': {
-      const messages = state.nedConversation.messages.map(msg =>
-        msg.id === action.payload.id
-          ? { ...msg, contents: action.payload.contents }
-          : msg
-      );
-      return {
-        ...state,
-        nedConversation: {
-          messages,
-        },
-      };
-    }
-
-    case 'CLEAR_NED_CONVERSATION':
-      return {
-        ...state,
-        nedConversation: {
-          messages: [],
-        },
-      };
 
     // Sub-menu Overlay
     case 'TOGGLE_SUBMENU_OVERLAY':

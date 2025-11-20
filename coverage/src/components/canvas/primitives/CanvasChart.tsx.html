@@ -228,7 +228,11 @@
 <a name='L163'></a><a href='#L163'>163</a>
 <a name='L164'></a><a href='#L164'>164</a>
 <a name='L165'></a><a href='#L165'>165</a>
-<a name='L166'></a><a href='#L166'>166</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L166'></a><a href='#L166'>166</a>
+<a name='L167'></a><a href='#L167'>167</a>
+<a name='L168'></a><a href='#L168'>168</a>
+<a name='L169'></a><a href='#L169'>169</a>
+<a name='L170'></a><a href='#L170'>170</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -314,6 +318,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -328,28 +333,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -375,6 +359,30 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -468,7 +476,7 @@ import type { ChartProps } from '../types';
 <span class="cstat-no" title="statement not covered" >            cx="50%"</span>
 <span class="cstat-no" title="statement not covered" >            cy="50%"</span>
 <span class="cstat-no" title="statement not covered" >            labelLine={false}</span>
-<span class="cstat-no" title="statement not covered" >            label={(props: any) =&gt; `${props.name}: ${(props.percent * 100).toFixed(0)}%`}</span>
+<span class="cstat-no" title="statement not covered" >            label={({ name, percent }: { name: string; percent: number }) =&gt; `${name}: ${(percent * 100).toFixed(0)}%`}</span>
 <span class="cstat-no" title="statement not covered" >            outerRadius={type === 'donut' ? 80 : 100}</span>
 <span class="cstat-no" title="statement not covered" >            innerRadius={type === 'donut' ? 50 : 0}</span>
 <span class="cstat-no" title="statement not covered" >            fill="#8884d8"</span>
@@ -479,6 +487,7 @@ import type { ChartProps } from '../types';
 <span class="cstat-no" title="statement not covered" >            ))}</span>
 <span class="cstat-no" title="statement not covered" >          &lt;/Pie&gt;</span>
 <span class="cstat-no" title="statement not covered" >          {tooltip &amp;&amp; &lt;Tooltip /&gt;}</span>
+          {/* @ts-expect-error - React 19 + recharts type compatibility issue */}
 <span class="cstat-no" title="statement not covered" >          {showLegend &amp;&amp; &lt;Legend /&gt;}</span>
 <span class="cstat-no" title="statement not covered" >        &lt;/PieChart&gt;</span>
 <span class="cstat-no" title="statement not covered" >      &lt;/ResponsiveContainer&gt;</span>
@@ -493,6 +502,7 @@ import type { ChartProps } from '../types';
 <span class="cstat-no" title="statement not covered" >          &lt;XAxis dataKey="name" stroke="#6b7280" /&gt;</span>
 <span class="cstat-no" title="statement not covered" >          &lt;YAxis stroke="#6b7280" /&gt;</span>
 <span class="cstat-no" title="statement not covered" >          {tooltip &amp;&amp; &lt;Tooltip /&gt;}</span>
+          {/* @ts-expect-error - React 19 + recharts type compatibility issue */}
 <span class="cstat-no" title="statement not covered" >          {showLegend &amp;&amp; &lt;Legend /&gt;}</span>
 <span class="cstat-no" title="statement not covered" >          {data.datasets.map((dataset, index) =&gt; (</span>
 <span class="cstat-no" title="statement not covered" >            &lt;Line</span>
@@ -518,6 +528,7 @@ import type { ChartProps } from '../types';
 <span class="cstat-no" title="statement not covered" >          &lt;XAxis dataKey="name" stroke="#6b7280" /&gt;</span>
 <span class="cstat-no" title="statement not covered" >          &lt;YAxis stroke="#6b7280" /&gt;</span>
 <span class="cstat-no" title="statement not covered" >          {tooltip &amp;&amp; &lt;Tooltip /&gt;}</span>
+          {/* @ts-expect-error - React 19 + recharts type compatibility issue */}
 <span class="cstat-no" title="statement not covered" >          {showLegend &amp;&amp; &lt;Legend /&gt;}</span>
 <span class="cstat-no" title="statement not covered" >          {data.datasets.map((dataset, index) =&gt; (</span>
 <span class="cstat-no" title="statement not covered" >            &lt;Bar</span>
@@ -540,6 +551,7 @@ import type { ChartProps } from '../types';
 <span class="cstat-no" title="statement not covered" >          &lt;XAxis dataKey="name" stroke="#6b7280" /&gt;</span>
 <span class="cstat-no" title="statement not covered" >          &lt;YAxis stroke="#6b7280" /&gt;</span>
 <span class="cstat-no" title="statement not covered" >          {tooltip &amp;&amp; &lt;Tooltip /&gt;}</span>
+          {/* @ts-expect-error - React 19 + recharts type compatibility issue */}
 <span class="cstat-no" title="statement not covered" >          {showLegend &amp;&amp; &lt;Legend /&gt;}</span>
 <span class="cstat-no" title="statement not covered" >          {data.datasets.map((dataset, index) =&gt; (</span>
 <span class="cstat-no" title="statement not covered" >            &lt;Area</span>
@@ -565,7 +577,7 @@ import type { ChartProps } from '../types';
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-11-02T19:20:07.742Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

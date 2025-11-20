@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/219</span>
+                <span class='fraction'>0/223</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/219</span>
+                <span class='fraction'>0/223</span>
             </div>
         
             
@@ -400,7 +400,14 @@
 <a name='L335'></a><a href='#L335'>335</a>
 <a name='L336'></a><a href='#L336'>336</a>
 <a name='L337'></a><a href='#L337'>337</a>
-<a name='L338'></a><a href='#L338'>338</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L338'></a><a href='#L338'>338</a>
+<a name='L339'></a><a href='#L339'>339</a>
+<a name='L340'></a><a href='#L340'>340</a>
+<a name='L341'></a><a href='#L341'>341</a>
+<a name='L342'></a><a href='#L342'>342</a>
+<a name='L343'></a><a href='#L343'>343</a>
+<a name='L344'></a><a href='#L344'>344</a>
+<a name='L345'></a><a href='#L345'>345</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -486,6 +493,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -507,7 +518,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -524,6 +534,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -534,12 +545,15 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -763,9 +777,9 @@
 &nbsp;
 <span class="cstat-no" title="statement not covered" >import React, { useState } from 'react';</span>
 <span class="cstat-no" title="statement not covered" >import { Sparkles, CheckCircle2, Loader2, AlertCircle, RefreshCw } from 'lucide-react';</span>
-import type { Session, EnrichmentProgress } from '../types';
+import type { Session } from '../types';
 <span class="cstat-no" title="statement not covered" >import { EnrichmentButton } from './EnrichmentButton';</span>
-<span class="cstat-no" title="statement not covered" >import { getBackgroundEnrichmentManager } from '../services/enrichment/BackgroundEnrichmentManager';</span>
+<span class="cstat-no" title="statement not covered" >import { sessionEnrichmentService, type EnrichmentProgress } from '../services/sessionEnrichmentService';</span>
 <span class="cstat-no" title="statement not covered" >import { useUI } from '../context/UIContext';</span>
 <span class="cstat-no" title="statement not covered" >import { useEnrichmentContext } from '../context/EnrichmentContext';</span>
 <span class="cstat-no" title="statement not covered" >import { getStorage } from '../services/storage';</span>
@@ -799,7 +813,7 @@ interface EnrichmentStatusBannerProps {
 &nbsp;
   // Check if session has audio or video data
 <span class="cstat-no" title="statement not covered" >  const hasAudio = session.audioSegments &amp;&amp; session.audioSegments.length &gt; 0;</span>
-<span class="cstat-no" title="statement not covered" >  const hasVideo = Boolean(session.video?.fullVideoAttachmentId);</span>
+<span class="cstat-no" title="statement not covered" >  const hasVideo = session.video?.fullVideoAttachmentId;</span>
 &nbsp;
   // Don't show banner if no enrichable content
 <span class="cstat-no" title="statement not covered" >  if (!hasAudio &amp;&amp; !hasVideo) {</span>
@@ -823,6 +837,10 @@ interface EnrichmentStatusBannerProps {
    */
 <span class="cstat-no" title="statement not covered" >  const handleEnrichment = async () =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    setIsEnriching(true);</span>
+<span class="cstat-no" title="statement not covered" >    setEnrichmentProgress(null);</span>
+&nbsp;
+    // Start tracking in EnrichmentContext for RainbowBorderProgressIndicator
+<span class="cstat-no" title="statement not covered" >    startTracking(session.id, session.name || 'Unnamed Session');</span>
 &nbsp;
     // Notify parent that enrichment is starting
 <span class="cstat-no" title="statement not covered" >    if (onEnrichmentStart) {</span>
@@ -830,54 +848,57 @@ interface EnrichmentStatusBannerProps {
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    try {</span>
-<span class="cstat-no" title="statement not covered" >      console.log('✨ [ENRICHMENT BANNER] Queuing session enrichment...');</span>
+<span class="cstat-no" title="statement not covered" >      console.log('✨ [ENRICHMENT BANNER] Starting session enrichment...');</span>
 &nbsp;
-      // Queue enrichment via BackgroundEnrichmentManager
-<span class="cstat-no" title="statement not covered" >      const manager = await getBackgroundEnrichmentManager();</span>
-<span class="cstat-no" title="statement not covered" >      const jobId = await manager.enqueueSession({</span>
-<span class="cstat-no" title="statement not covered" >        sessionId: session.id,</span>
-<span class="cstat-no" title="statement not covered" >        sessionName: session.name || 'Unnamed Session',</span>
-<span class="cstat-no" title="statement not covered" >        priority: 'high', // User-initiated = high priority</span>
-<span class="cstat-no" title="statement not covered" >        options: {</span>
-<span class="cstat-no" title="statement not covered" >          includeAudio: hasAudio &amp;&amp; !audioCompleted,</span>
-<span class="cstat-no" title="statement not covered" >          includeVideo: hasVideo &amp;&amp; !videoCompleted,</span>
-<span class="cstat-no" title="statement not covered" >          includeSummary: true,</span>
-<span class="cstat-no" title="statement not covered" >          includeCanvas: true</span>
-<span class="cstat-no" title="statement not covered" >        }</span>
+      // Start enrichment with progress tracking
+<span class="cstat-no" title="statement not covered" >      const result = await sessionEnrichmentService.enrichSession(session, {</span>
+<span class="cstat-no" title="statement not covered" >        includeAudio: hasAudio &amp;&amp; !audioCompleted ? true : false,</span>
+<span class="cstat-no" title="statement not covered" >        includeVideo: hasVideo &amp;&amp; !videoCompleted ? true : false,</span>
+<span class="cstat-no" title="statement not covered" >        includeSummary: true,</span>
+<span class="cstat-no" title="statement not covered" >        forceRegenerate: false,</span>
+<span class="cstat-no" title="statement not covered" >        onProgress: (progress) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >          setEnrichmentProgress(progress);</span>
+<span class="cstat-no" title="statement not covered" >          updateProgress(session.id, progress); // Update EnrichmentContext for rainbow border</span>
+<span class="cstat-no" title="statement not covered" >          console.log(`✨ [ENRICHMENT BANNER] ${progress.stage}: ${progress.message} (${progress.progress}%)`);</span>
+<span class="cstat-no" title="statement not covered" >        },</span>
 <span class="cstat-no" title="statement not covered" >      });</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      console.log('✅ [ENRICHMENT BANNER] Enrichment queued with job ID:', jobId);</span>
+<span class="cstat-no" title="statement not covered" >      console.log('✅ [ENRICHMENT BANNER] Enrichment complete:', result);</span>
 &nbsp;
-      // Show notification that enrichment is queued
+      // Show success notification (NO COST INFO)
 <span class="cstat-no" title="statement not covered" >      addNotification({</span>
-<span class="cstat-no" title="statement not covered" >        type: 'info',</span>
-<span class="cstat-no" title="statement not covered" >        title: 'Enrichment Queued',</span>
-<span class="cstat-no" title="statement not covered" >        message: 'Processing in background. Check status in top-right corner.',</span>
+<span class="cstat-no" title="statement not covered" >        type: 'success',</span>
+<span class="cstat-no" title="statement not covered" >        title: 'Enrichment Complete',</span>
+<span class="cstat-no" title="statement not covered" >        message: 'Session enriched successfully!',</span>
 <span class="cstat-no" title="statement not covered" >      });</span>
 &nbsp;
-      // Notify parent that session is now being enriched
+      // Notify parent of session update (reload from storage for fresh data)
 <span class="cstat-no" title="statement not covered" >      if (onSessionUpdate) {</span>
-        // Reload session from storage to get updated enrichmentStatus
+        // ✅ FIX: Reload session directly from storage to avoid stale React state
 <span class="cstat-no" title="statement not covered" >        const storage = await getStorage();</span>
 <span class="cstat-no" title="statement not covered" >        const sessions = await storage.load&lt;Session[]&gt;('sessions') || [];</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        if (Array.isArray(sessions)) {</span>
 <span class="cstat-no" title="statement not covered" >          const freshSession = sessions.find((s) =&gt; s.id === session.id);</span>
 <span class="cstat-no" title="statement not covered" >          if (freshSession) {</span>
-<span class="cstat-no" title="statement not covered" >            console.log('✅ [ENRICHMENT BANNER] Reloaded session with updated enrichment status');</span>
+<span class="cstat-no" title="statement not covered" >            console.log('✅ [ENRICHMENT BANNER] Reloaded fresh session from storage after enrichment');</span>
 <span class="cstat-no" title="statement not covered" >            onSessionUpdate(freshSession);</span>
+<span class="cstat-no" title="statement not covered" >          } else {</span>
+<span class="cstat-no" title="statement not covered" >            console.error('❌ [ENRICHMENT BANNER] Session not found in storage after enrichment');</span>
 <span class="cstat-no" title="statement not covered" >          }</span>
 <span class="cstat-no" title="statement not covered" >        }</span>
 <span class="cstat-no" title="statement not covered" >      }</span>
 <span class="cstat-no" title="statement not covered" >    } catch (error: any) {</span>
-<span class="cstat-no" title="statement not covered" >      console.error('❌ [ENRICHMENT BANNER] Failed to queue enrichment:', error);</span>
+<span class="cstat-no" title="statement not covered" >      console.error('❌ [ENRICHMENT BANNER] Enrichment failed:', error);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      addNotification({</span>
 <span class="cstat-no" title="statement not covered" >        type: 'error',</span>
 <span class="cstat-no" title="statement not covered" >        title: 'Enrichment Failed',</span>
-<span class="cstat-no" title="statement not covered" >        message: error.message || 'Failed to queue enrichment',</span>
+<span class="cstat-no" title="statement not covered" >        message: error.message || 'Failed to enrich session',</span>
 <span class="cstat-no" title="statement not covered" >      });</span>
 <span class="cstat-no" title="statement not covered" >    } finally {</span>
+      // Stop tracking in EnrichmentContext (cleans up rainbow border)
+<span class="cstat-no" title="statement not covered" >      stopTracking(session.id);</span>
 <span class="cstat-no" title="statement not covered" >      setIsEnriching(false);</span>
 <span class="cstat-no" title="statement not covered" >      setEnrichmentProgress(null);</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
@@ -1081,7 +1102,7 @@ interface EnrichmentStatusBannerProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-11-02T19:20:07.742Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

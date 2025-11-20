@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/928</span>
+                <span class='fraction'>0/916</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/928</span>
+                <span class='fraction'>0/916</span>
             </div>
         
             
@@ -1680,23 +1680,7 @@
 <a name='L1615'></a><a href='#L1615'>1615</a>
 <a name='L1616'></a><a href='#L1616'>1616</a>
 <a name='L1617'></a><a href='#L1617'>1617</a>
-<a name='L1618'></a><a href='#L1618'>1618</a>
-<a name='L1619'></a><a href='#L1619'>1619</a>
-<a name='L1620'></a><a href='#L1620'>1620</a>
-<a name='L1621'></a><a href='#L1621'>1621</a>
-<a name='L1622'></a><a href='#L1622'>1622</a>
-<a name='L1623'></a><a href='#L1623'>1623</a>
-<a name='L1624'></a><a href='#L1624'>1624</a>
-<a name='L1625'></a><a href='#L1625'>1625</a>
-<a name='L1626'></a><a href='#L1626'>1626</a>
-<a name='L1627'></a><a href='#L1627'>1627</a>
-<a name='L1628'></a><a href='#L1628'>1628</a>
-<a name='L1629'></a><a href='#L1629'>1629</a>
-<a name='L1630'></a><a href='#L1630'>1630</a>
-<a name='L1631'></a><a href='#L1631'>1631</a>
-<a name='L1632'></a><a href='#L1632'>1632</a>
-<a name='L1633'></a><a href='#L1633'>1633</a>
-<a name='L1634'></a><a href='#L1634'>1634</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L1618'></a><a href='#L1618'>1618</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2206,15 +2190,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2264,10 +2240,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -2330,10 +2302,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -3452,7 +3420,7 @@ export interface SessionMetadata {
   video?: {
     id: string;
     sessionId: string;
-    fullVideoAttachmentId?: string; // Optional: audio-only sessions won't have this
+    fullVideoAttachmentId: string;
     duration: number;
     chunkingStatus: 'pending' | 'processing' | 'complete' | 'error';
     processedAt?: string;
@@ -3839,15 +3807,7 @@ export interface CompressionResult {
 <span class="cstat-no" title="statement not covered" >    const chunk = await this.adapter.load&lt;ScreenshotsChunk&gt;(chunkKey);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    if (chunk) {</span>
-      // FIX: Cache only metadata (without base64 data) to prevent 15GB memory leak
-      // Base64 screenshot data is 50-100MB per image - caching this causes OOM
-<span class="cstat-no" title="statement not covered" >      const metadataOnly = chunk.screenshots.map(s =&gt; ({</span>
-<span class="cstat-no" title="statement not covered" >        ...s,</span>
-<span class="cstat-no" title="statement not covered" >        base64: undefined, // Strip base64 data from cache</span>
-<span class="cstat-no" title="statement not covered" >      }));</span>
-<span class="cstat-no" title="statement not covered" >      this.cache.set(cacheKey, metadataOnly);</span>
-&nbsp;
-      // Return full screenshots (with base64) to caller
+<span class="cstat-no" title="statement not covered" >      this.cache.set(cacheKey, chunk.screenshots);</span>
 <span class="cstat-no" title="statement not covered" >      return chunk.screenshots;</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
@@ -3893,13 +3853,9 @@ export interface CompressionResult {
 <span class="cstat-no" title="statement not covered" >      const chunkName = `screenshots/chunk-${String(i).padStart(3, '0')}`;</span>
 <span class="cstat-no" title="statement not covered" >      this.queue.enqueueChunk(sessionId, chunkName, chunk, 'normal');</span>
 &nbsp;
-      // Invalidate and re-cache (metadata only - no base64)
+      // Invalidate and re-cache
 <span class="cstat-no" title="statement not covered" >      this.cache.invalidate(`screenshots:${sessionId}:${i}`);</span>
-<span class="cstat-no" title="statement not covered" >      const metadataOnly = chunkScreenshots.map(s =&gt; ({</span>
-<span class="cstat-no" title="statement not covered" >        ...s,</span>
-<span class="cstat-no" title="statement not covered" >        base64: undefined, // Strip base64 data from cache</span>
-<span class="cstat-no" title="statement not covered" >      }));</span>
-<span class="cstat-no" title="statement not covered" >      this.cache.set(`screenshots:${sessionId}:${i}`, metadataOnly);</span>
+<span class="cstat-no" title="statement not covered" >      this.cache.set(`screenshots:${sessionId}:${i}`, chunkScreenshots);</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
     // Update metadata with chunk manifest
@@ -3962,13 +3918,9 @@ export interface CompressionResult {
 <span class="cstat-no" title="statement not covered" >    const chunkName = `screenshots/chunk-${String(chunkIndex).padStart(3, '0')}`;</span>
 <span class="cstat-no" title="statement not covered" >    this.queue.enqueueChunk(sessionId, chunkName, chunk, 'normal');</span>
 &nbsp;
-    // Invalidate and re-cache (metadata only - no base64)
+    // Invalidate and re-cache
 <span class="cstat-no" title="statement not covered" >    this.cache.invalidate(`screenshots:${sessionId}:${chunkIndex}`);</span>
-<span class="cstat-no" title="statement not covered" >    const metadataOnly = screenshots.map(s =&gt; ({</span>
-<span class="cstat-no" title="statement not covered" >      ...s,</span>
-<span class="cstat-no" title="statement not covered" >      base64: undefined, // Strip base64 data from cache</span>
-<span class="cstat-no" title="statement not covered" >    }));</span>
-<span class="cstat-no" title="statement not covered" >    this.cache.set(`screenshots:${sessionId}:${chunkIndex}`, metadataOnly);</span>
+<span class="cstat-no" title="statement not covered" >    this.cache.set(`screenshots:${sessionId}:${chunkIndex}`, screenshots);</span>
 &nbsp;
     // Update metadata
 <span class="cstat-no" title="statement not covered" >    metadata.chunks.screenshots.count = currentCount + 1;</span>
@@ -4969,7 +4921,7 @@ export interface CompressionResult {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-11-02T19:20:07.742Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

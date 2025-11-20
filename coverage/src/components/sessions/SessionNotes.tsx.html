@@ -732,7 +732,7 @@ interface SessionNotesProps {
 <span class="cstat-no" title="statement not covered" >          &lt;button</span>
 <span class="cstat-no" title="statement not covered" >            onClick={handleAddNote}</span>
 <span class="cstat-no" title="statement not covered" >            disabled={!noteInput.trim() || isAtLimit}</span>
-<span class="cstat-no" title="statement not covered" >            className={`absolute right-2 bottom-2 p-2 bg-cyan-500 text-white ${getRadiusClass('element')} ${TRANSITIONS.standard} ${</span>
+<span class="cstat-no" title="statement not covered" >            className={`absolute right-2 bottom-2 p-2 bg-cyan-500 text-white ${getRadiusClass('sm')} ${TRANSITIONS.standard} ${</span>
 <span class="cstat-no" title="statement not covered" >              !noteInput.trim() || isAtLimit</span>
 <span class="cstat-no" title="statement not covered" >                ? 'opacity-30 cursor-not-allowed'</span>
 <span class="cstat-no" title="statement not covered" >                : 'hover:bg-cyan-600 hover:shadow-lg'</span>
@@ -769,13 +769,13 @@ interface SessionNotesProps {
 <span class="cstat-no" title="statement not covered" >                      value={editContent}</span>
 <span class="cstat-no" title="statement not covered" >                      onChange={(e) =&gt; setEditContent(e.target.value)}</span>
 <span class="cstat-no" title="statement not covered" >                      onKeyDown={handleEditKeyPress}</span>
-<span class="cstat-no" title="statement not covered" >                      className={`w-full px-3 py-2 ${getGlassClasses('subtle')} ${getRadiusClass('element')} text-sm resize-none ${TRANSITIONS.standard}`}</span>
+<span class="cstat-no" title="statement not covered" >                      className={`w-full px-3 py-2 ${getGlassClasses('subtle')} ${getRadiusClass('sm')} text-sm resize-none ${TRANSITIONS.standard}`}</span>
 <span class="cstat-no" title="statement not covered" >                      rows={3}</span>
 <span class="cstat-no" title="statement not covered" >                    /&gt;</span>
 <span class="cstat-no" title="statement not covered" >                    &lt;div className="flex items-center justify-end gap-2"&gt;</span>
 <span class="cstat-no" title="statement not covered" >                      &lt;button</span>
 <span class="cstat-no" title="statement not covered" >                        onClick={cancelEditing}</span>
-<span class="cstat-no" title="statement not covered" >                        className={`px-3 py-1 flex items-center gap-1 text-xs font-medium text-gray-700 hover:bg-white/50 ${getRadiusClass('element')} ${TRANSITIONS.standard}`}</span>
+<span class="cstat-no" title="statement not covered" >                        className={`px-3 py-1 flex items-center gap-1 text-xs font-medium text-gray-700 hover:bg-white/50 ${getRadiusClass('sm')} ${TRANSITIONS.standard}`}</span>
                       &gt;
 <span class="cstat-no" title="statement not covered" >                        &lt;X size={12} /&gt;</span>
                         Cancel
@@ -783,7 +783,7 @@ interface SessionNotesProps {
 <span class="cstat-no" title="statement not covered" >                      &lt;button</span>
 <span class="cstat-no" title="statement not covered" >                        onClick={saveEdit}</span>
 <span class="cstat-no" title="statement not covered" >                        disabled={!editContent.trim()}</span>
-<span class="cstat-no" title="statement not covered" >                        className={`px-3 py-1 flex items-center gap-1 text-xs font-medium bg-cyan-500 text-white ${getRadiusClass('element')} ${TRANSITIONS.standard} ${</span>
+<span class="cstat-no" title="statement not covered" >                        className={`px-3 py-1 flex items-center gap-1 text-xs font-medium bg-cyan-500 text-white ${getRadiusClass('sm')} ${TRANSITIONS.standard} ${</span>
 <span class="cstat-no" title="statement not covered" >                          !editContent.trim()</span>
 <span class="cstat-no" title="statement not covered" >                            ? 'opacity-50 cursor-not-allowed'</span>
 <span class="cstat-no" title="statement not covered" >                            : 'hover:bg-cyan-600'</span>
@@ -809,7 +809,7 @@ interface SessionNotesProps {
 <span class="cstat-no" title="statement not covered" >                        {onUpdateContext &amp;&amp; (</span>
 <span class="cstat-no" title="statement not covered" >                          &lt;button</span>
 <span class="cstat-no" title="statement not covered" >                            onClick={() =&gt; startEditing(item)}</span>
-<span class="cstat-no" title="statement not covered" >                            className={`p-1 hover:bg-white/50 ${getRadiusClass('element')} ${TRANSITIONS.standard}`}</span>
+<span class="cstat-no" title="statement not covered" >                            className={`p-1 hover:bg-white/50 ${getRadiusClass('sm')} ${TRANSITIONS.standard}`}</span>
 <span class="cstat-no" title="statement not covered" >                            title="Edit note"</span>
                           &gt;
 <span class="cstat-no" title="statement not covered" >                            &lt;Edit2 size={12} className="text-gray-600" /&gt;</span>
@@ -818,7 +818,7 @@ interface SessionNotesProps {
 <span class="cstat-no" title="statement not covered" >                        {onDeleteContext &amp;&amp; (</span>
 <span class="cstat-no" title="statement not covered" >                          &lt;button</span>
 <span class="cstat-no" title="statement not covered" >                            onClick={() =&gt; handleDelete(item.id)}</span>
-<span class="cstat-no" title="statement not covered" >                            className={`p-1 hover:bg-red-500/10 ${getRadiusClass('element')} ${TRANSITIONS.standard}`}</span>
+<span class="cstat-no" title="statement not covered" >                            className={`p-1 hover:bg-red-500/10 ${getRadiusClass('sm')} ${TRANSITIONS.standard}`}</span>
 <span class="cstat-no" title="statement not covered" >                            title="Delete note"</span>
                           &gt;
 <span class="cstat-no" title="statement not covered" >                            &lt;Trash2 size={12} className="text-red-600" /&gt;</span>
@@ -862,7 +862,7 @@ interface SessionNotesProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-11-02T19:20:07.742Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

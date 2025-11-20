@@ -30,6 +30,7 @@ import { LearningService } from './learningService';
 import { fileStorage } from './fileStorageService';
 import { getUnifiedIndexManager } from './storage/UnifiedIndexManager';
 import { debug } from "../utils/debug";
+import { claudeServiceBaleybots } from './claudeServiceBaleybots';
 
 export class ClaudeService {
   private hasApiKey: boolean = false;
@@ -59,6 +60,8 @@ export class ClaudeService {
     try {
       await invoke('set_claude_api_key', { apiKey });
       this.hasApiKey = true;
+      // Also set API key for baleybot implementation (this will also store it on Tauri side)
+      await claudeServiceBaleybots.setApiKey(apiKey);
     } catch (error) {
       console.error('Failed to set API key:', error);
       throw error;
@@ -287,7 +290,38 @@ export class ClaudeService {
    * Returns a value between 0 and 1
    */
   /**
+   * Baleybot-based implementation of processInput()
+   * Uses baleybots with agentMode for automatic tool loops and structured outputs
+   */
+  async processInputBaleybots(
+    text: string,
+    existingTopics: Topic[],
+    existingNotes: Note[],
+    settings: AppState['aiSettings'],
+    userLearnings?: AppState['learnings'],
+    learningSettings?: AppState['learningSettings'],
+    existingTasks?: Task[],
+    attachments?: Attachment[],
+    extractTasks: boolean = true
+  ): Promise<AIProcessResult> {
+    // Delegate to baleybot implementation
+    return await claudeServiceBaleybots.processInput(
+      text,
+      existingTopics,
+      existingNotes,
+      settings,
+      userLearnings,
+      learningSettings,
+      existingTasks,
+      attachments,
+      extractTasks
+    );
+  }
+
+  /**
    * Main processing function: Analyzes text, detects topics, creates/merges notes, extracts tasks
+   * 
+   * @deprecated This is the legacy implementation. Consider using processInputBaleybots() instead.
    */
   async processInput(
     text: string,

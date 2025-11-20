@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/187</span>
+                <span class='fraction'>0/178</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/187</span>
+                <span class='fraction'>0/178</span>
             </div>
         
             
@@ -298,21 +298,13 @@
 <a name='L233'></a><a href='#L233'>233</a>
 <a name='L234'></a><a href='#L234'>234</a>
 <a name='L235'></a><a href='#L235'>235</a>
-<a name='L236'></a><a href='#L236'>236</a>
-<a name='L237'></a><a href='#L237'>237</a>
-<a name='L238'></a><a href='#L238'>238</a>
-<a name='L239'></a><a href='#L239'>239</a>
-<a name='L240'></a><a href='#L240'>240</a>
-<a name='L241'></a><a href='#L241'>241</a>
-<a name='L242'></a><a href='#L242'>242</a>
-<a name='L243'></a><a href='#L243'>243</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L236'></a><a href='#L236'>236</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -365,14 +357,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -554,7 +540,6 @@
 <span class="cstat-no" title="statement not covered" >import { useUI } from '../context/UIContext';</span>
 <span class="cstat-no" title="statement not covered" >import { X, FileText, Sparkles } from 'lucide-react';</span>
 import type { Note } from '../types';
-<span class="cstat-no" title="statement not covered" >import { EntityType, RelationshipType } from '../types/relationships';</span>
 <span class="cstat-no" title="statement not covered" >import { generateId } from '../utils/helpers';</span>
 <span class="cstat-no" title="statement not covered" >import { getGlassClasses, getRadiusClass, MODAL_SECTIONS } from '../design-system/theme';</span>
 <span class="cstat-no" title="statement not covered" >import {</span>
@@ -598,27 +583,21 @@ interface QuickNoteFromSessionProps {
 <span class="cstat-no" title="statement not covered" >    if (!content.trim()) return;</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    const now = new Date().toISOString();</span>
-<span class="cstat-no" title="statement not covered" >    const noteId = generateId();</span>
 <span class="cstat-no" title="statement not covered" >    const newNote: Note = {</span>
-<span class="cstat-no" title="statement not covered" >      id: noteId,</span>
-<span class="cstat-no" title="statement not covered" >      relationships: [</span>
-<span class="cstat-no" title="statement not covered" >        {</span>
-<span class="cstat-no" title="statement not covered" >          id: generateId(),</span>
-<span class="cstat-no" title="statement not covered" >          sourceType: EntityType.NOTE,</span>
-<span class="cstat-no" title="statement not covered" >          sourceId: noteId,</span>
-<span class="cstat-no" title="statement not covered" >          targetType: EntityType.SESSION,</span>
-<span class="cstat-no" title="statement not covered" >          targetId: sessionId,</span>
-<span class="cstat-no" title="statement not covered" >          type: RelationshipType.NOTE_SESSION,</span>
-<span class="cstat-no" title="statement not covered" >          canonical: true,</span>
-<span class="cstat-no" title="statement not covered" >          metadata: { source: 'ai' as const, createdAt: now },</span>
-<span class="cstat-no" title="statement not covered" >        },</span>
-<span class="cstat-no" title="statement not covered" >      ],</span>
+<span class="cstat-no" title="statement not covered" >      id: generateId(),</span>
 <span class="cstat-no" title="statement not covered" >      content: content.trim(),</span>
 <span class="cstat-no" title="statement not covered" >      summary: summary.trim() || content.trim().split('\n')[0].substring(0, 100),</span>
 <span class="cstat-no" title="statement not covered" >      timestamp: now,</span>
 <span class="cstat-no" title="statement not covered" >      lastUpdated: now,</span>
 <span class="cstat-no" title="statement not covered" >      source: 'thought',</span>
 <span class="cstat-no" title="statement not covered" >      tags: [],</span>
+<span class="cstat-no" title="statement not covered" >      sourceSessionId: sessionId,</span>
+&nbsp;
+      // Rich metadata following capture box pattern
+<span class="cstat-no" title="statement not covered" >      metadata: {</span>
+<span class="cstat-no" title="statement not covered" >        keyPoints: [summary.trim() || content.trim().split('\n')[0].substring(0, 100)],</span>
+<span class="cstat-no" title="statement not covered" >        relatedTopics: [sessionName],</span>
+<span class="cstat-no" title="statement not covered" >      },</span>
 <span class="cstat-no" title="statement not covered" >    };</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    addNote(newNote);</span>
@@ -796,7 +775,7 @@ interface QuickNoteFromSessionProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-11-02T19:20:07.742Z
+                at 2025-10-29T05:05:48.357Z
             </div>
         <script src="../../prettify.js"></script>
         <script>
