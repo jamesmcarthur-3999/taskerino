@@ -3,11 +3,12 @@ mod ai_types;
 mod api_keys;
 mod audio_simple; // Simple audio recording implementation (replaces AudioGraph)
 // mod baleybot_api; // Commented out - using baleybots directly from TypeScript
+mod baleybot_proxy; // Baleybot proxy handler with Tauri transport
 mod claude_api;
 mod macos_audio;
 mod macos_events;
 mod openai_api;
-mod tauri_ai_provider; // Tauri provider for baleybots with streaming support
+// mod tauri_ai_provider; // Removed - replaced by baleybot_proxy with custom fetch
 pub mod permissions; // Permissions error handling and detection (Phase 1)
 mod recording; // Safe FFI wrappers for video recording
 mod shutdown; // Graceful shutdown handler (Fix #13)
@@ -1041,9 +1042,6 @@ pub fn run() {
             claude_api::claude_chat_completion,
             claude_api::claude_chat_completion_vision,
             claude_api::proxy_http_request,
-            // Tauri Provider for Baleybots (with streaming support)
-            tauri_ai_provider::tauri_ai_chat_completion,
-            tauri_ai_provider::tauri_ai_chat_completion_stream_start,
             // BaleyBots API - commented out, using baleybots directly from TypeScript
             // baleybot_api::baleybot_invoke,
             // Performance optimization - Session storage (Task 3A)
@@ -1067,6 +1065,13 @@ pub fn run() {
             session_query_api::set_active_session_id
         ])
         .setup(move |app| {
+            // Initialize baleybot proxy handler with Tauri transport
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = baleybot_proxy::init_proxy_handler(app_handle).await {
+                    eprintln!("Failed to initialize baleybot proxy handler: {}", e);
+                }
+            });
             // Audio recorder initialized on first use (no separate init needed)
 
             if cfg!(debug_assertions) {

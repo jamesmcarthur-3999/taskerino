@@ -6,7 +6,7 @@
  * Now supports all enhanced card features.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, User, Copy, Check, Edit2 } from 'lucide-react';
 import { TaskCard } from './TaskCard';
@@ -418,33 +418,33 @@ const ToolCallBox = ({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="my-3">
+    <div className="my-1.5">
       <button
         onClick={() => setExpanded(!expanded)}
-        className={`w-full flex items-center justify-between gap-3 px-5 py-3.5 ${getRadiusClass('element')}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2 ${getRadiusClass('element')}
                  ${getGlassClasses('medium')} hover:from-slate-100 hover:to-slate-100
                  hover:border-white/80
-                 ${TRANSITIONS.standard} group shadow-lg shadow-slate-100/30 hover:shadow-xl hover:shadow-slate-200/40 ring-1 ring-black/5`}
+                 ${TRANSITIONS.standard} group shadow-md shadow-slate-100/20 hover:shadow-lg hover:shadow-slate-200/30 ring-1 ring-black/5`}
       >
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 via-cyan-400 to-blue-600
-                        flex items-center justify-center shadow-md group-hover:shadow-lg transition-all group-hover:scale-105`}>
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex items-center gap-2">
+          <div className={`w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 via-cyan-400 to-blue-600
+                        flex items-center justify-center shadow-sm group-hover:shadow-md transition-all group-hover:scale-105`}>
+            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </div>
           <div className="text-left">
-            <div className="text-sm font-bold text-gray-900">
+            <div className="text-xs font-bold text-gray-900">
               {TOOL_DESCRIPTIONS[toolName] || toolName}
             </div>
-            <div className="text-xs font-medium text-gray-500">
+            <div className="text-[10px] font-medium text-gray-500">
               {toolStatus === 'pending' ? 'Executing...' : toolStatus === 'error' ? 'Error' : 'Completed'}
             </div>
           </div>
         </div>
         <svg
-          className={`w-5 h-5 text-gray-400 transition-transform duration-300 group-hover:text-cyan-600 ${expanded ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-gray-400 transition-transform duration-300 group-hover:text-cyan-600 ${expanded ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -454,12 +454,12 @@ const ToolCallBox = ({
       </button>
 
       {expanded && (
-        <div className={`mt-3 ${getRadiusClass('element')} ${getGlassClasses('medium')} overflow-hidden shadow-lg`}>
+        <div className={`mt-2 ${getRadiusClass('element')} ${getGlassClasses('medium')} overflow-hidden shadow-md`}>
           {/* Arguments Section */}
           {toolArguments && Object.keys(toolArguments).length > 0 && (
-            <div className="px-5 py-3 border-b border-white/30">
-              <div className="text-xs font-semibold text-cyan-700 mb-2 uppercase tracking-wide">Arguments</div>
-              <div className="text-xs text-cyan-600/70 font-mono bg-white/50 px-3 py-2 rounded overflow-x-auto">
+            <div className="px-3 py-2 border-b border-white/30">
+              <div className="text-[10px] font-semibold text-cyan-700 mb-1.5 uppercase tracking-wide">Arguments</div>
+              <div className="text-[10px] text-cyan-600/70 font-mono bg-white/50 px-2 py-1.5 rounded overflow-x-auto">
                 <pre className="whitespace-pre-wrap">{JSON.stringify(toolArguments, null, 2)}</pre>
               </div>
             </div>
@@ -467,18 +467,18 @@ const ToolCallBox = ({
           
           {/* Result Section */}
           {toolResult && (
-            <div className="px-5 py-3">
-              <div className="text-xs font-semibold text-green-700 mb-2 uppercase tracking-wide">Result</div>
-              <div className="text-xs text-green-600/70 font-mono bg-white/50 px-3 py-2 rounded overflow-x-auto max-h-64 overflow-y-auto">
+            <div className="px-3 py-2">
+              <div className="text-[10px] font-semibold text-green-700 mb-1.5 uppercase tracking-wide">Result</div>
+              <div className="text-[10px] text-green-600/70 font-mono bg-white/50 px-2 py-1.5 rounded overflow-x-auto max-h-48 overflow-y-auto">
                 <pre className="whitespace-pre-wrap">{toolResult}</pre>
               </div>
             </div>
           )}
           
           {toolStatus === 'pending' && !toolResult && (
-            <div className="px-5 py-3 flex items-center gap-1.5">
+            <div className="px-3 py-2 flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse" />
-              <span className="text-xs text-cyan-600">Executing...</span>
+              <span className="text-[10px] text-cyan-600">Executing...</span>
             </div>
           )}
         </div>
@@ -520,10 +520,19 @@ interface MessageContent {
 interface NedMessageProps {
   message: {
     id: string;
-    role: 'user' | 'assistant';
-    contents: MessageContent[];
-    timestamp: string;
+    role: 'user' | 'assistant' | 'system' | 'tool';
+    content?: string | Array<{ type: string; text?: string; tool_use_id?: string; content?: any; is_error?: boolean }>;
+    tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+    timestamp?: string | Date;
+    tool_call_id?: string; // For tool messages
   };
+  previousMessages?: Array<{
+    id: string;
+    role: 'user' | 'assistant' | 'system' | 'tool';
+    content?: string | Array<{ type: string; text?: string; tool_use_id?: string; content?: any; is_error?: boolean }>;
+    tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+    tool_call_id?: string; // For tool messages
+  }>;
   // Task handlers
   onTaskComplete?: (taskId: string) => void;
   onTaskEdit?: (taskId: string) => void;
@@ -549,6 +558,7 @@ interface NedMessageProps {
 
 export const NedMessage: React.FC<NedMessageProps> = ({
   message,
+  previousMessages = [],
   onTaskComplete,
   onTaskEdit,
   onTaskDelete,
@@ -566,9 +576,205 @@ export const NedMessage: React.FC<NedMessageProps> = ({
   companies = [],
   contacts = [],
 }) => {
+  // Add logging at the start of the component
+  useEffect(() => {
+    console.log('[NedMessage] Rendering message:', {
+      id: message.id,
+      role: message.role,
+      contentType: typeof message.content,
+      contentLength: typeof message.content === 'string' ? message.content.length : Array.isArray(message.content) ? message.content.length : 'N/A',
+      hasToolCalls: !!(message.tool_calls && Array.isArray(message.tool_calls) && message.tool_calls.length > 0),
+      toolCallsCount: message.tool_calls?.length || 0,
+      contentPreview: typeof message.content === 'string' 
+        ? message.content.substring(0, 100) 
+        : Array.isArray(message.content) 
+          ? `[Array: ${message.content.length} blocks, first: ${JSON.stringify(message.content[0] || {}).substring(0, 50)}]`
+          : String(message.content).substring(0, 100),
+    });
+  }, [message.id, message.content, message.tool_calls]);
+  
+  // Only render user and assistant messages
+  if (message.role !== 'user' && message.role !== 'assistant') {
+    return null;
+  }
+  
   const isUser = message.role === 'user';
   const infoGradient = getInfoGradient();
   const successGradient = getSuccessGradient();
+
+  // Process raw message structure to build contents array
+  const contents: MessageContent[] = [];
+  
+  // Build map of tool calls from previous assistant messages to match with tool results
+  const toolCallMap = new Map<string, { toolName: string; toolArguments: Record<string, unknown> }>();
+  
+  // Collect tool calls from previous assistant messages
+  previousMessages.forEach((prevMsg) => {
+    if (prevMsg.role === 'assistant' && prevMsg.tool_calls && Array.isArray(prevMsg.tool_calls)) {
+      for (const toolCall of prevMsg.tool_calls) {
+        let toolName = 'unknown';
+        let toolArguments: Record<string, unknown> = {};
+        const toolCallId = toolCall.id || `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        if (toolCall?.function) {
+          toolName = String(toolCall.function.name || 'unknown');
+          if (toolCall.function.arguments && typeof toolCall.function.arguments === 'string') {
+            try {
+              toolArguments = JSON.parse(toolCall.function.arguments);
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+        
+        toolCallMap.set(toolCallId, { toolName, toolArguments });
+      }
+    }
+  });
+  
+  // Process tool_calls from current assistant message
+  if (message.role === 'assistant' && message.tool_calls && Array.isArray(message.tool_calls)) {
+    for (const toolCall of message.tool_calls) {
+      let toolName = 'unknown';
+      let toolArguments: Record<string, unknown> = {};
+      const toolCallId = toolCall.id || `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      if (toolCall?.function) {
+        toolName = String(toolCall.function.name || 'unknown');
+        if (toolCall.function.arguments && typeof toolCall.function.arguments === 'string') {
+          try {
+            toolArguments = JSON.parse(toolCall.function.arguments);
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+      
+      toolCallMap.set(toolCallId, { toolName, toolArguments });
+      
+      // Look for matching tool message in previousMessages (standard UIChatMessage format)
+      // Tool messages have role: 'tool' and tool_call_id linking to the tool call
+      let toolResult: string | undefined;
+      let toolStatus: 'pending' | 'success' | 'error' = 'pending';
+      
+      if (previousMessages) {
+        const toolMessage = previousMessages.find(
+          (msg) => msg.role === 'tool' && msg.tool_call_id === toolCallId
+        );
+        
+        if (toolMessage) {
+          // Extract content from tool message
+          if (typeof toolMessage.content === 'string') {
+            toolResult = toolMessage.content;
+          } else if (Array.isArray(toolMessage.content)) {
+            // Extract from MessageContentBlock array
+            const toolResultBlock = toolMessage.content.find(
+              (block: any) => block.type === 'tool_result' && block.tool_use_id === toolCallId
+            );
+            if (toolResultBlock) {
+              toolResult = typeof toolResultBlock.content === 'string' 
+                ? toolResultBlock.content 
+                : JSON.stringify(toolResultBlock.content);
+              toolStatus = toolResultBlock.is_error ? 'error' : 'success';
+            } else {
+              // Fallback: try to extract from any content block
+              const textBlock = toolMessage.content.find((block: any) => block.type === 'text');
+              if (textBlock) {
+                toolResult = textBlock.text || String(textBlock.content || '');
+              }
+            }
+          }
+          
+          // Check for error status
+          if (toolMessage.content && Array.isArray(toolMessage.content)) {
+            const hasError = toolMessage.content.some((block: any) => block.is_error === true);
+            if (hasError) {
+              toolStatus = 'error';
+            } else if (toolResult) {
+              toolStatus = 'success';
+            }
+          } else if (toolResult) {
+            toolStatus = 'success';
+          }
+        }
+      }
+      
+      contents.push({
+        type: 'tool-use',
+        toolName,
+        toolStatus,
+        toolArguments,
+        toolResult,
+      });
+    }
+  }
+  
+  // Process content - handle both string and array formats
+  if (message.content) {
+    if (typeof message.content === 'string') {
+      // Simple string content - add as text (comes after tool calls for assistant messages)
+      contents.push({ type: 'text', content: message.content });
+    } else if (Array.isArray(message.content)) {
+      // Array content - could contain text blocks, tool results, etc.
+      for (const block of message.content) {
+        if (block.type === 'tool_result' || block.tool_use_id) {
+          // Tool result block - match to tool call from previous messages or current message
+          const toolUseId = block.tool_use_id || (block as any).toolUseId;
+          const toolInfo = toolCallMap.get(toolUseId);
+          
+          if (toolInfo) {
+            // Check if we already have a tool-use entry for this in contents
+            let toolUseIndex = contents.findIndex(c => 
+              c.type === 'tool-use' && c.toolName === toolInfo.toolName
+            );
+            
+            if (toolUseIndex >= 0) {
+              // Update existing tool call entry with result
+              contents[toolUseIndex] = {
+                ...contents[toolUseIndex],
+                toolStatus: block.is_error ? 'error' : 'success',
+                toolResult: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+              };
+            } else {
+              // Tool result for a tool call from a previous message - add as tool-use with result
+              contents.push({
+                type: 'tool-use',
+                toolName: toolInfo.toolName,
+                toolStatus: block.is_error ? 'error' : 'success',
+                toolArguments: toolInfo.toolArguments,
+                toolResult: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+              });
+            }
+          } else {
+            // Tool result without matching tool call - add as separate tool-result entry
+            contents.push({
+              type: 'tool-result',
+              toolName: 'unknown',
+              toolStatus: block.is_error ? 'error' : 'success',
+              toolResult: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+            });
+          }
+        } else if (block.type === 'text' || typeof block === 'string') {
+          // Text block - add as text content
+          contents.push({ 
+            type: 'text', 
+            content: typeof block === 'string' ? block : (block.text || (block as any).content || '') 
+          });
+        }
+      }
+    }
+  }
+  
+  // For user messages with only tool results (no text), we still want to show them
+  // But they should be matched to tool calls from previous messages, which we already did above
+  // If a user message has tool results but no matching tool calls found, we still show the results
+  
+  // Normalize timestamp
+  const timestamp = typeof message.timestamp === 'string' 
+    ? message.timestamp 
+    : (message.timestamp instanceof Date 
+      ? message.timestamp.toISOString() 
+      : new Date().toISOString());
 
   // Helper to find source note for a task
   const findSourceNote = (task: Task) => {
@@ -632,7 +838,7 @@ export const NedMessage: React.FC<NedMessageProps> = ({
 
       {/* Content */}
       <div className={`flex-1 max-w-3xl space-y-2 ${isUser ? 'items-end' : 'items-start'}`}>
-        {message.contents.map((content, idx) => (
+        {contents.map((content, idx) => (
           <div key={idx}>
             {content.type === 'text' && content.content && (
               <div className={`rounded-[20px] px-5 py-3.5 shadow-xl transition-all duration-300 ${
@@ -854,9 +1060,9 @@ export const NedMessage: React.FC<NedMessageProps> = ({
           </div>
         ))}
 
-        {/* Timestamp */}
-        <div className={`text-xs font-medium text-gray-400 px-2 ${isUser ? 'text-right' : 'text-left'}`}>
-          {new Date(message.timestamp).toLocaleTimeString('en-US', {
+          {/* Timestamp */}
+          <div className={`text-xs font-medium text-gray-400 px-2 ${isUser ? 'text-right' : 'text-left'}`}>
+            {new Date(timestamp).toLocaleTimeString('en-US', {
             hour: 'numeric',
             minute: '2-digit',
           })}

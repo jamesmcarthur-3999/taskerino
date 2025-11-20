@@ -6,7 +6,7 @@
  * API calls are routed through Tauri for secure API key management.
  */
 
-import { Baleybot, BaleybotClient, tool } from '@baleybots/core';
+import { Baleybot, tool } from '@baleybots/core';
 import type { Processable, ProcessOptions } from '@baleybots/core';
 import { z } from 'zod';
 import { invoke } from '@tauri-apps/api/core';
@@ -16,12 +16,12 @@ import type {
   NedConversation,
   ToolExecutor,
   PermissionChecker,
-} from './nedService';
-import { tauri } from './tauriProvider';
+} from './nedServiceTypes';
+import { anthropic } from '@baleybots/core/proxy';
+import { tauriFetch } from './tauriFetch';
 
 export class NedServiceBaleybots {
   private apiKey: string | null = null;
-  private conversations: Map<string, NedConversation> = new Map();
   private executors: Map<string, { executor: ToolExecutor; checker: PermissionChecker }> = new Map();
 
   constructor(apiKey?: string) {
@@ -53,27 +53,6 @@ export class NedServiceBaleybots {
     }
   }
 
-  /**
-   * Create a new conversation
-   */
-  createConversation(): string {
-    const convId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    this.conversations.set(convId, {
-      id: convId,
-      messages: [],
-      context: {
-        lastSearch: null,
-        referencedItems: {
-          tasks: new Set(),
-          notes: new Set(),
-          topics: new Set(),
-        },
-      },
-      createdAt: new Date().toISOString(),
-      lastActive: new Date().toISOString(),
-    });
-    return convId;
-  }
 
   private jsonSchemaToZod(propSchema: Record<string, unknown>, required: boolean = true): z.ZodTypeAny {
     const type = propSchema.type || 'string';
@@ -120,27 +99,16 @@ export class NedServiceBaleybots {
    * Create a Processable bot instance for use with useChat
    * Tools are wired to call the provided toolExecutor and permissionChecker
    */
-  createBot(
+  async createBot(
     conversationId: string,
     appState: AppState,
     toolExecutor: ToolExecutor,
     permissionChecker: PermissionChecker
-  ): Processable<string, string> {
+  ): Promise<Processable<string, string>> {
     if (!this.apiKey) throw new Error('Ned: API key not set');
     
     // Store executors for this conversation
     this.executors.set(conversationId, { executor: toolExecutor, checker: permissionChecker });
-    
-    // Get or create conversation
-    let conversation = this.conversations.get(conversationId);
-    if (!conversation) {
-      const newConvId = this.createConversation();
-      conversation = this.conversations.get(newConvId)!;
-      // Update conversationId to use the new one
-      conversationId = newConvId;
-      // Update executors map with new conversation ID
-      this.executors.set(conversationId, { executor: toolExecutor, checker: permissionChecker });
-    }
     
     const executors = this.executors.get(conversationId);
     if (!executors) throw new Error(`No executors for conversation ${conversationId}`);
@@ -181,14 +149,15 @@ export class NedServiceBaleybots {
 <tool_usage>**CRITICAL - Large Context Window:** When you use search tools, you receive FULL data. After searching once, you have all the data for follow-up questions. Don't search again for filtering, sorting, or details - only search when you need NEW information.</tool_usage>
 ${appState.aiSettings.systemInstructions ? `\n<custom_instructions>\n${appState.aiSettings.systemInstructions}\n</custom_instructions>` : ''}`;
 
-    // Create bot with tools - use Tauri provider for secure API key management and streaming
+    // Create bot with tools - use custom fetch for secure API key management
     const bot = Baleybot.create({
       name: 'ned-assistant',
       goal: systemPrompt,
       tools,
       maxToolIterations: 10,
-      model: tauri('anthropic', 'claude-sonnet-4-5-20250929'),
-      apiKey: this.apiKey || '',
+      model: anthropic('claude-haiku-4-5-20251001', {
+        fetch: tauriFetch,
+      }),
     }) as ReturnType<typeof Baleybot.create>;
 
     // Return Processable - let useChat handle conversation history
@@ -261,19 +230,6 @@ ${appState.aiSettings.systemInstructions ? `\n<custom_instructions>\n${appState.
     } as Processable<string, string>;
   }
 
-  /**
-   * Get conversation
-   */
-  getConversation(conversationId: string): NedConversation | undefined {
-    return this.conversations.get(conversationId);
-  }
-
-  /**
-   * Clear conversation
-   */
-  clearConversation(conversationId: string) {
-    this.conversations.delete(conversationId);
-  }
 }
 
 // Singleton instance

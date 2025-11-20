@@ -1,4 +1,5 @@
 import { Baleybot, tool } from '@baleybots/core';
+import type { Processable } from '@baleybots/core';
 import { z } from 'zod';
 import { invoke } from '@tauri-apps/api/core';
 import type {
@@ -9,11 +10,148 @@ import type {
   AppState,
   Attachment,
 } from '../types';
-import type { ClaudeChatResponse } from '../types/tauri-ai-commands';
 import { getUnifiedIndexManager } from './storage/UnifiedIndexManager';
 import { LearningService } from './learningService';
 import { fileStorage } from './fileStorageService';
-import { tauri } from './tauriProvider';
+import { anthropic } from '@baleybots/core/proxy';
+import { tauriFetch } from './tauriFetch';
+
+// ============================================================================
+// ZOD SCHEMAS - Match AIProcessResult interface exactly with defaults
+// ============================================================================
+
+const noteSchema = z.object({
+  id: z.string().describe('Temp ID assigned by AI (note-1, note-2, etc.)'),
+  action: z.enum(['create', 'update', 'merge', 'skip']).optional().default('create'),
+  targetId: z.string().optional(),
+  mergeWith: z.array(z.string()).optional(),
+  mergeStrategy: z.enum(['append', 'replace']).optional(),
+  reasoning: z.string().optional().default('Auto-assigned action'),
+  content: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()).optional().default([]),
+  source: z.enum(['call', 'email', 'thought', 'other']).optional(),
+  sentiment: z.enum(['positive', 'neutral', 'negative']).optional(),
+  keyPoints: z.array(z.string()).optional().default([]),
+});
+
+const taskSchema = z.object({
+  id: z.string().describe('Temp ID assigned by AI (task-1, task-2, etc.)'),
+  action: z.enum(['create', 'update', 'complete', 'skip']).optional().default('create'),
+  targetId: z.string().optional(),
+  reasoning: z.string().optional().default('Auto-assigned action'),
+  title: z.string(),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional().default('medium'),
+  dueDate: z.string().optional(),
+  dueTime: z.string().optional(),
+  dueDateReasoning: z.string().optional(),
+  description: z.string().optional(),
+  tags: z.array(z.string()).optional().default([]),
+  suggestedSubtasks: z.array(z.string()).optional().default([]),
+  sourceExcerpt: z.string().optional(),
+});
+
+const relationshipSchema = z.object({
+  from: z.object({
+    type: z.enum(['note', 'task']),
+    id: z.string(),
+  }),
+  to: z.object({
+    type: z.enum(['topic', 'company', 'contact', 'note', 'task']),
+    id: z.string().optional(),
+    name: z.string().optional(),
+  }),
+  relationType: z.string(),
+  metadata: z.object({
+    confidence: z.number().optional(),
+    reasoning: z.string().optional(),
+  }).optional(),
+});
+
+const newEntitiesSchema = z.object({
+  topics: z.array(z.object({
+    name: z.string(),
+    type: z.enum(['company', 'person', 'subject', 'project']).default('subject'),
+    confidence: z.number().default(0.9),
+  })).optional().default([]),
+  companies: z.array(z.object({
+    name: z.string(),
+    confidence: z.number().default(0.9),
+  })).optional().default([]),
+  contacts: z.array(z.object({
+    name: z.string(),
+    confidence: z.number().default(0.9),
+  })).optional().default([]),
+});
+
+const skippedTaskSchema = z.object({
+  title: z.string(),
+  reason: z.enum(['duplicate', 'unclear', 'not-actionable']),
+  existingTaskTitle: z.string().optional(),
+  sourceExcerpt: z.string().optional(),
+});
+
+// Main output schema - matches AIProcessResult interface exactly
+const outputSchema = z.object({
+  aiSummary: z.string().optional(),
+  notes: z.array(noteSchema),
+  tasks: z.array(taskSchema),
+  relationships: z.array(relationshipSchema).optional().default([]),
+  newEntities: newEntitiesSchema.optional().default({
+    topics: [],
+    companies: [],
+    contacts: [],
+  }),
+  skippedTasks: z.array(skippedTaskSchema).optional(),
+  sentiment: z.enum(['positive', 'neutral', 'negative']).optional(),
+  tags: z.array(z.string()).optional().default([]),
+  processingSteps: z.array(z.string()).optional(),
+  requiresClarification: z.boolean().optional(),
+  clarificationMessage: z.string().optional(),
+});
+
+// Type inference from schema
+export type OutputSchemaType = z.infer<typeof outputSchema>;
+
+// Export schemas for reuse in other services/components
+export { outputSchema, noteSchema, taskSchema, relationshipSchema, newEntitiesSchema };
+
+// ============================================================================
+// TYPE GUARDS - Runtime validation with type narrowing
+// ============================================================================
+
+/**
+ * Type guard: Validates and narrows bot result to OutputSchemaType
+ */
+function isValidBotResult(value: unknown): value is OutputSchemaType {
+  const result = outputSchema.safeParse(value);
+  if (!result.success) {
+    console.error('[ClaudeServiceBaleybots] Bot result validation failed:', result.error.format());
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Type guard: Validates error is Error instance
+ */
+function isError(value: unknown): value is Error {
+  return value instanceof Error;
+}
+
+/**
+ * Parse and validate bot result with helpful error messages
+ */
+function parseBotResult(value: unknown): OutputSchemaType {
+  const result = outputSchema.safeParse(value);
+  if (!result.success) {
+    const errors = result.error.issues.map((issue) => 
+      `${issue.path.join('.')}: ${issue.message}`
+    ).join(', ');
+    throw new Error(`Invalid bot response structure: ${errors}`);
+  }
+  return result.data;
+}
 
 /**
  * Baleybot-based implementation of ClaudeService.processInput()
@@ -23,7 +161,9 @@ import { tauri } from './tauriProvider';
  */
 export class ClaudeServiceBaleybots {
   private apiKey: string | null = null;
-  private bot: any = null; // Type assertion needed due to baleybots type complexity
+  // Bot type: Baleybot with Zod outputSchema - type is inferred from outputSchema
+  // Using Processable interface for type safety while allowing Baleybot's internal type
+  private bot: Processable<string, OutputSchemaType> | null = null;
 
   async setApiKey(apiKey: string) {
     // Store API key on Tauri side for secure management
@@ -309,170 +449,11 @@ Returns tasks with relevance scores (0-1). Threshold default: 0.8 (stricter than
       }
     );
 
-    // Define output schema matching AIProcessResult interface
-    const outputSchema = {
-      type: 'object',
-      properties: {
-        aiSummary: {
-          type: 'string',
-          description: 'Conversational AI summary of what was created and why',
-        },
-        notes: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', description: 'Temp ID assigned by AI (note-1, note-2, etc.)' },
-              action: {
-                type: 'string',
-                enum: ['create', 'update', 'merge', 'skip'],
-                description: 'What AI wants to do',
-              },
-              targetId: { type: 'string', description: 'Existing note ID (required if action is update or merge)' },
-              mergeWith: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Additional note IDs to merge (if action is merge)',
-              },
-              mergeStrategy: { type: 'string', enum: ['append', 'replace'], description: 'How to merge content' },
-              reasoning: { type: 'string', description: 'Explanation of AI decision' },
-              content: { type: 'string' },
-              summary: { type: 'string' },
-              tags: { type: 'array', items: { type: 'string' } },
-              source: { type: 'string', enum: ['call', 'email', 'thought', 'other'] },
-              sentiment: { type: 'string', enum: ['positive', 'neutral', 'negative'] },
-              keyPoints: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['id', 'content', 'summary'],
-          },
-        },
-        tasks: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', description: 'Temp ID assigned by AI (task-1, task-2, etc.)' },
-              action: {
-                type: 'string',
-                enum: ['create', 'update', 'complete', 'skip'],
-                description: 'What AI wants to do',
-              },
-              targetId: { type: 'string', description: 'Existing task ID (required if action is update or complete)' },
-              reasoning: { type: 'string', description: 'Explanation of AI decision' },
-              title: { type: 'string' },
-              priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
-              dueDate: { type: 'string' },
-              dueTime: { type: 'string' },
-              dueDateReasoning: { type: 'string' },
-              description: { type: 'string' },
-              tags: { type: 'array', items: { type: 'string' } },
-              suggestedSubtasks: { type: 'array', items: { type: 'string' } },
-              sourceExcerpt: { type: 'string' },
-            },
-            required: ['id', 'title'],
-          },
-        },
-        relationships: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              from: {
-                type: 'object',
-                properties: {
-                  type: { type: 'string', enum: ['note', 'task'] },
-                  id: { type: 'string' },
-                },
-                required: ['type', 'id'],
-              },
-              to: {
-                type: 'object',
-                properties: {
-                  type: { type: 'string', enum: ['topic', 'company', 'contact', 'note', 'task'] },
-                  id: { type: 'string' },
-                  name: { type: 'string' },
-                },
-                required: ['type'],
-              },
-              relationType: { type: 'string' },
-              metadata: {
-                type: 'object',
-                properties: {
-                  confidence: { type: 'number' },
-                  reasoning: { type: 'string' },
-                },
-              },
-            },
-            required: ['from', 'to', 'relationType'],
-          },
-        },
-        newEntities: {
-          type: 'object',
-          properties: {
-            topics: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  type: { type: 'string', enum: ['company', 'person', 'subject', 'project'] },
-                  confidence: { type: 'number' },
-                },
-                required: ['name', 'type'],
-              },
-            },
-            companies: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  confidence: { type: 'number' },
-                },
-                required: ['name'],
-              },
-            },
-            contacts: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  confidence: { type: 'number' },
-                },
-                required: ['name'],
-              },
-            },
-          },
-        },
-        skippedTasks: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              title: { type: 'string' },
-              reason: { type: 'string', enum: ['duplicate', 'unclear', 'not-actionable'] },
-              existingTaskTitle: { type: 'string' },
-              sourceExcerpt: { type: 'string' },
-            },
-            required: ['title', 'reason'],
-          },
-        },
-        sentiment: { type: 'string', enum: ['positive', 'neutral', 'negative'] },
-        tags: { type: 'array', items: { type: 'string' } },
-        processingSteps: { type: 'array', items: { type: 'string' } },
-        requiresClarification: { type: 'boolean' },
-        clarificationMessage: { type: 'string' },
-      },
-      required: ['notes', 'tasks'],
-    };
-
-    // Create baleybot with agentMode enabled using Tauri provider
-    // Tauri provider routes all HTTP calls through Tauri backend for secure API key management
-    // Type assertion needed due to baleybots type definitions
+    // Create baleybot with tools - tools are automatically used when provided
+    // Tauri fetch routes all HTTP calls through Tauri backend for secure API key management
     const bot = Baleybot.create({
       name: 'taskerino-capture',
-      analysisGoal: `You are an intelligent capture assistant for Taskerino. You help users organize their thoughts, notes, and tasks by:
+      goal: `You are an intelligent capture assistant for Taskerino. You help users organize their thoughts, notes, and tasks by:
 - Detecting topics and entities from unstructured input
 - Creating structured notes with semantic HTML formatting
 - Extracting actionable tasks with priorities and deadlines
@@ -491,12 +472,13 @@ Tool Usage Guidelines:
         search_tasks: searchTasksTool,
         find_similar_notes: findSimilarNotesTool,
         find_similar_tasks: findSimilarTasksTool,
-      } as any, // Type assertion needed - baleybots types may not match exactly
-      agentMode: true,
+      },
       maxToolIterations: 5,
-      outputSchema,
-      model: tauri('anthropic', 'claude-haiku-4-5-20251001'), // Use Tauri provider for secure API key management and streaming
-    } as any); // Type assertion to work around TypeScript overload issues
+      outputSchema, // Zod schema - provides full type inference and runtime validation
+      model: anthropic('claude-haiku-4-5-20251001', {
+        fetch: tauriFetch,
+      }),
+    });
 
     this.bot = bot;
     return bot;
@@ -609,81 +591,24 @@ If images are attached, analyze them carefully:
     const fullPrompt = `${dynamicContext}${attachmentInfo}${learningsSection ? `\n${learningsSection}` : ''}`;
 
     try {
-      // Process with baleybot
+      // Process with baleybot - result is typed as OutputSchemaType
       const result = await bot.process(fullPrompt);
 
-      // Transform result to match AIProcessResult format
-      // In agent mode with createAgent, baleybot returns: { response: { response: {...}, confidence: ... }, toolCallCount: ..., toolCalls: [...] }
-      // The structured output is in result.response.response
-      // Type assertion needed as TypeScript may not infer the exact return type
-      const resultAny = result as any;
-      const aiResponse = resultAny.response?.response || resultAny.response || resultAny;
+      // Validate and parse result - Zod ensures all defaults are applied
+      const validated = parseBotResult(result);
 
-      // Ensure action fields default to 'create' if missing
-      const notesWithIds = (aiResponse.notes || []).map((note: any, index: number) => ({
-        id: note.id || `note-${index + 1}`,
-        action: note.action || 'create',
-        targetId: note.targetId,
-        mergeWith: note.mergeWith,
-        mergeStrategy: note.mergeStrategy,
-        reasoning: note.reasoning || 'Auto-assigned action',
-        content: note.content,
-        summary: note.summary,
-        tags: note.tags || [],
-        source: note.source,
-        sentiment: note.sentiment,
-        keyPoints: note.keyPoints || [],
-      }));
-
-      const tasksWithIds = (aiResponse.tasks || []).map((task: any, index: number) => ({
-        id: task.id || `task-${index + 1}`,
-        action: task.action || 'create',
-        targetId: task.targetId,
-        reasoning: task.reasoning || 'Auto-assigned action',
-        title: task.title,
-        priority: task.priority || 'medium',
-        dueDate: task.dueDate,
-        dueTime: task.dueTime,
-        dueDateReasoning: task.dueDateReasoning,
-        description: task.description,
-        tags: task.tags || [],
-        suggestedSubtasks: task.suggestedSubtasks || [],
-        sourceExcerpt: task.sourceExcerpt,
-      }));
-
-      // Return format matching AIProcessResult interface
-      return {
-        aiSummary: aiResponse.aiSummary,
-        notes: notesWithIds,
-        tasks: tasksWithIds,
-        relationships: aiResponse.relationships || [],
-        newEntities: {
-          topics: (aiResponse.newEntities?.topics || []).map((t: any) => ({
-            name: t.name,
-            type: t.type || 'subject',
-            confidence: t.confidence || 0.9,
-          })),
-          companies: (aiResponse.newEntities?.companies || []).map((c: any) => ({
-            name: c.name,
-            confidence: c.confidence || 0.9,
-          })),
-          contacts: (aiResponse.newEntities?.contacts || []).map((c: any) => ({
-            name: c.name,
-            confidence: c.confidence || 0.9,
-          })),
-        },
-        skippedTasks: aiResponse.skippedTasks,
-        sentiment: aiResponse.sentiment,
-        tags: aiResponse.tags || [],
-        processingSteps: aiResponse.processingSteps,
-        requiresClarification: aiResponse.requiresClarification,
-        clarificationMessage: aiResponse.clarificationMessage,
-      };
+      // Zod schema matches AIProcessResult exactly with defaults applied
+      // Simple type assertion since structure matches (Zod handles the defaults)
+      return validated as AIProcessResult;
     } catch (error) {
       console.error('[ClaudeServiceBaleybots] Error processing with baleybot:', error);
-      throw new Error(
-        `Failed to process: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      
+      // Use type guard for error handling
+      const errorMessage = isError(error) 
+        ? error.message 
+        : 'Unknown error';
+      
+      throw new Error(`Failed to process: ${errorMessage}`);
     }
   }
 }

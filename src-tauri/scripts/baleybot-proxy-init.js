@@ -68,80 +68,24 @@ const handlers = createHandlers({
   basePath: '/api',
 });
 
-// Stream response helper - handles both streaming and non-streaming responses
-async function streamResponse(response, requestId) {
-  if (response.body instanceof ReadableStream) {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) {
-          // Emit final event with done flag
-          process.stdout.write(JSON.stringify({
-            type: 'response',
-            requestId,
-            status: response.status,
-            headers: Object.fromEntries(response.headers),
-            body: null,
-            done: true,
-          }) + '\n');
-          break;
-        }
-        
-        // Emit chunk event
-        const chunk = decoder.decode(value, { stream: true });
-        process.stdout.write(JSON.stringify({
-          type: 'response',
-          requestId,
-          status: response.status,
-          headers: Object.fromEntries(response.headers),
-          body: chunk,
-          done: false,
-        }) + '\n');
-      }
-    } catch (error) {
-      // Emit error event
-      process.stdout.write(JSON.stringify({
-        type: 'response',
-        requestId,
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          error: error instanceof Error ? error.message : 'Streaming error'
-        }),
-        done: true,
-      }) + '\n');
-    } finally {
-      reader.releaseLock();
-    }
-  } else {
-    // Non-streaming response
-    const responseBody = await response.text();
-    process.stdout.write(JSON.stringify({
-      type: 'response',
-      requestId,
-      status: response.status,
-      headers: Object.fromEntries(response.headers),
-      body: responseBody,
-      done: true,
-    }) + '\n');
-  }
-}
-
-// Extract provider from path (for fallback only)
+// Extract provider from path (e.g., /api/anthropic/messages → anthropic)
 function extractProvider(path) {
   const match = path.match(/^\/api\/([^\/]+)\//);
   return match ? match[1] : null;
 }
 
-// Handle a proxy request - let baleybots handle routing automatically
+// Handle a proxy request (same as before)
 async function handleProxyRequest(request) {
   const { requestId, method, path, headers, body, query } = request;
   
   try {
+    // Extract provider from path
+    const provider = extractProvider(path);
+    console.log('[baleybot-proxy-init] Request received:', { requestId, path, extractedProvider: provider });
+    if (!provider) {
+      throw new Error(`Invalid path: ${path}. Expected /api/{provider}/...`);
+    }
+    
     // Convert Tauri event → Request object
     const url = new URL(`http://localhost${path}`);
     Object.entries(query || {}).forEach(([key, value]) => {
@@ -154,36 +98,86 @@ async function handleProxyRequest(request) {
       body: body || null,
     });
     
-    // Let baleybots runtime handle routing - it knows all the paths automatically
-    // This handles /api/{provider}/chat, /api/{provider}/messages, etc.
+    // Call the appropriate handler
     let response;
-    const routeHandler = handlers.runtime.getRoute(path);
-    if (routeHandler) {
-      // Use runtime route handler (handles all paths automatically)
-      response = await routeHandler(webRequest);
+    console.log('[baleybot-proxy-init] Calling handler for provider:', provider);
+    console.log('[baleybot-proxy-init] API keys available:', {
+      anthropic: apiKeys.anthropic ? `${apiKeys.anthropic.substring(0, 10)}...` : 'empty',
+      openai: apiKeys.openai ? `${apiKeys.openai.substring(0, 10)}...` : 'empty',
+    });
+    
+    if (provider === 'anthropic') {
+      response = await handlers.anthropic(webRequest);
+    } else if (provider === 'openai') {
+      response = await handlers.openai(webRequest);
+    } else if (provider === 'google') {
+      response = await handlers.google(webRequest);
+    } else if (provider === 'ollama') {
+      response = await handlers.ollama(webRequest);
     } else {
-      // Fallback to capability handlers for backwards compatibility
-      // Only needed for legacy paths that aren't registered in runtime
-      const provider = extractProvider(path);
-      if (!provider) {
-        throw new Error(`Invalid path: ${path}. Expected /api/{provider}/...`);
-      }
-      
-      if (provider === 'anthropic') {
-        response = await handlers.anthropic(webRequest);
-      } else if (provider === 'openai') {
-        response = await handlers.openai(webRequest);
-      } else if (provider === 'google') {
-        response = await handlers.google(webRequest);
-      } else if (provider === 'ollama') {
-        response = await handlers.ollama(webRequest);
-      } else {
-        throw new Error(`Unknown provider: ${provider}`);
-      }
+      throw new Error(`Unknown provider: ${provider}`);
     }
     
-    // Stream response back via stdout
-    await streamResponse(response, requestId);
+    // Stream response back via stdout (same format as before)
+    if (response.body instanceof ReadableStream) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            // Emit final event with done flag
+            process.stdout.write(JSON.stringify({
+              type: 'response',
+              requestId,
+              status: response.status,
+              headers: Object.fromEntries(response.headers),
+              body: null,
+              done: true,
+            }) + '\n');
+            break;
+          }
+          
+          // Emit chunk event
+          const chunk = decoder.decode(value, { stream: true });
+          process.stdout.write(JSON.stringify({
+            type: 'response',
+            requestId,
+            status: response.status,
+            headers: Object.fromEntries(response.headers),
+            body: chunk,
+            done: false,
+          }) + '\n');
+        }
+      } catch (error) {
+        // Emit error event
+        process.stdout.write(JSON.stringify({
+          type: 'response',
+          requestId,
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: error instanceof Error ? error.message : 'Streaming error'
+          }),
+          done: true,
+        }) + '\n');
+      } finally {
+        reader.releaseLock();
+      }
+    } else {
+      // Non-streaming response
+      const responseBody = await response.text();
+      process.stdout.write(JSON.stringify({
+        type: 'response',
+        requestId,
+        status: response.status,
+        headers: Object.fromEntries(response.headers),
+        body: responseBody,
+        done: true,
+      }) + '\n');
+    }
   } catch (error) {
     // Emit error response
     process.stdout.write(JSON.stringify({

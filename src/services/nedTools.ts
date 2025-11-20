@@ -14,25 +14,6 @@ import type { Task, Note } from '../types';
 export const NED_TOOLS = {
   // ==================== READ TOOLS (No Permission Required) ====================
 
-  query_context_agent: {
-    name: 'query_context_agent',
-    description: 'Search for notes and tasks using the Context Agent. Use this to find information the user is asking about. The agent can search by keywords, dates, tags, companies, contacts, and other metadata. You can have multi-turn conversations with the agent to refine results.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Your search query to the Context Agent. Be specific about what you\'re looking for (e.g., "notes about NVIDIA from Q4 2024" or "high priority tasks due next week")',
-        },
-        agent_thread_id: {
-          type: 'string',
-          description: 'Optional: Thread ID for continuing a previous conversation with the agent. Use this to refine or follow up on previous searches.',
-        },
-      },
-      required: ['query'],
-    },
-  },
-
   get_current_datetime: {
     name: 'get_current_datetime',
     description: 'Get the current date and time. Use this when you need to know "today", "this week", "next month", etc.',
@@ -105,8 +86,6 @@ export const NED_TOOLS = {
           description: 'Optional: Thread ID for continuing a previous search conversation with the agent. Use this to refine or follow up on previous session searches.',
         },
       },
-      required: ['query'],
-    },
   },
 
   get_session_details: {
@@ -488,6 +467,7 @@ export const NED_TOOLS = {
     },
     cache_control: { type: 'ephemeral' },
   },
+  },
 };
 
 // ============================================================================
@@ -495,8 +475,7 @@ export const NED_TOOLS = {
 // ============================================================================
 
 export const READ_TOOLS = [
-  'query_context_agent',
-  'get_current_datetime',
+    'get_current_datetime',
   'get_user_context',
   'recall_memory',
   'get_item_details',
@@ -552,14 +531,6 @@ export interface ToolResult {
   }>;
 }
 
-// Context Agent Response
-export interface ContextAgentResult {
-  notes: Note[];
-  tasks: Task[];
-  summary: string;
-  suggestions?: string[];
-  thread_id: string;
-}
 
 // Memory
 export interface NedMemory {
