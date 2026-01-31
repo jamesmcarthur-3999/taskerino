@@ -1,6 +1,6 @@
 // src/bots/ned-assistant.ts
 import { Baleybot, type ProcessOptions, type BaleybotStreamEvent } from '@baleybots/core';
-import { ChatBot, History, MemoryStorage } from '@baleybots/chat';
+import { ChatBot, History } from '@baleybots/chat';
 import { MODELS } from './config';
 import {
   allNedTools,
@@ -15,10 +15,7 @@ const conversationHistories = new Map<string, History>();
 
 function getConversationHistory(conversationId: string): History {
   if (!conversationHistories.has(conversationId)) {
-    conversationHistories.set(conversationId, new History({
-      storage: new MemoryStorage(),
-      maxMessages: 50,
-    }));
+    conversationHistories.set(conversationId, History.inMemory(50));
   }
   return conversationHistories.get(conversationId)!;
 }
@@ -126,7 +123,7 @@ export async function sendMessageToNed(
 
   const ned = createNedAssistant();
   const history = getConversationHistory(conversationId);
-  const chat = ChatBot.forUser(ned, { historyManager: history });
+  const chat = ChatBot.forUser(ned, { history });
 
   const options: ProcessOptions | undefined = onStream ? {
     onToken: (_botName, event) => onStream(event),

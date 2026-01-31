@@ -34,7 +34,7 @@ export const createTaskTool = tool(
       tags: params.tags,
       done: false,
       createdAt: new Date().toISOString(),
-      createdBy: 'ned',
+      createdBy: 'ai',
     };
 
     dispatch({ type: 'ADD_TASK', payload: task });

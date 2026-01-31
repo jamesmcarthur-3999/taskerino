@@ -1,6 +1,6 @@
 // src/bots/session-searcher.ts
 import { Baleybot, text } from '@baleybots/core';
-import { ChatBot, History, MemoryStorage } from '@baleybots/chat';
+import { ChatBot, History } from '@baleybots/chat';
 import { MODELS } from './config';
 import { SessionSearchResultSchema, type SessionSearchResult } from './types';
 import type { Session } from '../types';
@@ -10,10 +10,7 @@ const threadHistories = new Map<string, History>();
 
 function getThreadHistory(threadId: string): History {
   if (!threadHistories.has(threadId)) {
-    threadHistories.set(threadId, new History({
-      storage: new MemoryStorage(),
-      maxMessages: 20,
-    }));
+    threadHistories.set(threadId, History.inMemory(20));
   }
   return threadHistories.get(threadId)!;
 }
@@ -103,7 +100,7 @@ export async function searchSessions(
 
   if (threadId) {
     const history = getThreadHistory(threadId);
-    const chat = ChatBot.forUser(sessionSearcher, { historyManager: history });
+    const chat = ChatBot.forUser(sessionSearcher, { history });
     const result = await chat.send(searchPrompt);
     return { ...result, threadId };
   }

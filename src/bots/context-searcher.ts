@@ -1,6 +1,6 @@
 // src/bots/context-searcher.ts
 import { Baleybot, text } from '@baleybots/core';
-import { ChatBot, History, MemoryStorage } from '@baleybots/chat';
+import { ChatBot, History } from '@baleybots/chat';
 import { MODELS } from './config';
 import { SearchResultSchema, type SearchResult } from './types';
 import type { Note, Task, Topic, Company, Contact } from '../types';
@@ -13,10 +13,7 @@ const threadHistories = new Map<string, History>();
  */
 function getThreadHistory(threadId: string): History {
   if (!threadHistories.has(threadId)) {
-    threadHistories.set(threadId, new History({
-      storage: new MemoryStorage(),
-      maxMessages: 20,
-    }));
+    threadHistories.set(threadId, History.inMemory(20));
   }
   return threadHistories.get(threadId)!;
 }
@@ -54,7 +51,7 @@ function buildSearchContext(
       const meta = [
         n.timestamp,
         n.source,
-        n.sentiment,
+        n.metadata?.sentiment,
         n.tags?.join(', ')
       ].filter(Boolean).join(' | ');
       parts.push(`[${n.id}] ${n.summary || n.content.slice(0, 150)} (${meta})`);
@@ -129,7 +126,7 @@ export async function searchContext(
   // If thread provided, use ChatBot for multi-turn
   if (threadId) {
     const history = getThreadHistory(threadId);
-    const chat = ChatBot.forUser(contextSearcher, { historyManager: history });
+    const chat = ChatBot.forUser(contextSearcher, { history });
     const result = await chat.send(searchPrompt);
     return { ...result, threadId };
   }

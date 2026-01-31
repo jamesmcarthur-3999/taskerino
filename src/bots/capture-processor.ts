@@ -36,7 +36,7 @@ Topic hierarchy:
   if (existingTopics.length > 0) {
     const topicList = existingTopics
       .slice(0, 50) // Limit to prevent token overflow
-      .map(t => `- ${t.name} (${t.type}, id: ${t.id})`)
+      .map(t => `- ${t.name} (id: ${t.id})`)
       .join('\n');
     parts.push(`\n\nExisting topics (match when confidence > 0.7):\n${topicList}`);
   }
