@@ -14,5 +14,6 @@ export {
   reviewAudioChunked,
   estimateAudioReviewCost
 } from './audio-reviewer';
+export { createCaptureProcessor, processCapture } from './capture-processor';
 // export { nedAssistant } from './ned-assistant';
 // etc.
