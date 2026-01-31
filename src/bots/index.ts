@@ -27,5 +27,9 @@ export {
   clearSessionSearchThread,
   createSessionSearchThread
 } from './session-searcher';
+
+// Tools
+export * from './tools';
+
 // export { nedAssistant } from './ned-assistant';
 // etc.
