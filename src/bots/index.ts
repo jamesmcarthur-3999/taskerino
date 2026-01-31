@@ -15,5 +15,11 @@ export {
   estimateAudioReviewCost
 } from './audio-reviewer';
 export { createCaptureProcessor, processCapture } from './capture-processor';
+export {
+  contextSearcher,
+  searchContext,
+  clearSearchThread,
+  createSearchThread
+} from './context-searcher';
 // export { nedAssistant } from './ned-assistant';
 // etc.
