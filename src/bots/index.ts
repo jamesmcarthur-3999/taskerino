@@ -44,3 +44,6 @@ export type { NedConfig, NedStreamHandler } from './ned-assistant';
 
 // React Hooks
 export * from './hooks';
+
+// Adapters (for migration)
+export * from './adapters';
