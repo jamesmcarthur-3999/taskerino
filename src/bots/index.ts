@@ -7,6 +7,6 @@ export * from './types';
 
 // Bots
 export { screenshotAnalyzer, analyzeScreenshot, clearScreenshotContext } from './screenshot-analyzer';
-// export { sessionSummarizer } from './session-summarizer';
+export { sessionSummarizer, summarizeSession } from './session-summarizer';
 // export { nedAssistant } from './ned-assistant';
 // etc.
