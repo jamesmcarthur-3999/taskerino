@@ -21,5 +21,11 @@ export {
   clearSearchThread,
   createSearchThread
 } from './context-searcher';
+export {
+  sessionSearcher,
+  searchSessions,
+  clearSessionSearchThread,
+  createSessionSearchThread
+} from './session-searcher';
 // export { nedAssistant } from './ned-assistant';
 // etc.
