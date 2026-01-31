@@ -8,5 +8,11 @@ export * from './types';
 // Bots
 export { screenshotAnalyzer, analyzeScreenshot, clearScreenshotContext } from './screenshot-analyzer';
 export { sessionSummarizer, summarizeSession } from './session-summarizer';
+export {
+  audioReviewer,
+  reviewAudio,
+  reviewAudioChunked,
+  estimateAudioReviewCost
+} from './audio-reviewer';
 // export { nedAssistant } from './ned-assistant';
 // etc.
