@@ -27,6 +27,7 @@ import { contextAgent } from './services/contextAgent';
 import { sessionsQueryAgent } from './services/sessionsQueryAgent';
 import { migrateApiKeysToTauri } from './utils/apiKeyMigration';
 import { getStorage } from './services/storage';
+import { useBots } from './bots/hooks';
 
 // Lazy load zone components for better performance
 const CaptureZone = lazy(() => import('./components/CaptureZone'));
@@ -50,6 +51,14 @@ function ZoneLoadingFallback() {
 function MainApp() {
   const { state, dispatch } = useApp();
   const { state: uiState, dispatch: uiDispatch } = useUI();
+
+  // Initialize Baleybots
+  const { isReady: botsReady, error: botsError } = useBots();
+
+  // Log bots initialization errors
+  if (botsError) {
+    console.error('[App] Bots initialization failed:', botsError);
+  }
 
   // Enable global keyboard shortcuts
   useKeyboardShortcuts();
