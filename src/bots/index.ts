@@ -31,5 +31,13 @@ export {
 // Tools
 export * from './tools';
 
-// export { nedAssistant } from './ned-assistant';
-// etc.
+// Ned Assistant
+export {
+  createNedAssistant,
+  initializeNed,
+  sendMessageToNed,
+  askNed,
+  createConversation,
+  clearConversation,
+} from './ned-assistant';
+export type { NedConfig, NedStreamHandler } from './ned-assistant';
